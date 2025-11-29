@@ -1,0 +1,1170 @@
+============================================================
+FIGURE 4 - Nanorod Arrays (2D Heatmaps)
+============================================================
+
+(a) Bare nanorods, x-polarization...
+  L = 75 nm... Warning: grid volume is not an integer number of pixels; cell size will be rounded to nearest pixel.
+-----------
+Initializing structure...
+time for choose_chunkdivision = 0.000333071 s
+Working in 3D dimensions.
+Computational cell is 0.283333 x 0.183333 x 2 with resolution 60
+     block, center = (0,0,-0.35)
+          size (1e+20,1e+20,0.5)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.2801,2.2801,2.2801)
+     block, center = (0,0,-0.085)
+          size (1e+20,1e+20,0.03)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (3.9,3.9,3.9)
+time for set_epsilon = 0.0597749 s
+drude susceptibility: frequency=0.944319, gamma=0.0795775
+-----------
+Warning: grid volume is not an integer number of pixels; cell size will be rounded to nearest pixel.
+field decay(t = 50.00833333333333): 0.16593979967356343 / 0.16593979967356343 = 1.0
+field decay(t = 100.01666666666667): 2.0398808547567007e-11 / 0.16593979967356343 = 1.2292896934729052e-10
+run 0 finished at t = 100.01666666666667 (12002 timesteps)
+-----------
+Initializing structure...
+time for choose_chunkdivision = 2.59876e-05 s
+Working in 3D dimensions.
+Computational cell is 0.283333 x 0.183333 x 2 with resolution 60
+     block, center = (0,0,-0.35)
+          size (1e+20,1e+20,0.5)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.2801,2.2801,2.2801)
+     block, center = (0,0,-0.085)
+          size (1e+20,1e+20,0.03)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (3.9,3.9,3.9)
+     ellipsoid, center = (0,0,-0.05)
+          size (0.075,0.04,0.04)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (1,1,1)
+time for set_epsilon = 0.100991 s
+lorentzian susceptibility: frequency=1.21, gamma=0.4
+drude susceptibility: frequency=12.1, gamma=0.081
+drude susceptibility: frequency=0.944319, gamma=0.0795775
+-----------
+field decay(t = 50.00833333333333): 0.11359992541894101 / 0.11359992541894101 = 1.0
+on time step 8722 (time=72.6833), 0.000458619 s/step
+field decay(t = 100.01666666666667): 6.226602823289775e-09 / 0.11359992541894101 = 5.481168055636405e-08
+run 0 finished at t = 100.01666666666667 (12002 timesteps)
+done
+  L = 95 nm... Warning: grid volume is not an integer number of pixels; cell size will be rounded to nearest pixel.
+-----------
+Initializing structure...
+time for choose_chunkdivision = 2.69413e-05 s
+Working in 3D dimensions.
+Computational cell is 0.3 x 0.183333 x 2 with resolution 60
+     block, center = (0,0,-0.35)
+          size (1e+20,1e+20,0.5)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.2801,2.2801,2.2801)
+     block, center = (0,0,-0.085)
+          size (1e+20,1e+20,0.03)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (3.9,3.9,3.9)
+time for set_epsilon = 0.063483 s
+drude susceptibility: frequency=0.944319, gamma=0.0795775
+-----------
+Warning: grid volume is not an integer number of pixels; cell size will be rounded to nearest pixel.
+field decay(t = 50.00833333333333): 0.17033136004419774 / 0.17033136004419774 = 1.0
+field decay(t = 100.01666666666667): 2.530411374079446e-10 / 0.17033136004419774 = 1.485581617749575e-09
+run 0 finished at t = 100.01666666666667 (12002 timesteps)
+-----------
+Initializing structure...
+time for choose_chunkdivision = 2.47955e-05 s
+Working in 3D dimensions.
+Computational cell is 0.3 x 0.183333 x 2 with resolution 60
+     block, center = (0,0,-0.35)
+          size (1e+20,1e+20,0.5)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.2801,2.2801,2.2801)
+     block, center = (0,0,-0.085)
+          size (1e+20,1e+20,0.03)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (3.9,3.9,3.9)
+     ellipsoid, center = (0,0,-0.05)
+          size (0.095,0.04,0.04)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (1,1,1)
+time for set_epsilon = 0.113372 s
+lorentzian susceptibility: frequency=1.21, gamma=0.4
+drude susceptibility: frequency=12.1, gamma=0.081
+drude susceptibility: frequency=0.944319, gamma=0.0795775
+-----------
+field decay(t = 50.00833333333333): 0.1691470671076004 / 0.1691470671076004 = 1.0
+on time step 8594 (time=71.6167), 0.00046549 s/step
+field decay(t = 100.01666666666667): 5.570380524065284e-07 / 0.1691470671076004 = 3.2932173281619885e-06
+run 0 finished at t = 100.01666666666667 (12002 timesteps)
+done
+  L = 120 nm... Warning: grid volume is not an integer number of pixels; cell size will be rounded to nearest pixel.
+-----------
+Initializing structure...
+time for choose_chunkdivision = 2.21729e-05 s
+Working in 3D dimensions.
+Computational cell is 0.316667 x 0.183333 x 2 with resolution 60
+     block, center = (0,0,-0.35)
+          size (1e+20,1e+20,0.5)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.2801,2.2801,2.2801)
+     block, center = (0,0,-0.085)
+          size (1e+20,1e+20,0.03)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (3.9,3.9,3.9)
+time for set_epsilon = 0.066514 s
+drude susceptibility: frequency=0.944319, gamma=0.0795775
+-----------
+Warning: grid volume is not an integer number of pixels; cell size will be rounded to nearest pixel.
+field decay(t = 50.00833333333333): 0.17614680057790486 / 0.17614680057790486 = 1.0
+field decay(t = 100.01666666666667): 2.0934729081603262e-19 / 0.17614680057790486 = 1.1884819373908758e-18
+run 0 finished at t = 100.01666666666667 (12002 timesteps)
+-----------
+Initializing structure...
+time for choose_chunkdivision = 2.19345e-05 s
+Working in 3D dimensions.
+Computational cell is 0.316667 x 0.183333 x 2 with resolution 60
+     block, center = (0,0,-0.35)
+          size (1e+20,1e+20,0.5)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.2801,2.2801,2.2801)
+     block, center = (0,0,-0.085)
+          size (1e+20,1e+20,0.03)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (3.9,3.9,3.9)
+     ellipsoid, center = (0,0,-0.05)
+          size (0.12,0.04,0.04)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (1,1,1)
+time for set_epsilon = 0.132951 s
+lorentzian susceptibility: frequency=1.21, gamma=0.4
+drude susceptibility: frequency=12.1, gamma=0.081
+drude susceptibility: frequency=0.944319, gamma=0.0795775
+-----------
+field decay(t = 50.00833333333333): 0.0752972333793894 / 0.0752972333793894 = 1.0
+on time step 7663 (time=63.8583), 0.000521999 s/step
+field decay(t = 100.01666666666667): 4.784988920189203e-06 / 0.0752972333793894 = 6.354800442772928e-05
+run 0 finished at t = 100.01666666666667 (12002 timesteps)
+done
+  L = 140 nm... Warning: grid volume is not an integer number of pixels; cell size will be rounded to nearest pixel.
+-----------
+Initializing structure...
+time for choose_chunkdivision = 2.5034e-05 s
+Working in 3D dimensions.
+Computational cell is 0.333333 x 0.183333 x 2 with resolution 60
+     block, center = (0,0,-0.35)
+          size (1e+20,1e+20,0.5)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.2801,2.2801,2.2801)
+     block, center = (0,0,-0.085)
+          size (1e+20,1e+20,0.03)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (3.9,3.9,3.9)
+time for set_epsilon = 0.07021 s
+drude susceptibility: frequency=0.944319, gamma=0.0795775
+-----------
+Warning: grid volume is not an integer number of pixels; cell size will be rounded to nearest pixel.
+field decay(t = 50.00833333333333): 0.17614680057790477 / 0.17614680057790477 = 1.0
+field decay(t = 100.01666666666667): 2.093474033898547e-19 / 0.17614680057790477 = 1.1884825764818034e-18
+run 0 finished at t = 100.01666666666667 (12002 timesteps)
+-----------
+Initializing structure...
+time for choose_chunkdivision = 3.19481e-05 s
+Working in 3D dimensions.
+Computational cell is 0.333333 x 0.183333 x 2 with resolution 60
+     block, center = (0,0,-0.35)
+          size (1e+20,1e+20,0.5)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.2801,2.2801,2.2801)
+     block, center = (0,0,-0.085)
+          size (1e+20,1e+20,0.03)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (3.9,3.9,3.9)
+     ellipsoid, center = (0,0,-0.05)
+          size (0.14,0.04,0.04)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (1,1,1)
+time for set_epsilon = 0.151107 s
+lorentzian susceptibility: frequency=1.21, gamma=0.4
+drude susceptibility: frequency=12.1, gamma=0.081
+drude susceptibility: frequency=0.944319, gamma=0.0795775
+-----------
+field decay(t = 50.00833333333333): 0.07870975241306889 / 0.07870975241306889 = 1.0
+on time step 7781 (time=64.8417), 0.000514115 s/step
+field decay(t = 100.01666666666667): 2.480706360938722e-05 / 0.07870975241306889 = 0.00031517140949954603
+run 0 finished at t = 100.01666666666667 (12002 timesteps)
+done
+  L = 160 nm... Warning: grid volume is not an integer number of pixels; cell size will be rounded to nearest pixel.
+-----------
+Initializing structure...
+time for choose_chunkdivision = 2.38419e-05 s
+Working in 3D dimensions.
+Computational cell is 0.366667 x 0.183333 x 2 with resolution 60
+     block, center = (0,0,-0.35)
+          size (1e+20,1e+20,0.5)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.2801,2.2801,2.2801)
+     block, center = (0,0,-0.085)
+          size (1e+20,1e+20,0.03)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (3.9,3.9,3.9)
+time for set_epsilon = 0.0766649 s
+drude susceptibility: frequency=0.944319, gamma=0.0795775
+-----------
+field decay(t = 50.00833333333333): 0.16956131824426923 / 0.16956131824426923 = 1.0
+on time step 11522 (time=96.0167), 0.000347163 s/step
+Warning: grid volume is not an integer number of pixels; cell size will be rounded to nearest pixel.
+field decay(t = 100.01666666666667): 6.150576504380622e-07 / 0.16956131824426923 = 3.6273464774083265e-06
+run 0 finished at t = 100.01666666666667 (12002 timesteps)
+-----------
+Initializing structure...
+time for choose_chunkdivision = 2.31266e-05 s
+Working in 3D dimensions.
+Computational cell is 0.366667 x 0.183333 x 2 with resolution 60
+     block, center = (0,0,-0.35)
+          size (1e+20,1e+20,0.5)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.2801,2.2801,2.2801)
+     block, center = (0,0,-0.085)
+          size (1e+20,1e+20,0.03)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (3.9,3.9,3.9)
+     ellipsoid, center = (0,0,-0.05)
+          size (0.16,0.04,0.04)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (1,1,1)
+time for set_epsilon = 0.17459 s
+lorentzian susceptibility: frequency=1.21, gamma=0.4
+drude susceptibility: frequency=12.1, gamma=0.081
+drude susceptibility: frequency=0.944319, gamma=0.0795775
+-----------
+field decay(t = 50.00833333333333): 0.07632951927226497 / 0.07632951927226497 = 1.0
+on time step 7056 (time=58.8), 0.000566955 s/step
+field decay(t = 100.01666666666667): 7.10961015710276e-05 / 0.07632951927226497 = 0.0009314365169447755
+run 0 finished at t = 100.01666666666667 (12002 timesteps)
+done
+  L = 180 nm... Warning: grid volume is not an integer number of pixels; cell size will be rounded to nearest pixel.
+-----------
+Initializing structure...
+time for choose_chunkdivision = 2.90871e-05 s
+Working in 3D dimensions.
+Computational cell is 0.383333 x 0.183333 x 2 with resolution 60
+     block, center = (0,0,-0.35)
+          size (1e+20,1e+20,0.5)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.2801,2.2801,2.2801)
+     block, center = (0,0,-0.085)
+          size (1e+20,1e+20,0.03)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (3.9,3.9,3.9)
+time for set_epsilon = 0.0798109 s
+drude susceptibility: frequency=0.944319, gamma=0.0795775
+-----------
+field decay(t = 50.00833333333333): 0.17284740332110418 / 0.17284740332110418 = 1.0
+on time step 11152 (time=92.9333), 0.000358699 s/step
+Warning: grid volume is not an integer number of pixels; cell size will be rounded to nearest pixel.
+field decay(t = 100.01666666666667): 3.8102487409079664e-07 / 0.17284740332110418 = 2.2044003367696213e-06
+run 0 finished at t = 100.01666666666667 (12002 timesteps)
+-----------
+Initializing structure...
+time for choose_chunkdivision = 2.7895e-05 s
+Working in 3D dimensions.
+Computational cell is 0.383333 x 0.183333 x 2 with resolution 60
+     block, center = (0,0,-0.35)
+          size (1e+20,1e+20,0.5)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.2801,2.2801,2.2801)
+     block, center = (0,0,-0.085)
+          size (1e+20,1e+20,0.03)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (3.9,3.9,3.9)
+     ellipsoid, center = (0,0,-0.05)
+          size (0.18,0.04,0.04)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (1,1,1)
+time for set_epsilon = 0.190694 s
+lorentzian susceptibility: frequency=1.21, gamma=0.4
+drude susceptibility: frequency=12.1, gamma=0.081
+drude susceptibility: frequency=0.944319, gamma=0.0795775
+-----------
+field decay(t = 50.00833333333333): 0.07643163196081817 / 0.07643163196081817 = 1.0
+on time step 6473 (time=53.9417), 0.000617965 s/step
+field decay(t = 100.01666666666667): 3.054387263118764e-05 / 0.07643163196081817 = 0.0003996234523272461
+run 0 finished at t = 100.01666666666667 (12002 timesteps)
+done
+  L = 205 nm... Warning: grid volume is not an integer number of pixels; cell size will be rounded to nearest pixel.
+-----------
+Initializing structure...
+time for choose_chunkdivision = 3.29018e-05 s
+Working in 3D dimensions.
+Computational cell is 0.4 x 0.183333 x 2 with resolution 60
+     block, center = (0,0,-0.35)
+          size (1e+20,1e+20,0.5)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.2801,2.2801,2.2801)
+     block, center = (0,0,-0.085)
+          size (1e+20,1e+20,0.03)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (3.9,3.9,3.9)
+time for set_epsilon = 0.0839279 s
+drude susceptibility: frequency=0.944319, gamma=0.0795775
+-----------
+field decay(t = 50.00833333333333): 0.1761468005779049 / 0.1761468005779049 = 1.0
+on time step 10374 (time=86.45), 0.000385616 s/step
+Warning: grid volume is not an integer number of pixels; cell size will be rounded to nearest pixel.
+field decay(t = 100.01666666666667): 2.0934736422041742e-19 / 0.1761468005779049 = 1.1884823541136576e-18
+run 0 finished at t = 100.01666666666667 (12002 timesteps)
+-----------
+Initializing structure...
+time for choose_chunkdivision = 2.31266e-05 s
+Working in 3D dimensions.
+Computational cell is 0.4 x 0.183333 x 2 with resolution 60
+     block, center = (0,0,-0.35)
+          size (1e+20,1e+20,0.5)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.2801,2.2801,2.2801)
+     block, center = (0,0,-0.085)
+          size (1e+20,1e+20,0.03)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (3.9,3.9,3.9)
+     ellipsoid, center = (0,0,-0.05)
+          size (0.205,0.04,0.04)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (1,1,1)
+time for set_epsilon = 0.22076 s
+lorentzian susceptibility: frequency=1.21, gamma=0.4
+drude susceptibility: frequency=12.1, gamma=0.081
+drude susceptibility: frequency=0.944319, gamma=0.0795775
+-----------
+field decay(t = 50.00833333333333): 0.1380211419594216 / 0.1380211419594216 = 1.0
+on time step 6111 (time=50.925), 0.000654625 s/step
+field decay(t = 100.01666666666667): 0.00027371167664409096 / 0.1380211419594216 = 0.0019831141284468038
+on time step 12392 (time=103.267), 0.000636917 s/step
+field decay(t = 150.025): 2.9167268582620076e-05 / 0.1380211419594216 = 0.0002113246432288996
+run 0 finished at t = 150.025 (18003 timesteps)
+done
+
+(b) Coated nanorods, x-polarization...
+  L = 75 nm... Warning: grid volume is not an integer number of pixels; cell size will be rounded to nearest pixel.
+-----------
+Initializing structure...
+time for choose_chunkdivision = 2.7895e-05 s
+Working in 3D dimensions.
+Computational cell is 0.283333 x 0.183333 x 2 with resolution 60
+     block, center = (0,0,-0.35)
+          size (1e+20,1e+20,0.5)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.2801,2.2801,2.2801)
+     block, center = (0,0,-0.085)
+          size (1e+20,1e+20,0.03)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (3.9,3.9,3.9)
+time for set_epsilon = 0.0601928 s
+drude susceptibility: frequency=0.944319, gamma=0.0795775
+-----------
+Warning: grid volume is not an integer number of pixels; cell size will be rounded to nearest pixel.
+field decay(t = 50.00833333333333): 0.16593979967356343 / 0.16593979967356343 = 1.0
+field decay(t = 100.01666666666667): 2.0398808547567007e-11 / 0.16593979967356343 = 1.2292896934729052e-10
+run 0 finished at t = 100.01666666666667 (12002 timesteps)
+-----------
+Initializing structure...
+time for choose_chunkdivision = 2.19345e-05 s
+Working in 3D dimensions.
+Computational cell is 0.283333 x 0.183333 x 2 with resolution 60
+     block, center = (0,0,-0.35)
+          size (1e+20,1e+20,0.5)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.2801,2.2801,2.2801)
+     block, center = (0,0,-0.085)
+          size (1e+20,1e+20,0.03)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (3.9,3.9,3.9)
+     block, center = (0,0,-0.06)
+          size (1e+20,1e+20,0.02)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.56,2.56,2.56)
+     ellipsoid, center = (0,0,-0.04)
+          size (0.115,0.08,0.06)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.56,2.56,2.56)
+     ellipsoid, center = (0,0,-0.05)
+          size (0.075,0.04,0.04)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (1,1,1)
+time for set_epsilon = 0.174867 s
+lorentzian susceptibility: frequency=1.21, gamma=0.4
+drude susceptibility: frequency=12.1, gamma=0.081
+lorentzian susceptibility: frequency=1.70826, gamma=0.0530516
+drude susceptibility: frequency=0.944319, gamma=0.0795775
+-----------
+field decay(t = 50.00833333333333): 0.10046943947881411 / 0.10046943947881411 = 1.0
+on time step 7653 (time=63.775), 0.000522723 s/step
+field decay(t = 100.01666666666667): 4.69111451716429e-10 / 0.10046943947881411 = 4.669195470283778e-09
+run 0 finished at t = 100.01666666666667 (12002 timesteps)
+done
+  L = 95 nm... Warning: grid volume is not an integer number of pixels; cell size will be rounded to nearest pixel.
+-----------
+Initializing structure...
+time for choose_chunkdivision = 2.38419e-05 s
+Working in 3D dimensions.
+Computational cell is 0.3 x 0.183333 x 2 with resolution 60
+     block, center = (0,0,-0.35)
+          size (1e+20,1e+20,0.5)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.2801,2.2801,2.2801)
+     block, center = (0,0,-0.085)
+          size (1e+20,1e+20,0.03)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (3.9,3.9,3.9)
+time for set_epsilon = 0.0636818 s
+drude susceptibility: frequency=0.944319, gamma=0.0795775
+-----------
+Warning: grid volume is not an integer number of pixels; cell size will be rounded to nearest pixel.
+field decay(t = 50.00833333333333): 0.17033136004419774 / 0.17033136004419774 = 1.0
+field decay(t = 100.01666666666667): 2.530411374079446e-10 / 0.17033136004419774 = 1.485581617749575e-09
+run 0 finished at t = 100.01666666666667 (12002 timesteps)
+-----------
+Initializing structure...
+time for choose_chunkdivision = 2.40803e-05 s
+Working in 3D dimensions.
+Computational cell is 0.3 x 0.183333 x 2 with resolution 60
+     block, center = (0,0,-0.35)
+          size (1e+20,1e+20,0.5)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.2801,2.2801,2.2801)
+     block, center = (0,0,-0.085)
+          size (1e+20,1e+20,0.03)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (3.9,3.9,3.9)
+     block, center = (0,0,-0.06)
+          size (1e+20,1e+20,0.02)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.56,2.56,2.56)
+     ellipsoid, center = (0,0,-0.04)
+          size (0.135,0.08,0.06)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.56,2.56,2.56)
+     ellipsoid, center = (0,0,-0.05)
+          size (0.095,0.04,0.04)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (1,1,1)
+time for set_epsilon = 0.197576 s
+lorentzian susceptibility: frequency=1.21, gamma=0.4
+drude susceptibility: frequency=12.1, gamma=0.081
+lorentzian susceptibility: frequency=1.70826, gamma=0.0530516
+drude susceptibility: frequency=0.944319, gamma=0.0795775
+-----------
+field decay(t = 50.00833333333333): 0.09124965133684167 / 0.09124965133684167 = 1.0
+on time step 7427 (time=61.8917), 0.000538593 s/step
+field decay(t = 100.01666666666667): 2.1775442666267308e-10 / 0.09124965133684167 = 2.3863589994316575e-09
+run 0 finished at t = 100.01666666666667 (12002 timesteps)
+done
+  L = 120 nm... Warning: grid volume is not an integer number of pixels; cell size will be rounded to nearest pixel.
+-----------
+Initializing structure...
+time for choose_chunkdivision = 2.12193e-05 s
+Working in 3D dimensions.
+Computational cell is 0.316667 x 0.183333 x 2 with resolution 60
+     block, center = (0,0,-0.35)
+          size (1e+20,1e+20,0.5)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.2801,2.2801,2.2801)
+     block, center = (0,0,-0.085)
+          size (1e+20,1e+20,0.03)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (3.9,3.9,3.9)
+time for set_epsilon = 0.0675409 s
+drude susceptibility: frequency=0.944319, gamma=0.0795775
+-----------
+Warning: grid volume is not an integer number of pixels; cell size will be rounded to nearest pixel.
+field decay(t = 50.00833333333333): 0.17614680057790486 / 0.17614680057790486 = 1.0
+field decay(t = 100.01666666666667): 2.0934729081603262e-19 / 0.17614680057790486 = 1.1884819373908758e-18
+run 0 finished at t = 100.01666666666667 (12002 timesteps)
+-----------
+Initializing structure...
+time for choose_chunkdivision = 2.5034e-05 s
+Working in 3D dimensions.
+Computational cell is 0.316667 x 0.183333 x 2 with resolution 60
+     block, center = (0,0,-0.35)
+          size (1e+20,1e+20,0.5)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.2801,2.2801,2.2801)
+     block, center = (0,0,-0.085)
+          size (1e+20,1e+20,0.03)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (3.9,3.9,3.9)
+     block, center = (0,0,-0.06)
+          size (1e+20,1e+20,0.02)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.56,2.56,2.56)
+     ellipsoid, center = (0,0,-0.04)
+          size (0.16,0.08,0.06)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.56,2.56,2.56)
+     ellipsoid, center = (0,0,-0.05)
+          size (0.12,0.04,0.04)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (1,1,1)
+time for set_epsilon = 0.247595 s
+lorentzian susceptibility: frequency=1.21, gamma=0.4
+drude susceptibility: frequency=12.1, gamma=0.081
+lorentzian susceptibility: frequency=1.70826, gamma=0.0530516
+drude susceptibility: frequency=0.944319, gamma=0.0795775
+-----------
+field decay(t = 50.00833333333333): 0.09691565937563441 / 0.09691565937563441 = 1.0
+on time step 6951 (time=57.925), 0.000575493 s/step
+field decay(t = 100.01666666666667): 4.5506273627185827e-07 / 0.09691565937563441 = 4.695451067490396e-06
+run 0 finished at t = 100.01666666666667 (12002 timesteps)
+done
+  L = 140 nm... Warning: grid volume is not an integer number of pixels; cell size will be rounded to nearest pixel.
+-----------
+Initializing structure...
+time for choose_chunkdivision = 2.19345e-05 s
+Working in 3D dimensions.
+Computational cell is 0.333333 x 0.183333 x 2 with resolution 60
+     block, center = (0,0,-0.35)
+          size (1e+20,1e+20,0.5)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.2801,2.2801,2.2801)
+     block, center = (0,0,-0.085)
+          size (1e+20,1e+20,0.03)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (3.9,3.9,3.9)
+time for set_epsilon = 0.0715029 s
+drude susceptibility: frequency=0.944319, gamma=0.0795775
+-----------
+Warning: grid volume is not an integer number of pixels; cell size will be rounded to nearest pixel.
+field decay(t = 50.00833333333333): 0.17614680057790477 / 0.17614680057790477 = 1.0
+field decay(t = 100.01666666666667): 2.093474033898547e-19 / 0.17614680057790477 = 1.1884825764818034e-18
+run 0 finished at t = 100.01666666666667 (12002 timesteps)
+-----------
+Initializing structure...
+time for choose_chunkdivision = 2.40803e-05 s
+Working in 3D dimensions.
+Computational cell is 0.333333 x 0.183333 x 2 with resolution 60
+     block, center = (0,0,-0.35)
+          size (1e+20,1e+20,0.5)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.2801,2.2801,2.2801)
+     block, center = (0,0,-0.085)
+          size (1e+20,1e+20,0.03)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (3.9,3.9,3.9)
+     block, center = (0,0,-0.06)
+          size (1e+20,1e+20,0.02)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.56,2.56,2.56)
+     ellipsoid, center = (0,0,-0.04)
+          size (0.18,0.08,0.06)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.56,2.56,2.56)
+     ellipsoid, center = (0,0,-0.05)
+          size (0.14,0.04,0.04)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (1,1,1)
+time for set_epsilon = 0.271556 s
+lorentzian susceptibility: frequency=1.21, gamma=0.4
+drude susceptibility: frequency=12.1, gamma=0.081
+lorentzian susceptibility: frequency=1.70826, gamma=0.0530516
+drude susceptibility: frequency=0.944319, gamma=0.0795775
+-----------
+field decay(t = 50.00833333333333): 0.09674336431725615 / 0.09674336431725615 = 1.0
+on time step 6454 (time=53.7833), 0.000619812 s/step
+field decay(t = 100.01666666666667): 6.729617212916689e-06 / 0.09674336431725615 = 6.956153799704404e-05
+run 0 finished at t = 100.01666666666667 (12002 timesteps)
+done
+  L = 160 nm... Warning: grid volume is not an integer number of pixels; cell size will be rounded to nearest pixel.
+-----------
+Initializing structure...
+time for choose_chunkdivision = 2.28882e-05 s
+Working in 3D dimensions.
+Computational cell is 0.366667 x 0.183333 x 2 with resolution 60
+     block, center = (0,0,-0.35)
+          size (1e+20,1e+20,0.5)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.2801,2.2801,2.2801)
+     block, center = (0,0,-0.085)
+          size (1e+20,1e+20,0.03)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (3.9,3.9,3.9)
+time for set_epsilon = 0.078723 s
+drude susceptibility: frequency=0.944319, gamma=0.0795775
+-----------
+field decay(t = 50.00833333333333): 0.16956131824426923 / 0.16956131824426923 = 1.0
+on time step 11388 (time=94.9), 0.00035127 s/step
+Warning: grid volume is not an integer number of pixels; cell size will be rounded to nearest pixel.
+field decay(t = 100.01666666666667): 6.150576504380622e-07 / 0.16956131824426923 = 3.6273464774083265e-06
+run 0 finished at t = 100.01666666666667 (12002 timesteps)
+-----------
+Initializing structure...
+time for choose_chunkdivision = 2.28882e-05 s
+Working in 3D dimensions.
+Computational cell is 0.366667 x 0.183333 x 2 with resolution 60
+     block, center = (0,0,-0.35)
+          size (1e+20,1e+20,0.5)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.2801,2.2801,2.2801)
+     block, center = (0,0,-0.085)
+          size (1e+20,1e+20,0.03)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (3.9,3.9,3.9)
+     block, center = (0,0,-0.06)
+          size (1e+20,1e+20,0.02)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.56,2.56,2.56)
+     ellipsoid, center = (0,0,-0.04)
+          size (0.2,0.08,0.06)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.56,2.56,2.56)
+     ellipsoid, center = (0,0,-0.05)
+          size (0.16,0.04,0.04)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (1,1,1)
+time for set_epsilon = 0.3165 s
+lorentzian susceptibility: frequency=1.21, gamma=0.4
+drude susceptibility: frequency=12.1, gamma=0.081
+lorentzian susceptibility: frequency=1.70826, gamma=0.0530516
+drude susceptibility: frequency=0.944319, gamma=0.0795775
+-----------
+on time step 5870 (time=48.9167), 0.000681488 s/step
+field decay(t = 50.00833333333333): 0.08914193952119613 / 0.08914193952119613 = 1.0
+on time step 11996 (time=99.9667), 0.000653043 s/step
+field decay(t = 100.01666666666667): 7.3264168602997154e-06 / 0.08914193952119613 = 8.218821465689159e-05
+run 0 finished at t = 100.01666666666667 (12002 timesteps)
+done
+  L = 180 nm... Warning: grid volume is not an integer number of pixels; cell size will be rounded to nearest pixel.
+-----------
+Initializing structure...
+time for choose_chunkdivision = 2.69413e-05 s
+Working in 3D dimensions.
+Computational cell is 0.383333 x 0.183333 x 2 with resolution 60
+     block, center = (0,0,-0.35)
+          size (1e+20,1e+20,0.5)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.2801,2.2801,2.2801)
+     block, center = (0,0,-0.085)
+          size (1e+20,1e+20,0.03)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (3.9,3.9,3.9)
+time for set_epsilon = 0.0814469 s
+drude susceptibility: frequency=0.944319, gamma=0.0795775
+-----------
+field decay(t = 50.00833333333333): 0.17284740332110418 / 0.17284740332110418 = 1.0
+on time step 10862 (time=90.5167), 0.000368266 s/step
+Warning: grid volume is not an integer number of pixels; cell size will be rounded to nearest pixel.
+field decay(t = 100.01666666666667): 3.8102487409079664e-07 / 0.17284740332110418 = 2.2044003367696213e-06
+run 0 finished at t = 100.01666666666667 (12002 timesteps)
+-----------
+Initializing structure...
+time for choose_chunkdivision = 2.28882e-05 s
+Working in 3D dimensions.
+Computational cell is 0.383333 x 0.183333 x 2 with resolution 60
+     block, center = (0,0,-0.35)
+          size (1e+20,1e+20,0.5)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.2801,2.2801,2.2801)
+     block, center = (0,0,-0.085)
+          size (1e+20,1e+20,0.03)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (3.9,3.9,3.9)
+     block, center = (0,0,-0.06)
+          size (1e+20,1e+20,0.02)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.56,2.56,2.56)
+     ellipsoid, center = (0,0,-0.04)
+          size (0.22,0.08,0.06)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.56,2.56,2.56)
+     ellipsoid, center = (0,0,-0.05)
+          size (0.18,0.04,0.04)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (1,1,1)
+time for set_epsilon = 0.35497 s
+lorentzian susceptibility: frequency=1.21, gamma=0.4
+drude susceptibility: frequency=12.1, gamma=0.081
+lorentzian susceptibility: frequency=1.70826, gamma=0.0530516
+drude susceptibility: frequency=0.944319, gamma=0.0795775
+-----------
+on time step 5621 (time=46.8417), 0.000711623 s/step
+field decay(t = 50.00833333333333): 0.09074391627769572 / 0.09074391627769572 = 1.0
+on time step 11113 (time=92.6083), 0.000728443 s/step
+field decay(t = 100.01666666666667): 5.435983141263884e-06 / 0.09074391627769572 = 5.990465657916523e-05
+run 0 finished at t = 100.01666666666667 (12002 timesteps)
+done
+  L = 205 nm... Warning: grid volume is not an integer number of pixels; cell size will be rounded to nearest pixel.
+-----------
+Initializing structure...
+time for choose_chunkdivision = 2.40803e-05 s
+Working in 3D dimensions.
+Computational cell is 0.4 x 0.183333 x 2 with resolution 60
+     block, center = (0,0,-0.35)
+          size (1e+20,1e+20,0.5)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.2801,2.2801,2.2801)
+     block, center = (0,0,-0.085)
+          size (1e+20,1e+20,0.03)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (3.9,3.9,3.9)
+time for set_epsilon = 0.089051 s
+drude susceptibility: frequency=0.944319, gamma=0.0795775
+-----------
+field decay(t = 50.00833333333333): 0.1761468005779049 / 0.1761468005779049 = 1.0
+on time step 10471 (time=87.2583), 0.000382026 s/step
+Warning: grid volume is not an integer number of pixels; cell size will be rounded to nearest pixel.
+field decay(t = 100.01666666666667): 2.0934736422041742e-19 / 0.1761468005779049 = 1.1884823541136576e-18
+run 0 finished at t = 100.01666666666667 (12002 timesteps)
+-----------
+Initializing structure...
+time for choose_chunkdivision = 2.38419e-05 s
+Working in 3D dimensions.
+Computational cell is 0.4 x 0.183333 x 2 with resolution 60
+     block, center = (0,0,-0.35)
+          size (1e+20,1e+20,0.5)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.2801,2.2801,2.2801)
+     block, center = (0,0,-0.085)
+          size (1e+20,1e+20,0.03)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (3.9,3.9,3.9)
+     block, center = (0,0,-0.06)
+          size (1e+20,1e+20,0.02)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.56,2.56,2.56)
+     ellipsoid, center = (0,0,-0.04)
+          size (0.245,0.08,0.06)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.56,2.56,2.56)
+     ellipsoid, center = (0,0,-0.05)
+          size (0.205,0.04,0.04)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (1,1,1)
+time for set_epsilon = 0.396459 s
+lorentzian susceptibility: frequency=1.21, gamma=0.4
+drude susceptibility: frequency=12.1, gamma=0.081
+lorentzian susceptibility: frequency=1.70826, gamma=0.0530516
+drude susceptibility: frequency=0.944319, gamma=0.0795775
+-----------
+on time step 5554 (time=46.2833), 0.000720306 s/step
+field decay(t = 50.00833333333333): 0.09590067814506675 / 0.09590067814506675 = 1.0
+on time step 11054 (time=92.1167), 0.000727341 s/step
+field decay(t = 100.01666666666667): 3.5011815384928052e-06 / 0.09590067814506675 = 3.6508412726723874e-05
+run 0 finished at t = 100.01666666666667 (12002 timesteps)
+done
+
+(c) Coated nanorods, y-polarization...
+  L = 75 nm... Warning: grid volume is not an integer number of pixels; cell size will be rounded to nearest pixel.
+-----------
+Initializing structure...
+time for choose_chunkdivision = 2.59876e-05 s
+Working in 3D dimensions.
+Computational cell is 0.283333 x 0.183333 x 2 with resolution 60
+     block, center = (0,0,-0.35)
+          size (1e+20,1e+20,0.5)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.2801,2.2801,2.2801)
+     block, center = (0,0,-0.085)
+          size (1e+20,1e+20,0.03)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (3.9,3.9,3.9)
+time for set_epsilon = 0.0622301 s
+drude susceptibility: frequency=0.944319, gamma=0.0795775
+-----------
+Warning: grid volume is not an integer number of pixels; cell size will be rounded to nearest pixel.
+field decay(t = 50.00833333333333): 0.16592244586890784 / 0.16592244586890784 = 1.0
+field decay(t = 100.01666666666667): 8.559512790261883e-09 / 0.16592244586890784 = 5.1587431377576185e-08
+run 0 finished at t = 100.01666666666667 (12002 timesteps)
+-----------
+Initializing structure...
+time for choose_chunkdivision = 2.31266e-05 s
+Working in 3D dimensions.
+Computational cell is 0.283333 x 0.183333 x 2 with resolution 60
+     block, center = (0,0,-0.35)
+          size (1e+20,1e+20,0.5)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.2801,2.2801,2.2801)
+     block, center = (0,0,-0.085)
+          size (1e+20,1e+20,0.03)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (3.9,3.9,3.9)
+     block, center = (0,0,-0.06)
+          size (1e+20,1e+20,0.02)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.56,2.56,2.56)
+     ellipsoid, center = (0,0,-0.04)
+          size (0.115,0.08,0.06)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.56,2.56,2.56)
+     ellipsoid, center = (0,0,-0.05)
+          size (0.075,0.04,0.04)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (1,1,1)
+time for set_epsilon = 0.176627 s
+lorentzian susceptibility: frequency=1.21, gamma=0.4
+drude susceptibility: frequency=12.1, gamma=0.081
+lorentzian susceptibility: frequency=1.70826, gamma=0.0530516
+drude susceptibility: frequency=0.944319, gamma=0.0795775
+-----------
+field decay(t = 50.00833333333333): 0.11271882629406361 / 0.11271882629406361 = 1.0
+on time step 7206 (time=60.05), 0.000555116 s/step
+field decay(t = 100.01666666666667): 8.758895102538797e-08 / 0.11271882629406361 = 7.770569824501524e-07
+run 0 finished at t = 100.01666666666667 (12002 timesteps)
+done
+  L = 95 nm... Warning: grid volume is not an integer number of pixels; cell size will be rounded to nearest pixel.
+-----------
+Initializing structure...
+time for choose_chunkdivision = 2.31266e-05 s
+Working in 3D dimensions.
+Computational cell is 0.3 x 0.183333 x 2 with resolution 60
+     block, center = (0,0,-0.35)
+          size (1e+20,1e+20,0.5)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.2801,2.2801,2.2801)
+     block, center = (0,0,-0.085)
+          size (1e+20,1e+20,0.03)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (3.9,3.9,3.9)
+time for set_epsilon = 0.063818 s
+drude susceptibility: frequency=0.944319, gamma=0.0795775
+-----------
+Warning: grid volume is not an integer number of pixels; cell size will be rounded to nearest pixel.
+field decay(t = 50.00833333333333): 0.17038720709276445 / 0.17038720709276445 = 1.0
+field decay(t = 100.01666666666667): 5.53245667102135e-08 / 0.17038720709276445 = 3.2469906429121155e-07
+run 0 finished at t = 100.01666666666667 (12002 timesteps)
+-----------
+Initializing structure...
+time for choose_chunkdivision = 2.69413e-05 s
+Working in 3D dimensions.
+Computational cell is 0.3 x 0.183333 x 2 with resolution 60
+     block, center = (0,0,-0.35)
+          size (1e+20,1e+20,0.5)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.2801,2.2801,2.2801)
+     block, center = (0,0,-0.085)
+          size (1e+20,1e+20,0.03)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (3.9,3.9,3.9)
+     block, center = (0,0,-0.06)
+          size (1e+20,1e+20,0.02)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.56,2.56,2.56)
+     ellipsoid, center = (0,0,-0.04)
+          size (0.135,0.08,0.06)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.56,2.56,2.56)
+     ellipsoid, center = (0,0,-0.05)
+          size (0.095,0.04,0.04)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (1,1,1)
+time for set_epsilon = 0.201492 s
+lorentzian susceptibility: frequency=1.21, gamma=0.4
+drude susceptibility: frequency=12.1, gamma=0.081
+lorentzian susceptibility: frequency=1.70826, gamma=0.0530516
+drude susceptibility: frequency=0.944319, gamma=0.0795775
+-----------
+field decay(t = 50.00833333333333): 0.11538045629099665 / 0.11538045629099665 = 1.0
+on time step 7168 (time=59.7333), 0.000558056 s/step
+field decay(t = 100.01666666666667): 4.09613452436692e-07 / 0.11538045629099665 = 3.5501112199073085e-06
+run 0 finished at t = 100.01666666666667 (12002 timesteps)
+done
+  L = 120 nm... Warning: grid volume is not an integer number of pixels; cell size will be rounded to nearest pixel.
+-----------
+Initializing structure...
+time for choose_chunkdivision = 2.31266e-05 s
+Working in 3D dimensions.
+Computational cell is 0.316667 x 0.183333 x 2 with resolution 60
+     block, center = (0,0,-0.35)
+          size (1e+20,1e+20,0.5)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.2801,2.2801,2.2801)
+     block, center = (0,0,-0.085)
+          size (1e+20,1e+20,0.03)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (3.9,3.9,3.9)
+time for set_epsilon = 0.0673008 s
+drude susceptibility: frequency=0.944319, gamma=0.0795775
+-----------
+Warning: grid volume is not an integer number of pixels; cell size will be rounded to nearest pixel.
+field decay(t = 50.00833333333333): 0.17614680057790472 / 0.17614680057790472 = 1.0
+field decay(t = 100.01666666666667): 2.0934729536202775e-19 / 0.17614680057790472 = 1.1884819631988684e-18
+run 0 finished at t = 100.01666666666667 (12002 timesteps)
+-----------
+Initializing structure...
+time for choose_chunkdivision = 2.5034e-05 s
+Working in 3D dimensions.
+Computational cell is 0.316667 x 0.183333 x 2 with resolution 60
+     block, center = (0,0,-0.35)
+          size (1e+20,1e+20,0.5)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.2801,2.2801,2.2801)
+     block, center = (0,0,-0.085)
+          size (1e+20,1e+20,0.03)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (3.9,3.9,3.9)
+     block, center = (0,0,-0.06)
+          size (1e+20,1e+20,0.02)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.56,2.56,2.56)
+     ellipsoid, center = (0,0,-0.04)
+          size (0.16,0.08,0.06)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.56,2.56,2.56)
+     ellipsoid, center = (0,0,-0.05)
+          size (0.12,0.04,0.04)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (1,1,1)
+time for set_epsilon = 0.244515 s
+lorentzian susceptibility: frequency=1.21, gamma=0.4
+drude susceptibility: frequency=12.1, gamma=0.081
+lorentzian susceptibility: frequency=1.70826, gamma=0.0530516
+drude susceptibility: frequency=0.944319, gamma=0.0795775
+-----------
+field decay(t = 50.00833333333333): 0.11905235899576574 / 0.11905235899576574 = 1.0
+on time step 6989 (time=58.2417), 0.000572398 s/step
+field decay(t = 100.01666666666667): 9.055414911660511e-07 / 0.11905235899576574 = 7.606245678829916e-06
+run 0 finished at t = 100.01666666666667 (12002 timesteps)
+done
+  L = 140 nm... Warning: grid volume is not an integer number of pixels; cell size will be rounded to nearest pixel.
+-----------
+Initializing structure...
+time for choose_chunkdivision = 2.5034e-05 s
+Working in 3D dimensions.
+Computational cell is 0.333333 x 0.183333 x 2 with resolution 60
+     block, center = (0,0,-0.35)
+          size (1e+20,1e+20,0.5)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.2801,2.2801,2.2801)
+     block, center = (0,0,-0.085)
+          size (1e+20,1e+20,0.03)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (3.9,3.9,3.9)
+time for set_epsilon = 0.072731 s
+drude susceptibility: frequency=0.944319, gamma=0.0795775
+-----------
+field decay(t = 50.00833333333333): 0.1761468005779048 / 0.1761468005779048 = 1.0
+on time step 11907 (time=99.225), 0.000335958 s/step
+Warning: grid volume is not an integer number of pixels; cell size will be rounded to nearest pixel.
+field decay(t = 100.01666666666667): 2.0934745956142122e-19 / 0.1761468005779048 = 1.1884828953724465e-18
+run 0 finished at t = 100.01666666666667 (12002 timesteps)
+-----------
+Initializing structure...
+time for choose_chunkdivision = 2.5034e-05 s
+Working in 3D dimensions.
+Computational cell is 0.333333 x 0.183333 x 2 with resolution 60
+     block, center = (0,0,-0.35)
+          size (1e+20,1e+20,0.5)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.2801,2.2801,2.2801)
+     block, center = (0,0,-0.085)
+          size (1e+20,1e+20,0.03)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (3.9,3.9,3.9)
+     block, center = (0,0,-0.06)
+          size (1e+20,1e+20,0.02)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.56,2.56,2.56)
+     ellipsoid, center = (0,0,-0.04)
+          size (0.18,0.08,0.06)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.56,2.56,2.56)
+     ellipsoid, center = (0,0,-0.05)
+          size (0.14,0.04,0.04)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (1,1,1)
+time for set_epsilon = 0.276895 s
+lorentzian susceptibility: frequency=1.21, gamma=0.4
+drude susceptibility: frequency=12.1, gamma=0.081
+lorentzian susceptibility: frequency=1.70826, gamma=0.0530516
+drude susceptibility: frequency=0.944319, gamma=0.0795775
+-----------
+field decay(t = 50.00833333333333): 0.11901682904974716 / 0.11901682904974716 = 1.0
+on time step 6613 (time=55.1083), 0.00060491 s/step
+field decay(t = 100.01666666666667): 2.112873601088805e-06 / 0.11901682904974716 = 1.775272974383864e-05
+run 0 finished at t = 100.01666666666667 (12002 timesteps)
+done
+  L = 160 nm... Warning: grid volume is not an integer number of pixels; cell size will be rounded to nearest pixel.
+-----------
+Initializing structure...
+time for choose_chunkdivision = 2.31266e-05 s
+Working in 3D dimensions.
+Computational cell is 0.366667 x 0.183333 x 2 with resolution 60
+     block, center = (0,0,-0.35)
+          size (1e+20,1e+20,0.5)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.2801,2.2801,2.2801)
+     block, center = (0,0,-0.085)
+          size (1e+20,1e+20,0.03)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (3.9,3.9,3.9)
+time for set_epsilon = 0.0777121 s
+drude susceptibility: frequency=0.944319, gamma=0.0795775
+-----------
+field decay(t = 50.00833333333333): 0.1713125932607555 / 0.1713125932607555 = 1.0
+on time step 10768 (time=89.7333), 0.000371498 s/step
+Warning: grid volume is not an integer number of pixels; cell size will be rounded to nearest pixel.
+field decay(t = 100.01666666666667): 1.1760721474934968e-05 / 0.1713125932607555 = 6.865065346967185e-05
+run 0 finished at t = 100.01666666666667 (12002 timesteps)
+-----------
+Initializing structure...
+time for choose_chunkdivision = 2.81334e-05 s
+Working in 3D dimensions.
+Computational cell is 0.366667 x 0.183333 x 2 with resolution 60
+     block, center = (0,0,-0.35)
+          size (1e+20,1e+20,0.5)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.2801,2.2801,2.2801)
+     block, center = (0,0,-0.085)
+          size (1e+20,1e+20,0.03)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (3.9,3.9,3.9)
+     block, center = (0,0,-0.06)
+          size (1e+20,1e+20,0.02)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.56,2.56,2.56)
+     ellipsoid, center = (0,0,-0.04)
+          size (0.2,0.08,0.06)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.56,2.56,2.56)
+     ellipsoid, center = (0,0,-0.05)
+          size (0.16,0.04,0.04)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (1,1,1)
+time for set_epsilon = 0.316795 s
+lorentzian susceptibility: frequency=1.21, gamma=0.4
+drude susceptibility: frequency=12.1, gamma=0.081
+lorentzian susceptibility: frequency=1.70826, gamma=0.0530516
+drude susceptibility: frequency=0.944319, gamma=0.0795775
+-----------
+field decay(t = 50.00833333333333): 0.11751778463762015 / 0.11751778463762015 = 1.0
+on time step 6045 (time=50.375), 0.000661752 s/step
+field decay(t = 100.01666666666667): 9.626992879875299e-06 / 0.11751778463762015 = 8.191945508129905e-05
+run 0 finished at t = 100.01666666666667 (12002 timesteps)
+done
+  L = 180 nm... Warning: grid volume is not an integer number of pixels; cell size will be rounded to nearest pixel.
+-----------
+Initializing structure...
+time for choose_chunkdivision = 2.21729e-05 s
+Working in 3D dimensions.
+Computational cell is 0.383333 x 0.183333 x 2 with resolution 60
+     block, center = (0,0,-0.35)
+          size (1e+20,1e+20,0.5)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.2801,2.2801,2.2801)
+     block, center = (0,0,-0.085)
+          size (1e+20,1e+20,0.03)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (3.9,3.9,3.9)
+time for set_epsilon = 0.0822001 s
+drude susceptibility: frequency=0.944319, gamma=0.0795775
+-----------
+field decay(t = 50.00833333333333): 0.17364152129467972 / 0.17364152129467972 = 1.0
+on time step 10308 (time=85.9), 0.000388075 s/step
+Warning: grid volume is not an integer number of pixels; cell size will be rounded to nearest pixel.
+field decay(t = 100.01666666666667): 4.2038184499626316e-06 / 0.17364152129467972 = 2.4209753627005536e-05
+run 0 finished at t = 100.01666666666667 (12002 timesteps)
+-----------
+Initializing structure...
+time for choose_chunkdivision = 3.38554e-05 s
+Working in 3D dimensions.
+Computational cell is 0.383333 x 0.183333 x 2 with resolution 60
+     block, center = (0,0,-0.35)
+          size (1e+20,1e+20,0.5)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.2801,2.2801,2.2801)
+     block, center = (0,0,-0.085)
+          size (1e+20,1e+20,0.03)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (3.9,3.9,3.9)
+     block, center = (0,0,-0.06)
+          size (1e+20,1e+20,0.02)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.56,2.56,2.56)
+     ellipsoid, center = (0,0,-0.04)
+          size (0.22,0.08,0.06)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.56,2.56,2.56)
+     ellipsoid, center = (0,0,-0.05)
+          size (0.18,0.04,0.04)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (1,1,1)
+time for set_epsilon = 0.353528 s
+lorentzian susceptibility: frequency=1.21, gamma=0.4
+drude susceptibility: frequency=12.1, gamma=0.081
+lorentzian susceptibility: frequency=1.70826, gamma=0.0530516
+drude susceptibility: frequency=0.944319, gamma=0.0795775
+-----------
+on time step 5871 (time=48.925), 0.00068133 s/step
+field decay(t = 50.00833333333333): 0.12012983059915378 / 0.12012983059915378 = 1.0
+on time step 11900 (time=99.1667), 0.000663539 s/step
+field decay(t = 100.01666666666667): 7.28128542968365e-06 / 0.12012983059915378 = 6.061180135997745e-05
+run 0 finished at t = 100.01666666666667 (12002 timesteps)
+done
+  L = 205 nm... Warning: grid volume is not an integer number of pixels; cell size will be rounded to nearest pixel.
+-----------
+Initializing structure...
+time for choose_chunkdivision = 2.21729e-05 s
+Working in 3D dimensions.
+Computational cell is 0.4 x 0.183333 x 2 with resolution 60
+     block, center = (0,0,-0.35)
+          size (1e+20,1e+20,0.5)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.2801,2.2801,2.2801)
+     block, center = (0,0,-0.085)
+          size (1e+20,1e+20,0.03)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (3.9,3.9,3.9)
+time for set_epsilon = 0.083811 s
+drude susceptibility: frequency=0.944319, gamma=0.0795775
+-----------
+field decay(t = 50.00833333333333): 0.1761468005779048 / 0.1761468005779048 = 1.0
+on time step 10573 (time=88.1083), 0.000378336 s/step
+Warning: grid volume is not an integer number of pixels; cell size will be rounded to nearest pixel.
+field decay(t = 100.01666666666667): 2.093473839695513e-19 / 0.1761468005779048 = 1.1884824662311297e-18
+run 0 finished at t = 100.01666666666667 (12002 timesteps)
+-----------
+Initializing structure...
+time for choose_chunkdivision = 2.7895e-05 s
+Working in 3D dimensions.
+Computational cell is 0.4 x 0.183333 x 2 with resolution 60
+     block, center = (0,0,-0.35)
+          size (1e+20,1e+20,0.5)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.2801,2.2801,2.2801)
+     block, center = (0,0,-0.085)
+          size (1e+20,1e+20,0.03)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (3.9,3.9,3.9)
+     block, center = (0,0,-0.06)
+          size (1e+20,1e+20,0.02)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.56,2.56,2.56)
+     ellipsoid, center = (0,0,-0.04)
+          size (0.245,0.08,0.06)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (2.56,2.56,2.56)
+     ellipsoid, center = (0,0,-0.05)
+          size (0.205,0.04,0.04)
+          axes (1,0,0), (0,1,0), (0,0,1)
+          dielectric constant epsilon diagonal = (1,1,1)
+time for set_epsilon = 0.39668 s
+lorentzian susceptibility: frequency=1.21, gamma=0.4
+drude susceptibility: frequency=12.1, gamma=0.081
+lorentzian susceptibility: frequency=1.70826, gamma=0.0530516
+drude susceptibility: frequency=0.944319, gamma=0.0795775
+-----------
+on time step 5415 (time=45.125), 0.00073876 s/step
+field decay(t = 50.00833333333333): 0.12203263663279469 / 0.12203263663279469 = 1.0
+on time step 11267 (time=93.8917), 0.000683586 s/step
+field decay(t = 100.01666666666667): 1.6500021873698773e-05 / 0.12203263663279469 = 0.00013520991047131573
+run 0 finished at t = 100.01666666666667 (12002 timesteps)
+done
+
+Generating plots...
+
+Saved: fig4_reproduction.png
+
+============================================================
+Figure 4 reproduction complete!
+============================================================
+
+Elapsed run time = 243.3170 s
