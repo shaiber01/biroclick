@@ -1,0 +1,210 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "report_schema.json",
+  "title": "Paper Reproduction Report",
+  "description": "Schema for REPRODUCTION_REPORT_<paper_id>.md generation",
+  
+  "type": "object",
+  "required": ["paper_id", "paper_citation", "executive_summary", "assumptions", "figure_comparisons", "summary_table", "systematic_discrepancies", "conclusions"],
+  
+  "properties": {
+    "paper_id": {
+      "type": "string",
+      "description": "Unique identifier for the paper"
+    },
+    
+    "paper_citation": {
+      "type": "object",
+      "required": ["authors", "title", "journal", "year"],
+      "properties": {
+        "authors": {"type": "string"},
+        "title": {"type": "string"},
+        "journal": {"type": "string"},
+        "year": {"type": "integer"},
+        "volume": {"type": "string"},
+        "pages": {"type": "string"},
+        "doi": {"type": "string"}
+      }
+    },
+    
+    "executive_summary": {
+      "type": "object",
+      "required": ["overall_assessment"],
+      "properties": {
+        "overall_assessment": {
+          "type": "array",
+          "description": "High-level assessment of reproduction quality",
+          "items": {
+            "type": "object",
+            "required": ["aspect", "status", "status_icon"],
+            "properties": {
+              "aspect": {"type": "string"},
+              "status": {"type": "string", "enum": ["Reproduced", "Partial", "Not Reproduced", "Not Attempted"]},
+              "status_icon": {"type": "string", "enum": ["✅", "⚠️", "❌", "⏭️"]},
+              "notes": {"type": "string"}
+            }
+          }
+        }
+      }
+    },
+    
+    "assumptions": {
+      "type": "object",
+      "required": ["parameters_from_paper", "parameters_requiring_interpretation", "simulation_implementation"],
+      "properties": {
+        "parameters_from_paper": {
+          "type": "array",
+          "description": "Parameters directly stated in the paper",
+          "items": {
+            "type": "object",
+            "required": ["parameter", "value", "source"],
+            "properties": {
+              "parameter": {"type": "string"},
+              "value": {"type": "string"},
+              "source": {"type": "string"}
+            }
+          }
+        },
+        "parameters_requiring_interpretation": {
+          "type": "array",
+          "description": "Parameters that required assumptions or interpretation",
+          "items": {
+            "type": "object",
+            "required": ["parameter", "assumed_value", "rationale", "impact"],
+            "properties": {
+              "parameter": {"type": "string"},
+              "assumed_value": {"type": "string"},
+              "rationale": {"type": "string"},
+              "impact": {"type": "string", "enum": ["Critical", "Moderate", "Minor"]}
+            }
+          }
+        },
+        "simulation_implementation": {
+          "type": "array",
+          "description": "Implementation choices for the simulation",
+          "items": {
+            "type": "object",
+            "required": ["parameter", "value"],
+            "properties": {
+              "parameter": {"type": "string"},
+              "value": {"type": "string"}
+            }
+          }
+        }
+      }
+    },
+    
+    "figure_comparisons": {
+      "type": "array",
+      "description": "Detailed comparison for each reproduced figure",
+      "items": {
+        "$ref": "#/definitions/figure_comparison"
+      }
+    },
+    
+    "summary_table": {
+      "type": "array",
+      "description": "Quick reference table for all figures",
+      "items": {
+        "type": "object",
+        "required": ["figure", "main_effect", "effect_match", "shape_format", "format_match"],
+        "properties": {
+          "figure": {"type": "string"},
+          "main_effect": {"type": "string"},
+          "effect_match": {"type": "string", "enum": ["✅", "⚠️", "❌"]},
+          "shape_format": {"type": "string"},
+          "format_match": {"type": "string", "enum": ["✅", "⚠️", "❌"]}
+        }
+      }
+    },
+    
+    "systematic_discrepancies": {
+      "type": "array",
+      "description": "Known systematic differences affecting multiple results",
+      "items": {
+        "type": "object",
+        "required": ["name", "description", "origin"],
+        "properties": {
+          "name": {"type": "string"},
+          "description": {"type": "string"},
+          "origin": {"type": "string"},
+          "affected_figures": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    
+    "conclusions": {
+      "type": "object",
+      "required": ["main_physics_reproduced", "key_findings"],
+      "properties": {
+        "main_physics_reproduced": {"type": "boolean"},
+        "key_findings": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "limitations": {
+          "type": "array", 
+          "items": {"type": "string"}
+        },
+        "final_statement": {"type": "string"}
+      }
+    }
+  },
+  
+  "definitions": {
+    "figure_comparison": {
+      "type": "object",
+      "required": ["figure_id", "title", "comparison_table", "shape_comparison", "reason_for_difference"],
+      "properties": {
+        "figure_id": {
+          "type": "string",
+          "description": "Figure identifier (e.g., 'Fig2a', 'Fig3c,d')"
+        },
+        "title": {
+          "type": "string",
+          "description": "Descriptive title for the figure section"
+        },
+        "paper_image_path": {
+          "type": "string",
+          "description": "Path or URL to original paper figure"
+        },
+        "reproduction_image_path": {
+          "type": "string",
+          "description": "Path to reproduced figure"
+        },
+        "comparison_table": {
+          "type": "array",
+          "description": "Feature-by-feature comparison",
+          "items": {
+            "type": "object",
+            "required": ["feature", "paper", "reproduction", "status"],
+            "properties": {
+              "feature": {"type": "string"},
+              "paper": {"type": "string"},
+              "reproduction": {"type": "string"},
+              "status": {"type": "string", "enum": ["✅ Match", "⚠️ Partial", "❌ Mismatch"]}
+            }
+          }
+        },
+        "shape_comparison": {
+          "type": "array",
+          "description": "Qualitative shape/appearance comparison",
+          "items": {
+            "type": "object",
+            "required": ["aspect", "paper", "reproduction"],
+            "properties": {
+              "aspect": {"type": "string"},
+              "paper": {"type": "string"},
+              "reproduction": {"type": "string"}
+            }
+          }
+        },
+        "reason_for_difference": {
+          "type": "string",
+          "description": "Explanation for any discrepancies"
+        }
+      }
+    }
+  }
+}
+

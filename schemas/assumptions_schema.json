@@ -1,0 +1,243 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "assumptions_schema.json",
+  "title": "Paper Reproduction Assumptions",
+  "description": "Schema for assumptions_<paper_id>.json files",
+  
+  "type": "object",
+  "required": ["paper_id", "global_assumptions"],
+  
+  "properties": {
+    "paper_id": {
+      "type": "string",
+      "description": "Unique identifier for the paper"
+    },
+    
+    "global_assumptions": {
+      "type": "array",
+      "description": "Assumptions that apply across all stages",
+      "items": {
+        "$ref": "#/definitions/assumption"
+      }
+    },
+    
+    "geometry_interpretations": {
+      "type": "array",
+      "description": "Explicit interpretations of ambiguous geometry terms",
+      "items": {
+        "type": "object",
+        "required": ["id", "ambiguous_term", "interpretation", "reason"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique ID (e.g., 'G1')"
+          },
+          "ambiguous_term": {
+            "type": "string",
+            "description": "The ambiguous term from the paper"
+          },
+          "interpretation": {
+            "type": "string",
+            "description": "How we interpret it"
+          },
+          "reason": {
+            "type": "string",
+            "description": "Why this interpretation is reasonable"
+          },
+          "confidence": {
+            "type": "string",
+            "enum": ["high", "medium", "low"],
+            "description": "Confidence in this interpretation"
+          },
+          "introduced_by": {
+            "type": "string",
+            "description": "Which agent made this interpretation"
+          },
+          "stage_id": {
+            "type": ["string", "null"],
+            "description": "Stage where this was introduced"
+          }
+        }
+      }
+    },
+    
+    "stage_assumptions": {
+      "type": "array",
+      "description": "Assumptions specific to individual stages",
+      "items": {
+        "allOf": [
+          {"$ref": "#/definitions/assumption"},
+          {
+            "type": "object",
+            "required": ["stage_id"],
+            "properties": {
+              "stage_id": {
+                "type": "string",
+                "description": "Stage this assumption applies to"
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  
+  "definitions": {
+    "assumption": {
+      "type": "object",
+      "required": ["id", "category", "description", "reason", "source", "critical"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique ID (e.g., 'A1', 'S1')"
+        },
+        "category": {
+          "type": "string",
+          "enum": ["material", "geometry", "source", "boundary", "numerical"],
+          "description": "Category of assumption"
+        },
+        "description": {
+          "type": "string",
+          "description": "What is being assumed"
+        },
+        "reason": {
+          "type": "string",
+          "description": "Why this assumption is reasonable"
+        },
+        "source": {
+          "type": "string",
+          "enum": ["paper_stated", "paper_inferred", "literature_default", "user_provided", "performance_optimization"],
+          "description": "Origin of this assumption"
+        },
+        "alternatives_considered": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Other options that were considered"
+        },
+        "critical": {
+          "type": "boolean",
+          "description": "Whether this affects main physics significantly"
+        },
+        "validated": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether this assumption has been validated"
+        },
+        "validation_stage": {
+          "type": ["string", "null"],
+          "description": "Stage where this was/will be validated"
+        },
+        "introduced_by": {
+          "type": "string",
+          "description": "Which agent introduced this assumption"
+        }
+      }
+    }
+  },
+  
+  "example": {
+    "paper_id": "aluminum_nanoantenna_2013",
+    
+    "global_assumptions": [
+      {
+        "id": "A1",
+        "category": "material",
+        "description": "Use Palik data for aluminum refractive index",
+        "reason": "Paper cites 'standard' Al optical constants; Palik is the most common reference",
+        "source": "literature_default",
+        "alternatives_considered": ["Johnson-Christy", "Rakic Lorentz-Drude", "McPeak"],
+        "critical": true,
+        "validated": true,
+        "validation_stage": "stage0_material_validation",
+        "introduced_by": "PlannerAgent"
+      },
+      {
+        "id": "A2",
+        "category": "material",
+        "description": "Glass substrate n=1.51, non-dispersive",
+        "reason": "Typical BK7-like glass in visible/near-IR; dispersion negligible over 400-800nm",
+        "source": "literature_default",
+        "alternatives_considered": ["Fused silica n=1.46", "Soda-lime glass n=1.52"],
+        "critical": false,
+        "validated": false,
+        "validation_stage": null,
+        "introduced_by": "PlannerAgent"
+      },
+      {
+        "id": "A3",
+        "category": "material",
+        "description": "J-aggregate modeled as Lorentzian oscillator with ε∞=2.5, ω₀=2.1 eV (590nm), γ=50 meV, f=0.1",
+        "reason": "Parameters extracted from Fig 2a absorption spectrum; ε∞ typical for organic",
+        "source": "paper_inferred",
+        "alternatives_considered": ["Different oscillator strength", "Multiple Lorentzians"],
+        "critical": true,
+        "validated": true,
+        "validation_stage": "stage0_material_validation",
+        "introduced_by": "PlannerAgent"
+      },
+      {
+        "id": "A4",
+        "category": "boundary",
+        "description": "Substrate is semi-infinite (no back-reflection)",
+        "reason": "Experimental substrates are typically ~1mm thick, much larger than coherence length",
+        "source": "literature_default",
+        "alternatives_considered": ["Finite thickness with Fabry-Perot"],
+        "critical": false,
+        "validated": false,
+        "validation_stage": null,
+        "introduced_by": "PlannerAgent"
+      }
+    ],
+    
+    "geometry_interpretations": [
+      {
+        "id": "G1",
+        "ambiguous_term": "nanodisk spacing",
+        "interpretation": "Not applicable - isolated disks, not arrays",
+        "reason": "Paper focuses on single/isolated nanodisks; array effects not studied",
+        "confidence": "high",
+        "introduced_by": "PlannerAgent",
+        "stage_id": null
+      },
+      {
+        "id": "G2",
+        "ambiguous_term": "J-aggregate coating geometry",
+        "interpretation": "Conformal coating following disk topography",
+        "reason": "J-aggregates are typically spin-coated from solution, which produces conformal films",
+        "confidence": "medium",
+        "introduced_by": "ExecutorAgent",
+        "stage_id": "stage3_coated_single"
+      }
+    ],
+    
+    "stage_assumptions": [
+      {
+        "id": "S1",
+        "stage_id": "stage1_single_disk",
+        "category": "numerical",
+        "description": "Use 2D cross-section approximation (infinite cylinder) for initial validation",
+        "reason": "10× faster than 3D; captures main dipolar resonance physics; systematic error documented",
+        "source": "performance_optimization",
+        "alternatives_considered": ["Full 3D simulation"],
+        "critical": true,
+        "validated": true,
+        "validation_stage": "stage1_single_disk",
+        "introduced_by": "ExecutorAgent"
+      },
+      {
+        "id": "S2",
+        "stage_id": "stage1_single_disk",
+        "category": "numerical",
+        "description": "Resolution of 40 pixels/µm (25nm grid)",
+        "reason": "Resolves disk geometry with 3+ points across smallest feature; convergence tested",
+        "source": "performance_optimization",
+        "alternatives_considered": ["Higher resolution 80 px/µm"],
+        "critical": false,
+        "validated": true,
+        "validation_stage": "stage1_single_disk",
+        "introduced_by": "ExecutorAgent"
+      }
+    ]
+  }
+}
+

@@ -1,0 +1,361 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "plan_schema.json",
+  "title": "Paper Reproduction Plan",
+  "description": "Schema for plan_<paper_id>.json files",
+  
+  "type": "object",
+  "required": ["paper_id", "paper_domain", "title", "summary", "targets", "stages"],
+  
+  "properties": {
+    "paper_id": {
+      "type": "string",
+      "description": "Unique identifier for the paper (e.g., 'aluminum_nanoantenna_2013')"
+    },
+    
+    "paper_domain": {
+      "type": "string",
+      "enum": ["plasmonics", "photonic_crystal", "metamaterial", "thin_film", "waveguide", "other"],
+      "description": "Primary domain of the paper"
+    },
+    
+    "title": {
+      "type": "string",
+      "description": "Paper title"
+    },
+    
+    "summary": {
+      "type": "string",
+      "description": "Brief summary of the physical system and main claims"
+    },
+    
+    "extracted_parameters": {
+      "type": "array",
+      "description": "All parameters extracted from the paper with provenance",
+      "items": {
+        "type": "object",
+        "required": ["name", "value", "unit", "source"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Parameter name (e.g., 'disk_diameter')"
+          },
+          "value": {
+            "oneOf": [
+              {"type": "number"},
+              {"type": "string"},
+              {"type": "array", "items": {"type": "number"}}
+            ],
+            "description": "Parameter value or range"
+          },
+          "unit": {
+            "type": "string",
+            "description": "Unit (e.g., 'nm', 'eV', 'meV')"
+          },
+          "source": {
+            "type": "string",
+            "enum": ["text", "figure_caption", "figure_axis", "supplementary", "inferred"],
+            "description": "Where the value was found"
+          },
+          "location": {
+            "type": "string",
+            "description": "Specific location in paper"
+          },
+          "cross_checked": {
+            "type": "boolean",
+            "description": "Whether value was verified across multiple sources"
+          },
+          "discrepancy_notes": {
+            "type": ["string", "null"],
+            "description": "Notes if sources disagree"
+          }
+        }
+      }
+    },
+    
+    "targets": {
+      "type": "array",
+      "description": "Figures/results to reproduce",
+      "items": {
+        "type": "object",
+        "required": ["figure_id", "description", "type", "simulation_class"],
+        "properties": {
+          "figure_id": {
+            "type": "string",
+            "description": "Figure identifier (e.g., 'Fig3a')"
+          },
+          "description": {
+            "type": "string",
+            "description": "What the figure shows"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["spectrum", "dispersion", "field_map", "parameter_sweep", "other"],
+            "description": "Type of visualization"
+          },
+          "simulation_class": {
+            "type": "string",
+            "enum": ["FDTD_DIRECT", "FDTD_DERIVED", "ANALYTICAL", "COMPLEX_PHYSICS", "NOT_REPRODUCIBLE"],
+            "description": "Classification for reproducibility"
+          },
+          "complexity_notes": {
+            "type": ["string", "null"],
+            "description": "Any special considerations"
+          }
+        }
+      }
+    },
+    
+    "stages": {
+      "type": "array",
+      "description": "Ordered list of reproduction stages",
+      "items": {
+        "type": "object",
+        "required": ["stage_id", "stage_type", "name", "description", "targets", "dependencies"],
+        "properties": {
+          "stage_id": {
+            "type": "string",
+            "description": "Unique stage identifier (e.g., 'stage0_material_validation')"
+          },
+          "stage_type": {
+            "type": "string",
+            "enum": ["MATERIAL_VALIDATION", "SINGLE_STRUCTURE", "ARRAY_SYSTEM", "PARAMETER_SWEEP", "COMPLEX_PHYSICS"],
+            "description": "Stage category in validation hierarchy"
+          },
+          "name": {
+            "type": "string",
+            "description": "Human-readable stage name"
+          },
+          "description": {
+            "type": "string",
+            "description": "What will be done in this stage"
+          },
+          "targets": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Figure IDs this stage aims to reproduce"
+          },
+          "dependencies": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Stage IDs that must complete first"
+          },
+          "is_mandatory_validation": {
+            "type": "boolean",
+            "default": false,
+            "description": "Whether this is a required validation stage"
+          },
+          "complexity_class": {
+            "type": "string",
+            "enum": ["analytical", "2D_light", "2D_medium", "3D_light", "3D_medium", "3D_heavy"],
+            "description": "Computational complexity estimate"
+          },
+          "runtime_estimate_minutes": {
+            "type": "number",
+            "description": "Expected runtime in minutes"
+          },
+          "runtime_budget_minutes": {
+            "type": "number",
+            "description": "Maximum allowed runtime in minutes"
+          },
+          "max_revisions": {
+            "type": "integer",
+            "default": 3,
+            "description": "Maximum design revisions before escalating"
+          },
+          "fallback_strategy": {
+            "type": "string",
+            "enum": ["ask_user", "simplify", "skip_with_warning"],
+            "description": "What to do if stage fails or exceeds budget"
+          },
+          "validation_criteria": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Specific measurable criteria for success"
+          },
+          "reference_data_path": {
+            "type": ["string", "null"],
+            "description": "Optional path to digitized reference data"
+          }
+        }
+      }
+    }
+  },
+  
+  "example": {
+    "paper_id": "aluminum_nanoantenna_2013",
+    "paper_domain": "plasmonics",
+    "title": "Aluminum nanoantenna complexes for strong coupling between J-aggregates and localized surface plasmons",
+    "summary": "Study of strong coupling between Al nanodisk plasmons and J-aggregate excitons, demonstrating Rabi splitting of ~200 meV.",
+    
+    "extracted_parameters": [
+      {
+        "name": "disk_diameter",
+        "value": [60, 75, 90, 105],
+        "unit": "nm",
+        "source": "text",
+        "location": "Methods section, paragraph 2",
+        "cross_checked": true,
+        "discrepancy_notes": null
+      },
+      {
+        "name": "disk_height",
+        "value": 30,
+        "unit": "nm",
+        "source": "text",
+        "location": "Methods section",
+        "cross_checked": false,
+        "discrepancy_notes": null
+      },
+      {
+        "name": "exciton_wavelength",
+        "value": 590,
+        "unit": "nm",
+        "source": "figure_axis",
+        "location": "Extracted from Fig 2a absorption peak",
+        "cross_checked": true,
+        "discrepancy_notes": "Text says 588nm, figure peak at 590nm. Using figure value."
+      },
+      {
+        "name": "exciton_linewidth",
+        "value": 50,
+        "unit": "meV",
+        "source": "figure_axis",
+        "location": "FWHM from Fig 2a",
+        "cross_checked": true,
+        "discrepancy_notes": "Text says 45 meV, figure shows ~50 meV. Using figure value per Rule 1."
+      }
+    ],
+    
+    "targets": [
+      {
+        "figure_id": "Fig2a",
+        "description": "J-aggregate absorption spectrum",
+        "type": "spectrum",
+        "simulation_class": "FDTD_DERIVED",
+        "complexity_notes": "Need to extract Lorentzian parameters from this figure"
+      },
+      {
+        "figure_id": "Fig3a",
+        "description": "Transmission vs wavelength for bare Al nanodisks, multiple diameters",
+        "type": "spectrum",
+        "simulation_class": "FDTD_DIRECT",
+        "complexity_notes": null
+      },
+      {
+        "figure_id": "Fig3b",
+        "description": "Transmission for coated nanodisks showing strong coupling",
+        "type": "spectrum",
+        "simulation_class": "FDTD_DIRECT",
+        "complexity_notes": "Requires accurate exciton model"
+      },
+      {
+        "figure_id": "Fig4",
+        "description": "Dispersion diagram showing anticrossing and Rabi splitting",
+        "type": "dispersion",
+        "simulation_class": "FDTD_DERIVED",
+        "complexity_notes": "Requires peak extraction from multiple spectra"
+      }
+    ],
+    
+    "stages": [
+      {
+        "stage_id": "stage0_material_validation",
+        "stage_type": "MATERIAL_VALIDATION",
+        "name": "Material optical properties validation",
+        "description": "Validate Al optical constants (Palik) and J-aggregate Lorentzian model against paper Fig 2a absorption spectrum",
+        "targets": ["Fig2a"],
+        "dependencies": [],
+        "is_mandatory_validation": true,
+        "complexity_class": "analytical",
+        "runtime_estimate_minutes": 1,
+        "runtime_budget_minutes": 5,
+        "max_revisions": 3,
+        "fallback_strategy": "ask_user",
+        "validation_criteria": [
+          "J-aggregate absorption peak at 590±5 nm",
+          "J-aggregate FWHM within 20% of paper value",
+          "Al n,k data covers 400-800 nm range"
+        ],
+        "reference_data_path": null
+      },
+      {
+        "stage_id": "stage1_single_disk",
+        "stage_type": "SINGLE_STRUCTURE",
+        "name": "Single bare Al nanodisk",
+        "description": "Simulate single isolated Al nanodisk on glass substrate, validate resonance position for D=75nm",
+        "targets": ["Fig3a"],
+        "dependencies": ["stage0_material_validation"],
+        "is_mandatory_validation": true,
+        "complexity_class": "2D_light",
+        "runtime_estimate_minutes": 2,
+        "runtime_budget_minutes": 15,
+        "max_revisions": 3,
+        "fallback_strategy": "ask_user",
+        "validation_criteria": [
+          "Resonance wavelength within 5% of paper value for D=75nm",
+          "Peak shape qualitatively similar (single dip in transmission)"
+        ],
+        "reference_data_path": null
+      },
+      {
+        "stage_id": "stage2_bare_disk_sweep",
+        "stage_type": "PARAMETER_SWEEP",
+        "name": "Bare nanodisk diameter sweep",
+        "description": "Sweep disk diameter (60, 75, 90, 105 nm) to reproduce Fig 3a",
+        "targets": ["Fig3a"],
+        "dependencies": ["stage1_single_disk"],
+        "is_mandatory_validation": false,
+        "complexity_class": "2D_medium",
+        "runtime_estimate_minutes": 10,
+        "runtime_budget_minutes": 30,
+        "max_revisions": 3,
+        "fallback_strategy": "simplify",
+        "validation_criteria": [
+          "Resonance blue-shifts with decreasing diameter",
+          "Peak positions within 5% for all diameters"
+        ],
+        "reference_data_path": null
+      },
+      {
+        "stage_id": "stage3_coated_single",
+        "stage_type": "SINGLE_STRUCTURE",
+        "name": "Single coated nanodisk",
+        "description": "Add J-aggregate coating to single disk, validate Rabi splitting appears",
+        "targets": ["Fig3b"],
+        "dependencies": ["stage2_bare_disk_sweep", "stage0_material_validation"],
+        "is_mandatory_validation": true,
+        "complexity_class": "2D_medium",
+        "runtime_estimate_minutes": 5,
+        "runtime_budget_minutes": 20,
+        "max_revisions": 3,
+        "fallback_strategy": "ask_user",
+        "validation_criteria": [
+          "Two peaks visible (upper and lower polariton)",
+          "Splitting approximately centered on exciton wavelength"
+        ],
+        "reference_data_path": null
+      },
+      {
+        "stage_id": "stage4_dispersion",
+        "stage_type": "PARAMETER_SWEEP",
+        "name": "Dispersion diagram",
+        "description": "Sweep diameter with coating, extract peak positions to create dispersion diagram",
+        "targets": ["Fig4"],
+        "dependencies": ["stage3_coated_single"],
+        "is_mandatory_validation": false,
+        "complexity_class": "2D_medium",
+        "runtime_estimate_minutes": 20,
+        "runtime_budget_minutes": 60,
+        "max_revisions": 3,
+        "fallback_strategy": "simplify",
+        "validation_criteria": [
+          "Anticrossing behavior visible",
+          "Rabi splitting within 30% of paper value (~200 meV)"
+        ],
+        "reference_data_path": null
+      }
+    ]
+  }
+}
+
