@@ -446,3 +446,140 @@ Instead of fixed resolution estimates, future versions could:
 - Automatically refine based on convergence
 - Stop when results stabilize
 
+---
+
+## 13. Self-Improving System Roadmap
+
+### Current: PromptAdaptorAgent (v1)
+
+The system includes a `PromptAdaptorAgent` that customizes agent prompts for each paper:
+- Runs BEFORE all other agents
+- Analyzes paper domain, materials, techniques
+- Adds, modifies, or disables prompt content
+- Documents all changes with reasoning
+- Saves adaptation log for review
+
+**Current capabilities:**
+- Append domain-specific guidance to prompts
+- Modify existing content (with high confidence)
+- Disable irrelevant content (with very high confidence)
+- Document all changes
+
+**Constraints:**
+- Cannot modify `global_rules.md`
+- Cannot modify workflow structure
+- Cannot add/remove agents
+
+### Planned: PromptEvolutionAgent (v2)
+
+A meta-agent that learns from accumulated prompt adaptations:
+
+**Concept:**
+```
+Paper 1 → PromptAdaptor → Adaptations logged
+Paper 2 → PromptAdaptor → Adaptations logged  
+Paper 3 → PromptAdaptor → Adaptations logged
+         ↓
+PromptEvolutionAgent (periodic review)
+         ↓
+"These adaptations appeared in 80% of plasmonics papers:
+ - J-aggregate fitting procedure
+ - Rabi splitting thresholds
+ Recommend adding to base SimulationDesignerAgent."
+         ↓
+Human review → Merge to base prompts
+```
+
+**Benefits:**
+- System improves over time
+- Domain-specific knowledge accumulates
+- Reduces per-paper adaptation cost
+- Captures best practices automatically
+
+**Implementation Notes:**
+- Run periodically (every N papers or manually triggered)
+- Analyze adaptation logs across papers
+- Identify high-frequency, high-impact additions
+- Generate recommendations with confidence scores
+- Human approval required before base prompt changes
+
+### Planned: Dynamic Workflow Adaptation (v3)
+
+Extend PromptAdaptorAgent to modify workflow structure:
+
+**Potential Capabilities:**
+- Add specialized validation nodes for specific paper types
+- Skip irrelevant nodes for simple papers
+- Add parallel execution paths for independent stages
+- Insert domain-specific agents dynamically
+
+**Examples:**
+```python
+# Simple paper (transmission spectrum only)
+PLAN → DESIGN → CODE → RUN → ANALYZE → SUPERVISOR
+
+# Complex paper (strong coupling + near-field)
+PLAN → DESIGN → CODE → RUN → NEARFIELD_ANALYZE → COUPLING_VALIDATE → ANALYZE → SUPERVISOR
+```
+
+**Challenges:**
+- Workflow validation (ensure graph is acyclic, complete)
+- State management across dynamic nodes
+- Testing dynamic configurations
+- Debugging failures in modified workflows
+
+**Not implemented in v1** — requires stable base system first.
+
+### System Evolution Path
+
+```
+v1.0 (Current):
+├── 10 fixed agents
+├── PromptAdaptorAgent customizes prompts
+└── All adaptations logged
+
+v2.0 (Future):
+├── PromptEvolutionAgent learns from logs
+├── Base prompts improve over time
+└── Reduced per-paper adaptation
+
+v3.0 (Future):
+├── Dynamic workflow adaptation
+├── Domain-specific agent injection
+└── Fully adaptive reproduction system
+```
+
+### Adaptation Logging Schema
+
+All adaptations are logged for future learning:
+
+```json
+{
+  "paper_id": "paper_xyz",
+  "timestamp": "2025-11-30T12:00:00Z",
+  "domain": "plasmonics_strong_coupling",
+  "adaptations": [
+    {
+      "id": "MOD_001",
+      "target_agent": "SimulationDesignerAgent",
+      "modification_type": "append",
+      "confidence": 0.85,
+      "content_hash": "abc123",
+      "reasoning": "...",
+      "impact": "high"
+    }
+  ],
+  "reproduction_outcome": {
+    "success_rate": 0.8,
+    "figures_reproduced": 4,
+    "figures_total": 5
+  },
+  "adaptation_effectiveness": {
+    "MOD_001": "helpful",  // retrospective evaluation
+    "MOD_002": "neutral"
+  }
+}
+```
+
+This schema supports future machine learning on adaptation effectiveness.
+

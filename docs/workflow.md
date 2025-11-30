@@ -6,10 +6,11 @@ This document describes the LangGraph workflow for paper reproduction.
 
 The system uses a state graph where each node represents an agent action or system operation. State flows through the graph, accumulating results and tracking progress.
 
-## Agent Summary (9 Agents)
+## Agent Summary (10 Agents)
 
 | Agent | Node | Role |
 |-------|------|------|
+| PromptAdaptorAgent | ADAPT_PROMPTS | Customizes prompts for paper-specific needs |
 | PlannerAgent | PLAN | Reads paper, creates staged plan |
 | SimulationDesignerAgent | DESIGN | Designs simulation setup |
 | CodeReviewerAgent | CODE_REVIEW | Reviews design and code |
@@ -22,9 +23,48 @@ The system uses a state graph where each node represents an agent action or syst
 
 ## Node Definitions
 
-### 1. PLAN Node (PlannerAgent)
+### 1. ADAPT_PROMPTS Node (PromptAdaptorAgent)
 
-**Purpose**: Analyze paper and create reproduction plan
+**Purpose**: Customize agent prompts for paper-specific requirements
+
+**When**: First node to run, before any other agent
+
+**Inputs**:
+- `paper_id`: Unique identifier
+- `paper_text`: Extracted paper content (for quick domain scan)
+
+**Outputs**:
+- `prompt_modifications`: List of modifications to agent prompts
+- `adaptation_log`: Complete log of all changes with reasoning
+- `domain_analysis`: Paper domain, materials, techniques identified
+
+**Process**:
+1. Quick scan of paper for domain, materials, techniques
+2. Identify gaps in base prompts for this paper
+3. Generate targeted modifications (append, modify, disable)
+4. Document all changes with confidence levels
+5. Apply modifications to agent prompts
+
+**Modification Types**:
+| Type | Confidence Required | Description |
+|------|---------------------|-------------|
+| Append | >60% | Add domain-specific guidance |
+| Modify | >80% | Adjust existing content |
+| Disable | >90% | Mark content as not applicable |
+
+**Constraints**:
+- Cannot modify `global_rules.md`
+- Cannot change workflow structure
+- All changes logged for review
+
+**Transitions**:
+- → PLAN (always)
+
+---
+
+### 2. PLAN Node (PlannerAgent)
+
+**Purpose**: Analyze paper and create reproduction plan (using adapted prompt)
 
 **Inputs**:
 - `paper_id`: Unique identifier
@@ -42,7 +82,7 @@ The system uses a state graph where each node represents an agent action or syst
 
 ---
 
-### 2. SELECT_STAGE Node
+### 3. SELECT_STAGE Node
 
 **Purpose**: Choose next stage to execute based on dependencies and status
 
@@ -72,7 +112,7 @@ def select_next_stage(state):
 
 ---
 
-### 3. DESIGN Node (SimulationDesignerAgent)
+### 4. DESIGN Node (SimulationDesignerAgent)
 
 **Purpose**: Design simulation setup for current stage (no code generation)
 
@@ -93,7 +133,7 @@ def select_next_stage(state):
 
 ---
 
-### 4. CODE_REVIEW Node (CodeReviewerAgent)
+### 5. CODE_REVIEW Node (CodeReviewerAgent)
 
 **Purpose**: Review design or code before proceeding
 
@@ -129,7 +169,7 @@ def select_next_stage(state):
 
 ---
 
-### 5. GENERATE_CODE Node (CodeGeneratorAgent)
+### 6. GENERATE_CODE Node (CodeGeneratorAgent)
 
 **Purpose**: Generate Python+Meep code from approved design
 
@@ -147,7 +187,7 @@ def select_next_stage(state):
 
 ---
 
-### 6. RUN_CODE Node (Python Execution)
+### 7. RUN_CODE Node (Python Execution)
 
 **Purpose**: Execute the simulation code
 
@@ -186,7 +226,7 @@ def run_code_node(state):
 
 ---
 
-### 7. EXECUTION_CHECK Node (ExecutionValidatorAgent)
+### 8. EXECUTION_CHECK Node (ExecutionValidatorAgent)
 
 **Purpose**: Validate that simulation ran correctly (technical checks)
 
@@ -210,7 +250,7 @@ def run_code_node(state):
 
 ---
 
-### 8. PHYSICS_CHECK Node (PhysicsSanityAgent)
+### 9. PHYSICS_CHECK Node (PhysicsSanityAgent)
 
 **Purpose**: Validate that results are physically reasonable (before comparison)
 
@@ -233,7 +273,7 @@ def run_code_node(state):
 
 ---
 
-### 9. ANALYZE Node (ResultsAnalyzerAgent)
+### 10. ANALYZE Node (ResultsAnalyzerAgent)
 
 **Purpose**: Compare results to paper and classify reproduction quality
 
@@ -259,7 +299,7 @@ def run_code_node(state):
 
 ---
 
-### 10. COMPARISON_CHECK Node (ComparisonValidatorAgent)
+### 11. COMPARISON_CHECK Node (ComparisonValidatorAgent)
 
 **Purpose**: Validate that ResultsAnalyzerAgent's comparison is accurate
 
@@ -283,7 +323,7 @@ def run_code_node(state):
 
 ---
 
-### 11. SUPERVISOR Node (SupervisorAgent)
+### 12. SUPERVISOR Node (SupervisorAgent)
 
 **Purpose**: Big-picture assessment and strategic decisions
 
@@ -315,7 +355,7 @@ def run_code_node(state):
 
 ---
 
-### 12. ASK_USER Node
+### 13. ASK_USER Node
 
 **Purpose**: Pause for user input
 
@@ -334,7 +374,7 @@ def run_code_node(state):
 
 ---
 
-### 13. GENERATE_REPORT Node (SupervisorAgent)
+### 14. GENERATE_REPORT Node (SupervisorAgent)
 
 **Purpose**: Compile final reproduction report
 
@@ -369,6 +409,12 @@ def run_code_node(state):
 ```
                                     ┌─────────────┐
                                     │    START    │
+                                    └──────┬──────┘
+                                           │
+                                           ▼
+                                    ┌─────────────┐
+                                    │ADAPT_PROMPTS│
+                                    │(PromptAdapt)│
                                     └──────┬──────┘
                                            │
                                            ▼

@@ -16,10 +16,11 @@ BiroClick reads scientific papers, plans staged reproductions, generates and run
 
 ## Architecture
 
-### Agents (9 total)
+### Agents (10 total)
 
 | Agent | Role | Responsibilities |
 |-------|------|------------------|
+| **PromptAdaptorAgent** | System customization | Analyzes paper, adapts agent prompts for domain-specific needs |
 | **PlannerAgent** | Strategic planning | Reads paper, extracts parameters, classifies figures, designs staged reproduction plan |
 | **SimulationDesignerAgent** | Simulation design | Interprets geometry, selects materials, designs sources/BCs, estimates performance |
 | **CodeGeneratorAgent** | Code generation | Writes Python+Meep code from approved designs |
@@ -35,7 +36,9 @@ BiroClick reads scientific papers, plans staged reproductions, generates and run
 ```
 START
   ↓
-PLAN (PlannerAgent)
+ADAPT_PROMPTS (PromptAdaptorAgent) ← Customizes system for paper
+  ↓
+PLAN (PlannerAgent) ← Uses adapted prompts
   ↓
 SELECT_STAGE
   ├→ [no more stages] → GENERATE_REPORT → END
@@ -86,6 +89,7 @@ biroclick/
 │
 ├── prompts/                              # Agent system prompts
 │   ├── global_rules.md                   # Non-negotiable rules for all agents
+│   ├── prompt_adaptor_agent.md           # PromptAdaptorAgent (runs first)
 │   ├── planner_agent.md                  # PlannerAgent system prompt
 │   ├── simulation_designer_agent.md      # SimulationDesignerAgent prompt
 │   ├── code_generator_agent.md           # CodeGeneratorAgent prompt
