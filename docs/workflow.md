@@ -79,7 +79,7 @@ def select_next_stage(state):
 
 ---
 
-### 4. CRITIC_PRE Node (CriticAgent - Pre-Run Mode)
+### 4. CODE_REVIEW Node (CodeReviewerAgent)
 
 **Purpose**: Review design and code before execution
 
@@ -170,9 +170,9 @@ def run_code_node(state):
 
 ---
 
-### 7. CRITIC_POST Node (CriticAgent - Post-Run Mode)
+### 7. VALIDATE_RESULTS Node (ResultsValidatorAgent)
 
-**Purpose**: Validate analysis and discrepancy documentation
+**Purpose**: Validate outputs, physics, and comparison to paper
 
 **Checks**:
 - Qualitative comparison done correctly
@@ -302,7 +302,7 @@ def run_code_node(state):
                      │                  │                │          │
                      │                  ▼                │          │
                      │           ┌─────────────┐         │          │
-                     │           │ CRITIC_PRE  │         │          │
+                     │           │ CODE_REVIEW │         │          │
                      │           └──────┬──────┘         │          │
                      │                  │                │          │
                      │        ┌─────────┼─────────┐      │          │
@@ -331,7 +331,7 @@ def run_code_node(state):
                      │         │                  │     │           │
                      │         ▼                  │     │           │
                      │  ┌─────────────┐           │     │           │
-                     │  │ CRITIC_POST │           │     │           │
+                     │  │  VALIDATE   │           │     │           │
                      │  └──────┬──────┘           │     │           │
                      │         │                  │     │           │
                      │    ┌────┴────┐             │     │           │

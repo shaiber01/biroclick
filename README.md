@@ -22,7 +22,8 @@ BiroClick reads scientific papers, plans staged reproductions, generates and run
 |-------|------|------------------|
 | **PlannerAgent** | Strategic planning | Reads paper, extracts parameters, classifies figures, designs staged reproduction plan |
 | **ExecutorAgent** | Implementation | Designs simulations, writes Meep code, analyzes results, documents discrepancies |
-| **CriticAgent** | Quality assurance | Pre-run code review, post-run analysis validation, checklist verification |
+| **CodeReviewerAgent** | Pre-run QA | Reviews code, geometry, materials, numerics before simulation runs |
+| **ResultsValidatorAgent** | Post-run QA | Validates outputs, physics, figure comparisons after simulation runs |
 | **SupervisorAgent** | Scientific oversight | Big-picture assessment, validation hierarchy monitoring, decision-making |
 
 ### Workflow
@@ -36,15 +37,15 @@ SELECT_STAGE
   ├→ [no more stages] → END
   └→ [has next stage] → DESIGN (ExecutorAgent)
         ↓
-     CRITIC_PRE (CriticAgent)
+     CODE_REVIEW (CodeReviewerAgent)
         ├→ [needs_revision] → DESIGN (max 3 times)
-        └→ [approve] → RUN_CODE
+        └→ [approve_to_run] → RUN_CODE
               ↓
            ANALYZE (ExecutorAgent)
               ↓
-           CRITIC_POST (CriticAgent)
+           VALIDATE_RESULTS (ResultsValidatorAgent)
               ├→ [needs_revision] → ANALYZE (max 2 times)
-              └→ [approve] → SUPERVISOR
+              └→ [approve_results] → SUPERVISOR
                     ├→ [ok_continue] → SELECT_STAGE
                     ├→ [replan_needed] → PLAN
                     └→ [ask_user] → USER_INPUT
@@ -69,13 +70,14 @@ biroclick/
 ├── README.md                 # This file
 ├── requirements.txt          # Python dependencies
 │
-├── prompts/                  # Agent system prompts
-│   ├── global_rules.md       # Non-negotiable rules for all agents
-│   ├── planner_agent.md      # PlannerAgent system prompt
-│   ├── executor_agent.md     # ExecutorAgent system prompt
-│   ├── critic_agent.md       # CriticAgent system prompt
-│   ├── supervisor_agent.md   # SupervisorAgent system prompt
-│   └── report_template.md    # REPRODUCTION_REPORT.md template
+├── prompts/                       # Agent system prompts
+│   ├── global_rules.md            # Non-negotiable rules for all agents
+│   ├── planner_agent.md           # PlannerAgent system prompt
+│   ├── executor_agent.md          # ExecutorAgent system prompt
+│   ├── code_reviewer_agent.md     # CodeReviewerAgent (pre-run QA)
+│   ├── results_validator_agent.md # ResultsValidatorAgent (post-run QA)
+│   ├── supervisor_agent.md        # SupervisorAgent system prompt
+│   └── report_template.md         # REPRODUCTION_REPORT.md template
 │
 ├── schemas/                  # Data model definitions
 │   ├── plan_schema.json      # Plan file structure with example
