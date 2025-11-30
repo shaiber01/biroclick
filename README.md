@@ -16,7 +16,7 @@ BiroClick reads scientific papers, plans staged reproductions, generates and run
 
 ## Architecture
 
-### Agents (8 total)
+### Agents (9 total)
 
 | Agent | Role | Responsibilities |
 |-------|------|------------------|
@@ -25,8 +25,9 @@ BiroClick reads scientific papers, plans staged reproductions, generates and run
 | **CodeGeneratorAgent** | Code generation | Writes Python+Meep code from approved designs |
 | **CodeReviewerAgent** | Pre-run QA | Reviews designs and code before execution |
 | **ExecutionValidatorAgent** | Execution validation | Validates simulation ran correctly, checks output files |
+| **PhysicsSanityAgent** | Physics validation | Validates conservation laws, value ranges, numerical quality |
 | **ResultsAnalyzerAgent** | Analysis | Compares results to paper, classifies success/partial/failure |
-| **ScientificValidatorAgent** | Scientific QA | Validates physics reasonableness and comparison accuracy |
+| **ComparisonValidatorAgent** | Comparison QA | Validates comparison accuracy, math, and classifications |
 | **SupervisorAgent** | Scientific oversight | Big-picture assessment, validation hierarchy monitoring, decision-making |
 
 ### Workflow
@@ -52,14 +53,16 @@ SELECT_STAGE
                     ↓
                  EXECUTION_CHECK (ExecutionValidatorAgent)
                     ├→ [fail] → GENERATE_CODE
-                    └→ [pass] → ANALYZE (ResultsAnalyzerAgent)
-                          ↓
-                       SCIENTIFIC_CHECK (ScientificValidatorAgent)
-                          ├→ [needs_revision] → ANALYZE (max 2 times)
-                          └→ [approve] → SUPERVISOR
-                                ├→ [ok_continue] → SELECT_STAGE
-                                ├→ [replan_needed] → PLAN
-                                └→ [ask_user] → USER_INPUT
+                    └→ [pass] → PHYSICS_CHECK (PhysicsSanityAgent)
+                          ├→ [fail] → GENERATE_CODE
+                          └→ [pass] → ANALYZE (ResultsAnalyzerAgent)
+                                ↓
+                             COMPARISON_CHECK (ComparisonValidatorAgent)
+                                ├→ [needs_revision] → ANALYZE (max 2 times)
+                                └→ [approve] → SUPERVISOR
+                                      ├→ [ok_continue] → SELECT_STAGE
+                                      ├→ [replan_needed] → PLAN
+                                      └→ [ask_user] → USER_INPUT
 ```
 
 ### Mandatory Staging Order
@@ -81,17 +84,18 @@ biroclick/
 ├── README.md                 # This file
 ├── requirements.txt          # Python dependencies
 │
-├── prompts/                          # Agent system prompts
-│   ├── global_rules.md               # Non-negotiable rules for all agents
-│   ├── planner_agent.md              # PlannerAgent system prompt
-│   ├── simulation_designer_agent.md  # SimulationDesignerAgent prompt
-│   ├── code_generator_agent.md       # CodeGeneratorAgent prompt
-│   ├── code_reviewer_agent.md        # CodeReviewerAgent prompt
-│   ├── execution_validator_agent.md  # ExecutionValidatorAgent prompt
-│   ├── results_analyzer_agent.md     # ResultsAnalyzerAgent prompt
-│   ├── scientific_validator_agent.md # ScientificValidatorAgent prompt
-│   ├── supervisor_agent.md           # SupervisorAgent prompt
-│   └── report_template.md            # REPRODUCTION_REPORT.md template
+├── prompts/                              # Agent system prompts
+│   ├── global_rules.md                   # Non-negotiable rules for all agents
+│   ├── planner_agent.md                  # PlannerAgent system prompt
+│   ├── simulation_designer_agent.md      # SimulationDesignerAgent prompt
+│   ├── code_generator_agent.md           # CodeGeneratorAgent prompt
+│   ├── code_reviewer_agent.md            # CodeReviewerAgent prompt
+│   ├── execution_validator_agent.md      # ExecutionValidatorAgent prompt
+│   ├── physics_sanity_agent.md           # PhysicsSanityAgent prompt
+│   ├── results_analyzer_agent.md         # ResultsAnalyzerAgent prompt
+│   ├── comparison_validator_agent.md     # ComparisonValidatorAgent prompt
+│   ├── supervisor_agent.md               # SupervisorAgent prompt
+│   └── report_template.md                # REPRODUCTION_REPORT.md template
 │
 ├── schemas/                  # Data model definitions
 │   ├── plan_schema.json      # Plan file structure with example

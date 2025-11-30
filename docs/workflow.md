@@ -6,7 +6,7 @@ This document describes the LangGraph workflow for paper reproduction.
 
 The system uses a state graph where each node represents an agent action or system operation. State flows through the graph, accumulating results and tracking progress.
 
-## Agent Summary
+## Agent Summary (9 Agents)
 
 | Agent | Node | Role |
 |-------|------|------|
@@ -15,8 +15,9 @@ The system uses a state graph where each node represents an agent action or syst
 | CodeReviewerAgent | CODE_REVIEW | Reviews design and code |
 | CodeGeneratorAgent | GENERATE_CODE | Writes Python+Meep code |
 | ExecutionValidatorAgent | EXECUTION_CHECK | Validates simulation ran correctly |
+| PhysicsSanityAgent | PHYSICS_CHECK | Validates physics (conservation, value ranges) |
 | ResultsAnalyzerAgent | ANALYZE | Compares results to paper |
-| ScientificValidatorAgent | SCIENTIFIC_CHECK | Validates physics and comparisons |
+| ComparisonValidatorAgent | COMPARISON_CHECK | Validates comparison accuracy |
 | SupervisorAgent | SUPERVISOR | Big-picture decisions |
 
 ## Node Definitions
@@ -187,7 +188,7 @@ def run_code_node(state):
 
 ### 7. EXECUTION_CHECK Node (ExecutionValidatorAgent)
 
-**Purpose**: Validate that simulation ran correctly
+**Purpose**: Validate that simulation ran correctly (technical checks)
 
 **Checks**:
 - [ ] Simulation completed without errors
@@ -200,16 +201,39 @@ def run_code_node(state):
 **Outputs**:
 - `execution_verdict`: "pass" | "fail" | "warning"
 - `execution_status`: Detailed status object
-- `proceed_to_analysis`: Boolean
+- `proceed_to_physics`: Boolean
 
 **Transitions**:
-- → ANALYZE (pass or warning)
+- → PHYSICS_CHECK (pass or warning)
 - → GENERATE_CODE (fail, recoverable error)
 - → ASK_USER (fail, unknown error or limit reached)
 
 ---
 
-### 8. ANALYZE Node (ResultsAnalyzerAgent)
+### 8. PHYSICS_CHECK Node (PhysicsSanityAgent)
+
+**Purpose**: Validate that results are physically reasonable (before comparison)
+
+**Checks**:
+- [ ] Conservation laws: T + R + A ≈ 1
+- [ ] Value ranges: 0 ≤ T ≤ 1, 0 ≤ R ≤ 1, A ≥ 0
+- [ ] No NaN/Inf values
+- [ ] Numerical quality (smoothness, symmetry)
+- [ ] No boundary artifacts
+
+**Outputs**:
+- `physics_verdict`: "pass" | "warning" | "fail"
+- `physics_validation`: Conservation, value ranges, numerical quality
+- `proceed_to_analysis`: Boolean
+
+**Transitions**:
+- → ANALYZE (pass or warning)
+- → GENERATE_CODE (fail, suggests code issue)
+- → ASK_USER (fail, unknown cause)
+
+---
+
+### 9. ANALYZE Node (ResultsAnalyzerAgent)
 
 **Purpose**: Compare results to paper and classify reproduction quality
 
@@ -231,26 +255,26 @@ def run_code_node(state):
 | FAILURE | Wrong trends, missing features, or unphysical results |
 
 **Transitions**:
-- → SCIENTIFIC_CHECK (always)
+- → COMPARISON_CHECK (always)
 
 ---
 
-### 9. SCIENTIFIC_CHECK Node (ScientificValidatorAgent)
+### 10. COMPARISON_CHECK Node (ComparisonValidatorAgent)
 
-**Purpose**: Validate physics and comparison accuracy
+**Purpose**: Validate that ResultsAnalyzerAgent's comparison is accurate
 
 **Checks**:
-- [ ] Results are physically reasonable (T+R+A ≈ 1, etc.)
-- [ ] No unphysical values (T > 1, negative absorption)
-- [ ] Qualitative comparison accurate
-- [ ] Quantitative calculations correct
-- [ ] Classifications match the data
+- [ ] All target figures have comparison reports
+- [ ] Math is correct (percent differences)
+- [ ] Thresholds applied correctly
+- [ ] Classifications match the numbers
 - [ ] Discrepancies properly documented
+- [ ] Progress status consistent with results
 
 **Outputs**:
-- `scientific_verdict`: "approve" | "needs_revision"
-- `physics_validation`: Conservation laws, value ranges
-- `comparison_validation`: Accuracy of paper comparison
+- `comparison_verdict`: "approve" | "needs_revision"
+- `comparison_validation`: Math, classifications, documentation
+- `issues`: List of problems found
 
 **Transitions**:
 - → SUPERVISOR (approved)
@@ -259,7 +283,7 @@ def run_code_node(state):
 
 ---
 
-### 10. SUPERVISOR Node (SupervisorAgent)
+### 11. SUPERVISOR Node (SupervisorAgent)
 
 **Purpose**: Big-picture assessment and strategic decisions
 
@@ -291,7 +315,7 @@ def run_code_node(state):
 
 ---
 
-### 11. ASK_USER Node
+### 12. ASK_USER Node
 
 **Purpose**: Pause for user input
 
@@ -310,7 +334,7 @@ def run_code_node(state):
 
 ---
 
-### 12. GENERATE_REPORT Node (SupervisorAgent)
+### 13. GENERATE_REPORT Node (SupervisorAgent)
 
 **Purpose**: Compile final reproduction report
 
@@ -394,7 +418,7 @@ def run_code_node(state):
                      │        ▼                   │                 │
                      │  ┌─────────────┐           │                 │
                      │  │GENERATE_CODE│◄──────┐   │                 │
-                     │  │(CodeGenerator)│      │   │                 │
+                     │  │(CodeGenerator)│     │   │                 │
                      │  └──────┬──────┘       │   │                 │
                      │         │              │   │                 │
                      │         ▼              │   │                 │
@@ -430,14 +454,27 @@ def run_code_node(state):
                      │    │                       │             │   │
                      │    ▼                       │             │   │
                      │  ┌─────────────┐           │             │   │
+                     │  │PHYSICS_CHECK│           │             │   │
+                     │  │(PhysSanity) │           │             │   │
+                     │  └──────┬──────┘           │             │   │
+                     │         │                  │             │   │
+                     │    ┌────┴────┐             │             │   │
+                     │    │         │             │             │   │
+                     │    ▼         ▼             │             │   │
+                     │  [pass]   [fail]           │             │   │
+                     │    │         │             │             │   │
+                     │    │         └─────────────┼─────────────┤   │
+                     │    │                       │             │   │
+                     │    ▼                       │             │   │
+                     │  ┌─────────────┐           │             │   │
                      │  │  ANALYZE    │◄──────────┼─────┐       │   │
                      │  │(ResultsAnalyzer)│       │     │       │   │
                      │  └──────┬──────┘           │     │       │   │
                      │         │                  │     │       │   │
                      │         ▼                  │     │       │   │
                      │  ┌─────────────┐           │     │       │   │
-                     │  │SCIENCE_CHECK│           │     │       │   │
-                     │  │(SciValidator)│          │     │       │   │
+                     │  │COMPARE_CHECK│           │     │       │   │
+                     │  │(CompValidator)│         │     │       │   │
                      │  └──────┬──────┘           │     │       │   │
                      │         │                  │     │       │   │
                      │    ┌────┴────┐             │     │       │   │
@@ -557,12 +594,13 @@ Different agents can use different models:
 ```python
 from langchain_openai import ChatOpenAI
 
-# Cost-effective for reviews and validation
-reviewer_llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+# Cost-effective for validation (focused checks)
 execution_validator_llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
-scientific_validator_llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+physics_sanity_llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+comparison_validator_llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+reviewer_llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
-# More capable for design and code generation
+# More capable for design and analysis
 designer_llm = ChatOpenAI(model="gpt-4o", temperature=0)
 code_generator_llm = ChatOpenAI(model="gpt-4o", temperature=0)
 analyzer_llm = ChatOpenAI(model="gpt-4o", temperature=0)

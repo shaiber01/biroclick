@@ -1,4 +1,4 @@
-# BiroClick - Multi-Agent Paper Reproduction System
+# ReproLab - Multi-Agent Paper Reproduction System
 # Python dependencies
 
 # ═══════════════════════════════════════════════════════════════════════
