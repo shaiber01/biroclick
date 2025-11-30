@@ -12,18 +12,21 @@ BiroClick reads scientific papers, plans staged reproductions, generates and run
 - **Transparent assumptions**: Every inferred parameter is documented with source and reasoning
 - **Performance-aware**: Designed for laptop execution with runtime budgets
 - **Quantitative tracking**: Structured discrepancy logging with acceptance thresholds
-- **Scientific rigor**: Multi-agent review system with Critic and Supervisor oversight
+- **Scientific rigor**: Multi-agent review system with specialized validators
 
 ## Architecture
 
-### Agents
+### Agents (8 total)
 
 | Agent | Role | Responsibilities |
 |-------|------|------------------|
 | **PlannerAgent** | Strategic planning | Reads paper, extracts parameters, classifies figures, designs staged reproduction plan |
-| **ExecutorAgent** | Implementation | Designs simulations, writes Meep code, analyzes results, documents discrepancies |
-| **CodeReviewerAgent** | Pre-run QA | Reviews code, geometry, materials, numerics before simulation runs |
-| **ResultsValidatorAgent** | Post-run QA | Validates outputs, physics, figure comparisons after simulation runs |
+| **SimulationDesignerAgent** | Simulation design | Interprets geometry, selects materials, designs sources/BCs, estimates performance |
+| **CodeGeneratorAgent** | Code generation | Writes Python+Meep code from approved designs |
+| **CodeReviewerAgent** | Pre-run QA | Reviews designs and code before execution |
+| **ExecutionValidatorAgent** | Execution validation | Validates simulation ran correctly, checks output files |
+| **ResultsAnalyzerAgent** | Analysis | Compares results to paper, classifies success/partial/failure |
+| **ScientificValidatorAgent** | Scientific QA | Validates physics reasonableness and comparison accuracy |
 | **SupervisorAgent** | Scientific oversight | Big-picture assessment, validation hierarchy monitoring, decision-making |
 
 ### Workflow
@@ -34,21 +37,29 @@ START
 PLAN (PlannerAgent)
   ↓
 SELECT_STAGE
-  ├→ [no more stages] → END
-  └→ [has next stage] → DESIGN (ExecutorAgent)
+  ├→ [no more stages] → GENERATE_REPORT → END
+  └→ [has next stage] ↓
         ↓
-     CODE_REVIEW (CodeReviewerAgent)
+     DESIGN (SimulationDesignerAgent)
+        ↓
+     CODE_REVIEW (CodeReviewerAgent) ← reviews design
         ├→ [needs_revision] → DESIGN (max 3 times)
-        └→ [approve_to_run] → RUN_CODE
+        └→ [approve] → GENERATE_CODE (CodeGeneratorAgent)
               ↓
-           ANALYZE (ExecutorAgent)
-              ↓
-           VALIDATE_RESULTS (ResultsValidatorAgent)
-              ├→ [needs_revision] → ANALYZE (max 2 times)
-              └→ [approve_results] → SUPERVISOR
-                    ├→ [ok_continue] → SELECT_STAGE
-                    ├→ [replan_needed] → PLAN
-                    └→ [ask_user] → USER_INPUT
+           CODE_REVIEW (CodeReviewerAgent) ← reviews code
+              ├→ [needs_revision] → GENERATE_CODE (max 3 times)
+              └→ [approve] → RUN_CODE
+                    ↓
+                 EXECUTION_CHECK (ExecutionValidatorAgent)
+                    ├→ [fail] → GENERATE_CODE
+                    └→ [pass] → ANALYZE (ResultsAnalyzerAgent)
+                          ↓
+                       SCIENTIFIC_CHECK (ScientificValidatorAgent)
+                          ├→ [needs_revision] → ANALYZE (max 2 times)
+                          └→ [approve] → SUPERVISOR
+                                ├→ [ok_continue] → SELECT_STAGE
+                                ├→ [replan_needed] → PLAN
+                                └→ [ask_user] → USER_INPUT
 ```
 
 ### Mandatory Staging Order
@@ -70,14 +81,17 @@ biroclick/
 ├── README.md                 # This file
 ├── requirements.txt          # Python dependencies
 │
-├── prompts/                       # Agent system prompts
-│   ├── global_rules.md            # Non-negotiable rules for all agents
-│   ├── planner_agent.md           # PlannerAgent system prompt
-│   ├── executor_agent.md          # ExecutorAgent system prompt
-│   ├── code_reviewer_agent.md     # CodeReviewerAgent (pre-run QA)
-│   ├── results_validator_agent.md # ResultsValidatorAgent (post-run QA)
-│   ├── supervisor_agent.md        # SupervisorAgent system prompt
-│   └── report_template.md         # REPRODUCTION_REPORT.md template
+├── prompts/                          # Agent system prompts
+│   ├── global_rules.md               # Non-negotiable rules for all agents
+│   ├── planner_agent.md              # PlannerAgent system prompt
+│   ├── simulation_designer_agent.md  # SimulationDesignerAgent prompt
+│   ├── code_generator_agent.md       # CodeGeneratorAgent prompt
+│   ├── code_reviewer_agent.md        # CodeReviewerAgent prompt
+│   ├── execution_validator_agent.md  # ExecutionValidatorAgent prompt
+│   ├── results_analyzer_agent.md     # ResultsAnalyzerAgent prompt
+│   ├── scientific_validator_agent.md # ScientificValidatorAgent prompt
+│   ├── supervisor_agent.md           # SupervisorAgent prompt
+│   └── report_template.md            # REPRODUCTION_REPORT.md template
 │
 ├── schemas/                  # Data model definitions
 │   ├── plan_schema.json      # Plan file structure with example

@@ -6,6 +6,19 @@ This document describes the LangGraph workflow for paper reproduction.
 
 The system uses a state graph where each node represents an agent action or system operation. State flows through the graph, accumulating results and tracking progress.
 
+## Agent Summary
+
+| Agent | Node | Role |
+|-------|------|------|
+| PlannerAgent | PLAN | Reads paper, creates staged plan |
+| SimulationDesignerAgent | DESIGN | Designs simulation setup |
+| CodeReviewerAgent | CODE_REVIEW | Reviews design and code |
+| CodeGeneratorAgent | GENERATE_CODE | Writes Python+Meep code |
+| ExecutionValidatorAgent | EXECUTION_CHECK | Validates simulation ran correctly |
+| ResultsAnalyzerAgent | ANALYZE | Compares results to paper |
+| ScientificValidatorAgent | SCIENTIFIC_CHECK | Validates physics and comparisons |
+| SupervisorAgent | SUPERVISOR | Big-picture decisions |
+
 ## Node Definitions
 
 ### 1. PLAN Node (PlannerAgent)
@@ -54,57 +67,86 @@ def select_next_stage(state):
 
 **Transitions**:
 - → DESIGN (has next stage)
-- → END (no more stages)
+- → GENERATE_REPORT (no more stages)
 
 ---
 
-### 3. DESIGN Node (ExecutorAgent - Design Mode)
+### 3. DESIGN Node (SimulationDesignerAgent)
 
-**Purpose**: Design simulation for current stage
+**Purpose**: Design simulation setup for current stage (no code generation)
 
 **Inputs**:
 - `current_stage_id`: Stage to implement
 - `plan`: Stage definition
 - `assumptions`: Current assumptions
-- `critic_feedback`: Feedback if revising
+- `reviewer_feedback`: Feedback if revising
 
 **Outputs**:
-- `design_description`: Natural language design
+- `design`: Complete simulation design specification
 - `performance_estimate`: Runtime/memory estimates
-- `code`: Python + Meep code
 - `new_assumptions`: Any new assumptions introduced
+- `output_specifications`: Expected output files and formats
 
 **Transitions**:
-- → CRITIC_PRE (always)
+- → CODE_REVIEW (always)
 
 ---
 
 ### 4. CODE_REVIEW Node (CodeReviewerAgent)
 
-**Purpose**: Review design and code before execution
+**Purpose**: Review design or code before proceeding
 
-**Checklist**:
-- [ ] Geometry matches paper
-- [ ] Materials correctly modeled
-- [ ] Source configuration correct
-- [ ] Boundary conditions appropriate
-- [ ] Resolution adequate
-- [ ] Runtime within budget
-- [ ] Code quality (logging, outputs)
+**When reviewing DESIGN**:
+- [ ] Geometry matches paper interpretation
+- [ ] Materials correctly selected with sources
+- [ ] Source configuration appropriate
+- [ ] Boundary conditions match physics
+- [ ] Resolution adequate for features
+- [ ] Performance within budget
+
+**When reviewing CODE**:
+- [ ] Code implements design correctly
+- [ ] Progress prints included
+- [ ] No blocking calls (plt.show, input)
+- [ ] Error handling present
+- [ ] File outputs named correctly
 
 **Outputs**:
-- `last_critic_verdict`: "approve_to_run" | "needs_revision"
-- `critic_issues`: List of issues found
-- `critic_feedback`: Detailed feedback
+- `reviewer_verdict`: "approve" | "needs_revision"
+- `reviewer_issues`: List of issues found
+- `reviewer_feedback`: Detailed feedback
 
-**Transitions**:
-- → RUN_CODE (approved)
+**Transitions** (after design review):
+- → GENERATE_CODE (approved)
 - → DESIGN (needs revision, count < 3)
+- → ASK_USER (needs revision, count >= 3)
+
+**Transitions** (after code review):
+- → RUN_CODE (approved)
+- → GENERATE_CODE (needs revision, count < 3)
 - → ASK_USER (needs revision, count >= 3)
 
 ---
 
-### 5. RUN_CODE Node (Python Execution)
+### 5. GENERATE_CODE Node (CodeGeneratorAgent)
+
+**Purpose**: Generate Python+Meep code from approved design
+
+**Inputs**:
+- `design`: Approved simulation design from SimulationDesignerAgent
+- `reviewer_feedback`: Feedback if revising code
+
+**Outputs**:
+- `code`: Complete Python+Meep simulation code
+- `expected_outputs`: List of expected output files
+- `estimated_runtime_minutes`: Runtime estimate
+
+**Transitions**:
+- → CODE_REVIEW (always - code review phase)
+
+---
+
+### 6. RUN_CODE Node (Python Execution)
 
 **Purpose**: Execute the simulation code
 
@@ -139,12 +181,35 @@ def run_code_node(state):
 ```
 
 **Transitions**:
-- → ANALYZE (success)
-- → HANDLE_ERROR (failure) → DESIGN
+- → EXECUTION_CHECK (always)
 
 ---
 
-### 6. ANALYZE Node (ExecutorAgent - Analysis Mode)
+### 7. EXECUTION_CHECK Node (ExecutionValidatorAgent)
+
+**Purpose**: Validate that simulation ran correctly
+
+**Checks**:
+- [ ] Simulation completed without errors
+- [ ] Exit code was 0
+- [ ] All expected output files exist
+- [ ] Files are non-empty and valid format
+- [ ] No NaN/Inf in data
+- [ ] Runtime was reasonable
+
+**Outputs**:
+- `execution_verdict`: "pass" | "fail" | "warning"
+- `execution_status`: Detailed status object
+- `proceed_to_analysis`: Boolean
+
+**Transitions**:
+- → ANALYZE (pass or warning)
+- → GENERATE_CODE (fail, recoverable error)
+- → ASK_USER (fail, unknown error or limit reached)
+
+---
+
+### 8. ANALYZE Node (ResultsAnalyzerAgent)
 
 **Purpose**: Compare results to paper and classify reproduction quality
 
@@ -154,8 +219,8 @@ def run_code_node(state):
 - Paper figures (for comparison)
 
 **Outputs**:
-- `analysis_summary`: Per-result reports
-- `discrepancies`: Documented discrepancies
+- `per_figure_reports`: Structured comparison for each figure
+- `discrepancies`: Documented discrepancies with likely causes
 - `progress_update`: Updated stage status
 
 **Per-Result Classification**:
@@ -166,20 +231,26 @@ def run_code_node(state):
 | FAILURE | Wrong trends, missing features, or unphysical results |
 
 **Transitions**:
-- → CRITIC_POST (always)
+- → SCIENTIFIC_CHECK (always)
 
 ---
 
-### 7. VALIDATE_RESULTS Node (ResultsValidatorAgent)
+### 9. SCIENTIFIC_CHECK Node (ScientificValidatorAgent)
 
-**Purpose**: Validate outputs, physics, and comparison to paper
+**Purpose**: Validate physics and comparison accuracy
 
 **Checks**:
-- Qualitative comparison done correctly
-- Quantitative thresholds applied properly
-- Classifications match the data
-- Discrepancies properly documented
-- Progress update is consistent
+- [ ] Results are physically reasonable (T+R+A ≈ 1, etc.)
+- [ ] No unphysical values (T > 1, negative absorption)
+- [ ] Qualitative comparison accurate
+- [ ] Quantitative calculations correct
+- [ ] Classifications match the data
+- [ ] Discrepancies properly documented
+
+**Outputs**:
+- `scientific_verdict`: "approve" | "needs_revision"
+- `physics_validation`: Conservation laws, value ranges
+- `comparison_validation`: Accuracy of paper comparison
 
 **Transitions**:
 - → SUPERVISOR (approved)
@@ -188,7 +259,7 @@ def run_code_node(state):
 
 ---
 
-### 8. SUPERVISOR Node (SupervisorAgent)
+### 10. SUPERVISOR Node (SupervisorAgent)
 
 **Purpose**: Big-picture assessment and strategic decisions
 
@@ -196,7 +267,7 @@ def run_code_node(state):
 - `plan`: Full plan
 - `assumptions`: All assumptions
 - `progress`: Current progress
-- `analysis_summary`: Recent results
+- `per_figure_reports`: Recent results
 
 **Assessment Criteria**:
 1. Is main physics being reproduced?
@@ -216,10 +287,11 @@ def run_code_node(state):
 | replan_needed | PLAN (if count < 2) |
 | replan_needed | ASK_USER (if count >= 2) |
 | ask_user | ASK_USER |
+| all_complete | GENERATE_REPORT |
 
 ---
 
-### 9. ASK_USER Node
+### 11. ASK_USER Node
 
 **Purpose**: Pause for user input
 
@@ -238,7 +310,7 @@ def run_code_node(state):
 
 ---
 
-### 10. GENERATE_REPORT Node (SupervisorAgent)
+### 12. GENERATE_REPORT Node (SupervisorAgent)
 
 **Purpose**: Compile final reproduction report
 
@@ -248,7 +320,7 @@ def run_code_node(state):
 - `should_stop = true` from Supervisor
 
 **Inputs**:
-- All `figure_comparisons` from stages
+- All `per_figure_reports` from stages
 - `assumptions` log
 - `progress` with all discrepancies
 - `systematic_shifts` identified
@@ -292,58 +364,92 @@ def run_code_node(state):
                               │     │             │                 │
                               │     │             ▼                 │
                               │     │      ┌─────────────┐          │
+                              │     │      │GEN_REPORT   │          │
+                              │     │      └──────┬──────┘          │
+                              │     │             │                 │
+                              │     │             ▼                 │
+                              │     │      ┌─────────────┐          │
                               │     │      │     END     │          │
                               │     │      └─────────────┘          │
                               │     │                               │
                               │     ▼                               │
                               │  ┌─────────────┐                    │
-                     ┌────────┴─►│   DESIGN    │◄────────┐          │
-                     │           └──────┬──────┘         │          │
-                     │                  │                │          │
-                     │                  ▼                │          │
-                     │           ┌─────────────┐         │          │
-                     │           │ CODE_REVIEW │         │          │
-                     │           └──────┬──────┘         │          │
-                     │                  │                │          │
-                     │        ┌─────────┼─────────┐      │          │
-                     │        │         │         │      │          │
-                     │        ▼         ▼         ▼      │          │
-                     │   [approve]  [revise]  [limit]    │          │
-                     │        │         │         │      │          │
-                     │        │         └─────────┼──────┘          │
+                     ┌────────┴─►│   DESIGN    │◄─────────┐         │
+                     │           │(Sim Designer)│         │         │
+                     │           └──────┬──────┘          │         │
+                     │                  │                 │         │
+                     │                  ▼                 │         │
+                     │           ┌─────────────┐          │         │
+                     │           │ CODE_REVIEW │          │         │
+                     │           │(design check)│         │         │
+                     │           └──────┬──────┘          │         │
+                     │                  │                 │         │
+                     │        ┌─────────┼─────────┐       │         │
+                     │        │         │         │       │         │
+                     │        ▼         ▼         ▼       │         │
+                     │   [approve]  [revise]  [limit]     │         │
+                     │        │         │         │       │         │
+                     │        │         └─────────┼───────┘         │
                      │        │                   │                 │
-                     │        ▼                   ▼                 │
-                     │  ┌─────────────┐    ┌─────────────┐          │
-                     │  │  RUN_CODE   │    │  ASK_USER   │          │
-                     │  └──────┬──────┘    └──────┬──────┘          │
-                     │         │                  │                 │
-                     │    ┌────┴────┐             │                 │
+                     │        ▼                   │                 │
+                     │  ┌─────────────┐           │                 │
+                     │  │GENERATE_CODE│◄──────┐   │                 │
+                     │  │(CodeGenerator)│      │   │                 │
+                     │  └──────┬──────┘       │   │                 │
+                     │         │              │   │                 │
+                     │         ▼              │   │                 │
+                     │  ┌─────────────┐       │   │                 │
+                     │  │ CODE_REVIEW │       │   │                 │
+                     │  │(code check) │       │   │                 │
+                     │  └──────┬──────┘       │   │                 │
+                     │         │              │   │                 │
+                     │    ┌────┼────┐         │   │                 │
+                     │    │    │    │         │   │                 │
+                     │    ▼    ▼    ▼         │   │                 │
+                     │ [ok] [rev] [limit]     │   │                 │
+                     │    │    │    │         │   │                 │
+                     │    │    └────┼─────────┘   │                 │
                      │    │         │             │                 │
                      │    ▼         ▼             │                 │
-                     │ [success] [error]          │                 │
-                     │    │         │             │                 │
-                     │    │         └─────────────┼─────────────────┤
-                     │    │                       │                 │
-                     │    ▼                       │                 │
-                     │  ┌─────────────┐           │                 │
-                     │  │   ANALYZE   │◄──────────┼─────┐           │
-                     │  └──────┬──────┘           │     │           │
-                     │         │                  │     │           │
-                     │         ▼                  │     │           │
-                     │  ┌─────────────┐           │     │           │
-                     │  │  VALIDATE   │           │     │           │
-                     │  └──────┬──────┘           │     │           │
-                     │         │                  │     │           │
-                     │    ┌────┴────┐             │     │           │
-                     │    │         │             │     │           │
-                     │    ▼         ▼             │     │           │
-                     │ [approve] [revise]         │     │           │
-                     │    │         │             │     │           │
-                     │    │         └─────────────┼─────┘           │
-                     │    │                       │                 │
-                     │    ▼                       │                 │
-                     │  ┌─────────────┐           │                 │
-                     │  │ SUPERVISOR  │───────────┘                 │
+                     │  ┌─────────────┐    ┌─────────────┐          │
+                     │  │  RUN_CODE   │    │  ASK_USER   │◄─────┐   │
+                     │  └──────┬──────┘    └──────┬──────┘      │   │
+                     │         │                  │             │   │
+                     │         ▼                  │             │   │
+                     │  ┌─────────────┐           │             │   │
+                     │  │EXEC_CHECK   │           │             │   │
+                     │  │(ExecValidator)│         │             │   │
+                     │  └──────┬──────┘           │             │   │
+                     │         │                  │             │   │
+                     │    ┌────┴────┐             │             │   │
+                     │    │         │             │             │   │
+                     │    ▼         ▼             │             │   │
+                     │  [pass]   [fail]           │             │   │
+                     │    │         │             │             │   │
+                     │    │         └─────────────┼─────────────┤   │
+                     │    │                       │             │   │
+                     │    ▼                       │             │   │
+                     │  ┌─────────────┐           │             │   │
+                     │  │  ANALYZE    │◄──────────┼─────┐       │   │
+                     │  │(ResultsAnalyzer)│       │     │       │   │
+                     │  └──────┬──────┘           │     │       │   │
+                     │         │                  │     │       │   │
+                     │         ▼                  │     │       │   │
+                     │  ┌─────────────┐           │     │       │   │
+                     │  │SCIENCE_CHECK│           │     │       │   │
+                     │  │(SciValidator)│          │     │       │   │
+                     │  └──────┬──────┘           │     │       │   │
+                     │         │                  │     │       │   │
+                     │    ┌────┴────┐             │     │       │   │
+                     │    │         │             │     │       │   │
+                     │    ▼         ▼             │     │       │   │
+                     │ [approve] [revise]         │     │       │   │
+                     │    │         │             │     │       │   │
+                     │    │         └─────────────┼─────┘       │   │
+                     │    │                       │             │   │
+                     │    ▼                       │             │   │
+                     │  ┌─────────────┐           │             │   │
+                     │  │ SUPERVISOR  │───────────┴─────────────┘   │
                      │  └──────┬──────┘                             │
                      │         │                                    │
                      │    ┌────┴────────────┐                       │
@@ -372,10 +478,12 @@ outputs/<paper_id>/
 ├── assumptions_<paper_id>.json
 ├── progress_<paper_id>.json
 ├── stage0_material_validation/
+│   ├── design.json
 │   ├── code.py
 │   ├── *.csv
 │   └── *.png
 ├── stage1_single_disk/
+│   ├── design.json
 │   ├── code.py
 │   ├── *.csv
 │   └── *.png
@@ -389,19 +497,19 @@ outputs/<paper_id>/
 ```python
 if state["run_error"]:
     # Increment revision count
-    state["design_revision_count"] += 1
+    state["code_revision_count"] += 1
     
-    if state["design_revision_count"] >= MAX_DESIGN_REVISIONS:
+    if state["code_revision_count"] >= MAX_CODE_REVISIONS:
         # Escalate to user
         state["pending_user_questions"].append(
-            f"Simulation failed after {MAX_DESIGN_REVISIONS} attempts. "
+            f"Simulation failed after {MAX_CODE_REVISIONS} attempts. "
             f"Error: {state['run_error']}. How should we proceed?"
         )
         return "ask_user"
     
     # Try again with error context
-    state["critic_feedback"] = f"Simulation failed: {state['run_error']}"
-    return "design"
+    state["reviewer_feedback"] = f"Simulation failed: {state['run_error']}"
+    return "generate_code"
 ```
 
 ### Validation Hierarchy Enforcement
@@ -437,6 +545,7 @@ TOTAL_RUNTIME_BUDGET_MINUTES=240
 
 # Revision Limits
 MAX_DESIGN_REVISIONS=3
+MAX_CODE_REVISIONS=3
 MAX_ANALYSIS_REVISIONS=2
 MAX_REPLANS=2
 ```
@@ -448,13 +557,16 @@ Different agents can use different models:
 ```python
 from langchain_openai import ChatOpenAI
 
-# Cost-effective for reviews
-critic_llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+# Cost-effective for reviews and validation
+reviewer_llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+execution_validator_llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+scientific_validator_llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
-# More capable for code generation
-executor_llm = ChatOpenAI(model="gpt-4o", temperature=0)
+# More capable for design and code generation
+designer_llm = ChatOpenAI(model="gpt-4o", temperature=0)
+code_generator_llm = ChatOpenAI(model="gpt-4o", temperature=0)
+analyzer_llm = ChatOpenAI(model="gpt-4o", temperature=0)
 
 # Strategic decisions
 supervisor_llm = ChatOpenAI(model="gpt-4o", temperature=0)
 ```
-
