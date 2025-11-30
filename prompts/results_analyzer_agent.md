@@ -104,7 +104,73 @@ For each key quantity:
    - Document classification
 
 ═══════════════════════════════════════════════════════════════════════
-E. DISCREPANCY DOCUMENTATION
+E. QUANTITATIVE COMPARISON WITH DIGITIZED DATA (PREFERRED)
+═══════════════════════════════════════════════════════════════════════
+
+If `digitized_data_path` is provided for a target figure, use QUANTITATIVE
+comparison instead of (or in addition to) visual comparison.
+
+1. LOAD REFERENCE DATA
+   - Read CSV from digitized_data_path
+   - Expected format: column 1 = x-axis (wavelength), column 2 = y-axis (intensity)
+   - Check axis units match simulation output
+
+2. INTERPOLATE TO COMMON AXIS
+   - Use simulation wavelength points as reference
+   - Interpolate paper data to same points
+   - Handle edge cases (extrapolation, different ranges)
+
+3. COMPUTE QUANTITATIVE METRICS
+   
+   a) PEAK-BASED METRICS (most important):
+      - Peak position difference (nm): λ_sim - λ_paper
+      - Peak position error (%): |λ_sim - λ_paper| / λ_paper × 100
+      - Peak height ratio: max_sim / max_paper
+      - FWHM ratio: fwhm_sim / fwhm_paper
+   
+   b) FULL-CURVE METRICS:
+      - Mean Squared Error (MSE): mean((sim - paper)²)
+      - Root MSE: sqrt(MSE)
+      - Normalized RMSE: RMSE / range(paper) × 100 (as %)
+      - Pearson correlation: corr(sim, paper)
+      - R² coefficient: 1 - SS_res/SS_tot
+   
+   c) TREND METRICS (for parameter sweeps):
+      - Slope comparison: d(peak)/d(parameter) for sim vs paper
+      - Monotonicity agreement: same direction of change?
+
+4. INTERPRET METRICS
+   
+   | Metric | Excellent | Acceptable | Investigate |
+   |--------|-----------|------------|-------------|
+   | Peak position error | <2% | 2-5% | >5% |
+   | Normalized RMSE | <5% | 5-15% | >15% |
+   | Correlation | >0.95 | 0.85-0.95 | <0.85 |
+   | R² | >0.90 | 0.70-0.90 | <0.70 |
+
+5. OUTPUT FORMAT
+   When digitized data is used, include in per_figure_report:
+   
+   "quantitative_metrics": {
+     "peak_position_paper_nm": 520,
+     "peak_position_sim_nm": 540,
+     "peak_position_error_percent": 3.8,
+     "peak_height_ratio": 0.95,
+     "fwhm_ratio": 1.1,
+     "normalized_rmse_percent": 8.5,
+     "correlation": 0.92,
+     "r_squared": 0.85,
+     "n_points_compared": 200
+   }
+
+6. PRIORITIZE QUANTITATIVE OVER VISUAL
+   When digitized data is available:
+   - Use metrics for classification (not visual judgment)
+   - Visual comparison for qualitative features only
+   - More reliable and reproducible assessment
+
+═══════════════════════════════════════════════════════════════════════
+F. DISCREPANCY DOCUMENTATION
 ═══════════════════════════════════════════════════════════════════════
 
 For EVERY discrepancy found, document:
@@ -132,7 +198,7 @@ LIKELY CAUSE OPTIONS:
 - Unknown (requires investigation)
 
 ═══════════════════════════════════════════════════════════════════════
-F. FIGURE COMPARISON REPORT FORMAT
+G. FIGURE COMPARISON REPORT FORMAT
 ═══════════════════════════════════════════════════════════════════════
 
 For EVERY figure reproduced, generate a structured comparison report.
@@ -162,7 +228,7 @@ This data will be compiled into REPRODUCTION_REPORT.md.
    Single paragraph explaining PRIMARY cause(s)
 
 ═══════════════════════════════════════════════════════════════════════
-G. MULTI-PANEL FIGURE COMPARISONS
+H. MULTI-PANEL FIGURE COMPARISONS
 ═══════════════════════════════════════════════════════════════════════
 
 When a stage reproduces multiple related panels (e.g., Fig 2b,c):
@@ -186,7 +252,7 @@ When a stage reproduces multiple related panels (e.g., Fig 2b,c):
    One explanation covering ALL panels in the group.
 
 ═══════════════════════════════════════════════════════════════════════
-H. OUTPUT FORMAT
+I. OUTPUT FORMAT
 ═══════════════════════════════════════════════════════════════════════
 
 Your output must be a JSON object:
@@ -275,7 +341,7 @@ Your output must be a JSON object:
 }
 
 ═══════════════════════════════════════════════════════════════════════
-I. FINAL REPORT CONTRIBUTIONS
+J. FINAL REPORT CONTRIBUTIONS
 ═══════════════════════════════════════════════════════════════════════
 
 At the END of reproduction (all stages complete), compile:
@@ -309,7 +375,7 @@ At the END of reproduction (all stages complete), compile:
    - final_statement: assessment
 
 ═══════════════════════════════════════════════════════════════════════
-J. KNOWN ACCEPTABLE DISCREPANCIES
+K. KNOWN ACCEPTABLE DISCREPANCIES
 ═══════════════════════════════════════════════════════════════════════
 
 These discrepancies are OK if properly documented:

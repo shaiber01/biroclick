@@ -128,6 +128,52 @@ class ValidationHierarchyStatus(TypedDict):
     parameter_sweeps: str
 
 
+class AgentCallMetric(TypedDict):
+    """Metrics for a single agent call."""
+    agent: str
+    node: str
+    stage_id: Optional[str]
+    timestamp: str  # ISO 8601
+    duration_seconds: float
+    input_tokens: NotRequired[int]
+    output_tokens: NotRequired[int]
+    model: NotRequired[str]
+    verdict: NotRequired[str]
+    error: NotRequired[str]
+
+
+class StageMetric(TypedDict):
+    """Metrics for a single stage."""
+    stage_id: str
+    stage_type: str
+    started_at: Optional[str]
+    completed_at: Optional[str]
+    duration_seconds: NotRequired[float]
+    simulation_runtime_seconds: NotRequired[float]
+    design_revisions: int
+    code_revisions: int
+    analysis_revisions: int
+    final_status: NotRequired[str]
+    escalated_to_user: bool
+
+
+class MetricsLog(TypedDict):
+    """
+    Comprehensive metrics tracking for the reproduction.
+    Used for monitoring and future PromptEvolutionAgent learning.
+    """
+    paper_id: str
+    started_at: str  # ISO 8601
+    completed_at: Optional[str]
+    total_duration_seconds: NotRequired[float]
+    final_status: str  # in_progress | completed | stopped_by_user | failed
+    agent_calls: List[AgentCallMetric]
+    stage_metrics: List[StageMetric]
+    total_input_tokens: int
+    total_output_tokens: int
+    prompt_adaptations_count: int
+
+
 # ═══════════════════════════════════════════════════════════════════════
 # Main State Definition
 # ═══════════════════════════════════════════════════════════════════════
@@ -205,6 +251,12 @@ class ReproState(TypedDict, total=False):
     systematic_discrepancies_identified: List[SystematicDiscrepancy]
     report_conclusions: Optional[ReportConclusions]
     final_report_markdown: Optional[str]  # Generated REPRODUCTION_REPORT.md
+    
+    # ─── Metrics Tracking ─────────────────────────────────────────────────
+    metrics: Optional[MetricsLog]  # Comprehensive metrics for monitoring and learning
+    
+    # ─── Paper Figures (for multimodal comparison) ────────────────────────
+    paper_figures: List[Dict[str, str]]  # [{id, description, image_path}, ...]
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -298,7 +350,23 @@ def create_initial_state(
         overall_assessment=[],
         systematic_discrepancies_identified=[],
         report_conclusions=None,
-        final_report_markdown=None
+        final_report_markdown=None,
+        
+        # Metrics tracking
+        metrics={
+            "paper_id": paper_id,
+            "started_at": datetime.now().isoformat(),
+            "completed_at": None,
+            "final_status": "in_progress",
+            "agent_calls": [],
+            "stage_metrics": [],
+            "total_input_tokens": 0,
+            "total_output_tokens": 0,
+            "prompt_adaptations_count": 0
+        },
+        
+        # Paper figures (populated from PaperInput)
+        paper_figures=[]
     )
 
 
@@ -339,4 +407,150 @@ STAGE_TYPE_ORDER = [
     "PARAMETER_SWEEP",
     "COMPLEX_PHYSICS"
 ]
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Checkpointing
+# ═══════════════════════════════════════════════════════════════════════
+
+# Checkpoint locations in the workflow
+CHECKPOINT_LOCATIONS = [
+    "after_plan",           # After PlannerAgent completes
+    "after_stage_complete", # After each stage completes (SUPERVISOR node)
+    "before_ask_user",      # Before pausing for user input
+]
+
+# Checkpoint naming convention: checkpoint_<paper_id>_<location>_<timestamp>.json
+
+
+def save_checkpoint(
+    state: ReproState,
+    checkpoint_name: str,
+    output_dir: str = "outputs"
+) -> str:
+    """
+    Save a checkpoint of the current state.
+    
+    Args:
+        state: Current ReproState to save
+        checkpoint_name: Name for this checkpoint (e.g., "after_plan", "stage2_complete")
+        output_dir: Base output directory
+        
+    Returns:
+        Path to saved checkpoint file
+    """
+    import json
+    from pathlib import Path
+    
+    paper_id = state.get("paper_id", "unknown")
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    
+    checkpoint_dir = Path(output_dir) / paper_id / "checkpoints"
+    checkpoint_dir.mkdir(parents=True, exist_ok=True)
+    
+    filename = f"checkpoint_{paper_id}_{checkpoint_name}_{timestamp}.json"
+    filepath = checkpoint_dir / filename
+    
+    # Convert state to JSON-serializable dict
+    state_dict = dict(state)
+    
+    with open(filepath, 'w', encoding='utf-8') as f:
+        json.dump(state_dict, f, indent=2, default=str)
+    
+    # Also save as "latest" for easy access
+    latest_path = checkpoint_dir / f"checkpoint_{checkpoint_name}_latest.json"
+    with open(latest_path, 'w', encoding='utf-8') as f:
+        json.dump(state_dict, f, indent=2, default=str)
+    
+    return str(filepath)
+
+
+def load_checkpoint(
+    paper_id: str,
+    checkpoint_name: str = "latest",
+    output_dir: str = "outputs"
+) -> Optional[ReproState]:
+    """
+    Load a checkpoint to resume a reproduction.
+    
+    Args:
+        paper_id: Paper identifier
+        checkpoint_name: Specific checkpoint name or "latest" for most recent
+        output_dir: Base output directory
+        
+    Returns:
+        Loaded ReproState or None if not found
+    """
+    import json
+    from pathlib import Path
+    
+    checkpoint_dir = Path(output_dir) / paper_id / "checkpoints"
+    
+    if checkpoint_name == "latest":
+        # Find most recent checkpoint
+        checkpoints = list(checkpoint_dir.glob("checkpoint_*.json"))
+        if not checkpoints:
+            return None
+        # Sort by modification time, get most recent
+        latest = max(checkpoints, key=lambda p: p.stat().st_mtime)
+        filepath = latest
+    else:
+        # Look for specific checkpoint
+        filepath = checkpoint_dir / f"checkpoint_{checkpoint_name}_latest.json"
+        if not filepath.exists():
+            # Try with timestamp pattern
+            matches = list(checkpoint_dir.glob(f"checkpoint_{paper_id}_{checkpoint_name}_*.json"))
+            if not matches:
+                return None
+            filepath = max(matches, key=lambda p: p.stat().st_mtime)
+    
+    with open(filepath, 'r', encoding='utf-8') as f:
+        state_dict = json.load(f)
+    
+    return state_dict
+
+
+def list_checkpoints(paper_id: str, output_dir: str = "outputs") -> List[Dict[str, str]]:
+    """
+    List all available checkpoints for a paper.
+    
+    Args:
+        paper_id: Paper identifier
+        output_dir: Base output directory
+        
+    Returns:
+        List of checkpoint info dicts with name, timestamp, path
+    """
+    from pathlib import Path
+    
+    checkpoint_dir = Path(output_dir) / paper_id / "checkpoints"
+    
+    if not checkpoint_dir.exists():
+        return []
+    
+    checkpoints = []
+    for cp_file in checkpoint_dir.glob("checkpoint_*.json"):
+        if "_latest" in cp_file.name:
+            continue  # Skip "latest" symlinks
+        
+        # Parse filename: checkpoint_<paper_id>_<name>_<timestamp>.json
+        parts = cp_file.stem.split("_")
+        if len(parts) >= 4:
+            name = "_".join(parts[2:-2])  # Everything between paper_id and timestamp
+            timestamp = "_".join(parts[-2:])  # Last two parts are timestamp
+        else:
+            name = cp_file.stem
+            timestamp = "unknown"
+        
+        checkpoints.append({
+            "name": name,
+            "timestamp": timestamp,
+            "path": str(cp_file),
+            "size_kb": cp_file.stat().st_size / 1024
+        })
+    
+    # Sort by timestamp (most recent first)
+    checkpoints.sort(key=lambda x: x["timestamp"], reverse=True)
+    
+    return checkpoints
 

@@ -1,0 +1,384 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "metrics_schema.json",
+  "title": "Reproduction Metrics",
+  "description": "Schema for tracking metrics across a paper reproduction. Used for system monitoring and future PromptEvolutionAgent.",
+  
+  "type": "object",
+  "required": ["paper_id", "started_at", "agent_calls", "stage_metrics"],
+  
+  "properties": {
+    "paper_id": {
+      "type": "string",
+      "description": "Unique identifier for the paper"
+    },
+    
+    "started_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when reproduction started"
+    },
+    
+    "completed_at": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when reproduction completed"
+    },
+    
+    "total_duration_seconds": {
+      "type": ["number", "null"],
+      "description": "Total wall-clock time for reproduction"
+    },
+    
+    "final_status": {
+      "type": "string",
+      "enum": ["in_progress", "completed", "stopped_by_user", "failed"],
+      "description": "Final status of the reproduction"
+    },
+    
+    "agent_calls": {
+      "type": "array",
+      "description": "Log of all agent invocations",
+      "items": {
+        "type": "object",
+        "required": ["agent", "timestamp", "duration_seconds"],
+        "properties": {
+          "agent": {
+            "type": "string",
+            "enum": [
+              "PromptAdaptorAgent",
+              "PlannerAgent",
+              "SimulationDesignerAgent",
+              "CodeGeneratorAgent",
+              "CodeReviewerAgent",
+              "ExecutionValidatorAgent",
+              "PhysicsSanityAgent",
+              "ResultsAnalyzerAgent",
+              "ComparisonValidatorAgent",
+              "SupervisorAgent"
+            ],
+            "description": "Agent that was invoked"
+          },
+          "node": {
+            "type": "string",
+            "description": "LangGraph node name"
+          },
+          "stage_id": {
+            "type": ["string", "null"],
+            "description": "Stage being processed (null for non-stage-specific calls)"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the call started"
+          },
+          "duration_seconds": {
+            "type": "number",
+            "description": "How long the call took"
+          },
+          "input_tokens": {
+            "type": ["integer", "null"],
+            "description": "Number of input tokens (if available)"
+          },
+          "output_tokens": {
+            "type": ["integer", "null"],
+            "description": "Number of output tokens (if available)"
+          },
+          "model": {
+            "type": ["string", "null"],
+            "description": "LLM model used (e.g., 'gpt-4o', 'gpt-4o-mini')"
+          },
+          "verdict": {
+            "type": ["string", "null"],
+            "description": "Verdict/decision if applicable"
+          },
+          "error": {
+            "type": ["string", "null"],
+            "description": "Error message if call failed"
+          }
+        }
+      }
+    },
+    
+    "stage_metrics": {
+      "type": "array",
+      "description": "Metrics for each stage",
+      "items": {
+        "type": "object",
+        "required": ["stage_id", "stage_type"],
+        "properties": {
+          "stage_id": {
+            "type": "string",
+            "description": "Stage identifier"
+          },
+          "stage_type": {
+            "type": "string",
+            "enum": ["MATERIAL_VALIDATION", "SINGLE_STRUCTURE", "ARRAY_SYSTEM", "PARAMETER_SWEEP", "COMPLEX_PHYSICS"],
+            "description": "Type of stage"
+          },
+          "started_at": {
+            "type": ["string", "null"],
+            "format": "date-time"
+          },
+          "completed_at": {
+            "type": ["string", "null"],
+            "format": "date-time"
+          },
+          "duration_seconds": {
+            "type": ["number", "null"]
+          },
+          "simulation_runtime_seconds": {
+            "type": ["number", "null"],
+            "description": "Time spent actually running Meep"
+          },
+          "design_revisions": {
+            "type": "integer",
+            "default": 0,
+            "description": "Number of design revision cycles"
+          },
+          "code_revisions": {
+            "type": "integer",
+            "default": 0,
+            "description": "Number of code revision cycles"
+          },
+          "analysis_revisions": {
+            "type": "integer",
+            "default": 0,
+            "description": "Number of analysis revision cycles"
+          },
+          "final_status": {
+            "type": "string",
+            "enum": ["success", "partial", "failure", "blocked", "skipped"],
+            "description": "Final status of this stage"
+          },
+          "escalated_to_user": {
+            "type": "boolean",
+            "default": false,
+            "description": "Whether this stage required user intervention"
+          }
+        }
+      }
+    },
+    
+    "revision_summary": {
+      "type": "object",
+      "description": "Summary of revisions across all stages",
+      "properties": {
+        "total_design_revisions": {
+          "type": "integer",
+          "description": "Total design revision cycles"
+        },
+        "total_code_revisions": {
+          "type": "integer",
+          "description": "Total code revision cycles"
+        },
+        "total_analysis_revisions": {
+          "type": "integer",
+          "description": "Total analysis revision cycles"
+        },
+        "replans": {
+          "type": "integer",
+          "description": "Number of times plan was revised"
+        },
+        "user_interventions": {
+          "type": "integer",
+          "description": "Number of times user was asked"
+        },
+        "revision_reasons": {
+          "type": "array",
+          "description": "Categories of revision reasons",
+          "items": {
+            "type": "object",
+            "properties": {
+              "category": {
+                "type": "string",
+                "description": "E.g., 'geometry', 'materials', 'numerics', 'code_quality'"
+              },
+              "count": {
+                "type": "integer"
+              }
+            }
+          }
+        }
+      }
+    },
+    
+    "token_summary": {
+      "type": "object",
+      "description": "Summary of token usage",
+      "properties": {
+        "total_input_tokens": {
+          "type": "integer"
+        },
+        "total_output_tokens": {
+          "type": "integer"
+        },
+        "by_agent": {
+          "type": "object",
+          "description": "Token usage per agent",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "input_tokens": {"type": "integer"},
+              "output_tokens": {"type": "integer"},
+              "call_count": {"type": "integer"}
+            }
+          }
+        },
+        "by_model": {
+          "type": "object",
+          "description": "Token usage per model",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "input_tokens": {"type": "integer"},
+              "output_tokens": {"type": "integer"},
+              "call_count": {"type": "integer"}
+            }
+          }
+        }
+      }
+    },
+    
+    "prompt_adaptations": {
+      "type": "object",
+      "description": "Record of prompt adaptations made by PromptAdaptorAgent",
+      "properties": {
+        "adaptations_count": {
+          "type": "integer",
+          "description": "Number of prompt modifications made"
+        },
+        "agents_modified": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "List of agents whose prompts were modified"
+        },
+        "adaptation_types": {
+          "type": "object",
+          "description": "Count by modification type",
+          "properties": {
+            "append": {"type": "integer"},
+            "modify": {"type": "integer"},
+            "disable": {"type": "integer"}
+          }
+        }
+      }
+    },
+    
+    "reproduction_quality": {
+      "type": "object",
+      "description": "Summary of reproduction quality",
+      "properties": {
+        "figures_targeted": {
+          "type": "integer"
+        },
+        "figures_reproduced": {
+          "type": "integer"
+        },
+        "success_count": {
+          "type": "integer"
+        },
+        "partial_count": {
+          "type": "integer"
+        },
+        "failure_count": {
+          "type": "integer"
+        },
+        "success_rate": {
+          "type": "number",
+          "description": "Percentage of figures with success status"
+        }
+      }
+    }
+  },
+  
+  "example": {
+    "paper_id": "aluminum_nanoantenna_2013",
+    "started_at": "2025-11-30T10:00:00Z",
+    "completed_at": "2025-11-30T12:30:00Z",
+    "total_duration_seconds": 9000,
+    "final_status": "completed",
+    "agent_calls": [
+      {
+        "agent": "PromptAdaptorAgent",
+        "node": "ADAPT_PROMPTS",
+        "stage_id": null,
+        "timestamp": "2025-11-30T10:00:00Z",
+        "duration_seconds": 15.2,
+        "input_tokens": 8500,
+        "output_tokens": 2100,
+        "model": "gpt-4o",
+        "verdict": null,
+        "error": null
+      },
+      {
+        "agent": "PlannerAgent",
+        "node": "PLAN",
+        "stage_id": null,
+        "timestamp": "2025-11-30T10:00:20Z",
+        "duration_seconds": 45.8,
+        "input_tokens": 15000,
+        "output_tokens": 4500,
+        "model": "gpt-4o",
+        "verdict": null,
+        "error": null
+      }
+    ],
+    "stage_metrics": [
+      {
+        "stage_id": "stage0_material_validation",
+        "stage_type": "MATERIAL_VALIDATION",
+        "started_at": "2025-11-30T10:01:10Z",
+        "completed_at": "2025-11-30T10:05:30Z",
+        "duration_seconds": 260,
+        "simulation_runtime_seconds": 45,
+        "design_revisions": 0,
+        "code_revisions": 1,
+        "analysis_revisions": 0,
+        "final_status": "success",
+        "escalated_to_user": false
+      }
+    ],
+    "revision_summary": {
+      "total_design_revisions": 2,
+      "total_code_revisions": 4,
+      "total_analysis_revisions": 1,
+      "replans": 0,
+      "user_interventions": 1,
+      "revision_reasons": [
+        {"category": "code_quality", "count": 3},
+        {"category": "numerics", "count": 2}
+      ]
+    },
+    "token_summary": {
+      "total_input_tokens": 125000,
+      "total_output_tokens": 35000,
+      "by_agent": {
+        "PlannerAgent": {"input_tokens": 15000, "output_tokens": 4500, "call_count": 1},
+        "SimulationDesignerAgent": {"input_tokens": 25000, "output_tokens": 8000, "call_count": 5}
+      },
+      "by_model": {
+        "gpt-4o": {"input_tokens": 80000, "output_tokens": 25000, "call_count": 15},
+        "gpt-4o-mini": {"input_tokens": 45000, "output_tokens": 10000, "call_count": 30}
+      }
+    },
+    "prompt_adaptations": {
+      "adaptations_count": 3,
+      "agents_modified": ["SimulationDesignerAgent", "PhysicsSanityAgent"],
+      "adaptation_types": {
+        "append": 2,
+        "modify": 1,
+        "disable": 0
+      }
+    },
+    "reproduction_quality": {
+      "figures_targeted": 4,
+      "figures_reproduced": 4,
+      "success_count": 2,
+      "partial_count": 2,
+      "failure_count": 0,
+      "success_rate": 50.0
+    }
+  }
+}
+

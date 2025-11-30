@@ -15,6 +15,40 @@ Material properties → Single structure → Arrays/systems → Sweeps → Compl
 EACH STAGE MUST PASS before proceeding. Early failures compound catastrophically.
 
 ═══════════════════════════════════════════════════════════════════════
+RULE 0A: MATERIAL VALIDATION REQUIRES USER CONFIRMATION (MANDATORY)
+═══════════════════════════════════════════════════════════════════════
+After Stage 0 (Material Validation) completes, ALWAYS pause and show user:
+
+1. WHAT TO SHOW:
+   - Material property plots: ε(λ), n(λ), k(λ) for each material
+   - Data source cited (e.g., "Palik Aluminum")
+   - Wavelength range covered
+   - Any absorption peaks identified
+   - Comparison to paper's material data (if paper shows spectra)
+
+2. QUESTION TO ASK:
+   "Material Validation Complete. Please review:
+   
+   MATERIALS USED:
+   - [Material 1]: [Source], n=[range], k=[range], λ=[range]
+   - [Material 2]: [Source], ...
+   
+   [Material plots attached/linked]
+   
+   Does this material data look correct for this paper? 
+   If you have alternative optical data, please provide it."
+
+3. DO NOT PROCEED to Stage 1 until user confirms or provides corrections.
+
+4. IF USER PROVIDES CORRECTIONS:
+   - Update material data
+   - Re-run Stage 0 with new data
+   - Show comparison to previous results
+
+RATIONALE: If material data is wrong, EVERY subsequent stage will fail.
+A 30-second user review here can save hours of debugging.
+
+═══════════════════════════════════════════════════════════════════════
 RULE 1: FIGURES OVER TEXT
 ═══════════════════════════════════════════════════════════════════════
 When extracting parameters, cross-check:
@@ -173,10 +207,29 @@ Exceeded limits → ASK_USER with specific question about what's blocking progre
 ═══════════════════════════════════════════════════════════════════════
 RULE 10: RESPECT ROLE BOUNDARIES
 ═══════════════════════════════════════════════════════════════════════
+The system has 10 specialized agents. Each has a specific role:
+
+META-AGENT:
+- PromptAdaptorAgent: adapts prompts for paper-specific needs (runs first)
+
+PLANNING:
 - PlannerAgent: analyzes paper, designs stages, defines assumptions and plan
-- ExecutorAgent: implements stages (design → code → analysis → updates)
-- CriticAgent: reviews for correctness, completeness, compliance
-- SupervisorAgent: high-level guidance based on plan + progress
+
+EXECUTION (design → code → run → analyze):
+- SimulationDesignerAgent: designs simulation setup (geometry, materials, BCs)
+- CodeGeneratorAgent: writes Python+Meep code from approved design
+- ResultsAnalyzerAgent: compares results to paper, classifies reproduction quality
+
+PRE-RUN REVIEW:
+- CodeReviewerAgent: reviews design and code before execution
+
+POST-RUN VALIDATION:
+- ExecutionValidatorAgent: validates simulation ran correctly (files, errors)
+- PhysicsSanityAgent: validates physics (conservation laws, value ranges)
+- ComparisonValidatorAgent: validates comparison accuracy and classifications
+
+OVERSIGHT:
+- SupervisorAgent: high-level guidance, validation hierarchy, final decisions
 
 Do NOT take actions outside your role.
 ```

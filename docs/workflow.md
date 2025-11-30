@@ -277,10 +277,12 @@ def run_code_node(state):
 
 **Purpose**: Compare results to paper and classify reproduction quality
 
+**Multimodal Capability**: This node uses vision-capable LLMs (GPT-4o, Claude) to visually compare simulation output images against paper figure images. Both images are provided directly to the LLM.
+
 **Inputs**:
-- `stage_outputs`: Files and data from simulation
+- `stage_outputs`: Files and data from simulation (including generated plot images)
 - `plan`: Target figures and validation criteria
-- Paper figures (for comparison)
+- `paper_figures`: Image paths from `PaperInput.figures` for visual comparison
 
 **Outputs**:
 - `per_figure_reports`: Structured comparison for each figure
@@ -339,19 +341,29 @@ def run_code_node(state):
 3. Are we making progress or stuck?
 4. Diminishing returns?
 
+**MANDATORY CHECKPOINT: Material Validation (Stage 0)**
+
+After Stage 0 completes, the Supervisor MUST trigger a user checkpoint:
+- Verdict is ALWAYS `ask_user` after Stage 0 (even if all criteria pass)
+- Shows user the material property plots (ε(λ), n(λ), k(λ))
+- Asks user to confirm material data sources are correct
+- Only proceeds to Stage 1 after user confirmation
+
+This is the highest-leverage checkpoint in the system. If material data is wrong, everything downstream fails.
+
 **Outputs**:
 - `supervisor_verdict`: Decision
 - `supervisor_feedback`: Recommendations
 
 **Transitions**:
-| Verdict | Next Node |
-|---------|-----------|
-| ok_continue | SELECT_STAGE |
-| change_priority | SELECT_STAGE (reordered) |
-| replan_needed | PLAN (if count < 2) |
-| replan_needed | ASK_USER (if count >= 2) |
-| ask_user | ASK_USER |
-| all_complete | GENERATE_REPORT |
+| Verdict | Next Node | Notes |
+|---------|-----------|-------|
+| ok_continue | SELECT_STAGE | (Cannot use after Stage 0) |
+| change_priority | SELECT_STAGE (reordered) | |
+| replan_needed | PLAN (if count < 2) | |
+| replan_needed | ASK_USER (if count >= 2) | |
+| ask_user | ASK_USER | (MANDATORY after Stage 0) |
+| all_complete | GENERATE_REPORT | |
 
 ---
 
@@ -360,6 +372,7 @@ def run_code_node(state):
 **Purpose**: Pause for user input
 
 **Triggers**:
+- **Material validation checkpoint** (MANDATORY after Stage 0)
 - Revision limits exceeded
 - Ambiguous paper information
 - Trade-off decisions needed
@@ -548,9 +561,54 @@ def run_code_node(state):
 ### Checkpointing
 
 The graph supports checkpointing at key points:
-- After PLAN completes
-- After each stage completes (SUPERVISOR node)
-- Before ASK_USER pauses
+- `after_plan`: After PlannerAgent completes the reproduction plan
+- `after_stage_complete`: After each stage completes (SUPERVISOR node)
+- `before_ask_user`: Before pausing for user input
+
+### Checkpoint Functions
+
+```python
+from schemas.state import save_checkpoint, load_checkpoint, list_checkpoints
+
+# Save checkpoint after planning
+checkpoint_path = save_checkpoint(state, "after_plan")
+# Creates: outputs/<paper_id>/checkpoints/checkpoint_<paper_id>_after_plan_<timestamp>.json
+
+# Save checkpoint after stage completion
+checkpoint_path = save_checkpoint(state, f"stage{stage_num}_complete")
+
+# List all checkpoints for a paper
+checkpoints = list_checkpoints("aluminum_nanoantenna_2013")
+# Returns: [{"name": "after_plan", "timestamp": "20251130_143022", "path": "...", "size_kb": 45.2}, ...]
+
+# Resume from checkpoint
+state = load_checkpoint("aluminum_nanoantenna_2013", checkpoint_name="after_plan")
+# Or load most recent:
+state = load_checkpoint("aluminum_nanoantenna_2013", checkpoint_name="latest")
+```
+
+### Resume Behavior
+
+When resuming from a checkpoint:
+1. Load state from checkpoint file
+2. Identify current workflow phase from `workflow_phase` field
+3. Resume execution at the appropriate node:
+   - `"planning"` → Resume at PLAN node
+   - `"design"` → Resume at DESIGN node
+   - `"running"` → Resume at RUN_CODE node
+   - `"analysis"` → Resume at ANALYZE node
+   - etc.
+
+### Checkpoint File Structure
+
+```
+outputs/<paper_id>/checkpoints/
+├── checkpoint_<paper_id>_after_plan_20251130_143022.json
+├── checkpoint_after_plan_latest.json  (symlink to most recent)
+├── checkpoint_<paper_id>_stage1_complete_20251130_144515.json
+├── checkpoint_stage1_complete_latest.json
+└── ...
+```
 
 ### File Outputs
 
@@ -653,4 +711,77 @@ analyzer_llm = ChatOpenAI(model="gpt-4o", temperature=0)
 
 # Strategic decisions
 supervisor_llm = ChatOpenAI(model="gpt-4o", temperature=0)
+```
+
+## Context Management
+
+### How Context Works in LangGraph
+
+Each agent call is an **independent LLM invocation** with its own context window. Understanding this is critical for system design:
+
+**Between Different Agents:**
+- State is shared via the `ReproState` TypedDict (passed between nodes)
+- Full conversation history is NOT shared between agents
+- Each agent receives only its system prompt + current state + node-specific inputs
+
+**Between Steps of the Same Agent (Loops):**
+- If an agent loops (e.g., CodeReviewerAgent says "revise" → back to CodeGeneratorAgent → back to CodeReviewerAgent)
+- The second call gets **fresh context** with updated state
+- Previous conversation turns are NOT carried over
+- Feedback is passed via state fields (e.g., `reviewer_feedback`, `critic_issues`)
+
+### What Each Agent Receives
+
+```
+┌─────────────────────────────────────────────┐
+│              Agent Context                  │
+├─────────────────────────────────────────────┤
+│ 1. System Prompt (from prompts/*.md)        │
+│    - Agent role and responsibilities        │
+│    - Checklists and guidelines              │
+│    - Output format requirements             │
+│                                             │
+│ 2. Global Rules (prepended)                 │
+│    - Non-negotiable rules from global_rules │
+│                                             │
+│ 3. Current State (from ReproState)          │
+│    - paper_id, paper_text, paper_domain     │
+│    - plan, assumptions, progress            │
+│    - current_stage_id, workflow_phase       │
+│    - Revision counts, verdicts              │
+│                                             │
+│ 4. Node-Specific Inputs                     │
+│    - reviewer_feedback (if revising)        │
+│    - stage_outputs (after run)              │
+│    - paper_figures (for comparison)         │
+└─────────────────────────────────────────────┘
+```
+
+### Why This Design
+
+**Benefits:**
+- Prevents context bloat (agents don't see irrelevant history)
+- Each agent focuses on its specific task
+- State provides structured, relevant information
+- Easier to debug (each call is self-contained)
+
+**Implications:**
+- Important information must be explicitly saved to state
+- Feedback between agents must use state fields
+- Large outputs should be summarized before storing
+
+### Feedback Loop Example
+
+```
+CodeGeneratorAgent (attempt 1)
+    ↓ generates code
+CodeReviewerAgent
+    ↓ finds issues, sets reviewer_feedback="Missing progress prints"
+    ↓ sets last_critic_verdict="needs_revision"
+CodeGeneratorAgent (attempt 2)
+    ↓ receives: fresh prompt + state including reviewer_feedback
+    ↓ uses feedback to improve code
+CodeReviewerAgent
+    ↓ reviews improved code
+    ↓ sets last_critic_verdict="approve_to_run"
 ```

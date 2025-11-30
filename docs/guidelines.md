@@ -381,6 +381,27 @@ End with statement on whether discrepancies affect conclusions.
 - [ ] Geometry: spacing vs period clarified
 - [ ] Resolution: adequate for physics being simulated
 - [ ] Runtime: within budget
+- [ ] **Key figures digitized** (strongly recommended for quantitative comparison)
+
+### Figure Digitization (Recommended)
+
+For quantitative validation, digitize key figures BEFORE starting reproduction:
+
+**Tool**: [WebPlotDigitizer](https://automeris.io/WebPlotDigitizer/) (free, web-based)
+
+**Process**:
+1. Load paper figure image
+2. Calibrate axes (set 2 points per axis with known values)
+3. Extract data points (automatic or manual)
+4. Export as CSV with columns: x_value, y_value
+
+**Naming**: `<paper_id>_<figure_id>_digitized.csv`
+
+**Benefits**:
+- ResultsAnalyzerAgent computes MSE, correlation, R² automatically
+- Removes subjective visual judgment
+- Reproducible validation
+- Catches small shifts that visual comparison misses
 
 ### Post-Simulation Checklist
 
@@ -401,7 +422,52 @@ End with statement on whether discrepancies affect conclusions.
 
 ---
 
-## 12. Future Improvements
+## 12. Meep Version Considerations
+
+### Supported Version
+
+This system is designed and tested with **Meep 1.28+**. Key API features used:
+
+| Feature | API | Notes |
+|---------|-----|-------|
+| Flux monitors | `mp.FluxRegion()` | Syntax changed in older versions |
+| Materials | `mp.Medium()` | Supports dispersive models |
+| Simulation | `mp.Simulation()` | Object-oriented interface |
+| Sources | `mp.Source()`, `mp.GaussianSource()` | Standard API |
+
+### Version-Related Issues
+
+**If resonances are shifted:**
+1. Check Meep version matches expected (1.28+)
+2. Verify material data interpolation is working
+3. Check unit system consistency
+
+**If code fails to run:**
+1. Check for deprecated function calls
+2. Verify flux region syntax matches version
+3. Check material definition format
+
+### Installation
+
+```bash
+# Recommended: conda installation
+conda install -c conda-forge meep=1.28
+
+# Verify installation
+python -c "import meep; print(meep.__version__)"
+```
+
+### API Compatibility Checklist
+
+Before running, CodeReviewerAgent verifies:
+- [ ] No deprecated functions (e.g., old `get_flux_freqs()` syntax)
+- [ ] Material definitions use `mp.Medium()` format
+- [ ] Flux regions use current `mp.FluxRegion()` API
+- [ ] Source definitions are current
+
+---
+
+## 14. Future Improvements
 
 ### Multi-Model Consensus Validation
 
@@ -446,9 +512,94 @@ Instead of fixed resolution estimates, future versions could:
 - Automatically refine based on convergence
 - Stop when results stabilize
 
+### Stage Parallelization
+
+Currently, stages execute sequentially. Future versions could:
+- Identify independent stages (e.g., different parameter sweep points)
+- Execute independent stages in parallel
+- Aggregate results before validation
+- Significant speedup for parameter sweeps
+
+**Challenges:**
+- Resource management (memory, CPU)
+- Error handling in parallel execution
+- State synchronization
+- Result aggregation
+
+### Domain Expansion
+
+The system is currently optimized for optics/Meep. Future expansion could include:
+- **Electronics**: SPICE simulations for circuit reproduction
+- **Mechanics**: FEA simulations with Fenics/Abaqus
+- **Chemistry**: DFT calculations with VASP/Gaussian
+- **Fluid dynamics**: CFD with OpenFOAM
+
+Each domain would require:
+- Domain-specific agent prompts
+- Domain-specific validation rules
+- Different simulation backends
+- Domain-specific discrepancy thresholds
+
+### Reproducibility of Reproductions
+
+**Question**: Can the same paper be reproduced with identical results on repeated runs?
+
+**Sources of variation:**
+- LLM non-determinism (even with temperature=0)
+- Meep numerical noise
+- Random initialization in some simulations
+
+**Potential solutions:**
+- Seed fixing for deterministic LLM outputs (when available)
+- Seed fixing for numerical simulations
+- Tolerance-based comparison for "identical" results
+- Logging all random seeds used
+
+**Status**: Documented for future investigation.
+
+### Sandboxed Code Execution
+
+LLM-generated Meep code must be executed safely. Options include:
+
+**Option A: Subprocess with Resource Limits**
+```python
+import subprocess
+import resource
+
+# Set limits
+resource.setrlimit(resource.RLIMIT_CPU, (timeout_seconds, timeout_seconds))
+resource.setrlimit(resource.RLIMIT_AS, (max_memory_bytes, max_memory_bytes))
+
+# Execute in subprocess
+result = subprocess.run(
+    ["python", "simulation.py"],
+    timeout=timeout_seconds,
+    capture_output=True
+)
+```
+
+**Option B: Docker Container**
+```bash
+docker run --rm \
+    --memory=8g \
+    --cpus=4 \
+    --timeout=3600 \
+    -v $(pwd)/outputs:/outputs \
+    meep-sandbox:latest \
+    python simulation.py
+```
+
+**Considerations:**
+- Subprocess is simpler, Docker more isolated
+- Docker requires Docker installation
+- Both need file system access controls
+- Both need network isolation
+
+**Status**: Document requirements now, implement later.
+
 ---
 
-## 13. Self-Improving System Roadmap
+## 15. Self-Improving System Roadmap
 
 ### Current: PromptAdaptorAgent (v1)
 

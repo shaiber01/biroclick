@@ -151,6 +151,21 @@ Before approving code to run, verify EVERY item:
     - Number of parameter sweep points
   - Memory estimate within laptop limits (<8-16 GB)
 
+□ MEEP VERSION COMPATIBILITY
+  - Code uses Meep API consistent with documented version (1.28+)
+  - No deprecated function calls
+  - Flux region syntax matches current API
+  - Material definitions use supported format
+
+□ MEEP UNIT NORMALIZATION (CRITICAL)
+  - Characteristic length (a_unit) defined at top of code
+  - All geometry expressed in Meep normalized units
+  - Wavelength/frequency conversion shown explicitly
+  - Comment showing real-world values alongside Meep units
+  - NO mixing of units (e.g., geometry in µm, wavelength in nm without conversion)
+  - Unit system documented in design output
+  - Example: "# D = 75 nm → 0.075 in Meep units (a = 1 µm)"
+
 ═══════════════════════════════════════════════════════════════════════
 B. PLAN REVIEW (when reviewing PlannerAgent)
 ═══════════════════════════════════════════════════════════════════════
@@ -298,6 +313,8 @@ HIGH PRIORITY (blocking):
 - PML inside structures or too thin
 - Source inside structures
 - Wrong units (mixing nm and µm)
+- MISSING UNIT NORMALIZATION → Meep is scale-invariant; without a_unit
+  definition and explicit conversions, physics will be silently wrong
 
 MEDIUM PRIORITY (major):
 - Geometry doesn't match paper description

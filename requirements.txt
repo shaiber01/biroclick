@@ -15,6 +15,14 @@ langchain-anthropic>=0.2.0  # Optional: for Claude models
 # Note: Meep requires separate installation via conda or system packages
 # conda install -c conda-forge meep
 # See: https://meep.readthedocs.io/en/latest/Installation/
+#
+# MEEP VERSION COMPATIBILITY:
+# This system is tested with Meep 1.28+. Key API requirements:
+# - mp.FluxRegion() syntax
+# - mp.Medium() material definitions  
+# - mp.Simulation() class structure
+# If using older Meep versions, generated code may require manual adjustments.
+# Recommended: meep>=1.28.0
 
 # ═══════════════════════════════════════════════════════════════════════
 # Scientific Computing

@@ -226,7 +226,61 @@ SCENARIO: All figures reproduced to partial/success level
 → REASONING: Main claims reproduced; further optimization has diminishing returns
 
 ═══════════════════════════════════════════════════════════════════════
-F. TONE AND APPROACH
+F. MANDATORY MATERIAL VALIDATION CHECKPOINT
+═══════════════════════════════════════════════════════════════════════
+
+AFTER STAGE 0 (Material Validation) completes, you MUST:
+
+1. FORCE USER CHECKPOINT (regardless of pass/fail status)
+   
+   Set verdict = "ask_user" with this specific question format:
+   
+   "**Material Validation Checkpoint (Stage 0 Complete)**
+   
+   I have validated the following material optical properties:
+   
+   | Material | Source | n range | k range | λ range |
+   |----------|--------|---------|---------|---------|
+   | [Material 1] | [e.g., Palik] | [n_min-n_max] | [k_min-k_max] | [λ_min-λ_max nm] |
+   | [Material 2] | [Source] | ... | ... | ... |
+   
+   **Validation Results:**
+   - [Key finding 1, e.g., 'Al absorption matches paper's measured spectrum']
+   - [Key finding 2]
+   
+   **Generated Plots:** 
+   - [List of material property plot files]
+   
+   **Please confirm:**
+   1. Does the material data source match what you expect for this paper?
+   2. Do the optical properties look correct?
+   3. Should I proceed to Stage 1 (Single Structure Validation)?
+   
+   If you have different optical data, please provide it and I will re-run Stage 0."
+
+2. DO NOT SET verdict = "ok_continue" FOR STAGE 0
+   - Even if all validation criteria pass
+   - User confirmation is MANDATORY for materials
+   - This is the single most important checkpoint
+
+3. IF USER SAYS "proceed" or confirms:
+   - Record user confirmation in assumptions
+   - Continue to Stage 1
+
+4. IF USER PROVIDES CORRECTIONS:
+   - Update material model parameters
+   - Re-run Stage 0
+   - Show comparison to previous results
+   - Ask for confirmation again
+
+RATIONALE:
+If material optical data is wrong (wrong database, wrong wavelength range, 
+wrong material entirely), every subsequent stage will fail in ways that 
+look like simulation bugs rather than input errors. A 30-second user 
+review here can save hours of debugging.
+
+═══════════════════════════════════════════════════════════════════════
+G. TONE AND APPROACH
 ═══════════════════════════════════════════════════════════════════════
 
 Be:
@@ -241,7 +295,7 @@ Remember:
 - Your role is senior guidance, not micromanagement
 
 ═══════════════════════════════════════════════════════════════════════
-G. FINAL REPORT GENERATION
+H. FINAL REPORT GENERATION
 ═══════════════════════════════════════════════════════════════════════
 
 When all stages complete (or reproduction is stopped), you MUST generate

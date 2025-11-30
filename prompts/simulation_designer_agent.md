@@ -50,7 +50,52 @@ GEOMETRY INTERPRETATION CHECKLIST:
    - Native oxides (2-3nm) often mentioned but may need to be tested
 
 ═══════════════════════════════════════════════════════════════════════
-B. MATERIAL MODEL GUIDELINES
+B. MEEP UNIT NORMALIZATION (CRITICAL)
+═══════════════════════════════════════════════════════════════════════
+
+Meep uses NORMALIZED (scale-invariant) units where c = 1.
+This is a common source of SILENT FAILURES if not handled correctly.
+
+YOU MUST ALWAYS:
+
+1. DEFINE A CHARACTERISTIC LENGTH
+   - Choose a characteristic length a (typically 1 µm = 1e-6 m)
+   - ALL quantities must be normalized to this length
+   - Document your choice in the design output
+
+2. UNIT CONVERSION FORMULAS
+   - Geometry:    length_meep = length_nm × 1e-9 / a
+   - Wavelength:  λ_meep = λ_nm × 1e-9 / a  
+   - Frequency:   f_meep = a / (λ_nm × 1e-9) = a / λ_SI
+   - Time:        t_meep = t_seconds × c / a
+   - Where c = 3e8 m/s
+
+3. EXAMPLE (a = 1 µm = 1e-6 m):
+   - D = 75 nm → D_meep = 75e-9 / 1e-6 = 0.075
+   - λ = 500 nm → λ_meep = 500e-9 / 1e-6 = 0.5
+   - f = 1/λ → f_meep = 1/0.5 = 2.0 (in Meep units)
+   
+4. DOCUMENT IN DESIGN OUTPUT:
+   ```
+   unit_system:
+     characteristic_length_m: 1e-6  # 1 µm
+     length_unit: "µm"
+     wavelength_500nm_meep: 0.5
+     frequency_500nm_meep: 2.0
+   ```
+
+5. CODE MUST INCLUDE:
+   - Clear definition: a_unit = 1e-6  # characteristic length in meters
+   - Conversion helper or explicit formulas
+   - Comment showing real units alongside Meep units
+
+FAILURE MODE TO AVOID:
+If you define geometry in µm but use nm for wavelength without
+proper normalization, the simulation will run but produce 
+COMPLETELY WRONG physics (off by factors of 1000).
+
+═══════════════════════════════════════════════════════════════════════
+C. MATERIAL MODEL GUIDELINES
 ═══════════════════════════════════════════════════════════════════════
 
 MATERIAL MODEL SELECTION:
@@ -82,7 +127,7 @@ MATERIAL MODEL SELECTION:
    material data is the FIRST suspect. Document which data you used.
 
 ═══════════════════════════════════════════════════════════════════════
-C. RESOLUTION GUIDELINES
+D. RESOLUTION GUIDELINES
 ═══════════════════════════════════════════════════════════════════════
 
 RESOLUTION SELECTION TABLE:
@@ -105,7 +150,7 @@ CONVERGENCE TEST (if time permits):
 - If results look WORSE at higher res, may be numerical artifact
 
 ═══════════════════════════════════════════════════════════════════════
-D. OUTPUT FORMAT REQUIREMENTS
+E. OUTPUT FORMAT REQUIREMENTS
 ═══════════════════════════════════════════════════════════════════════
 
 FIGURE FORMAT - MUST MATCH PAPER:
@@ -134,7 +179,7 @@ FIGURE FORMAT - MUST MATCH PAPER:
    - Every plot title: "Stage <id> – <description> – Target: Fig. X"
 
 ═══════════════════════════════════════════════════════════════════════
-E. DESIGN WORKFLOW
+F. DESIGN WORKFLOW
 ═══════════════════════════════════════════════════════════════════════
 
 For each stage, follow this sequence:
@@ -166,7 +211,7 @@ For each stage, follow this sequence:
    If way over budget: ask user.
 
 ═══════════════════════════════════════════════════════════════════════
-F. OUTPUT FORMAT
+G. OUTPUT FORMAT
 ═══════════════════════════════════════════════════════════════════════
 
 Your output must be a JSON object:
@@ -183,6 +228,11 @@ Your output must be a JSON object:
   },
   
   "design": {
+    "unit_system": {
+      "characteristic_length_m": 1e-6,
+      "length_unit": "µm",
+      "example_conversion": "500nm → 0.5 Meep units"
+    },
     "geometry": {
       "dimensionality": "2D | 3D",
       "cell_size": [x, y, z],
@@ -270,7 +320,7 @@ Your output must be a JSON object:
 }
 
 ═══════════════════════════════════════════════════════════════════════
-G. SIMPLIFICATION HIERARCHY
+H. SIMPLIFICATION HIERARCHY
 ═══════════════════════════════════════════════════════════════════════
 
 When performance estimate exceeds budget, propose simplifications in order:
@@ -300,7 +350,7 @@ When performance estimate exceeds budget, propose simplifications in order:
 Document which simplifications are applied and their expected impact.
 
 ═══════════════════════════════════════════════════════════════════════
-H. DESIGN REVIEW CHECKLIST
+I. DESIGN REVIEW CHECKLIST
 ═══════════════════════════════════════════════════════════════════════
 
 Before submitting your design, verify:

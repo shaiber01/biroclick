@@ -1,10 +1,10 @@
-# BiroClick: Multi-Agent Paper Reproduction System
+# ReproLab: Multi-Agent Paper Reproduction System
 
 A LangGraph-based multi-agent system that automatically reproduces simulation results from optics and metamaterials research papers using Meep FDTD simulations.
 
 ## Overview
 
-BiroClick reads scientific papers, plans staged reproductions, generates and runs Meep simulations, and systematically compares results to published figures—all while maintaining transparency through explicit assumption tracking and structured progress logging.
+ReproLab reads scientific papers, plans staged reproductions, generates and runs Meep simulations, and systematically compares results to published figures—all while maintaining transparency through explicit assumption tracking and structured progress logging.
 
 ### Key Features
 
@@ -13,6 +13,7 @@ BiroClick reads scientific papers, plans staged reproductions, generates and run
 - **Performance-aware**: Designed for laptop execution with runtime budgets
 - **Quantitative tracking**: Structured discrepancy logging with acceptance thresholds
 - **Scientific rigor**: Multi-agent review system with specialized validators
+- **Multimodal AI**: Uses vision-capable LLMs (GPT-4o, Claude) for figure comparison
 
 ## Architecture
 
@@ -83,7 +84,7 @@ Every reproduction follows this validation hierarchy:
 ## Project Structure
 
 ```
-biroclick/
+reprolab/
 ├── README.md                 # This file
 ├── requirements.txt          # Python dependencies
 │
@@ -114,11 +115,38 @@ biroclick/
 │
 └── src/                      # Source code (implementation)
     ├── __init__.py
+    ├── paper_loader.py       # Paper input schema and validation
     ├── agents.py             # Agent node implementations
     ├── graph.py              # LangGraph state graph definition
     ├── utils.py              # Utility functions
     └── code_runner.py        # Sandboxed Python execution
 ```
+
+## Paper Input
+
+The system uses **multimodal LLMs** (GPT-4o, Claude) that can analyze both text and images. Paper inputs are provided via a structured format:
+
+```python
+from src.paper_loader import create_paper_input
+
+paper_input = create_paper_input(
+    paper_id="aluminum_nanoantenna_2013",
+    paper_title="Aluminum nanoantenna complexes for strong coupling...",
+    paper_text="... extracted paper text ...",
+    figures=[
+        {"id": "Fig3a", "description": "Transmission spectra", "image_path": "papers/fig3a.png"},
+        {"id": "Fig3b", "description": "Coated disk spectra", "image_path": "papers/fig3b.png"},
+    ],
+    paper_domain="plasmonics"
+)
+```
+
+**Figure images** are passed directly to vision-capable LLMs during:
+- **PlannerAgent**: Analyzing what figures show and how to reproduce them
+- **ResultsAnalyzerAgent**: Comparing simulation outputs to paper figures visually
+- **ComparisonValidatorAgent**: Verifying comparison accuracy
+
+See `src/paper_loader.py` for the full `PaperInput` schema and validation.
 
 ## Data Models
 
@@ -192,8 +220,8 @@ Stop optimizing when:
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/biroclick.git
-cd biroclick
+git clone https://github.com/yourusername/reprolab.git
+cd reprolab
 
 # Create virtual environment
 python -m venv venv
@@ -210,18 +238,25 @@ export OPENAI_API_KEY="your-api-key"
 
 ```python
 from src.graph import create_repro_graph
+from src.paper_loader import create_paper_input
 
 # Initialize the graph
 app = create_repro_graph()
 
-# Run reproduction
-initial_state = {
-    "paper_id": "aluminum_nanoantenna_2013",
-    "paper_text": "... extracted paper text ...",
-    "paper_domain": "plasmonics"
-}
+# Prepare paper input with figures for multimodal comparison
+paper_input = create_paper_input(
+    paper_id="aluminum_nanoantenna_2013",
+    paper_title="Aluminum nanoantenna complexes for strong coupling...",
+    paper_text="... extracted paper text ...",
+    figures=[
+        {"id": "Fig3a", "description": "Bare disk transmission", "image_path": "papers/fig3a.png"},
+        {"id": "Fig3b", "description": "Coated disk transmission", "image_path": "papers/fig3b.png"},
+    ],
+    paper_domain="plasmonics"
+)
 
-result = app.invoke(initial_state)
+# Run reproduction
+result = app.invoke(paper_input)
 ```
 
 ## Dependencies
