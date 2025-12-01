@@ -15,7 +15,13 @@ import os
 import signal
 from typing import Dict, Any, Optional
 
-from schemas.state import ReproState, save_checkpoint, check_context_before_node
+from schemas.state import (
+    ReproState, 
+    save_checkpoint, 
+    check_context_before_node,
+    initialize_progress_from_plan,
+    sync_extracted_parameters,
+)
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -79,6 +85,22 @@ def plan_node(state: ReproState) -> ReproState:
     # - Classify figures
     # - Design staged reproduction plan
     # - Initialize assumptions
+    # - Call LLM with planner_agent.md prompt
+    # - Parse agent output per planner_output_schema.json
+    
+    # STUB: Replace with actual LLM call that populates state["plan"]
+    # state["plan"] = generated_plan
+    # state["assumptions"] = generated_assumptions
+    
+    # ═══════════════════════════════════════════════════════════════════════
+    # MANDATORY: Initialize progress stages from plan (after plan is set)
+    # This converts plan stages into progress stages with status tracking.
+    # Must be called before select_stage_node runs.
+    # ═══════════════════════════════════════════════════════════════════════
+    if state.get("plan") and state["plan"].get("stages"):
+        state = initialize_progress_from_plan(state)
+        state = sync_extracted_parameters(state)
+    
     return state
 
 
@@ -493,56 +515,264 @@ def supervisor_node(state: ReproState) -> dict:
     
     1. CHECK ask_user_trigger:
        When this node is called after ask_user, check state["ask_user_trigger"]
-       to understand what the user was responding to:
-       - "material_checkpoint": User validated/changed material data
-       - "code_review_limit": User provided guidance on stuck code review
-       - "context_overflow": User chose recovery option
+       to understand what the user was responding to. See src/prompts.py
+       ASK_USER_TRIGGERS for full documentation of all trigger types.
        
-    2. HANDLE material_checkpoint RESPONSE (CRITICAL):
-       If ask_user_trigger == "material_checkpoint", check user_responses:
-       - "APPROVE" → proceed to select_stage (verdict = "ok_continue")
-       - "CHANGE_DATABASE" → invalidate Stage 0, update assumptions, rerun
-       - "CHANGE_MATERIAL" → route to plan with supervisor_feedback
-       - "NEED_HELP" → ask_user again with more context
+    2. HANDLE EACH TRIGGER TYPE:
+       Each trigger has specific handling requirements documented in
+       src/prompts.py:ASK_USER_TRIGGERS. Key triggers:
+       - "material_checkpoint": Mandatory Stage 0 validation
+       - "code_review_limit": User guidance on stuck code generation
+       - "design_review_limit": User guidance on stuck design
+       - "execution_failure_limit": Simulation runtime failures
+       - "physics_failure_limit": Physics sanity check failures
+       - "context_overflow": LLM context management
+       - "replan_limit": Planning iteration limit
+       - "backtrack_approval": Cross-stage backtrack confirmation
        
     3. RESET COUNTERS on user intervention:
-       When user provides guidance that resolves an issue (e.g., code fix hint),
-       reset relevant counters before routing back to the blocked node:
+       When user provides guidance that resolves an issue, reset relevant
+       counters to prevent limit exhaustion:
        - code_revision_count = 0 if routing back to generate_code
        - design_revision_count = 0 if routing back to design
-       This prevents limit exhaustion after user helps resolve the issue.
+       - execution_failure_count = 0 if retrying execution
+       - physics_failure_count = 0 if retrying physics check
        
     4. USE get_validation_hierarchy():
        Always use get_validation_hierarchy(state) to check hierarchy status.
        Never store validation_hierarchy in state directly - it's computed.
     """
-    from schemas.state import get_validation_hierarchy
+    from schemas.state import get_validation_hierarchy, update_progress_stage_status
     
-    # TODO: Implement supervision logic using prompts/supervisor_agent.md
-    # - Assess overall progress
-    # - Check validation hierarchy via get_validation_hierarchy(state)
-    # - Handle post-ask_user routing based on ask_user_trigger
-    # - Decide: continue, replan, ask_user, backtrack
+    # TODO: Implement full supervision logic using prompts/supervisor_agent.md
     # - Call LLM with supervisor_agent.md prompt
     # - Parse agent output per supervisor_output_schema.json
     
-    # STUB: Replace with actual LLM call
-    # Check if this is a post-ask_user call
+    # Get trigger info
     ask_user_trigger = state.get("ask_user_trigger")
     user_responses = state.get("user_responses", {})
+    last_node = state.get("last_node_before_ask_user")
+    current_stage_id = state.get("current_stage_id")
     
-    result = {
+    result: Dict[str, Any] = {
         "workflow_phase": "supervision",
     }
     
-    # Handle post-material-checkpoint scenario
-    if ask_user_trigger == "material_checkpoint":
-        # TODO: Parse user response and decide verdict
-        # For stub, assume approval
-        result["supervisor_verdict"] = "ok_continue"
+    # ═══════════════════════════════════════════════════════════════════════
+    # POST-ASK_USER HANDLING: Route based on trigger type
+    # ═══════════════════════════════════════════════════════════════════════
+    
+    if ask_user_trigger:
         result["ask_user_trigger"] = None  # Clear trigger after handling
+        
+        # ─── MATERIAL CHECKPOINT ──────────────────────────────────────────────
+        if ask_user_trigger == "material_checkpoint":
+            # Parse user response from any question (get last response)
+            response_text = ""
+            for q, r in user_responses.items():
+                response_text = r.upper() if isinstance(r, str) else str(r)
+            
+            if "APPROVE" in response_text:
+                result["supervisor_verdict"] = "ok_continue"
+                result["supervisor_feedback"] = "Material validation approved by user."
+            elif "CHANGE_DATABASE" in response_text:
+                # Invalidate Stage 0, will re-run with new database
+                result["supervisor_verdict"] = "backtrack_to_stage"
+                result["backtrack_decision"] = {
+                    "accepted": True,
+                    "target_stage_id": "stage0_material_validation",
+                    "stages_to_invalidate": [],
+                    "reason": "User requested different material database"
+                }
+                result["supervisor_feedback"] = f"User requested database change: {response_text}"
+            elif "CHANGE_MATERIAL" in response_text:
+                # Need to replan with different material
+                result["supervisor_verdict"] = "replan_needed"
+                result["planner_feedback"] = f"User indicated wrong material: {response_text}. Please update plan."
+            elif "NEED_HELP" in response_text:
+                result["supervisor_verdict"] = "ask_user"
+                result["pending_user_questions"] = [
+                    "Please provide more details about the material issue. "
+                    "What specific aspect of the optical constants looks incorrect?"
+                ]
+            else:
+                # Default: assume approval if unclear
+                result["supervisor_verdict"] = "ok_continue"
+                result["supervisor_feedback"] = f"Proceeding with user response: {response_text[:100]}"
+        
+        # ─── CODE REVIEW LIMIT ────────────────────────────────────────────────
+        elif ask_user_trigger == "code_review_limit":
+            response_text = ""
+            for q, r in user_responses.items():
+                response_text = r.upper() if isinstance(r, str) else str(r)
+            
+            if "PROVIDE_HINT" in response_text or "HINT" in response_text:
+                # Reset counter and route back to code generation with hint
+                result["code_revision_count"] = 0
+                result["reviewer_feedback"] = f"User hint: {user_responses.get(list(user_responses.keys())[-1] if user_responses else '', '')}"
+                result["supervisor_verdict"] = "ok_continue"  # Will route to select_stage, then design->code
+                result["supervisor_feedback"] = "Retrying code generation with user hint."
+            elif "SKIP" in response_text:
+                result["supervisor_verdict"] = "ok_continue"
+                if current_stage_id:
+                    update_progress_stage_status(state, current_stage_id, "blocked", 
+                                                summary="Skipped by user due to code review issues")
+            elif "STOP" in response_text:
+                result["supervisor_verdict"] = "all_complete"
+                result["should_stop"] = True
+            else:
+                result["supervisor_verdict"] = "ask_user"
+                result["pending_user_questions"] = [
+                    "Please clarify: PROVIDE_HINT (with hint text), SKIP_STAGE, or STOP?"
+                ]
+        
+        # ─── DESIGN REVIEW LIMIT ──────────────────────────────────────────────
+        elif ask_user_trigger == "design_review_limit":
+            response_text = ""
+            for q, r in user_responses.items():
+                response_text = r.upper() if isinstance(r, str) else str(r)
+            
+            if "PROVIDE_HINT" in response_text or "HINT" in response_text:
+                result["design_revision_count"] = 0
+                result["reviewer_feedback"] = f"User hint: {user_responses.get(list(user_responses.keys())[-1] if user_responses else '', '')}"
+                result["supervisor_verdict"] = "ok_continue"
+            elif "SKIP" in response_text:
+                result["supervisor_verdict"] = "ok_continue"
+                if current_stage_id:
+                    update_progress_stage_status(state, current_stage_id, "blocked",
+                                                summary="Skipped by user due to design review issues")
+            elif "STOP" in response_text:
+                result["supervisor_verdict"] = "all_complete"
+                result["should_stop"] = True
+            else:
+                result["supervisor_verdict"] = "ask_user"
+                result["pending_user_questions"] = [
+                    "Please clarify: PROVIDE_HINT (with hint text), SKIP_STAGE, or STOP?"
+                ]
+        
+        # ─── EXECUTION FAILURE LIMIT ──────────────────────────────────────────
+        elif ask_user_trigger == "execution_failure_limit":
+            response_text = ""
+            for q, r in user_responses.items():
+                response_text = r.upper() if isinstance(r, str) else str(r)
+            
+            if "RETRY" in response_text or "GUIDANCE" in response_text:
+                result["execution_failure_count"] = 0
+                result["supervisor_feedback"] = f"User guidance: {user_responses.get(list(user_responses.keys())[-1] if user_responses else '', '')}"
+                result["supervisor_verdict"] = "ok_continue"
+            elif "SKIP" in response_text:
+                result["supervisor_verdict"] = "ok_continue"
+                if current_stage_id:
+                    update_progress_stage_status(state, current_stage_id, "blocked",
+                                                summary="Skipped by user due to execution failures")
+            elif "STOP" in response_text:
+                result["supervisor_verdict"] = "all_complete"
+                result["should_stop"] = True
+            else:
+                result["supervisor_verdict"] = "ask_user"
+                result["pending_user_questions"] = [
+                    "Please clarify: RETRY_WITH_GUIDANCE (with guidance), SKIP_STAGE, or STOP?"
+                ]
+        
+        # ─── PHYSICS FAILURE LIMIT ────────────────────────────────────────────
+        elif ask_user_trigger == "physics_failure_limit":
+            response_text = ""
+            for q, r in user_responses.items():
+                response_text = r.upper() if isinstance(r, str) else str(r)
+            
+            if "RETRY" in response_text:
+                result["physics_failure_count"] = 0
+                result["supervisor_feedback"] = f"User guidance: {user_responses.get(list(user_responses.keys())[-1] if user_responses else '', '')}"
+                result["supervisor_verdict"] = "ok_continue"
+            elif "ACCEPT" in response_text or "PARTIAL" in response_text:
+                result["supervisor_verdict"] = "ok_continue"
+                if current_stage_id:
+                    update_progress_stage_status(state, current_stage_id, "completed_partial",
+                                                summary="Accepted as partial by user despite physics issues")
+            elif "SKIP" in response_text:
+                result["supervisor_verdict"] = "ok_continue"
+                if current_stage_id:
+                    update_progress_stage_status(state, current_stage_id, "blocked",
+                                                summary="Skipped by user due to physics check failures")
+            elif "STOP" in response_text:
+                result["supervisor_verdict"] = "all_complete"
+                result["should_stop"] = True
+            else:
+                result["supervisor_verdict"] = "ask_user"
+                result["pending_user_questions"] = [
+                    "Please clarify: RETRY_WITH_GUIDANCE, ACCEPT_PARTIAL, SKIP_STAGE, or STOP?"
+                ]
+        
+        # ─── CONTEXT OVERFLOW ─────────────────────────────────────────────────
+        elif ask_user_trigger == "context_overflow":
+            response_text = ""
+            for q, r in user_responses.items():
+                response_text = r.upper() if isinstance(r, str) else str(r)
+            
+            if "SUMMARIZE" in response_text:
+                # Apply feedback summarization (handled elsewhere)
+                result["supervisor_verdict"] = "ok_continue"
+                result["supervisor_feedback"] = "Applying feedback summarization for context management."
+            elif "TRUNCATE" in response_text:
+                result["supervisor_verdict"] = "ok_continue"
+                result["supervisor_feedback"] = "Truncating paper to methods section."
+            elif "SKIP" in response_text:
+                result["supervisor_verdict"] = "ok_continue"
+                if current_stage_id:
+                    update_progress_stage_status(state, current_stage_id, "blocked",
+                                                summary="Skipped due to context overflow")
+            elif "STOP" in response_text:
+                result["supervisor_verdict"] = "all_complete"
+                result["should_stop"] = True
+            else:
+                result["supervisor_verdict"] = "ok_continue"
+        
+        # ─── REPLAN LIMIT ─────────────────────────────────────────────────────
+        elif ask_user_trigger == "replan_limit":
+            response_text = ""
+            for q, r in user_responses.items():
+                response_text = r.upper() if isinstance(r, str) else str(r)
+            
+            if "FORCE" in response_text or "ACCEPT" in response_text:
+                result["supervisor_verdict"] = "ok_continue"
+                result["supervisor_feedback"] = "Plan force-accepted by user."
+            elif "GUIDANCE" in response_text:
+                result["replan_count"] = 0
+                result["planner_feedback"] = f"User guidance: {user_responses.get(list(user_responses.keys())[-1] if user_responses else '', '')}"
+                result["supervisor_verdict"] = "replan_needed"
+            elif "STOP" in response_text:
+                result["supervisor_verdict"] = "all_complete"
+                result["should_stop"] = True
+            else:
+                result["supervisor_verdict"] = "ok_continue"
+        
+        # ─── BACKTRACK APPROVAL ───────────────────────────────────────────────
+        elif ask_user_trigger == "backtrack_approval":
+            response_text = ""
+            for q, r in user_responses.items():
+                response_text = r.upper() if isinstance(r, str) else str(r)
+            
+            if "APPROVE" in response_text:
+                result["supervisor_verdict"] = "backtrack_to_stage"
+                # backtrack_decision should already be set
+            elif "REJECT" in response_text:
+                result["backtrack_suggestion"] = None
+                result["supervisor_verdict"] = "ok_continue"
+            else:
+                result["supervisor_verdict"] = "ok_continue"
+        
+        # ─── UNKNOWN/DEFAULT ──────────────────────────────────────────────────
+        else:
+            # Unknown trigger - default to continue
+            result["supervisor_verdict"] = "ok_continue"
+            result["supervisor_feedback"] = f"Handled unknown trigger: {ask_user_trigger}"
+    
+    # ═══════════════════════════════════════════════════════════════════════
+    # NORMAL SUPERVISION (not post-ask_user)
+    # ═══════════════════════════════════════════════════════════════════════
     else:
-        # Default behavior
+        # TODO: Implement actual LLM-based supervision logic
+        # For now, default to continue
         result["supervisor_verdict"] = "ok_continue"
     
     return result

@@ -122,6 +122,7 @@ SELECT_STAGE
                     ├→ [fail] → GENERATE_CODE
                     └→ [pass] → PHYSICS_CHECK (PhysicsSanityAgent)
                           ├→ [fail] → GENERATE_CODE
+                          ├→ [design_flaw] → DESIGN ← Physics issues requiring redesign
                           └→ [pass] → ANALYZE (ResultsAnalyzerAgent)
                                 ↓
                              COMPARISON_CHECK (ComparisonValidatorAgent)

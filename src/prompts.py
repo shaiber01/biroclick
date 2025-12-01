@@ -1,1100 +1,499 @@
 """
-Prompt Builder - Constructs agent prompts with runtime context injection.
+Prompt Builder for ReproLab Multi-Agent System
 
-This module handles loading prompt templates and injecting:
-1. Constants from state.py (thresholds, limits, etc.)
-2. Dynamic state (paper text, figures, current stage, etc.)
-3. Cross-agent context (feedback, assumptions, etc.)
+This module handles:
+1. Loading base prompts from prompts/*.md files
+2. Substituting placeholders like {THRESHOLDS_TABLE}
+3. Prepending global_rules.md to each agent's prompt
+4. Applying prompt adaptations from PromptAdaptorAgent
 
-Also provides utilities for:
-- Image encoding for Claude's vision API
-- Comparison image generation for reports
-
-The goal is to maintain a single source of truth for constants in code
-while making them available to LLM prompts at runtime.
+═══════════════════════════════════════════════════════════════════════════════
+IMPORTANT: This is the ONLY module that should build prompts for agents.
+All agent implementations should call build_agent_prompt() to get their
+final system prompt with all substitutions and global rules applied.
+═══════════════════════════════════════════════════════════════════════════════
 """
 
+import os
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Tuple
-import json
-import base64
-import logging
+from typing import Dict, List, Optional, Any
 
-logger = logging.getLogger(__name__)
-
-# Import canonical constants from state
-from schemas.state import (
-    DISCREPANCY_THRESHOLDS,
-    format_thresholds_table,
-    get_validation_hierarchy,
-    MAX_DESIGN_REVISIONS,
-    MAX_CODE_REVISIONS,
-    MAX_ANALYSIS_REVISIONS,
-    MAX_REPLANS,
-    DEFAULT_STAGE_BUDGETS,
-)
+from schemas.state import format_thresholds_table, ReproState
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# Configuration
+# Constants
 # ═══════════════════════════════════════════════════════════════════════
 
-# Path to prompts directory (relative to this file)
+# Default prompts directory (relative to project root)
 PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
 
-# Path to schemas directory (relative to this file)
-SCHEMAS_DIR = Path(__file__).parent.parent / "schemas"
-
-# Agents and their prompt files
+# Agent prompt filenames (without .md extension)
 AGENT_PROMPTS = {
-    "prompt_adaptor": "prompt_adaptor_agent.md",
-    "planner": "planner_agent.md",
-    "plan_reviewer": "plan_reviewer_agent.md",
-    "simulation_designer": "simulation_designer_agent.md",
-    "design_reviewer": "design_reviewer_agent.md",
-    "code_generator": "code_generator_agent.md",
-    "code_reviewer": "code_reviewer_agent.md",
-    "execution_validator": "execution_validator_agent.md",
-    "physics_sanity": "physics_sanity_agent.md",
-    "results_analyzer": "results_analyzer_agent.md",
-    "comparison_validator": "comparison_validator_agent.md",
-    "supervisor": "supervisor_agent.md",
+    "prompt_adaptor": "prompt_adaptor_agent",
+    "planner": "planner_agent",
+    "plan_reviewer": "plan_reviewer_agent",
+    "simulation_designer": "simulation_designer_agent",
+    "design_reviewer": "design_reviewer_agent",
+    "code_generator": "code_generator_agent",
+    "code_reviewer": "code_reviewer_agent",
+    "execution_validator": "execution_validator_agent",
+    "physics_sanity": "physics_sanity_agent",
+    "results_analyzer": "results_analyzer_agent",
+    "comparison_validator": "comparison_validator_agent",
+    "supervisor": "supervisor_agent",
 }
 
-# Agent output schemas (for function calling)
-AGENT_OUTPUT_SCHEMAS = {
-    "plan_reviewer": "plan_reviewer_output_schema.json",
-    "design_reviewer": "design_reviewer_output_schema.json",
-    "code_reviewer": "code_reviewer_output_schema.json",
-    "execution_validator": "execution_validator_output_schema.json",
-    "physics_sanity": "physics_sanity_output_schema.json",
-    "results_analyzer": "results_analyzer_output_schema.json",
-    "comparison_validator": "comparison_validator_output_schema.json",
-    "supervisor": "supervisor_output_schema.json",
+# Placeholder tokens and their generators
+PLACEHOLDER_GENERATORS = {
+    "{THRESHOLDS_TABLE}": format_thresholds_table,
 }
 
-# Global rules file (prepended to all agent prompts)
-GLOBAL_RULES_FILE = "global_rules.md"
-
 
 # ═══════════════════════════════════════════════════════════════════════
-# Image Encoding for Vision API
+# Prompt Loading
 # ═══════════════════════════════════════════════════════════════════════
 
-def encode_image_for_claude(image_path: str) -> Optional[Dict[str, Any]]:
+def load_prompt_file(filename: str, prompts_dir: Optional[Path] = None) -> str:
     """
-    Encode an image file for Claude's vision API.
+    Load a prompt file from the prompts directory.
     
     Args:
-        image_path: Path to the image file
+        filename: Prompt filename (with or without .md extension)
+        prompts_dir: Optional override for prompts directory
         
     Returns:
-        Dict with type, source (base64) for Claude message content,
-        or None if image cannot be loaded.
-        
-    Example:
-        image_content = encode_image_for_claude("papers/fig3a.png")
-        if image_content:
-            messages = [{
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": "Compare these figures..."},
-                    image_content,
-                ]
-            }]
-    """
-    path = Path(image_path)
-    if not path.exists():
-        logger.warning(f"Image not found: {image_path}")
-        return None
-    
-    # Determine media type from extension
-    suffix = path.suffix.lower()
-    media_types = {
-        '.png': 'image/png',
-        '.jpg': 'image/jpeg',
-        '.jpeg': 'image/jpeg',
-        '.gif': 'image/gif',
-        '.webp': 'image/webp',
-    }
-    media_type = media_types.get(suffix)
-    if not media_type:
-        logger.warning(f"Unsupported image format: {suffix}")
-        return None
-    
-    try:
-        with open(path, 'rb') as f:
-            data = base64.standard_b64encode(f.read()).decode('utf-8')
-        
-        return {
-            "type": "image",
-            "source": {
-                "type": "base64",
-                "media_type": media_type,
-                "data": data,
-            }
-        }
-    except Exception as e:
-        logger.error(f"Failed to encode image {image_path}: {e}")
-        return None
-
-
-def create_comparison_image(
-    paper_image_path: str,
-    reproduction_image_path: str,
-    output_path: str,
-    title: str = "Comparison"
-) -> bool:
-    """
-    Create a side-by-side comparison image for reports.
-    
-    Args:
-        paper_image_path: Path to the paper's figure image
-        reproduction_image_path: Path to the reproduction image
-        output_path: Where to save the comparison image
-        title: Title for the comparison (used in figure suptitle)
-        
-    Returns:
-        True if successful, False otherwise.
-        
-    Example:
-        success = create_comparison_image(
-            "papers/fig3a.png",
-            "outputs/paper_id/stage1_spectrum.png",
-            "outputs/paper_id/stage1_comparison.png",
-            "Stage 1 - Transmission Spectrum"
-        )
-    """
-    try:
-        import matplotlib.pyplot as plt
-        import matplotlib.image as mpimg
-    except ImportError:
-        logger.error("matplotlib required for comparison images")
-        return False
-    
-    try:
-        paper_img = mpimg.imread(paper_image_path)
-        repro_img = mpimg.imread(reproduction_image_path)
-        
-        fig, axes = plt.subplots(1, 2, figsize=(14, 6))
-        
-        axes[0].imshow(paper_img)
-        axes[0].set_title("Paper Figure", fontsize=12)
-        axes[0].axis('off')
-        
-        axes[1].imshow(repro_img)
-        axes[1].set_title("Reproduction", fontsize=12)
-        axes[1].axis('off')
-        
-        fig.suptitle(title, fontsize=14, fontweight='bold')
-        plt.tight_layout()
-        plt.savefig(output_path, dpi=150, bbox_inches='tight', 
-                    facecolor='white', edgecolor='none')
-        plt.close()
-        
-        logger.info(f"Created comparison image: {output_path}")
-        return True
-        
-    except FileNotFoundError as e:
-        logger.warning(f"Image file not found: {e}")
-        return False
-    except Exception as e:
-        logger.error(f"Failed to create comparison image: {e}")
-        return False
-
-
-def prepare_vision_comparison_content(
-    paper_figure_path: str,
-    reproduction_path: str,
-    figure_id: str,
-    comparison_question: Optional[str] = None
-) -> Tuple[List[Dict[str, Any]], bool]:
-    """
-    Prepare content list for a vision-based figure comparison.
-    
-    Encodes both images and creates appropriate text prompt.
-    Returns content list for Claude message and success flag.
-    
-    Args:
-        paper_figure_path: Path to the original paper figure
-        reproduction_path: Path to the simulation output figure
-        figure_id: Figure ID for reference (e.g., "Fig3a")
-        comparison_question: Custom comparison question (optional)
-        
-    Returns:
-        Tuple of (content_list, success_flag)
-        - content_list: List of content items for Claude message
-        - success_flag: True if both images loaded, False if fallback to text
-        
-    Example:
-        content, vision_ok = prepare_vision_comparison_content(
-            "papers/fig3a.png",
-            "outputs/stage1_spectrum.png",
-            "Fig3a"
-        )
-        if vision_ok:
-            # Use vision comparison
-            response = llm.invoke(messages=[{"role": "user", "content": content}])
-        else:
-            # Fallback to text-only comparison
-            ...
-    """
-    content = []
-    
-    # Default comparison question
-    if not comparison_question:
-        comparison_question = f"""Compare the paper figure ({figure_id}) with the reproduction.
-
-Please analyze:
-1. Do both plots show the same general shape/trend?
-2. Are the number of peaks/dips the same?
-3. Do the peak positions appear at similar x-axis locations?
-4. Are the relative amplitudes between features similar?
-5. Is the overall shape (dip vs peak, symmetric vs asymmetric) the same?
-
-Based on your analysis, classify the comparison as:
-- SUCCESS: Main features match well
-- PARTIAL: Some features match, some differences
-- FAILURE: Major mismatch in key features"""
-    
-    # Try to encode paper figure
-    paper_img = encode_image_for_claude(paper_figure_path)
-    repro_img = encode_image_for_claude(reproduction_path)
-    
-    vision_available = bool(paper_img and repro_img)
-    
-    if vision_available:
-        # Full vision comparison
-        content.append({"type": "text", "text": f"**Paper Figure ({figure_id}):**"})
-        content.append(paper_img)
-        content.append({"type": "text", "text": "**Reproduction:**"})
-        content.append(repro_img)
-        content.append({"type": "text", "text": comparison_question})
-    else:
-        # Text-only fallback
-        missing = []
-        if not paper_img:
-            missing.append(f"paper figure ({paper_figure_path})")
-        if not repro_img:
-            missing.append(f"reproduction ({reproduction_path})")
-        
-        fallback_text = f"""**Vision comparison unavailable** - Could not load: {', '.join(missing)}
-
-Falling back to text-only comparison for {figure_id}.
-
-Please compare based on available numerical data and descriptions only.
-Mark this comparison as having lower confidence due to missing visual verification."""
-        
-        content.append({"type": "text", "text": fallback_text})
-    
-    return content, vision_available
-
-
-# ═══════════════════════════════════════════════════════════════════════
-# Prompt Template Loading
-# ═══════════════════════════════════════════════════════════════════════
-
-def load_prompt_template(filename: str) -> str:
-    """
-    Load a raw prompt template from the prompts directory.
-    
-    Args:
-        filename: Name of the prompt file (e.g., "planner_agent.md")
-        
-    Returns:
-        Raw template string
+        Prompt file contents as string
         
     Raises:
         FileNotFoundError: If prompt file doesn't exist
     """
-    path = PROMPTS_DIR / filename
-    if not path.exists():
-        raise FileNotFoundError(f"Prompt template not found: {path}")
+    if prompts_dir is None:
+        prompts_dir = PROMPTS_DIR
     
-    return path.read_text(encoding='utf-8')
+    # Add .md extension if not present
+    if not filename.endswith(".md"):
+        filename = f"{filename}.md"
+    
+    filepath = prompts_dir / filename
+    
+    if not filepath.exists():
+        raise FileNotFoundError(f"Prompt file not found: {filepath}")
+    
+    with open(filepath, "r", encoding="utf-8") as f:
+        return f.read()
 
 
-def load_global_rules() -> str:
-    """Load the global rules that apply to all agents."""
-    return load_prompt_template(GLOBAL_RULES_FILE)
-
-
-def load_agent_prompt(agent_name: str) -> str:
+def load_global_rules(prompts_dir: Optional[Path] = None) -> str:
     """
-    Load an agent's prompt template by agent name.
+    Load the global_rules.md file.
     
     Args:
-        agent_name: Short name (e.g., "planner", "code_generator")
+        prompts_dir: Optional override for prompts directory
         
     Returns:
-        Raw template string
+        Global rules prompt content
     """
-    if agent_name not in AGENT_PROMPTS:
-        raise ValueError(f"Unknown agent: {agent_name}. Available: {list(AGENT_PROMPTS.keys())}")
-    
-    return load_prompt_template(AGENT_PROMPTS[agent_name])
+    return load_prompt_file("global_rules", prompts_dir)
 
 
-def load_output_schema(agent_name: str) -> Dict[str, Any]:
+# ═══════════════════════════════════════════════════════════════════════
+# Placeholder Substitution
+# ═══════════════════════════════════════════════════════════════════════
+
+def substitute_placeholders(prompt: str) -> str:
     """
-    Load an agent's output schema for function calling.
+    Substitute all known placeholders in a prompt with their generated values.
     
-    This loads the JSON schema that defines the agent's output format.
-    Use this schema with LLM function calling APIs to ensure structured,
-    schema-compliant outputs.
+    Currently handles:
+    - {THRESHOLDS_TABLE}: Discrepancy thresholds table from state.py
     
     Args:
-        agent_name: Short name (e.g., "plan_reviewer", "supervisor")
+        prompt: Prompt string with potential placeholders
         
     Returns:
-        JSON schema dict for function calling
-        
-    Raises:
-        ValueError: If no output schema defined for this agent
-        FileNotFoundError: If schema file doesn't exist
+        Prompt with all placeholders substituted
         
     Example:
-        schema = load_output_schema("plan_reviewer")
-        response = llm.invoke(
-            prompt,
-            tools=[{"type": "function", "function": {"name": "output", "parameters": schema}}]
-        )
+        >>> prompt = "Use these thresholds:\n{THRESHOLDS_TABLE}"
+        >>> result = substitute_placeholders(prompt)
+        >>> "{THRESHOLDS_TABLE}" in result
+        False
     """
-    if agent_name not in AGENT_OUTPUT_SCHEMAS:
-        raise ValueError(
-            f"No output schema for agent: {agent_name}. "
-            f"Available: {list(AGENT_OUTPUT_SCHEMAS.keys())}"
-        )
+    result = prompt
     
-    schema_filename = AGENT_OUTPUT_SCHEMAS[agent_name]
-    schema_path = SCHEMAS_DIR / schema_filename
-    
-    if not schema_path.exists():
-        raise FileNotFoundError(f"Output schema not found: {schema_path}")
-    
-    return json.loads(schema_path.read_text(encoding='utf-8'))
-
-
-# ═══════════════════════════════════════════════════════════════════════
-# Placeholder Injection
-# ═══════════════════════════════════════════════════════════════════════
-
-def inject_constants(template: str) -> str:
-    """
-    Inject constant values from state.py into a prompt template.
-    
-    Replaces placeholders like {THRESHOLDS_TABLE} with actual values
-    generated from the canonical source in state.py.
-    
-    Supported placeholders:
-    - {THRESHOLDS_TABLE}: Markdown table of discrepancy thresholds
-    - {MAX_DESIGN_REVISIONS}: Maximum design revision attempts
-    - {MAX_CODE_REVISIONS}: Maximum code revision attempts per stage
-    - {MAX_ANALYSIS_REVISIONS}: Maximum analysis revision attempts
-    - {MAX_REPLANS}: Maximum full replan attempts
-    - {MAX_BACKTRACKS}: Default max backtracks (note: configurable via RuntimeConfig)
-    
-    Args:
-        template: Prompt template with placeholders
-        
-    Returns:
-        Template with placeholders replaced
-    """
-    # Import additional constants for injection
-    from schemas.state import DEFAULT_RUNTIME_CONFIG
-    
-    # Define all constant placeholders and their values
-    constants = {
-        "{THRESHOLDS_TABLE}": format_thresholds_table(),
-        "{MAX_DESIGN_REVISIONS}": str(MAX_DESIGN_REVISIONS),
-        "{MAX_CODE_REVISIONS}": str(MAX_CODE_REVISIONS),
-        "{MAX_ANALYSIS_REVISIONS}": str(MAX_ANALYSIS_REVISIONS),
-        "{MAX_REPLANS}": str(MAX_REPLANS),
-        "{MAX_BACKTRACKS}": str(DEFAULT_RUNTIME_CONFIG.get("max_backtracks", 2)),
-    }
-    
-    # Replace each placeholder
-    result = template
-    for placeholder, value in constants.items():
-        result = result.replace(placeholder, value)
+    for placeholder, generator in PLACEHOLDER_GENERATORS.items():
+        if placeholder in result:
+            # Call the generator function to get the replacement value
+            replacement = generator()
+            result = result.replace(placeholder, replacement)
     
     return result
 
 
-def inject_state_context(
-    template: str,
+# ═══════════════════════════════════════════════════════════════════════
+# Prompt Adaptation
+# ═══════════════════════════════════════════════════════════════════════
+
+def apply_prompt_adaptations(
+    prompt: str,
     agent_name: str,
-    state: Dict[str, Any]
+    adaptations: List[Dict[str, Any]]
 ) -> str:
     """
-    Inject state-dependent context into a prompt template.
+    Apply prompt adaptations from PromptAdaptorAgent.
     
-    Different agents receive different context based on their needs:
-    - PlannerAgent: Full paper text, figures
-    - SimulationDesigner: Current stage, assumptions
-    - ResultsAnalyzer: Outputs, target figures
-    - etc.
+    Adaptations are modifications specific to the current paper that adjust
+    agent prompts for domain-specific needs.
     
     Args:
-        template: Prompt template (after constant injection)
-        agent_name: Which agent this prompt is for
-        state: Current ReproState
+        prompt: Base prompt string
+        agent_name: Name of the agent (e.g., "simulation_designer")
+        adaptations: List of adaptation dicts from state["prompt_adaptations"]
         
     Returns:
-        Template with state context appended
-    """
-    context_section = ""
-    
-    if agent_name == "planner":
-        context_section = _build_planner_context(state)
-    elif agent_name == "simulation_designer":
-        context_section = _build_designer_context(state)
-    elif agent_name == "code_generator":
-        context_section = _build_generator_context(state)
-    elif agent_name == "code_reviewer":
-        context_section = _build_reviewer_context(state)
-    elif agent_name == "execution_validator":
-        context_section = _build_execution_context(state)
-    elif agent_name == "physics_sanity":
-        context_section = _build_physics_context(state)
-    elif agent_name == "results_analyzer":
-        context_section = _build_analyzer_context(state)
-    elif agent_name == "comparison_validator":
-        context_section = _build_comparison_validator_context(state)
-    elif agent_name == "supervisor":
-        context_section = _build_supervisor_context(state)
-    elif agent_name == "prompt_adaptor":
-        context_section = _build_adaptor_context(state)
-    
-    if context_section:
-        return template + "\n\n" + context_section
-    return template
-
-
-# ═══════════════════════════════════════════════════════════════════════
-# Agent-Specific Context Builders
-# ═══════════════════════════════════════════════════════════════════════
-
-def _build_planner_context(state: Dict[str, Any]) -> str:
-    """Build context section for PlannerAgent."""
-    figures_list = _format_figures(state.get("paper_figures", []))
-    
-    return f"""
-═══════════════════════════════════════════════════════════════════════
-CURRENT PAPER (injected at runtime)
-═══════════════════════════════════════════════════════════════════════
-
-**Paper ID**: {state.get('paper_id', 'unknown')}
-**Title**: {state.get('paper_title', 'Unknown')}
-**Domain**: {state.get('paper_domain', 'other')}
-
-### Paper Text:
-
-{state.get('paper_text', '[No paper text provided]')}
-
-### Figures to Reproduce ({len(state.get('paper_figures', []))} total):
-
-{figures_list}
-"""
-
-
-def _build_designer_context(state: Dict[str, Any]) -> str:
-    """Build context section for SimulationDesignerAgent."""
-    stage_info = _get_current_stage_info(state)
-    assumptions = _format_assumptions(state)
-    
-    return f"""
-═══════════════════════════════════════════════════════════════════════
-CURRENT TASK (injected at runtime)
-═══════════════════════════════════════════════════════════════════════
-
-### Stage Information:
-- **Stage ID**: {state.get('current_stage_id', 'unknown')}
-- **Stage Type**: {state.get('current_stage_type', 'unknown')}
-- **Design Revision**: {state.get('design_revision_count', 0) + 1} of {MAX_DESIGN_REVISIONS}
-
-### Stage Requirements:
-{stage_info}
-
-### Current Assumptions:
-{assumptions}
-
-### Previous Feedback (if revising):
-{state.get('reviewer_feedback', 'N/A - first design attempt')}
-"""
-
-
-def _extract_unit_system(state: Dict[str, Any]) -> Dict[str, Any]:
-    """Extract unit_system from design JSON or performance estimate."""
-    # Try to get from performance_estimate (which may contain parsed design)
-    perf = state.get('performance_estimate', {})
-    if isinstance(perf, dict) and 'unit_system' in perf:
-        return perf['unit_system']
-    
-    # Try to parse from design_description if it's JSON
-    design = state.get('design_description', '')
-    if isinstance(design, str) and '"unit_system"' in design:
-        try:
-            import re
-            # Try to extract unit_system block
-            match = re.search(r'"unit_system"\s*:\s*\{[^}]+\}', design)
-            if match:
-                # This is a rough extraction - in production, parse the full JSON
-                return {"note": "unit_system found in design - parse the full design JSON"}
-        except:
-            pass
-    
-    return {}
-
-
-def _build_generator_context(state: Dict[str, Any]) -> str:
-    """Build context section for CodeGeneratorAgent."""
-    unit_system = _extract_unit_system(state)
-    unit_system_text = json.dumps(unit_system, indent=2) if unit_system else "Not found in state - CHECK DESIGN JSON"
-    
-    return f"""
-═══════════════════════════════════════════════════════════════════════
-CURRENT TASK (injected at runtime)
-═══════════════════════════════════════════════════════════════════════
-
-### ⚠️ UNIT SYSTEM (CRITICAL - USE THESE VALUES)
-{unit_system_text}
-
-**You MUST use the characteristic_length_m value for a_unit in your code.**
-If unit_system is not shown above, extract it from the design JSON below.
-
-### Design to Implement:
-
-{state.get('design_description', '[No design provided]')}
-
-### Previous Feedback (if revising):
-{state.get('reviewer_feedback', 'N/A - first code attempt')}
-
-### Performance Estimate:
-{json.dumps(state.get('performance_estimate', {}), indent=2) if state.get('performance_estimate') else 'N/A'}
-
-### Output Configuration:
-- **Paper ID**: {state.get('paper_id', 'unknown')}
-- **Stage ID**: {state.get('current_stage_id', 'unknown')}
-"""
-
-
-def _build_reviewer_context(state: Dict[str, Any]) -> str:
-    """Build context section for CodeReviewerAgent."""
-    # Determine if reviewing design or code
-    has_code = bool(state.get('code'))
-    has_design = bool(state.get('design_description'))
-    review_type = "code" if has_code else "design" if has_design else "unknown"
-    
-    stage_info = _get_current_stage_info(state)
-    
-    context = f"""
-═══════════════════════════════════════════════════════════════════════
-REVIEW TASK (injected at runtime)
-═══════════════════════════════════════════════════════════════════════
-
-### Review Type: {review_type.upper()} REVIEW
-
-### Stage Information:
-- **Stage ID**: {state.get('current_stage_id', 'unknown')}
-- **Stage Type**: {state.get('current_stage_type', 'unknown')}
-- **Domain**: {state.get('paper_domain', 'other')}
-
-### Stage Requirements:
-{stage_info}
-"""
-    
-    if review_type == "design":
-        context += f"""
-### Design to Review:
-
-{state.get('design_description', '[No design provided]')}
-
-### Performance Estimate:
-{json.dumps(state.get('performance_estimate', {}), indent=2) if state.get('performance_estimate') else 'N/A'}
-"""
-    elif review_type == "code":
-        code = state.get('code', '')
-        unit_system = _extract_unit_system(state)
-        unit_system_text = json.dumps(unit_system, indent=2) if unit_system else "Extract from design below"
+        Modified prompt with adaptations applied
         
-        context += f"""
-### ⚠️ UNIT SYSTEM (VERIFY a_unit MATCHES THIS)
-{unit_system_text}
-
-**BLOCKING CHECK**: Verify that the code's `a_unit` value matches 
-`design["unit_system"]["characteristic_length_m"]`
-
-### Code to Review:
-
-```python
-{code}
-```
-
-### What the Code Should Implement:
-{state.get('design_description', '[Design not available]')[:500]}{'...' if len(state.get('design_description', '')) > 500 else ''}
-"""
+    Adaptation dict format:
+        {
+            "target_agent": "SimulationDesignerAgent",
+            "modification_type": "append" | "prepend" | "replace" | "disable",
+            "content": "... additional content ...",
+            "section_marker": "optional marker for replace/disable",
+            "confidence": 0.85,
+            "reason": "why this adaptation is needed"
+        }
+    """
+    if not adaptations:
+        return prompt
     
-    return context
-
-
-def _build_execution_context(state: Dict[str, Any]) -> str:
-    """Build context section for ExecutionValidatorAgent."""
-    outputs = state.get("stage_outputs", {})
+    # Normalize agent name for matching
+    agent_name_normalized = agent_name.lower().replace("_", "")
     
-    return f"""
-═══════════════════════════════════════════════════════════════════════
-EXECUTION VALIDATION TASK (injected at runtime)
-═══════════════════════════════════════════════════════════════════════
-
-### Execution Results:
-
-- **Exit Code**: {outputs.get('exit_code', 'unknown')}
-- **Runtime**: {outputs.get('runtime_seconds', 0):.1f} seconds
-- **Stage ID**: {state.get('current_stage_id', 'unknown')}
-
-### Output Files Created:
-{chr(10).join('- ' + f for f in outputs.get('files', [])) or 'None'}
-
-### Expected Outputs (from design):
-{json.dumps(state.get('performance_estimate', {}).get('expected_outputs', []), indent=2) if state.get('performance_estimate') else 'Not specified'}
-
-### Stdout:
-```
-{_truncate_output(outputs.get('stdout', ''), 100)}
-```
-
-### Stderr:
-```
-{outputs.get('stderr', '[no stderr]')}
-```
-"""
-
-
-def _build_physics_context(state: Dict[str, Any]) -> str:
-    """Build context section for PhysicsSanityAgent."""
-    outputs = state.get("stage_outputs", {})
+    result = prompt
     
-    # Get data file names
-    data_files = [f for f in outputs.get('files', []) if f.endswith(('.csv', '.h5', '.npy'))]
+    for adaptation in adaptations:
+        # Check if this adaptation applies to this agent
+        target = adaptation.get("target_agent", "")
+        target_normalized = target.lower().replace("_", "").replace("agent", "")
+        
+        if agent_name_normalized not in target_normalized and target_normalized not in agent_name_normalized:
+            continue
+        
+        mod_type = adaptation.get("modification_type", "")
+        content = adaptation.get("content", "")
+        
+        if mod_type == "append":
+            # Add content at the end
+            result = f"{result}\n\n# Paper-Specific Adaptation\n{content}"
+            
+        elif mod_type == "prepend":
+            # Add content at the beginning (after global rules if present)
+            result = f"# Paper-Specific Adaptation\n{content}\n\n{result}"
+            
+        elif mod_type == "replace":
+            # Replace a specific section (identified by marker)
+            marker = adaptation.get("section_marker", "")
+            if marker and marker in result:
+                result = result.replace(marker, content)
+                
+        elif mod_type == "disable":
+            # Comment out a section
+            marker = adaptation.get("section_marker", "")
+            if marker and marker in result:
+                # Find and comment out the section
+                result = result.replace(marker, f"[DISABLED: {marker}]")
     
-    return f"""
-═══════════════════════════════════════════════════════════════════════
-PHYSICS VALIDATION TASK (injected at runtime)
-═══════════════════════════════════════════════════════════════════════
-
-### Stage Information:
-- **Stage ID**: {state.get('current_stage_id', 'unknown')}
-- **Stage Type**: {state.get('current_stage_type', 'unknown')}
-- **Domain**: {state.get('paper_domain', 'other')}
-
-### Data Files to Validate:
-{chr(10).join('- ' + f for f in data_files) or 'No data files found'}
-
-### Simulation Code (for context):
-```python
-{state.get('code', '[code not available]')[:2000]}{'...' if len(state.get('code', '')) > 2000 else ''}
-```
-
-### What Physics to Expect:
-{_get_current_stage_info(state)}
-"""
-
-
-def _build_comparison_validator_context(state: Dict[str, Any]) -> str:
-    """Build context section for ComparisonValidatorAgent."""
-    comparisons = state.get("figure_comparisons", [])
-    
-    # Format recent comparisons for review
-    comparisons_text = ""
-    if comparisons:
-        for comp in comparisons[-3:]:  # Last 3 comparisons
-            comparisons_text += f"""
-**{comp.get('figure_id', 'unknown')}**:
-- Classification: {comp.get('classification', 'unknown')}
-- Confidence: {comp.get('confidence', 0):.0%}
-- Comparison Table: {json.dumps(comp.get('comparison_table', []), indent=2)}
-"""
-    else:
-        comparisons_text = "No comparisons to validate"
-    
-    return f"""
-═══════════════════════════════════════════════════════════════════════
-COMPARISON VALIDATION TASK (injected at runtime)
-═══════════════════════════════════════════════════════════════════════
-
-### Analysis Summary:
-{state.get('analysis_summary', '[No analysis summary available]')}
-
-### Figure Comparisons to Validate:
-{comparisons_text}
-
-### Target Figures (reference):
-{_get_target_figures_for_stage(state)}
-"""
-
-
-def _build_analyzer_context(state: Dict[str, Any]) -> str:
-    """Build context section for ResultsAnalyzerAgent."""
-    outputs = state.get("stage_outputs", {})
-    target_figures = _get_target_figures_for_stage(state)
-    
-    return f"""
-═══════════════════════════════════════════════════════════════════════
-ANALYSIS TASK (injected at runtime)
-═══════════════════════════════════════════════════════════════════════
-
-### Simulation Outputs:
-
-**Exit Code**: {outputs.get('exit_code', 'unknown')}
-**Runtime**: {outputs.get('runtime_seconds', 0):.1f} seconds
-
-**Output Files**:
-{chr(10).join('- ' + f for f in outputs.get('files', [])) or 'None'}
-
-**Stdout** (last 50 lines):
-```
-{_truncate_output(outputs.get('stdout', ''), 50)}
-```
-
-**Stderr**:
-```
-{outputs.get('stderr', '')}
-```
-
-### Target Figures to Compare:
-
-{target_figures}
-
-### Digitized Data Available:
-{_list_digitized_data(state)}
-"""
-
-
-def _build_supervisor_context(state: Dict[str, Any]) -> str:
-    """Build context section for SupervisorAgent."""
-    progress_summary = _format_progress_summary(state)
-    # Get validation hierarchy computed from progress (single source of truth)
-    validation_hierarchy = get_validation_hierarchy(state)
-    
-    return f"""
-═══════════════════════════════════════════════════════════════════════
-CURRENT STATE (injected at runtime)
-═══════════════════════════════════════════════════════════════════════
-
-### Overall Progress:
-{progress_summary}
-
-### Validation Hierarchy Status:
-{json.dumps(validation_hierarchy, indent=2)}
-
-### Recent Figure Comparisons:
-{_format_recent_comparisons(state)}
-
-### Runtime Budget:
-- **Remaining**: {state.get('runtime_budget_remaining_seconds', 0) / 60:.1f} minutes
-- **Total Used**: {state.get('total_runtime_seconds', 0) / 60:.1f} minutes
-
-### Pending User Questions:
-{chr(10).join('- ' + q for q in state.get('pending_user_questions', [])) or 'None'}
-"""
-
-
-def _build_adaptor_context(state: Dict[str, Any]) -> str:
-    """Build context section for PromptAdaptorAgent."""
-    # Adaptor gets a quick summary of the paper for domain detection
-    paper_text = state.get('paper_text', '')
-    # Truncate for initial analysis
-    summary_length = min(5000, len(paper_text))
-    
-    return f"""
-═══════════════════════════════════════════════════════════════════════
-PAPER SUMMARY (for prompt adaptation analysis)
-═══════════════════════════════════════════════════════════════════════
-
-**Paper ID**: {state.get('paper_id', 'unknown')}
-**Title**: {state.get('paper_title', 'Unknown')}
-**Declared Domain**: {state.get('paper_domain', 'other')}
-
-### Paper Text (first {summary_length} chars for analysis):
-
-{paper_text[:summary_length]}
-
-{'[... truncated for initial analysis ...]' if len(paper_text) > summary_length else ''}
-
-### Available Agents to Adapt:
-{chr(10).join('- ' + name for name in AGENT_PROMPTS.keys())}
-"""
+    return result
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# Helper Functions
+# Main Prompt Builder
 # ═══════════════════════════════════════════════════════════════════════
 
-def _format_figures(figures: List[Dict[str, Any]]) -> str:
-    """Format figure list for prompt display."""
-    if not figures:
-        return "No figures provided"
-    
-    lines = []
-    for fig in figures:
-        fig_id = fig.get('id', 'unknown')
-        desc = fig.get('description', 'No description')
-        has_digitized = "✓" if fig.get('digitized_data_path') else "✗"
-        lines.append(f"- **{fig_id}** [digitized: {has_digitized}]: {desc}")
-    
-    return "\n".join(lines)
-
-
-def _format_assumptions(state: Dict[str, Any]) -> str:
-    """Format current assumptions for display."""
-    assumptions = state.get("assumptions", {})
-    if not assumptions:
-        return "No assumptions defined yet"
-    
-    # Format global assumptions
-    global_assumptions = assumptions.get("global_assumptions", {})
-    lines = ["**Global Assumptions:**"]
-    
-    for category, items in global_assumptions.items():
-        if items:
-            lines.append(f"\n*{category.replace('_', ' ').title()}*:")
-            for item in items:
-                if isinstance(item, dict):
-                    lines.append(f"  - {item.get('description', str(item))}")
-                else:
-                    lines.append(f"  - {item}")
-    
-    return "\n".join(lines) if len(lines) > 1 else "No assumptions defined yet"
-
-
-def _get_current_stage_info(state: Dict[str, Any]) -> str:
-    """Get info about the current stage from the plan."""
-    plan = state.get("plan", {})
-    stages = plan.get("stages", [])
-    current_id = state.get("current_stage_id")
-    
-    for stage in stages:
-        if stage.get("stage_id") == current_id:
-            return json.dumps(stage, indent=2)
-    
-    return "Stage not found in plan"
-
-
-def _get_target_figures_for_stage(state: Dict[str, Any]) -> str:
-    """Get target figures for the current stage."""
-    plan = state.get("plan", {})
-    stages = plan.get("stages", [])
-    current_id = state.get("current_stage_id")
-    
-    for stage in stages:
-        if stage.get("stage_id") == current_id:
-            targets = stage.get("target_figures", [])
-            if targets:
-                # Also get figure details
-                figures = state.get("paper_figures", [])
-                lines = []
-                for target in targets:
-                    fig = next((f for f in figures if f.get('id') == target), None)
-                    if fig:
-                        lines.append(f"- **{target}**: {fig.get('description', 'No description')}")
-                        if fig.get('image_path'):
-                            lines.append(f"  Image: {fig['image_path']}")
-                        if fig.get('digitized_data_path'):
-                            lines.append(f"  Digitized: {fig['digitized_data_path']}")
-                    else:
-                        lines.append(f"- **{target}**: [figure details not found]")
-                return "\n".join(lines)
-            return "No target figures for this stage"
-    
-    return "Stage not found"
-
-
-def _list_digitized_data(state: Dict[str, Any]) -> str:
-    """List any available digitized data files."""
-    figures = state.get("paper_figures", [])
-    digitized = [f for f in figures if f.get('digitized_data_path')]
-    
-    if not digitized:
-        return "No digitized data available"
-    
-    lines = []
-    for fig in digitized:
-        lines.append(f"- {fig['id']}: {fig['digitized_data_path']}")
-    
-    return "\n".join(lines)
-
-
-def _format_progress_summary(state: Dict[str, Any]) -> str:
-    """Format overall progress for supervisor."""
-    progress = state.get("progress", {})
-    stage_progress = progress.get("stage_progress", {})
-    
-    if not stage_progress:
-        return "No stages started yet"
-    
-    lines = []
-    for stage_id, info in stage_progress.items():
-        status = info.get("status", "unknown")
-        revision = info.get("revision_count", 0)
-        lines.append(f"- {stage_id}: {status} (revisions: {revision})")
-    
-    return "\n".join(lines)
-
-
-def _format_recent_comparisons(state: Dict[str, Any]) -> str:
-    """Format recent figure comparisons."""
-    comparisons = state.get("figure_comparisons", [])
-    
-    if not comparisons:
-        return "No comparisons yet"
-    
-    # Show last 3 comparisons
-    recent = comparisons[-3:]
-    lines = []
-    for comp in recent:
-        fig_id = comp.get("figure_id", "unknown")
-        classification = comp.get("classification", "unknown")
-        confidence = comp.get("confidence", 0)
-        lines.append(f"- {fig_id}: {classification} (confidence: {confidence:.0%})")
-    
-    return "\n".join(lines)
-
-
-def _truncate_output(text: str, max_lines: int) -> str:
-    """Truncate text to last N lines."""
-    if not text:
-        return "[no output]"
-    
-    lines = text.strip().split('\n')
-    if len(lines) <= max_lines:
-        return text
-    
-    return f"[... {len(lines) - max_lines} lines omitted ...]\n" + '\n'.join(lines[-max_lines:])
-
-
-# ═══════════════════════════════════════════════════════════════════════
-# Main Prompt Building Function
-# ═══════════════════════════════════════════════════════════════════════
-
-def build_prompt(
+def build_agent_prompt(
     agent_name: str,
-    state: Dict[str, Any],
-    include_global_rules: bool = True
+    state: Optional[ReproState] = None,
+    include_global_rules: bool = True,
+    prompts_dir: Optional[Path] = None
 ) -> str:
     """
-    Build a complete prompt for an agent with all injections.
+    Build the complete system prompt for an agent.
     
-    This is the main entry point for prompt construction. It:
-    1. Loads the global rules (if requested)
-    2. Loads the agent-specific prompt template
-    3. Injects constants from state.py
-    4. Injects state-dependent context
+    This function:
+    1. Loads the agent's base prompt from prompts/{agent_name}_agent.md
+    2. Loads and prepends global_rules.md (if include_global_rules=True)
+    3. Substitutes placeholders like {THRESHOLDS_TABLE}
+    4. Applies any prompt adaptations from state["prompt_adaptations"]
     
     Args:
-        agent_name: Short name of the agent (e.g., "planner")
-        state: Current ReproState dictionary
-        include_global_rules: Whether to prepend global rules
+        agent_name: Name of the agent (e.g., "simulation_designer", "code_generator")
+        state: Optional ReproState for prompt adaptations (can be None)
+        include_global_rules: Whether to prepend global rules (default: True)
+        prompts_dir: Optional override for prompts directory
         
     Returns:
-        Complete prompt string ready for LLM
+        Complete system prompt ready for LLM call
         
     Example:
-        prompt = build_prompt("planner", state)
-        response = llm.invoke(prompt)
+        >>> prompt = build_agent_prompt("code_generator", state)
+        >>> # prompt now contains:
+        >>> # 1. global_rules.md content (with THRESHOLDS_TABLE substituted)
+        >>> # 2. code_generator_agent.md content
+        >>> # 3. Any paper-specific adaptations from state
     """
-    parts = []
+    # Determine prompt filename
+    if agent_name in AGENT_PROMPTS:
+        prompt_filename = AGENT_PROMPTS[agent_name]
+    else:
+        # Assume agent_name is already the filename stem
+        prompt_filename = f"{agent_name}_agent"
     
-    # 1. Global rules (always first)
+    # Load the agent's base prompt
+    agent_prompt = load_prompt_file(prompt_filename, prompts_dir)
+    
+    # Load and prepend global rules if requested
     if include_global_rules:
-        global_rules = load_global_rules()
-        global_rules = inject_constants(global_rules)
-        parts.append(global_rules)
-        parts.append("\n\n" + "="*75 + "\n\n")
+        global_rules = load_global_rules(prompts_dir)
+        # Substitute placeholders in global rules
+        global_rules = substitute_placeholders(global_rules)
+        # Combine: global rules first, then agent-specific prompt
+        combined_prompt = f"{global_rules}\n\n{'═' * 75}\n\n{agent_prompt}"
+    else:
+        combined_prompt = agent_prompt
     
-    # 2. Agent-specific prompt
-    agent_prompt = load_agent_prompt(agent_name)
-    agent_prompt = inject_constants(agent_prompt)
-    agent_prompt = inject_state_context(agent_prompt, agent_name, state)
-    parts.append(agent_prompt)
+    # Substitute any placeholders in the combined prompt
+    combined_prompt = substitute_placeholders(combined_prompt)
     
-    return "".join(parts)
+    # Apply prompt adaptations if state is provided
+    if state is not None:
+        adaptations = state.get("prompt_adaptations", [])
+        if adaptations:
+            combined_prompt = apply_prompt_adaptations(
+                combined_prompt, 
+                agent_name, 
+                adaptations
+            )
+    
+    return combined_prompt
+
+
+def get_agent_prompt_cached(
+    agent_name: str,
+    state: Optional[ReproState] = None,
+    cache: Optional[Dict[str, str]] = None
+) -> str:
+    """
+    Get agent prompt with optional caching for repeated calls.
+    
+    Args:
+        agent_name: Name of the agent
+        state: Optional ReproState for adaptations
+        cache: Optional dict to use as cache
+        
+    Returns:
+        Complete system prompt
+    """
+    # If no adaptations and cache exists, use cached version
+    adaptations = state.get("prompt_adaptations", []) if state else []
+    
+    if cache is not None and not adaptations:
+        if agent_name in cache:
+            return cache[agent_name]
+        
+        prompt = build_agent_prompt(agent_name, state)
+        cache[agent_name] = prompt
+        return prompt
+    
+    return build_agent_prompt(agent_name, state)
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# Utility Functions for Testing
+# Validation Helpers
 # ═══════════════════════════════════════════════════════════════════════
 
-def preview_injected_thresholds() -> str:
-    """Preview what the thresholds table looks like after injection."""
-    return format_thresholds_table()
-
-
-def list_placeholders_in_prompts() -> Dict[str, List[str]]:
+def validate_all_prompts_loadable(prompts_dir: Optional[Path] = None) -> Dict[str, bool]:
     """
-    Scan all prompts for placeholders that need injection.
+    Validate that all agent prompts can be loaded.
     
-    Returns dict mapping prompt files to list of placeholders found.
+    Useful for testing and CI to ensure prompt files exist.
+    
+    Args:
+        prompts_dir: Optional override for prompts directory
+        
+    Returns:
+        Dict mapping agent names to load success (True/False)
     """
-    import re
-    
-    placeholder_pattern = re.compile(r'\{[A-Z_]+\}')
     results = {}
-    
-    # Check all prompt files
-    for name, filename in AGENT_PROMPTS.items():
-        try:
-            content = load_prompt_template(filename)
-            placeholders = placeholder_pattern.findall(content)
-            if placeholders:
-                results[filename] = placeholders
-        except FileNotFoundError:
-            results[filename] = ["[FILE NOT FOUND]"]
     
     # Check global rules
     try:
-        content = load_global_rules()
-        placeholders = placeholder_pattern.findall(content)
-        if placeholders:
-            results[GLOBAL_RULES_FILE] = placeholders
+        load_global_rules(prompts_dir)
+        results["global_rules"] = True
     except FileNotFoundError:
-        results[GLOBAL_RULES_FILE] = ["[FILE NOT FOUND]"]
+        results["global_rules"] = False
+    
+    # Check each agent prompt
+    for agent_name, prompt_filename in AGENT_PROMPTS.items():
+        try:
+            load_prompt_file(prompt_filename, prompts_dir)
+            results[agent_name] = True
+        except FileNotFoundError:
+            results[agent_name] = False
     
     return results
 
 
-if __name__ == "__main__":
-    # Test the prompt building
-    print("=== Prompt Builder Test ===\n")
+def validate_placeholders_substituted(prompt: str) -> List[str]:
+    """
+    Check for any remaining unsubstituted placeholders in a prompt.
     
-    # Preview thresholds
-    print("Thresholds Table (from state.py):")
-    print(preview_injected_thresholds())
-    print()
+    Args:
+        prompt: Prompt string to check
+        
+    Returns:
+        List of unsubstituted placeholder tokens found
+    """
+    unsubstituted = []
     
-    # List all placeholders
-    print("Placeholders found in prompts:")
-    for filename, placeholders in list_placeholders_in_prompts().items():
-        print(f"  {filename}: {placeholders}")
-    print()
+    for placeholder in PLACEHOLDER_GENERATORS.keys():
+        if placeholder in prompt:
+            unsubstituted.append(placeholder)
     
-    # Test building a prompt with minimal state
-    test_state = {
-        "paper_id": "test_paper",
-        "paper_title": "Test Paper Title",
-        "paper_domain": "plasmonics",
-        "paper_text": "This is a test paper about plasmonics...",
-        "paper_figures": [
-            {"id": "Fig1", "description": "Test figure", "image_path": "fig1.png"}
-        ]
-    }
-    
-    print("Building planner prompt (first 500 chars):")
-    try:
-        prompt = build_prompt("planner", test_state)
-        print(prompt[:500])
-        print("...\n")
-        print(f"Total prompt length: {len(prompt)} characters")
-    except Exception as e:
-        print(f"Error: {e}")
+    return unsubstituted
 
+
+# ═══════════════════════════════════════════════════════════════════════
+# ASK_USER Trigger Documentation
+# ═══════════════════════════════════════════════════════════════════════
+#
+# This section documents all valid ask_user_trigger values for the system.
+# The SupervisorAgent must handle each of these triggers appropriately.
+#
+# See: supervisor_agent.md and agents.py:supervisor_node
+#
+# ═══════════════════════════════════════════════════════════════════════
+
+ASK_USER_TRIGGERS = {
+    "material_checkpoint": {
+        "description": "Mandatory Stage 0 material validation requires user confirmation",
+        "source_node": "material_checkpoint",
+        "expected_response_keys": ["verdict", "notes"],
+        "valid_verdicts": ["APPROVE", "CHANGE_DATABASE", "CHANGE_MATERIAL", "NEED_HELP"],
+        "supervisor_action": {
+            "APPROVE": "Set supervisor_verdict='ok_continue', proceed to select_stage",
+            "CHANGE_DATABASE": "Invalidate Stage 0, update assumptions, rerun Stage 0",
+            "CHANGE_MATERIAL": "Route to plan with supervisor_feedback about material change",
+            "NEED_HELP": "Route back to ask_user with additional context",
+        }
+    },
+    "code_review_limit": {
+        "description": "Code review revision limit (MAX_CODE_REVISIONS) exceeded",
+        "source_node": "code_review",
+        "expected_response_keys": ["action", "hint"],
+        "valid_verdicts": ["PROVIDE_HINT", "SKIP_STAGE", "STOP"],
+        "supervisor_action": {
+            "PROVIDE_HINT": "Reset code_revision_count=0, add hint to reviewer_feedback, route to generate_code",
+            "SKIP_STAGE": "Mark stage as blocked, route to select_stage",
+            "STOP": "Route to generate_report",
+        }
+    },
+    "design_review_limit": {
+        "description": "Design review revision limit (MAX_DESIGN_REVISIONS) exceeded",
+        "source_node": "design_review",
+        "expected_response_keys": ["action", "hint"],
+        "valid_verdicts": ["PROVIDE_HINT", "SKIP_STAGE", "STOP"],
+        "supervisor_action": {
+            "PROVIDE_HINT": "Reset design_revision_count=0, add hint to reviewer_feedback, route to design",
+            "SKIP_STAGE": "Mark stage as blocked, route to select_stage",
+            "STOP": "Route to generate_report",
+        }
+    },
+    "execution_failure_limit": {
+        "description": "Execution failure limit (MAX_EXECUTION_FAILURES) exceeded",
+        "source_node": "execution_check",
+        "expected_response_keys": ["action", "guidance"],
+        "valid_verdicts": ["RETRY_WITH_GUIDANCE", "SKIP_STAGE", "STOP"],
+        "supervisor_action": {
+            "RETRY_WITH_GUIDANCE": "Reset execution_failure_count=0, add guidance to supervisor_feedback, route to generate_code",
+            "SKIP_STAGE": "Mark stage as blocked, route to select_stage",
+            "STOP": "Route to generate_report",
+        }
+    },
+    "physics_failure_limit": {
+        "description": "Physics sanity check failure limit (MAX_PHYSICS_FAILURES) exceeded",
+        "source_node": "physics_check",
+        "expected_response_keys": ["action", "guidance"],
+        "valid_verdicts": ["RETRY_WITH_GUIDANCE", "ACCEPT_PARTIAL", "SKIP_STAGE", "STOP"],
+        "supervisor_action": {
+            "RETRY_WITH_GUIDANCE": "Reset physics_failure_count=0, add guidance, route to generate_code or design",
+            "ACCEPT_PARTIAL": "Mark stage completed_partial, proceed to analyze",
+            "SKIP_STAGE": "Mark stage as blocked, route to select_stage",
+            "STOP": "Route to generate_report",
+        }
+    },
+    "context_overflow": {
+        "description": "LLM context window would overflow, recovery options needed",
+        "source_node": "any (detected by check_context_before_node)",
+        "expected_response_keys": ["action"],
+        "valid_verdicts": ["SUMMARIZE_FEEDBACK", "TRUNCATE_PAPER", "SKIP_STAGE", "STOP"],
+        "supervisor_action": {
+            "SUMMARIZE_FEEDBACK": "Apply summarize_feedback recovery action",
+            "TRUNCATE_PAPER": "Apply truncate_paper_to_methods recovery action",
+            "SKIP_STAGE": "Mark stage as blocked, route to select_stage",
+            "STOP": "Route to generate_report",
+        }
+    },
+    "replan_limit": {
+        "description": "Replan limit (MAX_REPLANS) exceeded",
+        "source_node": "plan_review",
+        "expected_response_keys": ["action", "guidance"],
+        "valid_verdicts": ["FORCE_ACCEPT", "PROVIDE_GUIDANCE", "STOP"],
+        "supervisor_action": {
+            "FORCE_ACCEPT": "Accept plan as-is, route to select_stage",
+            "PROVIDE_GUIDANCE": "Reset replan_count=0, add guidance, route to plan",
+            "STOP": "Route to generate_report",
+        }
+    },
+    "backtrack_approval": {
+        "description": "Backtrack suggestion requires user confirmation",
+        "source_node": "supervisor",
+        "expected_response_keys": ["approve", "alternative"],
+        "valid_verdicts": ["APPROVE_BACKTRACK", "REJECT_BACKTRACK", "ALTERNATIVE"],
+        "supervisor_action": {
+            "APPROVE_BACKTRACK": "Route to handle_backtrack",
+            "REJECT_BACKTRACK": "Clear backtrack_suggestion, continue normally",
+            "ALTERNATIVE": "Apply user's alternative suggestion",
+        }
+    },
+    "clarification": {
+        "description": "Ambiguous paper information requires user clarification",
+        "source_node": "any planning/design agent",
+        "expected_response_keys": ["clarification"],
+        "valid_verdicts": None,  # Free-form response
+        "supervisor_action": "Add clarification to assumptions, continue from last_node_before_ask_user",
+    },
+    "unknown": {
+        "description": "Unknown trigger - fallback handling",
+        "source_node": "unknown",
+        "expected_response_keys": ["action"],
+        "valid_verdicts": ["CONTINUE", "STOP"],
+        "supervisor_action": {
+            "CONTINUE": "Route to select_stage",
+            "STOP": "Route to generate_report",
+        }
+    },
+}
+
+
+def get_ask_user_trigger_info(trigger: str) -> Dict[str, Any]:
+    """
+    Get documentation for an ask_user trigger.
+    
+    Args:
+        trigger: The ask_user_trigger value
+        
+    Returns:
+        Dict with trigger documentation (or unknown trigger info)
+    """
+    return ASK_USER_TRIGGERS.get(trigger, ASK_USER_TRIGGERS["unknown"])

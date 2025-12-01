@@ -2000,6 +2000,16 @@ def validate_state_for_node(state: ReproState, node_name: str) -> List[str]:
             if field in ["paper_id", "paper_text", "plan", "code", "stage_outputs"]:
                 missing.append(f"{field} (is None)")
     
+    # ─── Conditional Validation: validated_materials for Stage 1+ ─────────
+    # After Stage 0 (MATERIAL_VALIDATION), subsequent stages MUST have
+    # validated_materials populated for Code Generator to use correct paths.
+    if node_name == "generate_code":
+        current_stage_type = state.get("current_stage_type", "")
+        if current_stage_type != "MATERIAL_VALIDATION":
+            validated_materials = state.get("validated_materials", [])
+            if not validated_materials:
+                missing.append("validated_materials (required for Stage 1+ code generation)")
+    
     return missing
 
 
@@ -2200,5 +2210,164 @@ def list_extracted_parameters(
         })
     
     return result
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Progress Stages Initialization
+# ═══════════════════════════════════════════════════════════════════════
+
+def initialize_progress_from_plan(state: ReproState) -> ReproState:
+    """
+    Initialize progress["stages"] from plan["stages"] after planning completes.
+    
+    This function converts plan stages (which contain design specs like 
+    expected_outputs, validation_criteria) into progress stages (which track
+    execution status like status, outputs, discrepancies).
+    
+    MUST be called after plan_node completes and before select_stage_node runs.
+    
+    Args:
+        state: ReproState to update (modified in place)
+        
+    Returns:
+        The same state object (for chaining)
+        
+    Example:
+        # In plan_node after LLM generates plan:
+        state["plan"] = generated_plan
+        state = initialize_progress_from_plan(state)
+        state = sync_extracted_parameters(state)
+    """
+    plan = state.get("plan", {})
+    plan_stages = plan.get("stages", [])
+    paper_id = state.get("paper_id", "unknown")
+    
+    if not plan_stages:
+        return state
+    
+    # Initialize progress structure if not present
+    if "progress" not in state or not isinstance(state["progress"], dict):
+        state["progress"] = {
+            "paper_id": paper_id,
+            "total_runtime_seconds": 0,
+            "stages": [],
+            "discrepancy_summary": {
+                "total_discrepancies": 0,
+                "blocking_discrepancies": 0,
+                "systematic_shifts_identified": []
+            },
+            "user_interactions": []
+        }
+    
+    # Convert plan stages to progress stages
+    progress_stages = []
+    current_time = datetime.now().isoformat()
+    
+    for plan_stage in plan_stages:
+        stage_id = plan_stage.get("stage_id", "unknown")
+        stage_type = plan_stage.get("stage_type", "SINGLE_STRUCTURE")
+        
+        # Create progress stage entry with status tracking fields
+        progress_stage = {
+            # Identification (from plan)
+            "stage_id": stage_id,
+            "stage_type": stage_type,
+            "name": plan_stage.get("name", ""),
+            "description": plan_stage.get("description", ""),
+            "targets": plan_stage.get("targets", []),
+            "dependencies": plan_stage.get("dependencies", []),
+            
+            # Status tracking (progress-specific)
+            "status": "not_started",
+            "invalidation_reason": None,
+            "last_updated": current_time,
+            "revision_count": 0,
+            "runtime_seconds": 0,
+            "summary": f"Planned: {plan_stage.get('description', '')}",
+            
+            # Output tracking (progress-specific)
+            "outputs": [],
+            "discrepancies": [],
+            "issues": [],
+            "next_actions": [],
+            
+            # Reference to plan-level specs (for Code Generator)
+            "expected_outputs": plan_stage.get("expected_outputs", []),
+            "validation_criteria": plan_stage.get("validation_criteria", []),
+            "runtime_budget_minutes": plan_stage.get("runtime_budget_minutes", 30),
+        }
+        
+        progress_stages.append(progress_stage)
+    
+    state["progress"]["stages"] = progress_stages
+    
+    return state
+
+
+def get_progress_stage(state: ReproState, stage_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Get a specific stage from progress by stage_id.
+    
+    Args:
+        state: Current ReproState
+        stage_id: Stage identifier to find
+        
+    Returns:
+        Stage dict or None if not found
+    """
+    progress = state.get("progress", {})
+    stages = progress.get("stages", [])
+    
+    for stage in stages:
+        if stage.get("stage_id") == stage_id:
+            return stage
+    
+    return None
+
+
+def update_progress_stage_status(
+    state: ReproState,
+    stage_id: str,
+    status: str,
+    summary: Optional[str] = None,
+    invalidation_reason: Optional[str] = None
+) -> ReproState:
+    """
+    Update the status of a specific stage in progress.
+    
+    Valid status values:
+    - "not_started": Stage hasn't run yet
+    - "in_progress": Currently running
+    - "completed_success": Finished with good results
+    - "completed_partial": Finished with acceptable gaps
+    - "completed_failed": Finished but failed validation
+    - "blocked": Cannot run (dependencies not met or budget exceeded)
+    - "needs_rerun": Backtrack target, will re-execute
+    - "invalidated": Results invalid due to backtrack of dependency
+    
+    Args:
+        state: ReproState to update
+        stage_id: Stage to update
+        status: New status value
+        summary: Optional updated summary
+        invalidation_reason: Optional reason if status is needs_rerun/invalidated
+        
+    Returns:
+        The same state object (for chaining)
+    """
+    progress = state.get("progress", {})
+    stages = progress.get("stages", [])
+    
+    for stage in stages:
+        if stage.get("stage_id") == stage_id:
+            stage["status"] = status
+            stage["last_updated"] = datetime.now().isoformat()
+            if summary:
+                stage["summary"] = summary
+            if invalidation_reason:
+                stage["invalidation_reason"] = invalidation_reason
+            break
+    
+    return state
 
 
