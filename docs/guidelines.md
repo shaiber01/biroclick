@@ -742,3 +742,161 @@ See `schemas/prompt_adaptations_schema.json` for the complete schema with all fi
 validation rules, and detailed examples. This schema supports future machine learning
 on adaptation effectiveness.
 
+---
+
+## 15. Structured Output with Function Calling
+
+### The Problem with Free-Text JSON
+
+When asking LLMs to output JSON directly in their response, several issues can occur:
+- Extra text before/after the JSON ("Here's the output:", etc.)
+- Markdown code block wrapping (```json ... ```)
+- JSON syntax errors (trailing commas, unquoted keys)
+- Missing required fields
+- Type mismatches
+
+### Recommended: Function Calling APIs
+
+Use OpenAI's function calling or Anthropic's tool use APIs for structured outputs.
+This guarantees schema compliance and eliminates parsing errors.
+
+**OpenAI Example:**
+
+```python
+from openai import OpenAI
+import json
+
+client = OpenAI()
+
+# Load our JSON schema
+with open("schemas/plan_schema.json") as f:
+    plan_schema = json.load(f)
+
+# Define tool with our schema
+tools = [{
+    "type": "function",
+    "function": {
+        "name": "submit_plan",
+        "description": "Submit the reproduction plan",
+        "parameters": plan_schema  # Use schema directly!
+    }
+}]
+
+response = client.chat.completions.create(
+    model="gpt-4-turbo",
+    messages=[
+        {"role": "system", "content": planner_agent_prompt},
+        {"role": "user", "content": paper_text}
+    ],
+    tools=tools,
+    tool_choice={"type": "function", "function": {"name": "submit_plan"}}
+)
+
+# Guaranteed valid JSON matching schema
+plan = json.loads(response.choices[0].message.tool_calls[0].function.arguments)
+```
+
+**Anthropic Example:**
+
+```python
+import anthropic
+import json
+
+client = anthropic.Anthropic()
+
+# Define tool with our schema
+tools = [{
+    "name": "submit_plan",
+    "description": "Submit the reproduction plan",
+    "input_schema": plan_schema  # Use schema directly!
+}]
+
+response = client.messages.create(
+    model="claude-sonnet-4-20250514",
+    max_tokens=4096,
+    system=planner_agent_prompt,
+    messages=[{"role": "user", "content": paper_text}],
+    tools=tools,
+    tool_choice={"type": "tool", "name": "submit_plan"}
+)
+
+# Guaranteed valid JSON matching schema
+plan = response.content[0].input
+```
+
+### Benefits
+
+| Aspect | Free-text JSON | Function Calling |
+|--------|---------------|------------------|
+| Schema compliance | Manual validation needed | Guaranteed by API |
+| Parsing errors | Common | Impossible |
+| Type safety | Runtime errors | Compile-time safety |
+| Required fields | May be missing | Always present |
+| Debugging | Parse error messages | Clear validation errors |
+
+### Implementation Pattern for Agents
+
+Each agent should:
+1. Define a tool matching its output schema
+2. Force tool use with `tool_choice`
+3. Extract result from tool call response
+4. No JSON parsing needed—API handles it
+
+```python
+def call_agent(agent_name: str, system_prompt: str, user_input: str, output_schema: dict) -> dict:
+    """Generic agent caller using function calling."""
+    tool = {
+        "type": "function",
+        "function": {
+            "name": f"submit_{agent_name}_output",
+            "description": f"Submit {agent_name} output",
+            "parameters": output_schema
+        }
+    }
+    
+    response = client.chat.completions.create(
+        model="gpt-4-turbo",
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_input}
+        ],
+        tools=[tool],
+        tool_choice={"type": "function", "function": {"name": f"submit_{agent_name}_output"}}
+    )
+    
+    return json.loads(response.choices[0].message.tool_calls[0].function.arguments)
+```
+
+### Fallback for Non-Compliant Models
+
+If using a model without function calling support:
+
+```python
+import re
+import json
+
+def extract_json_from_response(response_text: str) -> dict:
+    """Fallback JSON extraction with cleanup."""
+    # Remove markdown code blocks
+    cleaned = re.sub(r'```json?\s*', '', response_text)
+    cleaned = re.sub(r'```\s*$', '', cleaned)
+    
+    # Find JSON object
+    match = re.search(r'\{[\s\S]*\}', cleaned)
+    if not match:
+        raise ValueError("No JSON object found in response")
+    
+    # Parse and validate
+    try:
+        return json.loads(match.group())
+    except json.JSONDecodeError as e:
+        # Try fixing common issues
+        fixed = match.group()
+        fixed = re.sub(r',\s*}', '}', fixed)  # Remove trailing commas
+        fixed = re.sub(r',\s*]', ']', fixed)
+        return json.loads(fixed)
+```
+
+**Recommendation:** Always prefer function calling. Only use fallback for models that
+don't support it or during development/testing.
+

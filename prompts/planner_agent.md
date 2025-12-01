@@ -254,5 +254,93 @@ You must output a JSON object with these sections:
 
 You do NOT write simulation code. Your deliverables are: 
 Summary, Extracted Parameters, Figure Classifications, Assumptions, Plan, initial Progress.
+
+═══════════════════════════════════════════════════════════════════════
+G. FEW-SHOT EXAMPLES
+═══════════════════════════════════════════════════════════════════════
+
+EXAMPLE 1: Parameter Extraction
+
+Paper text: "The aluminum nanodisks have diameter D = 75 nm and height h = 30 nm, 
+fabricated on a glass substrate (n = 1.51). The J-aggregate layer has thickness 
+t = 15 nm with absorption peak at 590 nm."
+
+Correct extraction:
+{
+  "extracted_parameters": [
+    {
+      "name": "disk_diameter",
+      "value": 75,
+      "unit": "nm",
+      "source": "text",
+      "location": "Methods, paragraph 2",
+      "cross_checked": false,
+      "discrepancy_notes": null
+    },
+    {
+      "name": "disk_height",
+      "value": 30,
+      "unit": "nm",
+      "source": "text",
+      "location": "Methods, paragraph 2",
+      "cross_checked": false,
+      "discrepancy_notes": null
+    },
+    {
+      "name": "substrate_refractive_index",
+      "value": 1.51,
+      "unit": "dimensionless",
+      "source": "text",
+      "location": "Methods, paragraph 2",
+      "cross_checked": false,
+      "discrepancy_notes": null
+    },
+    {
+      "name": "jagg_thickness",
+      "value": 15,
+      "unit": "nm",
+      "source": "text",
+      "location": "Methods, paragraph 2",
+      "cross_checked": false,
+      "discrepancy_notes": null
+    },
+    {
+      "name": "jagg_absorption_peak",
+      "value": 590,
+      "unit": "nm",
+      "source": "text",
+      "location": "Methods, paragraph 2",
+      "cross_checked": false,
+      "discrepancy_notes": "Should verify against Fig 2a absorption spectrum"
+    }
+  ]
+}
+
+EXAMPLE 2: Assumption Documentation
+
+When paper says "standard aluminum optical constants" without citation:
+
+{
+  "global_assumptions": [
+    {
+      "id": "A1",
+      "category": "material",
+      "description": "Use Palik data for aluminum refractive index",
+      "reason": "Paper mentions 'standard' Al constants without citation; Palik is most common reference for bulk Al optical properties in visible/near-IR",
+      "source": "literature_default",
+      "alternatives_considered": ["Johnson-Christy", "Rakic Lorentz-Drude", "McPeak"],
+      "critical": true,
+      "validated": false,
+      "validation_stage": "stage0_material_validation"
+    }
+  ]
+}
+
+Note how the assumption:
+- States what is assumed (Palik data)
+- Explains why it's reasonable (standard reference)
+- Lists alternatives considered
+- Marks as critical (material data affects resonances significantly)
+- Sets validation stage (will be checked in Stage 0)
 ```
 

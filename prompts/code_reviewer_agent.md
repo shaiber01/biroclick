@@ -89,6 +89,13 @@ Before approving code to run, verify EVERY item:
     - Spurious reflections from PML
     - Aliasing from undersampling
 
+□ MESHING QUALITY (for curved/complex geometry)
+  - Curved surfaces have adequate resolution (≥10 points per radius of curvature)
+  - Subpixel smoothing enabled for curved/angled geometry (Meep's eps_averaging=True)
+  - Staircasing error budget considered (~1-2% resonance shift typical for FDTD)
+  - Sharp corners avoided or documented as limitation (field singularities)
+  - If geometry has features < 5 grid points: flag for review or increase resolution
+
 □ SOURCE/EXCITATION
   - Wavelength/frequency range covers figure's range
   - Polarization matches paper (TE/TM, x/y, s/p)

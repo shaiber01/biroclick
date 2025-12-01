@@ -364,5 +364,128 @@ Before submitting your design, verify:
 □ All assumptions are documented
 □ New assumptions are flagged for assumptions log
 □ Output specifications match paper's format
+
+═══════════════════════════════════════════════════════════════════════
+J. FEW-SHOT EXAMPLE
+═══════════════════════════════════════════════════════════════════════
+
+EXAMPLE: Design for single aluminum nanodisk transmission spectrum
+
+Task: Design simulation for Stage 1 - single bare Al disk (D=75nm, h=30nm)
+      Target: Fig 3a transmission spectrum (400-700nm)
+
+Design output:
+{
+  "stage_id": "stage1_single_disk",
+  "design_summary": "2D cross-section FDTD simulation of isolated Al nanodisk on glass substrate, illuminated by broadband plane wave to obtain transmission spectrum",
+  
+  "unit_system": {
+    "characteristic_length": "1 µm",
+    "meep_unit_explanation": "All Meep dimensions in µm; wavelengths in µm; frequencies in c/µm"
+  },
+  
+  "geometry": {
+    "description": "Al cylinder cross-section on semi-infinite glass substrate",
+    "components": [
+      {
+        "name": "substrate",
+        "type": "block",
+        "material": "glass_n1.51",
+        "center": [0, -2.5],
+        "size": [10, 5],
+        "note": "Semi-infinite approximation; extends below simulation domain"
+      },
+      {
+        "name": "disk",
+        "type": "cylinder",
+        "material": "aluminum_palik",
+        "center": [0, 0.015],
+        "radius": 0.0375,
+        "height": 0.030,
+        "axis": "z",
+        "note": "D=75nm, h=30nm in Meep units (µm)"
+      }
+    ]
+  },
+  
+  "materials": {
+    "glass_n1.51": {
+      "type": "dielectric",
+      "epsilon": 2.28,
+      "source": "assumption A2 (BK7-like glass)"
+    },
+    "aluminum_palik": {
+      "type": "dispersive",
+      "model": "Lorentz-Drude from Palik handbook",
+      "source": "assumption A1 (standard Al optical constants)",
+      "meep_implementation": "load from materials library or fit Lorentz poles"
+    }
+  },
+  
+  "source": {
+    "type": "GaussianSource",
+    "wavelength_center": "550 nm (0.55 µm)",
+    "wavelength_width": "400 nm (covers 400-700nm)",
+    "polarization": "Ex (TM for 2D)",
+    "position": "y = +1.5 µm (above disk)",
+    "size": "spanning cell width"
+  },
+  
+  "boundary_conditions": {
+    "x": "periodic (infinite disk array approximation) or PML (isolated disk)",
+    "y": "PML on both ends",
+    "pml_thickness": "1.0 µm (> λ_max/2)",
+    "note": "Using PML for isolated disk to avoid array effects"
+  },
+  
+  "resolution": {
+    "value": "50 pixels/µm = 20 nm grid",
+    "justification": "Resolves 75nm disk with ~4 points across radius; meets metal surface guideline (2-5nm recommended, using 20nm acceptable for validation stage)"
+  },
+  
+  "monitors": {
+    "transmission": {
+      "type": "flux_region",
+      "position": "y = -1.0 µm (in substrate, below disk)",
+      "size": "cell width",
+      "output": "transmission vs wavelength"
+    },
+    "reflection": {
+      "type": "flux_region",
+      "position": "y = +1.0 µm (above source)",
+      "size": "cell width",
+      "output": "reflection vs wavelength (for validation)"
+    }
+  },
+  
+  "runtime": {
+    "termination": "field decay to 1e-6 or max 500 time units",
+    "estimated_runtime_minutes": 8,
+    "memory_estimate_mb": 200
+  },
+  
+  "output_specifications": {
+    "data_file": "stage1_D75_spectrum.csv",
+    "columns": ["wavelength_nm", "transmission", "reflection"],
+    "plot_file": "stage1_D75_transmission.png",
+    "plot_format": "wavelength (nm) on x-axis, Transmission on y-axis, matching Fig 3a style"
+  },
+  
+  "new_assumptions": [
+    {
+      "id": "S1",
+      "description": "Using 2D cross-section (infinite cylinder) approximation",
+      "reason": "10x faster than 3D; captures main dipolar resonance; systematic error documented",
+      "impact": "Expect ~5% resonance wavelength shift vs 3D"
+    }
+  ]
+}
+
+Note how this design:
+- Uses consistent Meep units (µm throughout)
+- Specifies materials with sources
+- Documents resolution justification
+- Includes new stage-specific assumptions
+- Provides performance estimates
 ```
 

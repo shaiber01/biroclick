@@ -403,5 +403,108 @@ These discrepancies are OK if properly documented:
    - Experimental data has noise
    - Simulation may be smoother or noisier
    - Check for same underlying behavior
+
+═══════════════════════════════════════════════════════════════════════
+L. FEW-SHOT EXAMPLES
+═══════════════════════════════════════════════════════════════════════
+
+EXAMPLE 1: Discrepancy Documentation
+
+Scenario: Simulation peak at 540nm, paper shows peak at 520nm
+
+Correct documentation:
+{
+  "id": "D1",
+  "figure": "Fig3a",
+  "quantity": "resonance_wavelength",
+  "paper_value": "520 nm",
+  "simulation_value": "540 nm",
+  "difference_percent": 3.8,
+  "classification": "acceptable",
+  "likely_cause": "2D cross-section approximation ignores 3D depolarization effects; Palik Al data may differ from actual fabricated sample",
+  "action_taken": "Documented as systematic shift; proceeding with understanding that all resonances will be ~4% red-shifted",
+  "blocking": false
+}
+
+Note how this:
+- Calculates precise percent difference: |540-520|/520 × 100 = 3.8%
+- Uses "acceptable" (not "investigate") because 3.8% < 5% threshold
+- Identifies TWO likely causes (2D approx + material data)
+- States impact on downstream analysis
+- Explicitly marks as non-blocking
+
+EXAMPLE 2: Figure Comparison Report
+
+For comparing simulated vs paper Figure 3a:
+
+{
+  "figure_id": "Fig3a",
+  "stage_id": "stage2_bare_disk_sweep",
+  "title": "Bare Al nanodisk transmission spectra - diameter dependence",
+  "reproduction_image_path": "outputs/stage2_fig3a_reproduction.png",
+  
+  "comparison_table": [
+    {
+      "feature": "D=60nm peak position",
+      "paper": "480 nm",
+      "reproduction": "498 nm",
+      "status": "⚠️ 3.8%"
+    },
+    {
+      "feature": "D=75nm peak position", 
+      "paper": "520 nm",
+      "reproduction": "540 nm",
+      "status": "⚠️ 3.8%"
+    },
+    {
+      "feature": "D=90nm peak position",
+      "paper": "565 nm",
+      "reproduction": "586 nm",
+      "status": "⚠️ 3.7%"
+    },
+    {
+      "feature": "Peak shift trend (D↓ → λ↓)",
+      "paper": "Blue-shift with decreasing D",
+      "reproduction": "Blue-shift with decreasing D",
+      "status": "✅ Match"
+    },
+    {
+      "feature": "Transmission amplitude",
+      "paper": "~0.3 at resonance",
+      "reproduction": "~0.35 at resonance",
+      "status": "⚠️ 17%"
+    }
+  ],
+  
+  "shape_comparison": [
+    {
+      "aspect": "Spectral shape",
+      "paper": "Single Lorentzian-like dip",
+      "reproduction": "Single Lorentzian-like dip"
+    },
+    {
+      "aspect": "Linewidth trend",
+      "paper": "Broader for larger D",
+      "reproduction": "Broader for larger D"
+    },
+    {
+      "aspect": "Baseline",
+      "paper": "T ≈ 0.9 far from resonance",
+      "reproduction": "T ≈ 0.88 far from resonance"
+    }
+  ],
+  
+  "reason_for_difference": "Systematic ~4% red-shift consistent with 2D approximation. Amplitude difference (17%) likely from normalization and 2D geometry effects. Key physics (size-dependent plasmon resonance) reproduced correctly.",
+  
+  "overall_classification": "PARTIAL",
+  "classification_justification": "Peak positions acceptable (within 5%), trends match, but amplitude deviation requires documentation. Main physics captured."
+}
+
+Note how this:
+- Uses emoji status indicators for quick scanning
+- Separates quantitative (table) from qualitative (shape) comparison
+- Tracks TRENDS not just absolute values
+- Provides clear reason for differences
+- Justifies the overall classification
 ```
 
