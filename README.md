@@ -219,14 +219,18 @@ For detailed instructions on preparing papers (text extraction, figure extractio
 
 ## Data Models
 
-### Plan (`plan_<paper_id>.json`)
+> **Note**: Artifact files use `_artifact_` prefix (e.g., `_artifact_plan.json`) to indicate
+> they are for human review only, not for execution. See [docs/workflow.md](docs/workflow.md)
+> for the dual checkpointing strategy.
+
+### Plan (`_artifact_plan.json`)
 
 Defines the reproduction strategy:
 - Extracted parameters with sources (text/figure/supplementary)
 - Target figures with simulation classification
 - Staged reproduction plan with dependencies and runtime budgets
 
-### Assumptions (`assumptions_<paper_id>.json`)
+### Assumptions (`_artifact_assumptions.json`)
 
 Tracks all non-explicit parameters:
 - Global assumptions (materials, boundary conditions)
@@ -234,7 +238,7 @@ Tracks all non-explicit parameters:
 - Stage-specific assumptions
 - Validation status for each assumption
 
-### Progress (`progress_<paper_id>.json`)
+### Progress (`_artifact_progress.json`)
 
 Logs reproduction progress:
 - Stage status (not_started → in_progress → completed_*)
@@ -317,7 +321,7 @@ Stop optimizing when:
 | **Linux** | ✅ Full | Primary development platform |
 | **macOS** | ✅ Full | Intel and Apple Silicon |
 | **Windows + WSL2** | ✅ Full | Recommended for Windows users |
-| **Windows Native** | ⚠️ Limited | No memory limits; see docs/guidelines.md |
+| **Windows Native** | ❌ Not Recommended | No memory limits, use WSL2 instead |
 
 **Windows Users**: We recommend using [WSL2](https://learn.microsoft.com/en-us/windows/wsl/install) for full functionality. Native Windows has limited resource management. See `docs/guidelines.md` Section 14 for details.
 

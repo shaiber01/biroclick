@@ -105,6 +105,48 @@ NEVER MODIFY:
 - Output format structures
 
 ═══════════════════════════════════════════════════════════════════════
+C2. FORBIDDEN MODIFICATION ZONES (CRITICAL)
+═══════════════════════════════════════════════════════════════════════
+
+The following sections in agent prompts are STRICTLY OFF-LIMITS. Modifying 
+them can break JSON parsing and cause silent system failures.
+
+FORBIDDEN SECTIONS (in ALL agents):
+┌────────────────────────────────────────────────────────────────────────┐
+│  ❌ "OUTPUT FORMAT" sections                                           │
+│  ❌ "OUTPUT SCHEMA" sections                                           │
+│  ❌ JSON structure definitions (anything with { "field": ... })        │
+│  ❌ "SYSTEM CONSTRAINTS" sections                                      │
+│  ❌ "VERDICT GUIDELINES" sections                                      │
+│  ❌ Revision/escalation limits                                         │
+│  ❌ Required field lists                                               │
+└────────────────────────────────────────────────────────────────────────┘
+
+ALLOWED SECTIONS (safe to adapt):
+┌────────────────────────────────────────────────────────────────────────┐
+│  ✅ Context/background sections                                        │
+│  ✅ Physics guidelines                                                  │
+│  ✅ Examples (add new, don't modify format)                            │
+│  ✅ Checklist items (can add items, not remove required ones)          │
+│  ✅ Domain-specific guidance                                           │
+│  ✅ Material-specific notes                                            │
+│  ✅ Technique-specific tips                                            │
+└────────────────────────────────────────────────────────────────────────┘
+
+WHY THIS MATTERS:
+- System expects specific JSON fields from each agent
+- Modified output format → JSON parse error → agent retry loops
+- Modified verdicts → routing logic breaks
+- These errors are SILENT until they cascade
+
+VALIDATION BEFORE APPLYING:
+For every modification, ask:
+1. Does this touch anything in { } brackets that defines output? → REJECT
+2. Does this change verdict options (pass/fail/warning)? → REJECT
+3. Does this modify required fields? → REJECT
+4. Is it adding guidance/context only? → ALLOW
+
+═══════════════════════════════════════════════════════════════════════
 D. AGENT-SPECIFIC ADAPTATION GUIDELINES
 ═══════════════════════════════════════════════════════════════════════
 

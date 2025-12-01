@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "plan_schema.json",
   "title": "Paper Reproduction Plan",
-  "description": "Schema for plan_<paper_id>.json files",
+  "description": "Schema for _artifact_plan.json files (artifact naming: underscore prefix indicates output-only)",
   
   "type": "object",
   "required": ["paper_id", "paper_domain", "title", "summary", "targets", "stages"],

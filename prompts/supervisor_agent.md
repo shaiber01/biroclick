@@ -107,6 +107,61 @@ DO NOT backtrack for:
 - Small numerical differences
 - Issues that can be fixed in current stage
 
+═══════════════════════════════════════════════════════════════════════
+B2. REPLAN vs BACKTRACK DECISION TREE (CRITICAL DISTINCTION)
+═══════════════════════════════════════════════════════════════════════
+
+These are DIFFERENT actions with DIFFERENT consequences:
+
+┌─────────────────────────────────────────────────────────────────────┐
+│  BACKTRACK = "We have the wrong VALUE or ASSUMPTION"               │
+│  → Invalidates results, re-runs EXISTING stages with corrected     │
+│    values                                                          │
+│  → Does NOT change plan structure                                  │
+│                                                                    │
+│  REPLAN = "We have the wrong PROCESS or STRUCTURE"                 │
+│  → Updates the plan.json itself (adds/removes/reorders stages)     │
+│  → May also require backtracking after replan                      │
+└─────────────────────────────────────────────────────────────────────┘
+
+DECISION TREE:
+
+Is a PARAMETER VALUE wrong?
+├─ NO → Not a backtrack issue (skip to next question)
+├─ YES → Does it invalidate completed stage results?
+│        ├─ NO → Just update assumptions, continue (no backtrack)
+│        │       Example: User says "coating thickness is 35nm not 30nm"
+│        │                but we haven't simulated coated structure yet
+│        └─ YES → BACKTRACK to earliest affected stage
+│                 Example: User says "it's gold not silver" after Stage 1
+│                          completed with silver → backtrack to Stage 0
+
+Is the PLAN STRUCTURE wrong?
+├─ NO → Continue with current plan
+├─ YES → What kind of structure problem?
+│        ├─ Missing stage → REPLAN (add the stage)
+│        │   Example: "We need a polarization study stage"
+│        ├─ Wrong stage order → REPLAN (reorder stages)
+│        │   Example: "Array stage should come before sweep"
+│        ├─ Need new parameter extraction → REPLAN (PlannerAgent re-reads paper)
+│        │   Example: "We missed the substrate thickness in Methods"
+│        └─ Stage is unnecessary → REPLAN (remove/skip stage)
+│            Example: "Paper doesn't actually show array data"
+
+COMBINED SCENARIOS:
+
+| Situation | Action | Why |
+|-----------|--------|-----|
+| Wrong material identified | BACKTRACK to Stage 0 | Value error, invalidates all stages |
+| Need to add sweep stage | REPLAN only | Structure change, no results invalidated |
+| Wrong geometry + missing stage | REPLAN first, then BACKTRACK | Fix structure, then fix values |
+| User corrects future parameter | Update assumptions only | No completed work invalidated |
+| Memory error needs 2D | BACKTRACK to DESIGN | Design choice needs to change |
+
+KEY INSIGHT:
+- BACKTRACK looks BACKWARD (fix what we did wrong)
+- REPLAN looks FORWARD (fix what we planned to do)
+
 STOP (recommend ending via "ok_continue" + should_stop=true) if:
 - All reproducible figures done to acceptable level
 - Blocked by missing information that user can't provide
@@ -404,6 +459,10 @@ H. FINAL REPORT GENERATION
 
 When all stages complete (or reproduction is stopped), you MUST generate
 the final REPRODUCTION_REPORT_<paper_id>.md by compiling data from all stages.
+
+**Template Reference**: Follow the structure defined in `prompts/report_template.md`.
+That file contains the canonical section ordering, formatting conventions, and
+example content for each section.
 
 REPORT SECTIONS TO GENERATE:
 

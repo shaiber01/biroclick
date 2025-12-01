@@ -312,7 +312,62 @@ INCLUDE IN YOUR OUTPUT:
 This helps the system decide whether to auto-retry or escalate immediately.
 
 ═══════════════════════════════════════════════════════════════════════
-I. ESCALATION
+I. ERROR CLASSIFICATION AND ROUTING (CRITICAL)
+═══════════════════════════════════════════════════════════════════════
+
+Different error types require different responses. Your classification
+determines WHERE the fix happens in the workflow.
+
+ERROR ROUTING TABLE:
+┌──────────────────┬────────────────────┬──────────────────────────────────────┐
+│ Error Type       │ Route To           │ Required Feedback                    │
+├──────────────────┼────────────────────┼──────────────────────────────────────┤
+│ Syntax error     │ GENERATE_CODE      │ "Fix syntax: [specific error]"       │
+│ Missing import   │ GENERATE_CODE      │ "Add import: [module]"               │
+│ File path error  │ GENERATE_CODE      │ "Fix path: [correct path]"           │
+├──────────────────┼────────────────────┼──────────────────────────────────────┤
+│ MEMORY ERROR     │ DESIGN (via SUPV)  │ "DESIGN CHANGE REQUIRED: reduce      │
+│                  │                    │  resolution from X to Y, or use 2D"  │
+│ TIMEOUT          │ DESIGN (via SUPV)  │ "DESIGN CHANGE REQUIRED: simplify    │
+│                  │                    │  geometry or reduce simulation time" │
+│ Numerical blowup │ DESIGN (via SUPV)  │ "DESIGN CHANGE REQUIRED: check       │
+│                  │                    │  source position, reduce time step"  │
+├──────────────────┼────────────────────┼──────────────────────────────────────┤
+│ Unknown crash    │ ASK_USER           │ "Unknown error: [details]. Options:" │
+│ Repeated failure │ ASK_USER           │ "Failed X times. User guidance..."   │
+└──────────────────┴────────────────────┴──────────────────────────────────────┘
+
+MEMORY ERROR HANDLING (CRITICAL):
+
+Simply re-generating code WON'T fix memory errors. You MUST:
+
+1. DETECT MEMORY ERROR:
+   - "MemoryError" in stderr
+   - "Killed" with high memory usage
+   - "std::bad_alloc" (C++ allocation failure)
+   - Process killed by OS (exit code 137 on Linux)
+
+2. ESTIMATE RESOURCE USAGE:
+   - Memory ≈ 200 bytes × cells × resolution³
+   - If estimated > available RAM, code changes won't help
+
+3. SET failure_category = "resource_limit"
+
+4. PROVIDE SPECIFIC FEEDBACK:
+   BAD:  "Memory error occurred"
+   GOOD: "Memory limit exceeded (8GB). Estimated usage: ~12GB for 
+          resolution=50 on 3D cell (2×2×1 µm). DESIGN CHANGE REQUIRED:
+          Option 1: Reduce resolution from 50 to 35 (reduces memory ~60%)
+          Option 2: Use 2D approximation (if physics allows)
+          Option 3: Reduce simulation domain size"
+
+5. SET retry_recommended = false
+   (Don't retry at code level - needs design change)
+
+This feedback goes to SupervisorAgent, who routes to SimulationDesignerAgent.
+
+═══════════════════════════════════════════════════════════════════════
+J. ESCALATION
 ═══════════════════════════════════════════════════════════════════════
 
 Set escalate_to_user when:

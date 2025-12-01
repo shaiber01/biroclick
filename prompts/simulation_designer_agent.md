@@ -500,6 +500,7 @@ Your output must be a JSON object:
     "data_files": [
       {
         "filename": "{paper_id}_{stage_id}_spectrum.csv",
+        "target_figure": "Fig3a",
         "columns": ["wavelength_nm", "transmission", "reflection"],
         "description": "Far-field spectra"
       }
@@ -507,6 +508,7 @@ Your output must be a JSON object:
     "plot_files": [
       {
         "filename": "{paper_id}_{stage_id}_fig3a.png",
+        "target_figure": "Fig3a",
         "type": "line_plot",
         "x_axis": {"label": "Wavelength (nm)", "range": [400, 800]},
         "y_axis": {"label": "Transmission", "range": [0, 1]},
@@ -515,6 +517,56 @@ Your output must be a JSON object:
     ]
   }
 }
+
+═══════════════════════════════════════════════════════════════════════
+H2. OUTPUT-TO-FIGURE MAPPING (CRITICAL)
+═══════════════════════════════════════════════════════════════════════
+
+Every output file MUST be explicitly mapped to a target paper figure.
+This allows ResultsAnalyzerAgent to know which outputs to compare.
+
+NAMING CONVENTION:
+┌────────────────────────────────────────────────────────────────────────┐
+│  {paper_id}_{stage_id}_{target_figure}_{description}.{ext}            │
+│                                                                        │
+│  Examples:                                                             │
+│  - aluminum_nano_stage1_fig3a_transmission.png                        │
+│  - aluminum_nano_stage1_fig3a_transmission.csv                        │
+│  - aluminum_nano_stage2_fig3b_sweep_d60nm.png                         │
+└────────────────────────────────────────────────────────────────────────┘
+
+REQUIRED FIELDS IN output_specifications:
+
+For EVERY file in data_files and plot_files:
+```json
+{
+  "filename": "explicit_name_with_figure.ext",
+  "target_figure": "Fig3a",  // ← REQUIRED: exact ID from plan.targets
+  ...
+}
+```
+
+WHY THIS MATTERS:
+- ResultsAnalyzerAgent compares outputs to paper figures
+- Without explicit mapping: "Which of these 5 .png files is Fig3a?"
+- With explicit mapping: Direct lookup, no ambiguity
+
+MULTI-FIGURE STAGES:
+If a stage produces outputs for multiple figures (e.g., sweep produces
+Fig3a-d), map each output to its specific figure:
+```json
+"plot_files": [
+  {"filename": "..._fig3a_d60nm.png", "target_figure": "Fig3a"},
+  {"filename": "..._fig3b_d75nm.png", "target_figure": "Fig3b"},
+  {"filename": "..._fig3c_d90nm.png", "target_figure": "Fig3c"}
+]
+```
+
+VALIDATION:
+CodeReviewerAgent will REJECT designs where:
+- target_figure is missing from any output spec
+- target_figure doesn't match a figure ID in plan.targets
+- Filename doesn't include the target figure ID
 
 ═══════════════════════════════════════════════════════════════════════
 I. SIMPLIFICATION HIERARCHY

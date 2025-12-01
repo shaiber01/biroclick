@@ -185,6 +185,327 @@ def update_validation_hierarchy(state: dict, stage_id: str, stages: list) -> Non
         state["validation_hierarchy"][hierarchy_key] = hierarchy_value
 
 
+class HierarchySyncError(Exception):
+    """Raised when validation hierarchy is out of sync with stage statuses."""
+    pass
+
+
+def verify_hierarchy_sync(state: dict) -> List[str]:
+    """
+    Verify that validation_hierarchy is correctly synced with stage statuses.
+    
+    This function should be called in select_stage (or similar routing logic)
+    to catch bugs early where update_validation_hierarchy() was not called
+    after a stage status change.
+    
+    Args:
+        state: ReproState dict containing plan and validation_hierarchy
+        
+    Returns:
+        List of sync issues (empty if all is well)
+        
+    Raises:
+        HierarchySyncError: If raise_on_error=True and sync issues found
+        
+    Example:
+        # In select_stage routing function:
+        issues = verify_hierarchy_sync(state)
+        if issues:
+            logging.error(f"Hierarchy sync issues: {issues}")
+            # Could raise or attempt auto-repair
+    """
+    issues = []
+    
+    plan = state.get("plan", {})
+    stages = plan.get("stages", [])
+    hierarchy = state.get("validation_hierarchy", {})
+    
+    if not stages:
+        return issues  # No stages yet, nothing to verify
+    
+    # For each stage type that has a hierarchy key, check if status matches
+    for stage in stages:
+        stage_type = stage.get("stage_type")
+        stage_status = stage.get("status")
+        stage_id = stage.get("stage_id")
+        
+        # Get expected hierarchy key and value
+        hierarchy_key = STAGE_TYPE_TO_HIERARCHY_KEY.get(stage_type)
+        if not hierarchy_key:
+            continue  # Not a validation stage
+            
+        expected_value = STAGE_STATUS_TO_HIERARCHY_MAPPING.get(stage_status)
+        if not expected_value:
+            continue  # Status doesn't affect hierarchy (e.g., "in_progress")
+        
+        actual_value = hierarchy.get(hierarchy_key)
+        
+        if actual_value != expected_value:
+            issues.append(
+                f"Stage '{stage_id}' ({stage_type}) has status '{stage_status}' "
+                f"but hierarchy['{hierarchy_key}'] is '{actual_value}' "
+                f"(expected '{expected_value}')"
+            )
+    
+    return issues
+
+
+def verify_hierarchy_sync_or_raise(state: dict) -> None:
+    """
+    Verify hierarchy sync and raise if issues found.
+    
+    Use this in critical paths where sync issues should halt execution.
+    
+    Args:
+        state: ReproState dict
+        
+    Raises:
+        HierarchySyncError: If any sync issues are detected
+        
+    Example:
+        # In select_stage, fail fast on sync issues:
+        verify_hierarchy_sync_or_raise(state)
+    """
+    issues = verify_hierarchy_sync(state)
+    if issues:
+        raise HierarchySyncError(
+            f"Validation hierarchy is out of sync with stage statuses. "
+            f"This usually means update_validation_hierarchy() was not called "
+            f"after a stage status change. Issues:\n"
+            + "\n".join(f"  - {issue}" for issue in issues)
+        )
+
+
+def repair_hierarchy_sync(state: dict) -> List[str]:
+    """
+    Automatically repair hierarchy sync issues by recomputing from stage statuses.
+    
+    Use with caution - this is a recovery mechanism, not a substitute for
+    properly calling update_validation_hierarchy().
+    
+    Args:
+        state: ReproState dict (will be modified in place)
+        
+    Returns:
+        List of repairs made
+        
+    Example:
+        # Attempt repair before failing:
+        issues = verify_hierarchy_sync(state)
+        if issues:
+            repairs = repair_hierarchy_sync(state)
+            logging.warning(f"Auto-repaired hierarchy: {repairs}")
+    """
+    repairs = []
+    
+    plan = state.get("plan", {})
+    stages = plan.get("stages", [])
+    
+    if "validation_hierarchy" not in state:
+        state["validation_hierarchy"] = {
+            "material_validation": "not_done",
+            "single_structure": "not_done",
+            "arrays_systems": "not_done",
+            "parameter_sweeps": "not_done",
+        }
+    
+    for stage in stages:
+        stage_type = stage.get("stage_type")
+        stage_status = stage.get("status")
+        stage_id = stage.get("stage_id")
+        
+        hierarchy_key = STAGE_TYPE_TO_HIERARCHY_KEY.get(stage_type)
+        if not hierarchy_key:
+            continue
+            
+        expected_value = STAGE_STATUS_TO_HIERARCHY_MAPPING.get(stage_status)
+        if not expected_value:
+            continue
+        
+        actual_value = state["validation_hierarchy"].get(hierarchy_key)
+        
+        if actual_value != expected_value:
+            state["validation_hierarchy"][hierarchy_key] = expected_value
+            repairs.append(
+                f"Set hierarchy['{hierarchy_key}'] = '{expected_value}' "
+                f"(was '{actual_value}') based on stage '{stage_id}'"
+            )
+    
+    return repairs
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# User Interaction Logging
+# ═══════════════════════════════════════════════════════════════════════
+
+# Valid interaction types for log_user_interaction()
+INTERACTION_TYPES = [
+    "material_checkpoint",      # Mandatory Stage 0 approval
+    "clarification",            # Ambiguous paper information
+    "trade_off_decision",       # Accuracy vs runtime choices
+    "parameter_confirmation",   # Key parameter values
+    "stop_decision",            # Whether to stop reproduction
+    "backtrack_approval",       # Approving suggested backtrack
+    "context_overflow",         # Context overflow recovery decision
+    "general_feedback",         # Other user input
+]
+
+
+def log_user_interaction(
+    state: dict,
+    interaction_type: str,
+    question: str,
+    response: Dict[str, Any],
+    context: Optional[Dict[str, Any]] = None
+) -> str:
+    """
+    Log a user interaction for audit trail and reproducibility.
+    
+    MUST be called after every ask_user node completes, before transitioning
+    to the next node. This is critical for:
+    1. Audit trail - documenting what decisions were made and why
+    2. Reproducibility - allowing reproduction of the decision path
+    3. Report generation - showing user involvement in final report
+    
+    Args:
+        state: ReproState dict (will be modified in place)
+        interaction_type: Type of interaction (see INTERACTION_TYPES)
+        question: The question that was posed to the user
+        response: User's response dict (from user_responses field)
+        context: Optional additional context (stage_id, agent, reason, etc.)
+        
+    Returns:
+        The generated interaction ID (e.g., "U1", "U2")
+        
+    Raises:
+        ValueError: If interaction_type is not valid
+        
+    Example:
+        # After material checkpoint
+        interaction_id = log_user_interaction(
+            state,
+            interaction_type="material_checkpoint",
+            question=state["pending_user_questions"][0],
+            response=state["user_responses"]["material_validation"],
+            context={
+                "stage_id": "stage0_material_validation",
+                "agent": "SupervisorAgent"
+            }
+        )
+        
+    Example in ask_user node handler:
+        def ask_user_node(state):
+            # ... wait for user response ...
+            
+            # Log the interaction before transitioning
+            log_user_interaction(
+                state,
+                interaction_type=state.get("pending_interaction_type", "general_feedback"),
+                question=state["pending_user_questions"][0],
+                response=state["user_responses"],
+                context={"stage_id": state.get("current_stage_id")}
+            )
+            
+            # Clear pending questions
+            state["pending_user_questions"] = []
+            state["awaiting_user_input"] = False
+            
+            return state
+    """
+    from datetime import datetime
+    
+    # Validate interaction type
+    if interaction_type not in INTERACTION_TYPES:
+        raise ValueError(
+            f"Invalid interaction_type '{interaction_type}'. "
+            f"Must be one of: {INTERACTION_TYPES}"
+        )
+    
+    # Ensure user_interactions list exists
+    if "user_interactions" not in state:
+        state["user_interactions"] = []
+    
+    # Generate interaction ID
+    interaction_id = f"U{len(state['user_interactions']) + 1}"
+    
+    # Build context with defaults
+    full_context = {
+        "stage_id": state.get("current_stage_id"),
+        "agent": "SupervisorAgent",  # Default, can be overridden
+        "reason": state.get("supervisor_feedback", "User input required"),
+    }
+    if context:
+        full_context.update(context)
+    
+    # Create interaction record
+    interaction_record = {
+        "id": interaction_id,
+        "timestamp": datetime.now().isoformat(),
+        "interaction_type": interaction_type,
+        "context": full_context,
+        "question": question,
+        "user_response": response,
+        "impact": "",  # Filled after decision is applied
+        "alternatives_considered": [],
+    }
+    
+    # Append to state
+    state["user_interactions"].append(interaction_record)
+    
+    # Also update progress if available (for persistence)
+    if "progress" in state and isinstance(state["progress"], dict):
+        if "user_interactions" not in state["progress"]:
+            state["progress"]["user_interactions"] = []
+        state["progress"]["user_interactions"].append(interaction_record)
+    
+    return interaction_id
+
+
+def update_interaction_impact(
+    state: dict,
+    interaction_id: str,
+    impact: str,
+    alternatives_considered: Optional[List[str]] = None
+) -> None:
+    """
+    Update a logged interaction with its impact after the decision is applied.
+    
+    Call this after applying the user's decision to document what effect
+    it had on the workflow.
+    
+    Args:
+        state: ReproState dict
+        interaction_id: ID of the interaction to update (e.g., "U1")
+        impact: Description of what changed as a result
+        alternatives_considered: Optional list of alternatives that were presented
+        
+    Example:
+        log_user_interaction(state, "material_checkpoint", question, response)
+        # ... apply the decision ...
+        update_interaction_impact(
+            state, 
+            "U1",
+            impact="Changed material from silver to gold, invalidated Stage 0",
+            alternatives_considered=["Keep silver", "Use aluminum"]
+        )
+    """
+    for interaction in state.get("user_interactions", []):
+        if interaction["id"] == interaction_id:
+            interaction["impact"] = impact
+            if alternatives_considered:
+                interaction["alternatives_considered"] = alternatives_considered
+            break
+    
+    # Also update in progress if available
+    if "progress" in state and isinstance(state["progress"], dict):
+        for interaction in state["progress"].get("user_interactions", []):
+            if interaction["id"] == interaction_id:
+                interaction["impact"] = impact
+                if alternatives_considered:
+                    interaction["alternatives_considered"] = alternatives_considered
+                break
+
+
 class MaterialValidationUserResponse(TypedDict):
     """
     User response to Stage 0 material validation checkpoint.
@@ -920,6 +1241,442 @@ Feedback History:
 {combined}
 
 Provide a condensed summary (max 500 words):"""
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Context Overflow Recovery
+# ═══════════════════════════════════════════════════════════════════════
+#
+# When context would exceed safe limits, these functions help determine
+# recovery options. Key principle: functions return ACTIONS, they don't
+# mutate state directly (LangGraph nodes should apply state changes).
+#
+# Recovery priority order:
+# 1. Summarize feedback (safest, preserves paper content)
+# 2. Truncate paper to Methods (more aggressive, may lose context)
+# 3. Escalate to user (always available as last resort)
+# ═══════════════════════════════════════════════════════════════════════
+
+class ContextOverflowError(Exception):
+    """
+    Raised when context would exceed safe limits and recovery failed.
+    
+    This exception signals that:
+    1. Estimated context exceeds CONTEXT_WINDOW_LIMITS["safe_paper_tokens"]
+    2. Automatic recovery was attempted (if recovery_attempted=True)
+    3. Manual intervention or user decision is required
+    
+    Attributes:
+        estimated_tokens: How many tokens were estimated
+        max_tokens: The safe limit that was exceeded
+        node: Which node/agent would have overflowed
+        recovery_attempted: Whether automatic recovery was tried
+        available_actions: List of recovery actions still possible
+    """
+    
+    def __init__(
+        self,
+        estimated_tokens: int,
+        max_tokens: int,
+        node: str,
+        recovery_attempted: bool = False,
+        available_actions: Optional[List[str]] = None
+    ):
+        self.estimated_tokens = estimated_tokens
+        self.max_tokens = max_tokens
+        self.node = node
+        self.recovery_attempted = recovery_attempted
+        self.available_actions = available_actions or []
+        
+        msg = (
+            f"Context overflow in {node}: {estimated_tokens:,} tokens "
+            f"exceeds safe limit of {max_tokens:,}."
+        )
+        if recovery_attempted:
+            msg += " Automatic recovery was attempted but insufficient."
+        if available_actions:
+            msg += f" Available actions: {', '.join(available_actions)}"
+            
+        super().__init__(msg)
+
+
+def estimate_context_for_node(
+    state: "ReproState",
+    node_name: str
+) -> Dict[str, Any]:
+    """
+    Estimate total context tokens that will be sent to LLM for a specific node.
+    
+    Different nodes receive different subsets of state, so context size varies.
+    This builds on the existing loop context estimation but adds node-specific
+    knowledge about what each agent receives.
+    
+    Args:
+        state: Current ReproState
+        node_name: Node about to execute (e.g., "plan", "design", "generate_code")
+        
+    Returns:
+        Dict with:
+        - estimated_tokens: Total estimated tokens
+        - breakdown: Dict showing token contribution by field
+        - status: "ok", "warning", or "critical"
+        - exceeds_limit: Boolean
+        
+    Example:
+        >>> result = estimate_context_for_node(state, "design")
+        >>> if result["exceeds_limit"]:
+        ...     actions = get_context_recovery_actions(...)
+    """
+    chars_per_token = CONTEXT_WINDOW_LIMITS["chars_per_token_estimate"]
+    safe_limit = CONTEXT_WINDOW_LIMITS["safe_paper_tokens"]
+    
+    breakdown: Dict[str, int] = {}
+    
+    # Base overhead (system prompt, response reserve)
+    breakdown["system_overhead"] = (
+        CONTEXT_WINDOW_LIMITS["system_prompt_reserve"] +
+        CONTEXT_WINDOW_LIMITS["response_reserve"]
+    )
+    
+    # Node-specific context
+    if node_name in ["plan", "adapt_prompts"]:
+        # These receive full paper text
+        paper_text = state.get("paper_text", "")
+        breakdown["paper_text"] = len(paper_text) // chars_per_token
+        
+    elif node_name in ["design", "generate_code", "review_design", "review_code"]:
+        # These receive design + feedback + relevant plan sections
+        breakdown["design_description"] = len(state.get("design_description", "") or "") // chars_per_token
+        breakdown["reviewer_feedback"] = len(state.get("reviewer_feedback", "") or "") // chars_per_token
+        breakdown["simulation_code"] = len(state.get("simulation_code", "") or "") // chars_per_token
+        
+        # Plan context (stage-specific, not full plan)
+        plan = state.get("plan", {})
+        current_stage = state.get("current_stage_id", "")
+        if plan and current_stage:
+            # Estimate stage context as subset of plan
+            breakdown["plan_context"] = 2000  # Typical stage context
+        else:
+            breakdown["plan_context"] = len(str(plan)) // chars_per_token
+            
+    elif node_name in ["analyze", "compare", "physics_sanity"]:
+        # These receive outputs + figures
+        breakdown["stage_outputs"] = 3000  # Typical outputs context
+        breakdown["paper_figures"] = 2000  # Figure context
+        breakdown["analysis_summary"] = len(state.get("analysis_summary", "") or "") // chars_per_token
+        
+    elif node_name == "supervisor":
+        # Supervisor receives summary of everything
+        breakdown["progress_summary"] = len(str(state.get("progress", {}))) // chars_per_token
+        breakdown["figure_comparisons"] = len(str(state.get("figure_comparisons", []))) // chars_per_token
+        
+    # Common context (assumptions, current stage info)
+    breakdown["assumptions"] = len(str(state.get("assumptions", {}))) // chars_per_token
+    breakdown["common_context"] = CONTEXT_WINDOW_LIMITS["state_context_reserve"]
+    
+    total_tokens = sum(breakdown.values())
+    
+    # Determine status
+    warning_threshold = int(safe_limit * 0.8)  # 80% of limit
+    if total_tokens >= safe_limit:
+        status = "critical"
+    elif total_tokens >= warning_threshold:
+        status = "warning"
+    else:
+        status = "ok"
+    
+    return {
+        "estimated_tokens": total_tokens,
+        "breakdown": breakdown,
+        "status": status,
+        "exceeds_limit": total_tokens >= safe_limit,
+        "safe_limit": safe_limit,
+        "tokens_over": max(0, total_tokens - safe_limit),
+    }
+
+
+def get_context_recovery_actions(
+    node_name: str,
+    estimated_tokens: int,
+    state: "ReproState"
+) -> List[Dict[str, Any]]:
+    """
+    Determine which recovery actions are available for a context overflow.
+    
+    Returns a list of actions in priority order. Does NOT mutate state.
+    The caller (typically a LangGraph node) decides which action to take
+    and applies the corresponding state updates.
+    
+    This design follows LangGraph patterns where:
+    - Utility functions analyze and recommend
+    - Nodes apply state changes through return values
+    
+    Args:
+        node_name: Node that would overflow
+        estimated_tokens: Current estimated tokens
+        state: Current state (read-only)
+        
+    Returns:
+        List of recovery actions, each with:
+        - action: Action identifier
+        - description: Human-readable description
+        - estimated_savings: Token savings estimate
+        - requires_llm_call: Whether LLM call is needed
+        - Additional action-specific fields
+        
+    Example:
+        >>> actions = get_context_recovery_actions("design", 180000, state)
+        >>> for action in actions:
+        ...     if action["estimated_savings"] >= tokens_over:
+        ...         apply_action(action)
+        ...         break
+    """
+    safe_limit = CONTEXT_WINDOW_LIMITS["safe_paper_tokens"]
+    tokens_over = estimated_tokens - safe_limit
+    chars_per_token = CONTEXT_WINDOW_LIMITS["chars_per_token_estimate"]
+    
+    actions: List[Dict[str, Any]] = []
+    
+    # ─── Action 1: Summarize feedback (safest) ───────────────────────────
+    # This preserves paper content and only condenses iteration history
+    feedback = state.get("reviewer_feedback", "") or ""
+    if len(feedback) > 2000:
+        # Estimate savings: keep ~500 chars worth of summary
+        current_tokens = len(feedback) // chars_per_token
+        after_tokens = 500 // chars_per_token
+        savings = current_tokens - after_tokens
+        
+        actions.append({
+            "action": "summarize_feedback",
+            "priority": 1,
+            "description": f"Summarize reviewer feedback ({len(feedback):,} chars → ~500 chars)",
+            "estimated_savings": savings,
+            "requires_llm_call": True,
+            "prompt": create_feedback_summary_prompt([feedback]),
+            "state_field": "reviewer_feedback",
+            "risk_level": "low",
+        })
+    
+    # ─── Action 2: Truncate old feedback history ─────────────────────────
+    # Less aggressive than summarization, just drops old iterations
+    if len(feedback) > 4000:
+        # Keep only last 2000 chars
+        current_tokens = len(feedback) // chars_per_token
+        after_tokens = 2000 // chars_per_token
+        savings = current_tokens - after_tokens
+        
+        actions.append({
+            "action": "truncate_feedback",
+            "priority": 2,
+            "description": f"Keep only recent feedback ({len(feedback):,} → 2000 chars)",
+            "estimated_savings": savings,
+            "requires_llm_call": False,
+            "truncation_rule": "keep_last_2000_chars",
+            "state_field": "reviewer_feedback",
+            "risk_level": "low",
+        })
+    
+    # ─── Action 3: Use methods section only ──────────────────────────────
+    # More aggressive - may lose context from other sections
+    paper_text = state.get("paper_text", "") or ""
+    if len(paper_text) > 30000:
+        current_tokens = len(paper_text) // chars_per_token
+        # Methods section typically 15-20K chars
+        estimated_methods_tokens = 5000
+        savings = current_tokens - estimated_methods_tokens
+        
+        actions.append({
+            "action": "truncate_paper_to_methods",
+            "priority": 3,
+            "description": f"Keep only Methods section ({len(paper_text):,} chars → ~20K chars)",
+            "estimated_savings": savings,
+            "requires_llm_call": False,
+            "extraction_note": "Use extract_methods_section() from paper_loader.py",
+            "state_field": "paper_text",
+            "risk_level": "medium",
+            "warning": "May lose important context from Results/Discussion sections",
+        })
+    
+    # ─── Action 4: Clear non-critical working fields ─────────────────────
+    # Clear fields that can be regenerated
+    clearable_fields = []
+    clearable_savings = 0
+    
+    # Only suggest clearing fields that aren't needed for current node
+    if node_name not in ["analyze", "compare"]:
+        analysis_summary = state.get("analysis_summary", "") or ""
+        if len(analysis_summary) > 1000:
+            clearable_fields.append("analysis_summary")
+            clearable_savings += len(analysis_summary) // chars_per_token
+    
+    if clearable_fields and clearable_savings > 500:
+        actions.append({
+            "action": "clear_working_fields",
+            "priority": 4,
+            "description": f"Clear regenerable fields: {', '.join(clearable_fields)}",
+            "estimated_savings": clearable_savings,
+            "requires_llm_call": False,
+            "fields_to_clear": clearable_fields,
+            "risk_level": "medium",
+            "warning": "These fields will need to be regenerated if needed later",
+        })
+    
+    # ─── Action 5: Escalate to user (always available) ───────────────────
+    actions.append({
+        "action": "escalate_to_user",
+        "priority": 99,  # Always last
+        "description": "Ask user how to proceed",
+        "estimated_savings": 0,  # Depends on user choice
+        "requires_llm_call": False,
+        "user_question": _build_overflow_user_question(
+            node_name, estimated_tokens, safe_limit, actions
+        ),
+        "risk_level": "none",
+        "interrupt_type": "ask_user",
+    })
+    
+    # Sort by priority
+    actions.sort(key=lambda x: x["priority"])
+    
+    return actions
+
+
+def _build_overflow_user_question(
+    node_name: str,
+    estimated_tokens: int,
+    safe_limit: int,
+    available_actions: List[Dict[str, Any]]
+) -> str:
+    """Build the user question for escalation action."""
+    
+    options = []
+    for i, action in enumerate(available_actions, 1):
+        if action["action"] == "escalate_to_user":
+            continue
+        risk = action.get("risk_level", "unknown")
+        savings = action.get("estimated_savings", 0)
+        options.append(f"{i}. {action['description']} (saves ~{savings:,} tokens, risk: {risk})")
+    
+    options.append(f"{len(options) + 1}. Skip this stage and continue")
+    options.append(f"{len(options) + 2}. Stop reproduction")
+    
+    return f"""Context overflow detected in {node_name}.
+
+**Current estimate:** {estimated_tokens:,} tokens
+**Safe limit:** {safe_limit:,} tokens  
+**Over by:** {estimated_tokens - safe_limit:,} tokens
+
+Available recovery options:
+{chr(10).join(options)}
+
+Which option should we use? (Enter number or describe custom approach)"""
+
+
+def check_context_before_node(
+    state: "ReproState",
+    node_name: str,
+    auto_recover: bool = True
+) -> Dict[str, Any]:
+    """
+    Check context limits before executing a node and optionally auto-recover.
+    
+    This is the main entry point for context management. Call this at the
+    start of each LangGraph node that makes LLM calls.
+    
+    Args:
+        state: Current ReproState
+        node_name: Node about to execute
+        auto_recover: If True, attempt automatic recovery for low-risk actions
+        
+    Returns:
+        Dict with:
+        - ok: Boolean, True if safe to proceed
+        - estimation: Full estimation result
+        - recovery_applied: None or the action that was applied
+        - state_updates: Dict of state changes to apply (if recovery needed)
+        - escalate: Boolean, True if user intervention needed
+        
+    Example (in a LangGraph node):
+        >>> def design_node(state):
+        ...     check = check_context_before_node(state, "design")
+        ...     if check["escalate"]:
+        ...         return {
+        ...             "pending_user_questions": [check["user_question"]],
+        ...             "awaiting_user_input": True,
+        ...         }
+        ...     if check["state_updates"]:
+        ...         state = {**state, **check["state_updates"]}
+        ...     # Continue with normal node logic...
+    """
+    estimation = estimate_context_for_node(state, node_name)
+    
+    result: Dict[str, Any] = {
+        "ok": True,
+        "estimation": estimation,
+        "recovery_applied": None,
+        "state_updates": {},
+        "escalate": False,
+        "user_question": None,
+    }
+    
+    if estimation["status"] == "ok":
+        return result
+    
+    if estimation["status"] == "warning":
+        # Log warning but proceed
+        import logging
+        logging.getLogger(__name__).warning(
+            f"Context warning in {node_name}: {estimation['estimated_tokens']:,} tokens "
+            f"({estimation['status']})"
+        )
+        return result
+    
+    # Critical - need recovery
+    result["ok"] = False
+    
+    actions = get_context_recovery_actions(
+        node_name, 
+        estimation["estimated_tokens"],
+        state
+    )
+    
+    if not auto_recover:
+        # Return actions for caller to decide
+        result["available_actions"] = actions
+        return result
+    
+    # Attempt auto-recovery with low-risk actions
+    for action in actions:
+        if action.get("risk_level") != "low":
+            continue
+        if action.get("requires_llm_call"):
+            continue  # Can't auto-apply LLM-dependent actions
+            
+        # Apply this action
+        if action["action"] == "truncate_feedback":
+            feedback = state.get("reviewer_feedback", "") or ""
+            result["state_updates"]["reviewer_feedback"] = feedback[-2000:]
+            result["recovery_applied"] = action
+            result["ok"] = True
+            
+            import logging
+            logging.getLogger(__name__).info(
+                f"Auto-recovered from context overflow: {action['description']}"
+            )
+            return result
+    
+    # No auto-recovery worked - escalate to user
+    escalate_action = next(
+        (a for a in actions if a["action"] == "escalate_to_user"),
+        None
+    )
+    
+    if escalate_action:
+        result["escalate"] = True
+        result["user_question"] = escalate_action["user_question"]
+        result["available_actions"] = actions
+    
+    return result
 
 
 def format_thresholds_table() -> str:

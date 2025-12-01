@@ -13,20 +13,20 @@ The system uses a state graph where each node represents an agent action or syst
 
 | Agent | Node | Role |
 |-------|------|------|
-| PromptAdaptorAgent | ADAPT_PROMPTS | Customizes prompts for paper-specific needs |
-| PlannerAgent | PLAN | Reads paper, creates staged plan |
-| SimulationDesignerAgent | DESIGN | Designs simulation setup |
+| PromptAdaptorAgent | adapt_prompts | Customizes prompts for paper-specific needs |
+| PlannerAgent | plan | Reads paper, creates staged plan |
+| SimulationDesignerAgent | design | Designs simulation setup |
 | CodeReviewerAgent | CODE_REVIEW | Reviews design and code |
-| CodeGeneratorAgent | GENERATE_CODE | Writes Python+Meep code |
+| CodeGeneratorAgent | generate_code | Writes Python+Meep code |
 | ExecutionValidatorAgent | EXECUTION_CHECK | Validates simulation ran correctly |
-| PhysicsSanityAgent | PHYSICS_CHECK | Validates physics (conservation, value ranges) |
-| ResultsAnalyzerAgent | ANALYZE | Compares results to paper |
+| PhysicsSanityAgent | physics_check | Validates physics (conservation, value ranges) |
+| ResultsAnalyzerAgent | analyze | Compares results to paper |
 | ComparisonValidatorAgent | COMPARISON_CHECK | Validates comparison accuracy |
-| SupervisorAgent | SUPERVISOR | Big-picture decisions |
+| SupervisorAgent | supervisor | Big-picture decisions |
 
 ## Node Definitions
 
-### 1. ADAPT_PROMPTS Node (PromptAdaptorAgent)
+### 1. adapt_prompts Node (PromptAdaptorAgent)
 
 **Purpose**: Customize agent prompts for paper-specific requirements
 
@@ -61,11 +61,11 @@ The system uses a state graph where each node represents an agent action or syst
 - All changes logged for review
 
 **Transitions**:
-- → PLAN (always)
+- → plan (always)
 
 ---
 
-### 2. PLAN Node (PlannerAgent)
+### 2. plan Node (PlannerAgent)
 
 **Purpose**: Analyze paper and create reproduction plan (using adapted prompt)
 
@@ -86,7 +86,7 @@ The system uses a state graph where each node represents an agent action or syst
 
 ---
 
-### 3. SELECT_STAGE Node
+### 3. select_stage Node
 
 **Purpose**: Choose next stage to execute based on dependencies, status, validation hierarchy, budget, and backtracking state
 
@@ -94,9 +94,21 @@ The system uses a state graph where each node represents an agent action or syst
 ```python
 def select_next_stage(state):
     # ─── PRIORITY 1: Handle backtracked stages ───────────────────────────
-    # Stages marked "needs_rerun" from backtracking take priority
+    # Stages marked "needs_rerun" from backtracking take priority.
+    # INVARIANT: A needs_rerun stage should never have invalidated dependencies
+    # because handle_backtrack marks the target as needs_rerun AFTER marking
+    # all dependents as invalidated. If this invariant is violated, it indicates
+    # a bug in handle_backtrack logic.
     for stage in state["plan"]["stages"]:
         if stage["status"] == "needs_rerun":
+            # Safety check (should never happen if handle_backtrack is correct)
+            for dep in stage.get("dependencies", []):
+                dep_status = get_stage_status(dep)
+                if dep_status == "invalidated":
+                    raise ValueError(
+                        f"BUG: needs_rerun stage {stage['stage_id']} has "
+                        f"invalidated dependency {dep}. This should not happen."
+                    )
             return stage["stage_id"]
     
     # ─── PRIORITY 2: Check for invalidated stages ready to re-run ────────
@@ -171,12 +183,12 @@ def select_next_stage(state):
 | invalidated | Stage results invalid, will re-run when deps ready |
 
 **Transitions**:
-- → DESIGN (has next stage)
-- → GENERATE_REPORT (no more stages)
+- → design (has next stage)
+- → generate_report (no more stages)
 
 ---
 
-### 4. DESIGN Node (SimulationDesignerAgent)
+### 4. design Node (SimulationDesignerAgent)
 
 **Purpose**: Design simulation setup for current stage (no code generation)
 
@@ -203,14 +215,14 @@ def select_next_stage(state):
 
 **Why one agent for all reviews?** A single CodeReviewerAgent handles plan, design, and code review because all tasks require the same technical expertise (Meep API knowledge, physics constraints, validation hierarchy understanding). The `review_context` field determines which checklist to use.
 
-**When reviewing PLAN** (`review_context = "plan"`):
+**When reviewing plan** (`review_context = "plan"`):
 - [ ] All key simulation-reproducible figures identified
 - [ ] Validation hierarchy respected (Stage 0 first)
 - [ ] Stage dependencies make sense
 - [ ] Runtime budgets realistic
 - [ ] Assumptions properly initialized
 
-**When reviewing DESIGN** (`review_context = "design"`):
+**When reviewing design** (`review_context = "design"`):
 - [ ] Geometry matches paper interpretation
 - [ ] Materials correctly selected with sources
 - [ ] Source configuration appropriate
@@ -231,23 +243,23 @@ def select_next_stage(state):
 - `reviewer_feedback`: Detailed feedback
 
 **Transitions** (after plan review):
-- → SELECT_STAGE (approved)
-- → PLAN (needs revision, replan_count < 2)
-- → ASK_USER (needs revision, replan_count >= 2)
+- → select_stage (approved)
+- → plan (needs revision, replan_count < 2)
+- → ask_user (needs revision, replan_count >= 2)
 
 **Transitions** (after design review):
-- → GENERATE_CODE (approved)
-- → DESIGN (needs revision, count < 3)
-- → ASK_USER (needs revision, count >= 3)
+- → generate_code (approved)
+- → design (needs revision, count < 3)
+- → ask_user (needs revision, count >= 3)
 
 **Transitions** (after code review):
-- → RUN_CODE (approved)
-- → GENERATE_CODE (needs revision, count < 3)
-- → ASK_USER (needs revision, count >= 3)
+- → run_code (approved)
+- → generate_code (needs revision, count < 3)
+- → ask_user (needs revision, count >= 3)
 
 ---
 
-### 6. GENERATE_CODE Node (CodeGeneratorAgent)
+### 6. generate_code Node (CodeGeneratorAgent)
 
 **Purpose**: Generate Python+Meep code from approved design
 
@@ -265,7 +277,7 @@ def select_next_stage(state):
 
 ---
 
-### 7. RUN_CODE Node (Python Execution)
+### 7. run_code Node (Python Execution)
 
 **Purpose**: Execute the simulation code in a sandboxed subprocess
 
@@ -290,7 +302,7 @@ def get_current_stage(state):
 
 def run_code_node(state):
     """
-    LangGraph node for RUN_CODE.
+    LangGraph node for run_code.
     
     Sandboxing features:
     - Subprocess isolation
@@ -353,7 +365,7 @@ See `docs/guidelines.md` Section 14 for sandboxing details and future Docker sup
 
 **Architectural Note**: This agent is the **SINGLE POINT for failure interpretation**.
 
-- `RUN_CODE` returns raw results (`stage_outputs`, `run_error`) without interpretation
+- `run_code` returns raw results (`stage_outputs`, `run_error`) without interpretation
 - `ExecutionValidatorAgent` is the only agent that decides:
   - Whether to retry code generation (recoverable error)
   - Whether to escalate to user (unknown error)
@@ -374,13 +386,13 @@ See `docs/guidelines.md` Section 14 for sandboxing details and future Docker sup
 - `proceed_to_physics`: Boolean
 
 **Transitions**:
-- → PHYSICS_CHECK (pass or warning)
-- → GENERATE_CODE (fail, recoverable error)
-- → ASK_USER (fail, unknown error or limit reached)
+- → physics_check (pass or warning)
+- → generate_code (fail, recoverable error)
+- → ask_user (fail, unknown error or limit reached)
 
 ---
 
-### 9. PHYSICS_CHECK Node (PhysicsSanityAgent)
+### 9. physics_check Node (PhysicsSanityAgent)
 
 **Purpose**: Validate that results are physically reasonable (before comparison)
 
@@ -397,13 +409,13 @@ See `docs/guidelines.md` Section 14 for sandboxing details and future Docker sup
 - `proceed_to_analysis`: Boolean
 
 **Transitions**:
-- → ANALYZE (pass or warning)
-- → GENERATE_CODE (fail, suggests code issue)
-- → ASK_USER (fail, unknown cause)
+- → analyze (pass or warning)
+- → generate_code (fail, suggests code issue)
+- → ask_user (fail, unknown cause)
 
 ---
 
-### 10. ANALYZE Node (ResultsAnalyzerAgent)
+### 10. analyze Node (ResultsAnalyzerAgent)
 
 **Purpose**: Compare results to paper and classify reproduction quality
 
@@ -449,13 +461,13 @@ See `docs/guidelines.md` Section 14 for sandboxing details and future Docker sup
 - `issues`: List of problems found
 
 **Transitions**:
-- → SUPERVISOR (approved)
-- → ANALYZE (needs revision, count < 2)
-- → SUPERVISOR (needs revision, count >= 2, with flag)
+- → supervisor (approved)
+- → analyze (needs revision, count < 2)
+- → supervisor (needs revision, count >= 2, with flag)
 
 ---
 
-### 12. SUPERVISOR Node (SupervisorAgent)
+### 12. supervisor Node (SupervisorAgent)
 
 **Purpose**: Big-picture assessment and strategic decisions
 
@@ -514,7 +526,7 @@ elif user_response.verdict == "change_material":
     state["progress"]["stages"]["stage0"]["status"] = "needs_rerun"
     state["backtrack_count"] += 1
     
-    # Route to PLAN to update material selection
+    # Route to plan to update material selection
     return "plan"
 
 elif user_response.verdict == "need_help":
@@ -532,13 +544,13 @@ elif user_response.verdict == "need_help":
 **Transitions**:
 | Verdict | Next Node | Notes |
 |---------|-----------|-------|
-| ok_continue | SELECT_STAGE | (Cannot use after Stage 0) |
-| change_priority | SELECT_STAGE (reordered) | |
-| replan_needed | PLAN (if count < 2) | |
-| replan_needed | ASK_USER (if count >= 2) | |
-| backtrack_to_stage | HANDLE_BACKTRACK | Cross-stage backtracking |
-| ask_user | ASK_USER | (MANDATORY after Stage 0) |
-| all_complete | GENERATE_REPORT | |
+| ok_continue | select_stage | (Cannot use after Stage 0) |
+| change_priority | select_stage (reordered) | |
+| replan_needed | plan (if count < 2) | |
+| replan_needed | ask_user (if count >= 2) | |
+| backtrack_to_stage | handle_backtrack | Cross-stage backtracking |
+| ask_user | ask_user | (MANDATORY after Stage 0) |
+| all_complete | generate_report | |
 
 **CRITICAL: Validation Hierarchy Synchronization**
 
@@ -565,11 +577,42 @@ stage["status"] = "completed_success"
 update_validation_hierarchy(state, stage["stage_id"], state["plan"]["stages"])
 ```
 
-**Why this matters**: `SELECT_STAGE` uses `validation_hierarchy` to enforce dependencies. If it's out of sync with actual stage status, stages may be blocked incorrectly or allowed to run prematurely.
+**Why this matters**: `select_stage` uses `validation_hierarchy` to enforce dependencies. If it's out of sync with actual stage status, stages may be blocked incorrectly or allowed to run prematurely.
+
+#### Hierarchy Sync Verification
+
+To catch bugs where `update_validation_hierarchy()` was not called, use the verification functions:
+
+```python
+from schemas.state import (
+    verify_hierarchy_sync,
+    verify_hierarchy_sync_or_raise,
+    repair_hierarchy_sync,
+    HierarchySyncError
+)
+
+# Option 1: Check and log (non-blocking)
+issues = verify_hierarchy_sync(state)
+if issues:
+    logging.warning(f"Hierarchy sync issues detected: {issues}")
+
+# Option 2: Fail fast (recommended in select_stage)
+verify_hierarchy_sync_or_raise(state)  # Raises HierarchySyncError if issues
+
+# Option 3: Auto-repair (use with caution)
+issues = verify_hierarchy_sync(state)
+if issues:
+    repairs = repair_hierarchy_sync(state)
+    logging.warning(f"Auto-repaired hierarchy sync: {repairs}")
+```
+
+**Recommended Usage**: Call `verify_hierarchy_sync_or_raise(state)` at the start of 
+`select_stage` to fail fast if hierarchy is out of sync. This catches bugs early
+rather than allowing stages to run with incorrect dependencies.
 
 ---
 
-### 13. HANDLE_BACKTRACK Node
+### 13. handle_backtrack Node
 
 **Purpose**: Process cross-stage backtracking when Supervisor accepts a backtrack suggestion
 
@@ -626,7 +669,7 @@ def handle_backtrack(state):
 - Cleared working data
 
 **Transitions**:
-- → SELECT_STAGE (always)
+- → select_stage (always)
 
 #### Backtracking Semantics Reference
 
@@ -678,7 +721,7 @@ This table summarizes when each agent can propose backtracking and what typicall
 
 ---
 
-### 14. ASK_USER Node
+### 14. ask_user Node
 
 **Purpose**: Pause for user input and log decisions
 
@@ -732,7 +775,7 @@ def log_user_interaction(state, question, response, interaction_type):
 
 ---
 
-### 14. GENERATE_REPORT Node (SupervisorAgent)
+### 14. generate_report Node (SupervisorAgent)
 
 **Purpose**: Compile final reproduction report
 
@@ -771,18 +814,18 @@ def log_user_interaction(state, question, response, interaction_type):
                                            │
                                            ▼
                                     ┌─────────────┐
-                                    │ADAPT_PROMPTS│
+                                    │adapt_prompts│
                                     │(PromptAdapt)│
                                     └──────┬──────┘
                                            │
                                            ▼
                                     ┌─────────────┐
-                              ┌─────│    PLAN     │◄────────────────┐
+                              ┌─────│    plan     │◄────────────────┐
                               │     └──────┬──────┘                 │
                               │            │                        │
                               │            ▼                        │
                               │     ┌─────────────┐                 │
-                              │     │SELECT_STAGE │                 │
+                              │     │select_stage │                 │
                               │     └──────┬──────┘                 │
                               │            │                        │
                               │     ┌──────┴──────┐                 │
@@ -802,7 +845,7 @@ def log_user_interaction(state, question, response, interaction_type):
                               │     │                               │
                               │     ▼                               │
                               │  ┌─────────────┐                    │
-                     ┌────────┴─►│   DESIGN    │◄─────────┐         │
+                     ┌────────┴─►│   design    │◄─────────┐         │
                      │           │(Sim Designer)│         │         │
                      │           └──────┬──────┘          │         │
                      │                  │                 │         │
@@ -821,7 +864,7 @@ def log_user_interaction(state, question, response, interaction_type):
                      │        │                   │                 │
                      │        ▼                   │                 │
                      │  ┌─────────────┐           │                 │
-                     │  │GENERATE_CODE│◄──────┐   │                 │
+                     │  │generate_code│◄──────┐   │                 │
                      │  │(CodeGenerator)│     │   │                 │
                      │  └──────┬──────┘       │   │                 │
                      │         │              │   │                 │
@@ -840,7 +883,7 @@ def log_user_interaction(state, question, response, interaction_type):
                      │    │         │             │                 │
                      │    ▼         ▼             │                 │
                      │  ┌─────────────┐    ┌─────────────┐          │
-                     │  │  RUN_CODE   │    │  ASK_USER   │◄─────┐   │
+                     │  │  run_code   │    │  ask_user   │◄─────┐   │
                      │  └──────┬──────┘    └──────┬──────┘      │   │
                      │         │                  │             │   │
                      │         ▼                  │             │   │
@@ -858,7 +901,7 @@ def log_user_interaction(state, question, response, interaction_type):
                      │    │                       │             │   │
                      │    ▼                       │             │   │
                      │  ┌─────────────┐           │             │   │
-                     │  │PHYSICS_CHECK│           │             │   │
+                     │  │physics_check│           │             │   │
                      │  │(PhysSanity) │           │             │   │
                      │  └──────┬──────┘           │             │   │
                      │         │                  │             │   │
@@ -871,13 +914,13 @@ def log_user_interaction(state, question, response, interaction_type):
                      │    │                       │             │   │
                      │    ▼                       │             │   │
                      │  ┌─────────────┐           │             │   │
-                     │  │  ANALYZE    │◄──────────┼─────┐       │   │
+                     │  │  analyze    │◄──────────┼─────┐       │   │
                      │  │(ResultsAnalyzer)│       │     │       │   │
                      │  └──────┬──────┘           │     │       │   │
                      │         │                  │     │       │   │
                      │         ▼                  │     │       │   │
                      │  ┌─────────────┐           │     │       │   │
-                     │  │COMPARE_CHECK│           │     │       │   │
+                     │  │compare_CHECK│           │     │       │   │
                      │  │(CompValidator)│         │     │       │   │
                      │  └──────┬──────┘           │     │       │   │
                      │         │                  │     │       │   │
@@ -890,7 +933,7 @@ def log_user_interaction(state, question, response, interaction_type):
                      │    │                       │             │   │
                      │    ▼                       │             │   │
                      │  ┌─────────────┐           │             │   │
-                     │  │ SUPERVISOR  │───────────┴─────────────┘   │
+                     │  │ supervisor  │───────────┴─────────────┘   │
                      │  └──────┬──────┘                             │
                      │         │                                    │
                      │    ┌────┴────────────┐                       │
@@ -909,27 +952,27 @@ This section documents which nodes mutate which state fields, when state is pers
 
 | Node | Reads | Writes |
 |------|-------|--------|
-| ADAPT_PROMPTS | paper_text, paper_domain | prompt_adaptations |
-| PLAN | paper_text, assumptions | plan, assumptions, extracted_parameters, validation_hierarchy |
-| SELECT_STAGE | plan, validation_hierarchy | current_stage_id, current_stage_type |
-| DESIGN | plan, assumptions, reviewer_feedback | design_description, performance_estimate, new_assumptions |
+| adapt_prompts | paper_text, paper_domain | prompt_adaptations |
+| plan | paper_text, assumptions | plan, assumptions, extracted_parameters, validation_hierarchy |
+| select_stage | plan, validation_hierarchy | current_stage_id, current_stage_type |
+| design | plan, assumptions, reviewer_feedback | design_description, performance_estimate, new_assumptions |
 | CODE_REVIEW | design_description, code | reviewer_verdict, reviewer_issues, reviewer_feedback |
-| GENERATE_CODE | design_description, reviewer_feedback | code |
-| RUN_CODE | code | stage_outputs, run_error, runtime_seconds |
+| generate_code | design_description, reviewer_feedback | code |
+| run_code | code | stage_outputs, run_error, runtime_seconds |
 | EXECUTION_CHECK | stage_outputs, run_error | execution_valid, execution_issues |
 | PHYSICS_SANITY | stage_outputs | physics_valid, physics_issues |
-| ANALYZE | stage_outputs, paper_figures | analysis_summary, figure_comparisons, discrepancies_log |
+| analyze | stage_outputs, paper_figures | analysis_summary, figure_comparisons, discrepancies_log |
 | COMPARISON_CHECK | figure_comparisons, analysis_summary | comparison_valid, comparison_issues |
-| SUPERVISOR | analysis_summary, validation_hierarchy | supervisor_verdict, progress, stage status updates |
-| ASK_USER | user_question | user_response, awaiting_user_input |
-| GENERATE_REPORT | figure_comparisons, progress | report_conclusions, final_report_path |
+| supervisor | analysis_summary, validation_hierarchy | supervisor_verdict, progress, stage status updates |
+| ask_user | user_question | user_response, awaiting_user_input |
+| generate_report | figure_comparisons, progress | report_conclusions, final_report_path |
 
 ### State Persistence Rules
 
 1. **In-Memory State**: All fields in `ReproState` are in-memory during execution
 2. **Disk Sync Points**:
    - `plan`, `assumptions`, `progress` are synced to JSON files at checkpoints
-   - `figure_comparisons` aggregated into report at GENERATE_REPORT
+   - `figure_comparisons` aggregated into report at generate_report
    - `metrics` appended to log file at each agent call
 3. **Canonical Sources**:
    - `plan["extracted_parameters"]` is canonical; `state.extracted_parameters` is synced view
@@ -967,11 +1010,11 @@ def run_node_with_validation(state: ReproState, node_name: str, node_fn: Callabl
 
 | Checkpoint Name | Trigger Location | Contents Saved |
 |-----------------|------------------|----------------|
-| `after_plan` | After PLAN node | Full state with plan, assumptions |
+| `after_plan` | After plan node | Full state with plan, assumptions |
 | `after_stage0_user_confirm` | After user confirms materials | State + user confirmation |
-| `after_stage_N_complete` | After each SUPERVISOR approval | Full state with stage progress |
-| `before_ask_user` | Before ASK_USER node | Full state for resume |
-| `final_report` | After GENERATE_REPORT | Full state + report path |
+| `after_stage_N_complete` | After each supervisor approval | Full state with stage progress |
+| `before_ask_user` | Before ask_user node | Full state for resume |
+| `final_report` | After generate_report | Full state + report path |
 
 ## State Persistence
 
@@ -995,16 +1038,19 @@ workflow.compile(checkpointer=checkpointer, interrupt_before=["ask_user"])
 
 ```
 outputs/<paper_id>/
-├── plan_<paper_id>.json
-├── assumptions_<paper_id>.json
-├── progress_<paper_id>.json
-└── checkpoints/checkpoint_*.json
+├── _artifact_plan.json           # Underscore prefix = artifact (not for execution)
+├── _artifact_assumptions.json
+├── _artifact_progress.json
+└── checkpoints/checkpoint_*.json  # LangGraph checkpoints (resumable)
 ```
 
 **Purpose**: Human-readable artifacts, debugging, manual inspection
 **Used for**: Reviewing what happened, debugging failures, archival
 **Scope**: Selected state fields (plan, assumptions, progress)
-**Managed by**: Explicit `save_checkpoint()` calls in routing functions
+**Managed by**: `src/persistence.py` module with safety guards
+
+**File Naming Convention**: Artifact files use `_artifact_` prefix to make it 
+visually obvious they are not for loading during execution.
 
 #### Why This Matters (Potential Sync Issues)
 
@@ -1035,11 +1081,41 @@ These two systems can get out of sync:
    - Called at strategic points for human inspection
    - Does not affect graph execution flow
 
+#### Enforcement via `src/persistence.py`
+
+The `src/persistence.py` module enforces these rules programmatically:
+
+```python
+from src.persistence import (
+    save_artifact,              # ✅ Safe: writing artifacts
+    read_artifact_for_debugging, # ⚠️ Warning: for debugging only
+    load_plan_from_disk,        # ❌ FORBIDDEN: always raises error
+)
+
+# ✅ CORRECT: Save artifacts for human review
+save_artifact(state["plan"], path, "plan")
+
+# ⚠️ FOR DEBUGGING ONLY: Reads with warning
+plan = read_artifact_for_debugging(path, caller="debug_session")
+# → Prints warning: "This data may be out of sync..."
+
+# ❌ FORBIDDEN: These ALWAYS raise DiskReadForbiddenError
+plan = load_plan_from_disk("paper_123")  # Raises error!
+# → "FORBIDDEN: Cannot load plan from disk for execution..."
+```
+
+**Why trap functions exist**: If someone accidentally tries to load state from
+disk during execution, they get a clear error with instructions instead of
+subtle state divergence bugs that are hard to debug.
+
+**Audit trail**: All artifact reads are logged to `_artifact_access_log.txt`
+in the paper's output directory for debugging and auditing.
+
 ### Checkpointing
 
 The graph supports checkpointing at key points:
 - `after_plan`: After PlannerAgent completes the reproduction plan
-- `after_stage_complete`: After each stage completes (SUPERVISOR node)
+- `after_stage_complete`: After each stage completes (supervisor node)
 - `before_ask_user`: Before pausing for user input
 
 ### Checkpoint Functions
@@ -1070,10 +1146,10 @@ When resuming from a checkpoint:
 1. Load state from checkpoint file
 2. Identify current workflow phase from `workflow_phase` field
 3. Resume execution at the appropriate node:
-   - `"planning"` → Resume at PLAN node
-   - `"design"` → Resume at DESIGN node
-   - `"running"` → Resume at RUN_CODE node
-   - `"analysis"` → Resume at ANALYZE node
+   - `"planning"` → Resume at plan node
+   - `"design"` → Resume at design node
+   - `"running"` → Resume at run_code node
+   - `"analysis"` → Resume at analyze node
    - etc.
 
 ### Checkpoint File Structure
@@ -1089,12 +1165,13 @@ outputs/<paper_id>/checkpoints/
 
 ### File Outputs
 
-State is mirrored to JSON files:
+State is mirrored to artifact files (managed by `src/persistence.py`):
 ```
 outputs/<paper_id>/
-├── plan_<paper_id>.json
-├── assumptions_<paper_id>.json
-├── progress_<paper_id>.json
+├── _artifact_plan.json
+├── _artifact_assumptions.json
+├── _artifact_progress.json
+├── _artifact_access_log.txt       # Audit trail for debugging reads
 ├── stage0_material_validation/
 │   ├── design.json
 │   ├── code.py
@@ -1148,7 +1225,7 @@ if execution_failed:
 ```
 
 **Note**: Both `code_revision_count` and `execution_failure_count` are reset per stage. 
-Additionally, `execution_failure_count` resets when user intervenes via ASK_USER.
+Additionally, `execution_failure_count` resets when user intervenes via ask_user.
 Global tracking via `total_execution_failures` preserves the full count for metrics/reporting.
 See "Counter Scoping and Reset Behavior" section below for full details.
 
@@ -1176,16 +1253,17 @@ This matrix defines the system behavior for various error scenarios and edge cas
 
 | Scenario | Behavior | Limit | Escalation |
 |----------|----------|-------|------------|
-| **Simulation execution fails (crash/timeout)** | Increment `execution_failure_count`. Regenerate code with error context. After limit, escalate to user. | `max_execution_failures` (default: 2) | ASK_USER |
-| **Code review rejects code** | Increment `code_revision_count`. Regenerate with reviewer feedback. After limit, escalate. | `MAX_CODE_REVISIONS` (3) | ASK_USER |
-| **PHYSICS_CHECK fails repeatedly** | After 2 failures at same stage, escalate to SUPERVISOR with `physics_stuck` flag. Supervisor can try alternative approach or ask user. | 2 per stage | SUPERVISOR → ASK_USER |
-| **User doesn't respond to ASK_USER** | Timeout after configurable period (default: 24 hours). Auto-save checkpoint, pause workflow. Can be resumed later. | 24 hours (default) | Checkpoint + Pause |
+| **Simulation execution fails (crash/timeout)** | Increment `execution_failure_count`. Regenerate code with error context. After limit, escalate to user. | `max_execution_failures` (default: 2) | ask_user |
+| **Code review rejects code** | Increment `code_revision_count`. Regenerate with reviewer feedback. After limit, escalate. | `MAX_CODE_REVISIONS` (3) | ask_user |
+| **physics_check fails repeatedly** | After 2 failures at same stage, escalate to supervisor with `physics_stuck` flag. Supervisor can try alternative approach or ask user. | 2 per stage | supervisor → ask_user |
+| **User doesn't respond to ask_user** | Timeout after configurable period (default: 24 hours). Auto-save checkpoint, pause workflow. Can be resumed later. | 24 hours (default) | Checkpoint + Pause |
 | **Total runtime exceeded** | Hard abort after `max_total_runtime_hours`. Save checkpoint, generate partial report with whatever results are available. | 8 hours (default) | Partial report |
-| **Consecutive stage failures** | After 2 consecutive stage failures (different stages), trigger replanning via SUPERVISOR | 2 consecutive | SUPERVISOR → PLAN |
-| **Memory exhaustion during simulation** | Capture error, increment `execution_failure_count`, suggest resolution reduction or cell size adjustment. | `max_execution_failures` | ASK_USER |
+| **Consecutive stage failures** | After 2 consecutive stage failures (different stages), trigger replanning via supervisor | 2 consecutive | supervisor → plan |
+| **Memory exhaustion during simulation** | Capture error, increment `execution_failure_count`, suggest resolution reduction or cell size adjustment. | `max_execution_failures` | ask_user |
+| **LLM context overflow** | Auto-recovery attempts: 1) truncate feedback, 2) summarize paper. If insufficient, escalate to user with options. | `safe_paper_tokens` (140K) | ask_user |
 | **LLM rate limit or timeout** | Retry with exponential backoff (1s, 2s, 4s, 8s, 16s). After 5 retries, save checkpoint and pause. | 5 retries | Checkpoint + Pause |
-| **Invalid JSON from LLM** | Retry same call up to 3 times. If still failing, escalate to user with raw output for debugging. | 3 retries | ASK_USER |
-| **File I/O errors** | Log error, attempt alternate paths. If critical file (checkpoint, output), escalate immediately. | N/A | ASK_USER |
+| **Invalid JSON from LLM** | Retry same call up to 3 times. If still failing, escalate to user with raw output for debugging. | 3 retries | ask_user |
+| **File I/O errors** | Log error, attempt alternate paths. If critical file (checkpoint, output), escalate immediately. | N/A | ask_user |
 
 ### Counter Scoping and Reset Behavior
 
@@ -1218,6 +1296,86 @@ def handle_user_intervention(state):
     # User guidance = fresh start for this stage
     state["execution_failure_count"] = 0
     # code_revision_count may or may not reset depending on intervention type
+```
+
+### Context Overflow Recovery
+
+Long papers (100K+ chars) combined with accumulated feedback during revision loops can 
+exceed the LLM's context window, causing cryptic API failures. The system includes 
+proactive context management to prevent and recover from overflow situations.
+
+#### Context Estimation
+
+Before each LLM call, estimate context size:
+
+```python
+from schemas.state import check_context_before_node
+
+def some_node(state):
+    # Check context before making LLM calls
+    check = check_context_before_node(state, "design")
+    
+    if check["escalate"]:
+        # Context too large, user intervention needed
+        return {
+            "pending_user_questions": [check["user_question"]],
+            "awaiting_user_input": True,
+        }
+    
+    if check["state_updates"]:
+        # Auto-recovery was applied, merge updates
+        state = {**state, **check["state_updates"]}
+    
+    # Proceed with normal node logic...
+```
+
+#### Recovery Actions (Priority Order)
+
+| Priority | Action | Risk | Requires LLM | Description |
+|----------|--------|------|--------------|-------------|
+| 1 | `summarize_feedback` | Low | Yes | Condense reviewer feedback to ~500 chars using LLM |
+| 2 | `truncate_feedback` | Low | No | Keep only last 2000 chars of feedback |
+| 3 | `truncate_paper_to_methods` | Medium | No | Keep only Methods section of paper |
+| 4 | `clear_working_fields` | Medium | No | Clear regenerable fields like `analysis_summary` |
+| 5 | `escalate_to_user` | None | No | Present options to user for decision |
+
+#### User Escalation
+
+When automatic recovery is insufficient, the user sees:
+
+```
+Context overflow detected in design.
+
+**Current estimate:** 185,000 tokens
+**Safe limit:** 140,000 tokens  
+**Over by:** 45,000 tokens
+
+Available recovery options:
+1. Summarize reviewer feedback (12,500 chars → ~500 chars) (saves ~3,000 tokens, risk: low)
+2. Keep only Methods section (95,000 chars → ~20K chars) (saves ~18,750 tokens, risk: medium)
+3. Skip this stage and continue
+4. Stop reproduction
+
+Which option should we use?
+```
+
+#### Key Functions
+
+| Function | Purpose |
+|----------|---------|
+| `estimate_context_for_node()` | Estimate tokens for a specific node |
+| `get_context_recovery_actions()` | Get available recovery actions (doesn't mutate state) |
+| `check_context_before_node()` | Main entry point - check + auto-recover if possible |
+| `ContextOverflowError` | Exception raised when recovery fails |
+
+#### Design Principles
+
+1. **Functions return actions, don't mutate state** - Follows LangGraph pattern where 
+   nodes apply state changes through return values
+2. **Low-risk first** - Automatic recovery only attempts low-risk actions
+3. **User always last** - Escalation is the final fallback
+4. **Builds on existing infrastructure** - Uses existing `create_feedback_summary_prompt()` 
+   and loop context estimation functions
 ```
 
 ### Recovery Implementation
@@ -1947,7 +2105,7 @@ application, persistence, and restoration.
 │                      ADAPTATION LIFECYCLE                                    │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
-│  1. CREATION (ADAPT_PROMPTS node)                                           │
+│  1. CREATION (adapt_prompts node)                                           │
 │     │                                                                       │
 │     ├─ PromptAdaptorAgent analyzes paper                                    │
 │     ├─ Generates modifications with confidence levels                       │
@@ -1958,7 +2116,7 @@ application, persistence, and restoration.
 │     │                                                                       │
 │     ├─ In-memory: state["prompt_adaptations"]                               │
 │     ├─ On disk: outputs/<paper_id>/prompt_adaptations_<paper_id>.json       │
-│     └─ Written: Immediately after ADAPT_PROMPTS, updated at checkpoints     │
+│     └─ Written: Immediately after adapt_prompts, updated at checkpoints     │
 │                                                                             │
 │  3. APPLICATION (every agent call)                                          │
 │     │                                                                       │
@@ -1985,7 +2143,7 @@ application, persistence, and restoration.
 ### Data Flow Diagram
 
 ```
-ADAPT_PROMPTS                      PLAN, DESIGN, etc.
+adapt_prompts                      plan, design, etc.
      │                                    │
      ▼                                    │
 ┌──────────────┐                          │
@@ -2037,11 +2195,11 @@ ADAPT_PROMPTS                      PLAN, DESIGN, etc.
 
 | Event | What's Saved | Location |
 |-------|-------------|----------|
-| After ADAPT_PROMPTS | Full adaptation log | `prompt_adaptations_<paper_id>.json` |
-| After PLAN | Checkpoint with adaptations | `checkpoints/checkpoint_after_plan_*.json` |
-| Before ASK_USER | Full checkpoint | `checkpoints/checkpoint_before_ask_*.json` |
+| After adapt_prompts | Full adaptation log | `_artifact_prompt_adaptations.json` |
+| After plan | Checkpoint with adaptations | `checkpoints/checkpoint_after_plan_*.json` |
+| Before ask_user | Full checkpoint | `checkpoints/checkpoint_before_ask_*.json` |
 | After each stage | Updated checkpoint | `checkpoints/checkpoint_stage*_complete_*.json` |
-| On completion | Final metrics (includes adaptation count) | `metrics_<paper_id>.json` |
+| On completion | Final metrics (includes adaptation count) | `_artifact_metrics.json` |
 
 ### Adaptation Application (Implementation)
 
@@ -2113,7 +2271,7 @@ assert "prompt_adaptations" in state
 print(f"Loaded {len(state['prompt_adaptations'])} adaptations")
 
 # Resume graph execution
-result = app.invoke(state, resume_from="SELECT_STAGE")
+result = app.invoke(state, resume_from="select_stage")
 ```
 
 ### Versioning and Base Prompt Changes
@@ -2134,7 +2292,7 @@ result = app.invoke(state, resume_from="SELECT_STAGE")
 
 **Best Practices:**
 1. When updating base prompts, note which papers may be affected
-2. Consider re-running ADAPT_PROMPTS for active reproductions
+2. Consider re-running adapt_prompts for active reproductions
 3. Version base prompts alongside adaptation logs for reproducibility
 
 **Future (v2):**
@@ -2255,7 +2413,7 @@ This section documents what data each agent receives and produces, clarifying th
 │  ├─ IN:  simulation_code, design_spec, expected_outputs[]                   │
 │  └─ OUT: reviewer_verdict, reviewer_issues[], reviewer_feedback             │
 │                    ↓ (if approved)                                          │
-│  RUN_CODE (not an agent - system execution)                                 │
+│  run_code (not an agent - system execution)                                 │
 │  ├─ IN:  simulation_code                                                    │
 │  └─ OUT: stdout, stderr, output_files[], exit_code                          │
 │                    ↓                                                        │
@@ -2292,22 +2450,22 @@ This section documents what data each agent receives and produces, clarifying th
 |---------------|-------|-------------------|-------|
 | **paper_text** | Global (read-only) | All agents | Original paper content, never modified |
 | **paper_figures** | Global (read-only) | Planner, ResultsAnalyzer, ComparisonValidator | Image paths for multimodal comparison |
-| **plan** | Shared artifact | PlannerAgent (write), all others (read) | Persisted to plan_<paper_id>.json |
-| **assumptions** | Shared artifact | Planner, Designer (write), all others (read) | Persisted to assumptions_<paper_id>.json |
-| **progress** | Shared artifact | Supervisor (write), others (read) | Persisted to progress_<paper_id>.json |
+| **plan** | Shared artifact | PlannerAgent (write), all others (read) | Persisted to `_artifact_plan.json` |
+| **assumptions** | Shared artifact | Planner, Designer (write), all others (read) | Persisted to `_artifact_assumptions.json` |
+| **progress** | Shared artifact | Supervisor (write), others (read) | Persisted to `_artifact_progress.json` |
 | **design_spec** | Stage-local | Designer → Reviewer → Generator | Reset each stage |
-| **simulation_code** | Stage-local | Generator → Reviewer → RUN_CODE | Reset each stage |
-| **stage_outputs** | Stage-local | RUN_CODE → Validators → Analyzer | Reset each stage |
+| **simulation_code** | Stage-local | Generator → Reviewer → run_code | Reset each stage |
+| **stage_outputs** | Stage-local | run_code → Validators → Analyzer | Reset each stage |
 | **reviewer_feedback** | Loop-local | Reviewer → Designer/Generator | Used for revisions within a loop |
 | **figure_comparisons** | Accumulated | Analyzer (write), Supervisor (read) | Persisted across stages |
-| **validation_hierarchy** | Global (mutable) | Supervisor (write), SELECT_STAGE (read) | Gates stage progression |
+| **validation_hierarchy** | Global (mutable) | Supervisor (write), select_stage (read) | Gates stage progression |
 
 ### Data Persistence Points
 
 | Event | What Gets Saved | Location |
 |-------|-----------------|----------|
-| After PLAN | plan, assumptions, progress | `outputs/<paper_id>/*.json` |
-| After each SUPERVISOR approval | progress, figure_comparisons | `outputs/<paper_id>/progress_*.json` |
+| After plan | plan, assumptions, progress | `outputs/<paper_id>/_artifact_*.json` |
+| After each supervisor approval | progress, figure_comparisons | `outputs/<paper_id>/_artifact_progress.json` |
 | After stage completion | stage outputs | `outputs/<paper_id>/stage_*/` |
-| Before ASK_USER | full checkpoint | `outputs/<paper_id>/checkpoints/` |
-| After GENERATE_REPORT | final report | `outputs/<paper_id>/REPRODUCTION_REPORT_*.md` |
+| Before ask_user | full checkpoint | `outputs/<paper_id>/checkpoints/` |
+| After generate_report | final report | `outputs/<paper_id>/REPRODUCTION_REPORT_*.md` |

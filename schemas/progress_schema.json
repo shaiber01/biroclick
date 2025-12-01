@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "progress_schema.json",
   "title": "Paper Reproduction Progress",
-  "description": "Schema for progress_<paper_id>.json files",
+  "description": "Schema for _artifact_progress.json files (artifact naming: underscore prefix indicates output-only)",
   
   "type": "object",
   "required": ["paper_id", "stage_progress"],

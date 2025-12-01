@@ -46,7 +46,10 @@ The loader will:
 2. Extract all figure references (`![alt](url)` and `<img src="...">`)
 3. Download figures to the output directory
 4. Generate figure IDs from alt text or filenames
-5. Return a validated `PaperInput` structure
+5. **Handle duplicate IDs** by appending `_1`, `_2`, etc. (e.g., `fig1`, `fig1_1`, `fig1_2`)
+6. Return a validated `PaperInput` structure
+
+> **Note**: Duplicate figure IDs are common when PDF converters extract the same figure multiple times or when multi-panel figures have generic alt text. Check the output for `_1`, `_2` suffixes and consider editing the markdown to use unique alt text before loading.
 
 ### Supported Figure Formats
 
@@ -259,6 +262,24 @@ For simpler papers, copy-paste from PDF viewer:
 - [ ] Equations converted reasonably (even as text descriptions)
 - [ ] Figure captions included
 - [ ] References section intact (optional, but useful for context)
+
+### Methods Section Identification
+
+When using `load_paper_from_markdown()`, the system extracts the Methods section for the PromptAdaptorAgent. It searches for these common headers (case-insensitive):
+
+| Header Pattern | Common In |
+|----------------|-----------|
+| `## Methods` | Most journals |
+| `## Materials and Methods` | Biology, Chemistry |
+| `## Experimental` | Physics, Engineering |
+| `## Experimental Section` | ACS journals |
+| `## Simulation Details` | Computational papers |
+| `## Computational Methods` | Theory papers |
+| `## Experimental Procedures` | Some Nature journals |
+
+If none are found, the loader falls back to the first ~15,000 characters of the paper.
+
+**Tip**: If your paper uses a non-standard header, consider manually adding `## Methods` above that section in the markdown before loading.
 
 ---
 
