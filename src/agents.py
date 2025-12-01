@@ -23,6 +23,7 @@ from schemas.state import (
     sync_extracted_parameters,
     validate_state_for_node,
 )
+from src.prompts import build_agent_prompt
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -126,6 +127,9 @@ def plan_node(state: ReproState) -> dict:
     # - Call LLM with planner_agent.md prompt
     # - Parse agent output per planner_output_schema.json
     
+    # Note: We need to fetch the prompt to use adaptations
+    system_prompt = build_agent_prompt("planner", state)
+    
     # STUB: Replace with actual LLM call that populates plan, assumptions, etc.
     result = {
         "workflow_phase": "planning",
@@ -139,13 +143,12 @@ def plan_node(state: ReproState) -> dict:
     # This converts plan stages into progress stages with status tracking.
     # Must be called before select_stage_node runs.
     # ═══════════════════════════════════════════════════════════════════════
-    # NOTE: When implementing, call after plan is generated:
-    # if result.get("plan") and result["plan"].get("stages"):
-    #     state_with_plan = {**state, **result}
-    #     state_with_plan = initialize_progress_from_plan(state_with_plan)
-    #     state_with_plan = sync_extracted_parameters(state_with_plan)
-    #     result["progress"] = state_with_plan.get("progress")
-    #     result["extracted_parameters"] = state_with_plan.get("extracted_parameters")
+    if result.get("plan") and result["plan"].get("stages"):
+        state_with_plan = {**state, **result}
+        state_with_plan = initialize_progress_from_plan(state_with_plan)
+        state_with_plan = sync_extracted_parameters(state_with_plan)
+        result["progress"] = state_with_plan.get("progress")
+        result["extracted_parameters"] = state_with_plan.get("extracted_parameters")
     
     return result
 
@@ -169,6 +172,9 @@ def plan_reviewer_node(state: ReproState) -> dict:
     
     # Separate blocking issues (PLAN_ISSUE) from other validation warnings
     blocking_issues = [i for i in validation_issues if i.startswith("PLAN_ISSUE:")]
+    
+    # Connect prompt adaptation
+    system_prompt = build_agent_prompt("plan_reviewer", state)
     
     # TODO: Implement plan review logic using prompts/plan_reviewer_agent.md
     # - Check coverage of reproducible figures
@@ -348,6 +354,9 @@ def simulation_designer_node(state: ReproState) -> dict:
         # Context overflow - return escalation state updates
         return escalation
     
+    # Connect prompt adaptation
+    system_prompt = build_agent_prompt("simulation_designer", state)
+    
     # TODO: Implement design logic
     # - Interpret geometry from plan
     # - Select materials from validated_materials (Stage 1+) or planned_materials (Stage 0)
@@ -374,6 +383,9 @@ def design_reviewer_node(state: ReproState) -> dict:
     - Increments `design_revision_count` when verdict is "needs_revision".
     The routing function `route_after_design_review` reads these fields.
     """
+    # Connect prompt adaptation
+    system_prompt = build_agent_prompt("design_reviewer", state)
+    
     # TODO: Implement design review logic using prompts/design_reviewer_agent.md
     # - Check geometry matches paper
     # - Verify physics setup is correct
@@ -415,6 +427,9 @@ def code_reviewer_node(state: ReproState) -> dict:
     - Increments `code_revision_count` when verdict is "needs_revision".
     The routing function `route_after_code_review` reads these fields.
     """
+    # Connect prompt adaptation
+    system_prompt = build_agent_prompt("code_reviewer", state)
+    
     # TODO: Implement code review logic using prompts/code_reviewer_agent.md
     # - Verify a_unit matches design
     # - Check Meep API usage
@@ -464,6 +479,9 @@ def code_generator_node(state: ReproState) -> dict:
         # Context overflow - return escalation state updates
         return escalation
     
+    # Connect prompt adaptation
+    system_prompt = build_agent_prompt("code_generator", state)
+    
     # TODO: Implement code generation logic
     # - Convert design to Meep code
     # - For Stage 1+: Read material paths from state["validated_materials"]
@@ -491,6 +509,9 @@ def execution_validator_node(state: ReproState) -> dict:
     - Increments `total_execution_failures` for metrics tracking.
     The routing function `route_after_execution_check` reads these fields.
     """
+    # Connect prompt adaptation
+    system_prompt = build_agent_prompt("execution_validator", state)
+    
     # TODO: Implement execution validation logic
     # - Check completion status
     # - Verify output files exist
@@ -538,6 +559,9 @@ def physics_sanity_node(state: ReproState) -> dict:
     - "fail": Code/numerics issue, route to code generator
     - "design_flaw": Fundamental design problem, route to simulation designer
     """
+    # Connect prompt adaptation
+    system_prompt = build_agent_prompt("physics_sanity", state)
+    
     # TODO: Implement physics validation logic
     # - Check conservation laws (T + R + A ≈ 1)
     # - Verify value ranges
@@ -577,6 +601,10 @@ def physics_sanity_node(state: ReproState) -> dict:
 def results_analyzer_node(state: ReproState) -> ReproState:
     """ResultsAnalyzerAgent: Compare results to paper figures."""
     state["workflow_phase"] = "analysis"
+    
+    # Connect prompt adaptation
+    system_prompt = build_agent_prompt("results_analyzer", state)
+    
     # TODO: Implement analysis logic
     # - Compare simulation outputs to paper figures
     # - Compute discrepancies
@@ -595,6 +623,9 @@ def comparison_validator_node(state: ReproState) -> dict:
     - Increments `analysis_revision_count` when verdict is "needs_revision".
     The routing function `route_after_comparison_check` reads these fields.
     """
+    # Connect prompt adaptation
+    system_prompt = build_agent_prompt("comparison_validator", state)
+    
     # TODO: Implement comparison validation logic
     # - Verify math is correct
     # - Check classifications match numbers
@@ -661,6 +692,9 @@ def supervisor_node(state: ReproState) -> dict:
        Never store validation_hierarchy in state directly - it's computed.
     """
     from schemas.state import get_validation_hierarchy, update_progress_stage_status
+    
+    # Connect prompt adaptation
+    system_prompt = build_agent_prompt("supervisor", state)
     
     # TODO: Implement full supervision logic using prompts/supervisor_agent.md
     # - Call LLM with supervisor_agent.md prompt
@@ -837,8 +871,17 @@ def supervisor_node(state: ReproState) -> dict:
                 result["supervisor_verdict"] = "ok_continue"
                 result["supervisor_feedback"] = "Applying feedback summarization for context management."
             elif "TRUNCATE" in response_text:
+                # Actually truncate the paper text to resolve the loop
+                current_text = state.get("paper_text", "")
+                # Keep first 15k chars and last 5k as a simple heuristic
+                if len(current_text) > 20000:
+                    truncated_text = current_text[:15000] + "\n\n... [TRUNCATED BY USER REQUEST] ...\n\n" + current_text[-5000:]
+                    result["paper_text"] = truncated_text
+                    result["supervisor_feedback"] = "Truncating paper to first 15k and last 5k chars."
+                else:
+                    result["supervisor_feedback"] = "Paper already short enough, proceeding."
+                
                 result["supervisor_verdict"] = "ok_continue"
-                result["supervisor_feedback"] = "Truncating paper to methods section."
             elif "SKIP" in response_text:
                 result["supervisor_verdict"] = "ok_continue"
                 if current_stage_id:
@@ -1179,6 +1222,7 @@ def _match_material_from_text(text: str, material_lookup: dict) -> dict:
     
     Returns the best matching material entry or None.
     """
+    import re
     text_lower = text.lower()
     
     # Priority 1: Exact material_id match (e.g., "palik_gold")
@@ -1186,13 +1230,27 @@ def _match_material_from_text(text: str, material_lookup: dict) -> dict:
         if mat_id in text_lower:
             return mat_entry
     
-    # Priority 2: Simple material name match (e.g., "gold", "silver")
-    simple_names = ["gold", "silver", "aluminum", "silicon", "sio2", "glass", "water", "air"]
+    # Priority 2: Word-boundary match for simple names
+    # This avoids "golden" matching "gold" or "usage" matching "ag"
+    simple_names = ["gold", "silver", "aluminum", "silicon", "sio2", "glass", "water", "air", "ag", "au", "al", "si"]
+    
+    # Map common chemical symbols to full names for lookup
+    symbol_map = {
+        "ag": "silver",
+        "au": "gold",
+        "al": "aluminum",
+        "si": "silicon"
+    }
+    
     for name in simple_names:
-        if name in text_lower:
+        # Use regex to match whole words only
+        if re.search(r'\b' + re.escape(name) + r'\b', text_lower):
+            lookup_name = symbol_map.get(name, name)
+            
             # Find the best match in lookup (prefer entries with csv_available=true)
-            candidates = [v for k, v in material_lookup.items() if name in k]
+            candidates = [v for k, v in material_lookup.items() if lookup_name in k]
             csv_available = [c for c in candidates if c.get("csv_available", False)]
+            
             if csv_available:
                 return csv_available[0]
             elif candidates:
