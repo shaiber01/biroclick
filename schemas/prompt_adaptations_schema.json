@@ -1,0 +1,232 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "prompt_adaptations_schema.json",
+  "title": "Prompt Adaptations Log",
+  "description": "Schema for logging prompt modifications made by PromptAdaptorAgent for future learning and analysis.",
+
+  "type": "object",
+  "required": ["paper_id", "timestamp", "domain", "adaptations"],
+
+  "properties": {
+    "paper_id": {
+      "type": "string",
+      "description": "Unique identifier for the paper being reproduced."
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when adaptations were generated."
+    },
+    "domain": {
+      "type": "string",
+      "description": "Detected or specified domain of the paper (e.g., 'plasmonics_strong_coupling', 'photonic_crystal', 'metamaterial')."
+    },
+    "domain_signals": {
+      "type": "array",
+      "description": "Keywords/phrases that led to domain detection.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "adaptations": {
+      "type": "array",
+      "description": "List of prompt modifications made for this paper.",
+      "items": {
+        "$ref": "#/definitions/adaptation"
+      }
+    },
+    "protected_files": {
+      "type": "array",
+      "description": "Files that were NOT modified (e.g., global_rules.md).",
+      "items": {
+        "type": "string"
+      },
+      "default": ["prompts/global_rules.md"]
+    },
+    "reproduction_outcome": {
+      "type": "object",
+      "description": "Post-reproduction evaluation (filled after completion).",
+      "properties": {
+        "success_rate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Fraction of target figures successfully reproduced."
+        },
+        "figures_reproduced": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "figures_total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "overall_status": {
+          "type": "string",
+          "enum": ["success", "partial", "failure", "aborted"]
+        }
+      }
+    },
+    "adaptation_effectiveness": {
+      "type": "object",
+      "description": "Retrospective evaluation of each adaptation's usefulness (filled after completion).",
+      "additionalProperties": {
+        "type": "string",
+        "enum": ["helpful", "neutral", "harmful", "unknown"],
+        "description": "Evaluation of adaptation effectiveness. Keys are adaptation IDs."
+      }
+    },
+    "lessons_learned": {
+      "type": "array",
+      "description": "Free-form notes about what worked or didn't for future reference.",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+
+  "definitions": {
+    "adaptation": {
+      "type": "object",
+      "required": ["id", "target_agent", "modification_type", "confidence", "content", "reason"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^(APPEND|MOD|REMOVE)_[0-9]{3}$",
+          "description": "Unique identifier for this adaptation (e.g., 'APPEND_001', 'MOD_002', 'REMOVE_003')."
+        },
+        "target_agent": {
+          "type": "string",
+          "enum": [
+            "PromptAdaptorAgent",
+            "PlannerAgent",
+            "SimulationDesignerAgent",
+            "CodeGeneratorAgent",
+            "CodeReviewerAgent",
+            "ExecutionValidatorAgent",
+            "PhysicsSanityAgent",
+            "ResultsAnalyzerAgent",
+            "ComparisonValidatorAgent",
+            "SupervisorAgent"
+          ],
+          "description": "Which agent's prompt is being modified."
+        },
+        "target_file": {
+          "type": "string",
+          "description": "Path to the prompt file being modified.",
+          "examples": ["prompts/simulation_designer_agent.md", "prompts/planner_agent.md"]
+        },
+        "modification_type": {
+          "type": "string",
+          "enum": ["append", "modify", "remove"],
+          "description": "Type of modification: append adds content, modify changes existing content, remove disables content."
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Confidence level for this modification (0-1). Higher confidence needed for modify (>0.8) and remove (>0.9)."
+        },
+        "content": {
+          "type": "string",
+          "description": "The content being added, the modified content (for modify), or the content being disabled (for remove)."
+        },
+        "original_content": {
+          "type": "string",
+          "description": "For 'modify' and 'remove' types: the original content that was changed or disabled."
+        },
+        "location": {
+          "type": "string",
+          "description": "Where in the prompt file this modification applies (section name or line reference).",
+          "examples": ["Section B: MATERIALS", "After line 45", "End of file"]
+        },
+        "reason": {
+          "type": "string",
+          "description": "Explanation of why this modification is needed for this specific paper."
+        },
+        "domain_specific": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether this adaptation is domain-specific or generally applicable."
+        },
+        "reversible": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether this adaptation can be safely reverted without side effects."
+        }
+      }
+    }
+  },
+
+  "example": {
+    "paper_id": "jagg_plasmon_coupling_2023",
+    "timestamp": "2025-11-30T12:00:00Z",
+    "domain": "plasmonics_strong_coupling",
+    "domain_signals": [
+      "J-aggregate",
+      "Rabi splitting",
+      "plexciton",
+      "strong coupling",
+      "exciton-plasmon"
+    ],
+    "adaptations": [
+      {
+        "id": "APPEND_001",
+        "target_agent": "SimulationDesignerAgent",
+        "target_file": "prompts/simulation_designer_agent.md",
+        "modification_type": "append",
+        "confidence": 0.85,
+        "content": "For J-aggregate materials: Use Lorentzian oscillator model. Extract parameters from absorption spectrum: peak position → ω₀, FWHM → γ, peak height → oscillator strength. Typical values: γ = 30-80 meV, f = 0.05-0.2.",
+        "location": "Section B: MATERIALS",
+        "reason": "Paper involves J-aggregate excitons which require specific Lorentzian modeling not covered in base prompt.",
+        "domain_specific": true,
+        "reversible": true
+      },
+      {
+        "id": "APPEND_002",
+        "target_agent": "ResultsAnalyzerAgent",
+        "target_file": "prompts/results_analyzer_agent.md",
+        "modification_type": "append",
+        "confidence": 0.82,
+        "content": "For strong coupling systems: Look for anticrossing in dispersion. Rabi splitting = minimum energy gap at crossing point. Verify: upper and lower polariton branches should have equal intensity at anticrossing.",
+        "location": "Section D: RESULT CLASSIFICATION",
+        "reason": "Strong coupling physics requires specific validation criteria for Rabi splitting.",
+        "domain_specific": true,
+        "reversible": true
+      },
+      {
+        "id": "MOD_001",
+        "target_agent": "PhysicsSanityAgent",
+        "target_file": "prompts/physics_sanity_agent.md",
+        "modification_type": "modify",
+        "confidence": 0.88,
+        "content": "Expected absorption/transmission features: For coupled systems, expect split peaks (upper/lower polariton) instead of single resonance. Peak splitting 50-200 meV is typical for strong coupling.",
+        "original_content": "Expected absorption/transmission features: Single Lorentzian peak for simple resonances.",
+        "location": "Section C: VALUE RANGE CHECKS",
+        "reason": "Base prompt assumes single resonances; coupled systems have fundamentally different spectral features.",
+        "domain_specific": true,
+        "reversible": true
+      }
+    ],
+    "protected_files": [
+      "prompts/global_rules.md"
+    ],
+    "reproduction_outcome": {
+      "success_rate": 0.8,
+      "figures_reproduced": 4,
+      "figures_total": 5,
+      "overall_status": "partial"
+    },
+    "adaptation_effectiveness": {
+      "APPEND_001": "helpful",
+      "APPEND_002": "helpful",
+      "MOD_001": "neutral"
+    },
+    "lessons_learned": [
+      "J-aggregate fitting procedure was critical for material validation",
+      "Rabi splitting threshold guidance helped classify results correctly",
+      "Consider adding anticrossing detection to base PhysicsSanityAgent"
+    ]
+  }
+}
+

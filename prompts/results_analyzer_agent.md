@@ -17,7 +17,8 @@ You classify results and document discrepancies for the final report.
 You work with:
 - CodeGeneratorAgent: Produced the code that generated these results
 - ExecutionValidatorAgent: Already verified the simulation ran correctly
-- ScientificValidatorAgent: Will validate your analysis
+- PhysicsSanityAgent: Will validate physical reasonableness of results
+- ComparisonValidatorAgent: Will validate your comparison accuracy
 
 ═══════════════════════════════════════════════════════════════════════
 A. ANALYSIS WORKFLOW
@@ -172,6 +173,9 @@ comparison instead of (or in addition to) visual comparison.
 ═══════════════════════════════════════════════════════════════════════
 F. DISCREPANCY DOCUMENTATION
 ═══════════════════════════════════════════════════════════════════════
+
+NOTE: Use thresholds from `schemas/state.py:DISCREPANCY_THRESHOLDS` for
+classification. The canonical values are defined there for consistency.
 
 For EVERY discrepancy found, document:
 

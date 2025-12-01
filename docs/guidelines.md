@@ -157,6 +157,10 @@ if abs(peak_wavelength_1 - peak_wavelength_2) / peak_wavelength_1 > 0.05:
 
 ### Discrepancy Classification
 
+> **Canonical Source**: Threshold values are defined programmatically in
+> `schemas/state.py:DISCREPANCY_THRESHOLDS`. The table below is for human
+> reference; agents should use the state constants for consistency.
+
 | Quantity | Excellent | Acceptable | Investigate |
 |----------|-----------|------------|-------------|
 | Resonance λ | ±2% | ±5% | >10% |
@@ -702,8 +706,17 @@ v3.0 (Future):
 
 ### Adaptation Logging Schema
 
-All adaptations are logged for future learning:
+All adaptations are logged for future learning. The formal schema is defined in
+`schemas/prompt_adaptations_schema.json`.
 
+**Key fields:**
+- `paper_id`, `timestamp`, `domain`: Identification
+- `domain_signals`: Keywords that detected the domain
+- `adaptations[]`: List of modifications with type, confidence, content, reason
+- `reproduction_outcome`: Post-completion success metrics
+- `adaptation_effectiveness`: Retrospective evaluation per adaptation
+
+**Example (abbreviated):**
 ```json
 {
   "paper_id": "paper_xyz",
@@ -711,26 +724,21 @@ All adaptations are logged for future learning:
   "domain": "plasmonics_strong_coupling",
   "adaptations": [
     {
-      "id": "MOD_001",
+      "id": "APPEND_001",
       "target_agent": "SimulationDesignerAgent",
       "modification_type": "append",
       "confidence": 0.85,
-      "content_hash": "abc123",
-      "reasoning": "...",
-      "impact": "high"
+      "content": "For J-aggregate materials: Use Lorentzian oscillator model...",
+      "reason": "Paper involves J-aggregate excitons"
     }
   ],
-  "reproduction_outcome": {
-    "success_rate": 0.8,
-    "figures_reproduced": 4,
-    "figures_total": 5
-  },
   "adaptation_effectiveness": {
-    "MOD_001": "helpful",  // retrospective evaluation
-    "MOD_002": "neutral"
+    "APPEND_001": "helpful"
   }
 }
 ```
 
-This schema supports future machine learning on adaptation effectiveness.
+See `schemas/prompt_adaptations_schema.json` for the complete schema with all fields,
+validation rules, and detailed examples. This schema supports future machine learning
+on adaptation effectiveness.
 

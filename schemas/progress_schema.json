@@ -103,63 +103,11 @@
           "type": "array",
           "items": {"type": "string"},
           "description": "Recommended next steps"
-        },
-        "figure_comparisons": {
-          "type": "array",
-          "description": "Structured comparisons for reproduction report",
-          "items": {
-            "$ref": "#/definitions/figure_comparison"
-          }
         }
       }
     },
     
-    "figure_comparison": {
-      "type": "object",
-      "required": ["figure_id", "title", "comparison_table", "shape_comparison", "reason_for_difference"],
-      "properties": {
-        "figure_id": {
-          "type": "string",
-          "description": "Figure identifier (e.g., 'Fig3a')"
-        },
-        "title": {
-          "type": "string",
-          "description": "Descriptive title"
-        },
-        "reproduction_image_path": {
-          "type": "string",
-          "description": "Path to reproduced figure"
-        },
-        "comparison_table": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "required": ["feature", "paper", "reproduction", "status"],
-            "properties": {
-              "feature": {"type": "string"},
-              "paper": {"type": "string"},
-              "reproduction": {"type": "string"},
-              "status": {"type": "string"}
-            }
-          }
-        },
-        "shape_comparison": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "required": ["aspect", "paper", "reproduction"],
-            "properties": {
-              "aspect": {"type": "string"},
-              "paper": {"type": "string"},
-              "reproduction": {"type": "string"}
-            }
-          }
-        },
-        "reason_for_difference": {
-          "type": "string"
-        }
-      }
-    },
+    "NOTE": "Figure comparisons are stored at the top-level in ReproState (not per-stage) for simpler management. Each FigureComparison has a stage_id field to link it to its source stage. See schemas/state.py for the canonical FigureComparison type.",
     
     "output": {
       "type": "object",

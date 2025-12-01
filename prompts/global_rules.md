@@ -121,6 +121,10 @@ RULE 5: QUANTITATIVE DISCREPANCY TRACKING
 ═══════════════════════════════════════════════════════════════════════
 ACCEPTABLE DISCREPANCY RANGES (optics/photonics):
 
+NOTE: Canonical threshold values are defined in `schemas/state.py` as
+`DISCREPANCY_THRESHOLDS`. The table below is for human readability only.
+Agents should use state.DISCREPANCY_THRESHOLDS for programmatic checks.
+
 | Quantity               | Excellent | Acceptable | Investigate |
 |------------------------|-----------|------------|-------------|
 | Resonance wavelength   | ±2%       | ±5%        | >10%        |

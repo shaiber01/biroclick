@@ -205,7 +205,7 @@
         "interpretation": "Conformal coating following disk topography",
         "reason": "J-aggregates are typically spin-coated from solution, which produces conformal films",
         "confidence": "medium",
-        "introduced_by": "ExecutorAgent",
+        "introduced_by": "SimulationDesignerAgent",
         "stage_id": "stage3_coated_single"
       }
     ],
@@ -222,7 +222,7 @@
         "critical": true,
         "validated": true,
         "validation_stage": "stage1_single_disk",
-        "introduced_by": "ExecutorAgent"
+        "introduced_by": "SimulationDesignerAgent"
       },
       {
         "id": "S2",
@@ -235,7 +235,7 @@
         "critical": false,
         "validated": true,
         "validation_stage": "stage1_single_disk",
-        "introduced_by": "ExecutorAgent"
+        "introduced_by": "SimulationDesignerAgent"
       }
     ]
   }

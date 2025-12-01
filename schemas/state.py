@@ -63,8 +63,8 @@ class StageProgress(TypedDict):
     next_actions: List[str]
 
 
-class CriticIssue(TypedDict):
-    """An issue identified by CriticAgent."""
+class ReviewerIssue(TypedDict):
+    """An issue identified by CodeReviewerAgent or validation agents."""
     severity: str  # blocking | major | minor
     category: str  # geometry | material | source | numerical | analysis | documentation
     description: str
@@ -90,6 +90,7 @@ class ShapeComparisonRow(TypedDict):
 class FigureComparison(TypedDict):
     """Structured comparison of a reproduced figure to paper."""
     figure_id: str
+    stage_id: str  # Which stage produced this comparison
     title: str
     reproduction_image_path: NotRequired[str]
     comparison_table: List[FigureComparisonRow]
@@ -199,6 +200,12 @@ class ReproState(TypedDict, total=False):
     progress: Dict[str, Any]  # Full progress structure
     
     # ─── Extracted Parameters ───────────────────────────────────────────
+    # NOTE: Data Ownership Contract
+    # - plan["extracted_parameters"] = canonical persisted structure (saved to disk)
+    # - state.extracted_parameters = typed in-memory view, synced FROM plan
+    # - PlannerAgent writes to plan["extracted_parameters"]
+    # - Other agents READ from state.extracted_parameters
+    # - Sync happens at checkpoint boundaries
     extracted_parameters: List[ExtractedParameter]
     
     # ─── Validation Tracking ────────────────────────────────────────────
@@ -218,8 +225,8 @@ class ReproState(TypedDict, total=False):
     replan_count: int
     
     # ─── Verdicts ───────────────────────────────────────────────────────
-    last_critic_verdict: Optional[str]  # approve_to_run | approve_results | needs_revision
-    critic_issues: List[CriticIssue]
+    last_reviewer_verdict: Optional[str]  # approve_to_run | approve_results | needs_revision
+    reviewer_issues: List[ReviewerIssue]
     supervisor_verdict: Optional[str]  # ok_continue | replan_needed | change_priority | ask_user
     
     # ─── Stage Working Data ─────────────────────────────────────────────

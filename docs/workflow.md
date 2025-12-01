@@ -84,11 +84,20 @@ The system uses a state graph where each node represents an agent action or syst
 
 ### 3. SELECT_STAGE Node
 
-**Purpose**: Choose next stage to execute based on dependencies and status
+**Purpose**: Choose next stage to execute based on dependencies, status, validation hierarchy, and budget
 
 **Logic**:
 ```python
 def select_next_stage(state):
+    # Check validation hierarchy first
+    hierarchy = state["validation_hierarchy"]
+    if not hierarchy["material_validated"]:
+        # Cannot proceed past Stage 0 without material validation
+        return "stage0_material_validation"
+    
+    # Check runtime budget
+    budget_remaining = state.get("runtime_budget_remaining_seconds", float("inf"))
+    
     for stage in state["plan"]["stages"]:
         # Skip completed or blocked stages
         if stage["status"] in ["completed_success", "completed_partial", "blocked"]:
@@ -100,8 +109,28 @@ def select_next_stage(state):
             for dep in stage["dependencies"]
         )
         
-        if deps_met:
-            return stage["stage_id"]
+        if not deps_met:
+            continue
+        
+        # Check validation hierarchy requirements
+        stage_type = stage.get("stage_type", "")
+        if stage_type == "ARRAY_SYSTEM" and not hierarchy["single_structure_validated"]:
+            continue  # Cannot do array without single structure
+        if stage_type == "PARAMETER_SWEEP" and not hierarchy["array_validated"]:
+            continue  # Cannot sweep without array validation
+        if stage_type == "COMPLEX_PHYSICS" and not hierarchy["sweep_validated"]:
+            continue  # Cannot do complex physics without sweep validation
+        
+        # Check if budget allows this stage
+        estimated_runtime = stage.get("estimated_runtime_seconds", 0)
+        if estimated_runtime > budget_remaining:
+            # Skip expensive stages when budget is low
+            # Mark as blocked with reason
+            stage["status"] = "blocked"
+            stage["issues"].append(f"Skipped: estimated {estimated_runtime}s exceeds budget {budget_remaining}s")
+            continue
+        
+        return stage["stage_id"]
     
     return None  # All stages done
 ```
@@ -555,6 +584,50 @@ This is the highest-leverage checkpoint in the system. If material data is wrong
                      │    │         │       │                       │
                      └────┘         └───────┴───────────────────────┘
 ```
+
+## State Mutation Contract
+
+This section documents which nodes mutate which state fields, when state is persisted to disk, and checkpoint trigger points.
+
+### Node → State Field Mutations
+
+| Node | Reads | Writes |
+|------|-------|--------|
+| ADAPT_PROMPTS | paper_text, paper_domain | prompt_adaptations |
+| PLAN | paper_text, assumptions | plan, assumptions, extracted_parameters, validation_hierarchy |
+| SELECT_STAGE | plan, validation_hierarchy | current_stage_id, current_stage_type |
+| DESIGN | plan, assumptions, reviewer_feedback | design_description, performance_estimate, new_assumptions |
+| CODE_REVIEW | design_description, code | reviewer_verdict, reviewer_issues, reviewer_feedback |
+| GENERATE_CODE | design_description, reviewer_feedback | code |
+| RUN_CODE | code | stage_outputs, run_error, runtime_seconds |
+| EXECUTION_CHECK | stage_outputs, run_error | execution_valid, execution_issues |
+| PHYSICS_SANITY | stage_outputs | physics_valid, physics_issues |
+| ANALYZE | stage_outputs, paper_figures | analysis_summary, figure_comparisons, discrepancies_log |
+| COMPARISON_CHECK | figure_comparisons, analysis_summary | comparison_valid, comparison_issues |
+| SUPERVISOR | analysis_summary, validation_hierarchy | supervisor_verdict, progress, stage status updates |
+| ASK_USER | user_question | user_response, awaiting_user_input |
+| GENERATE_REPORT | figure_comparisons, progress | report_conclusions, final_report_path |
+
+### State Persistence Rules
+
+1. **In-Memory State**: All fields in `ReproState` are in-memory during execution
+2. **Disk Sync Points**:
+   - `plan`, `assumptions`, `progress` are synced to JSON files at checkpoints
+   - `figure_comparisons` aggregated into report at GENERATE_REPORT
+   - `metrics` appended to log file at each agent call
+3. **Canonical Sources**:
+   - `plan["extracted_parameters"]` is canonical; `state.extracted_parameters` is synced view
+   - `DISCREPANCY_THRESHOLDS` in state.py is canonical for threshold values
+
+### Checkpoint Trigger Points
+
+| Checkpoint Name | Trigger Location | Contents Saved |
+|-----------------|------------------|----------------|
+| `after_plan` | After PLAN node | Full state with plan, assumptions |
+| `after_stage0_user_confirm` | After user confirms materials | State + user confirmation |
+| `after_stage_N_complete` | After each SUPERVISOR approval | Full state with stage progress |
+| `before_ask_user` | Before ASK_USER node | Full state for resume |
+| `final_report` | After GENERATE_REPORT | Full state + report path |
 
 ## State Persistence
 
