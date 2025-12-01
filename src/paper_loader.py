@@ -24,7 +24,7 @@ from urllib.parse import urlparse, unquote, urljoin
 # Supported Image Formats
 # ═══════════════════════════════════════════════════════════════════════
 
-# Image formats supported by vision models (GPT-4o, Claude)
+# Image formats supported by vision-capable LLMs (Claude, GPT-4, etc.)
 SUPPORTED_IMAGE_FORMATS = {
     # Raster formats - widely supported
     '.png': 'image/png',
@@ -88,7 +88,7 @@ class PaperInput(TypedDict):
     Complete input specification for a paper reproduction.
     
     This schema defines the expected format for paper inputs to the system.
-    The system uses multimodal LLMs (GPT-4o, Claude) to analyze both text
+    The system uses multimodal LLMs (Claude, GPT-4, etc.) to analyze both text
     and figure images for comparison.
     """
     paper_id: str  # Unique identifier (e.g., "aluminum_nanoantenna_2013")
@@ -199,7 +199,7 @@ def validate_figure_image(image_path: str) -> List[str]:
     """
     Check if a figure image is suitable for vision models.
     
-    Vision models (GPT-4o, Claude) work best with certain image characteristics.
+    Vision-capable LLMs work best with certain image characteristics.
     This function checks for common issues that may affect comparison quality.
     
     Args:
@@ -273,7 +273,7 @@ def estimate_token_cost(paper_input: Dict[str, Any]) -> Dict[str, Any]:
     
     NOTE: This is a ROUGH estimate. Actual costs depend on:
     - Number of revisions needed
-    - Model used (GPT-4o, Claude, etc.)
+    - Model used (Claude, GPT-4, etc.) and current pricing
     - Complexity of the reproduction
     
     Args:
@@ -290,7 +290,7 @@ def estimate_token_cost(paper_input: Dict[str, Any]) -> Dict[str, Any]:
     if supplementary.get("supplementary_text"):
         text_tokens += len(supplementary["supplementary_text"]) / 4
     
-    # Image tokens (OpenAI GPT-4o pricing as reference)
+    # Image tokens (approximate, varies by model)
     # ~170 tokens per 512x512 tile, typical figure = ~4 tiles = 680 tokens
     TOKENS_PER_FIGURE = 680
     
@@ -339,10 +339,11 @@ def estimate_token_cost(paper_input: Dict[str, Any]) -> Dict[str, Any]:
     # Output tokens (typically 20-30% of input for this use case)
     total_output_estimate = total_input_estimate * 0.25
     
-    # Cost calculation (GPT-4o pricing as of late 2024)
-    # Input: $2.50 per 1M tokens
-    # Output: $10.00 per 1M tokens
-    INPUT_COST_PER_MILLION = 2.50
+    # Cost calculation (example LLM pricing - verify current rates)
+    # These rates are approximate and change frequently
+    # Input: ~$2-3 per 1M tokens (varies by model)
+    # Output: ~$10-15 per 1M tokens (varies by model)
+    INPUT_COST_PER_MILLION = 3.00  # Conservative estimate
     OUTPUT_COST_PER_MILLION = 10.00
     
     input_cost = total_input_estimate * INPUT_COST_PER_MILLION / 1_000_000
@@ -362,7 +363,7 @@ def estimate_token_cost(paper_input: Dict[str, Any]) -> Dict[str, Any]:
             "num_figures": total_figures,
             "num_stages_estimated": num_stages,
             "text_chars": len(paper_input.get("paper_text", "")),
-            "model_pricing": "GPT-4o (late 2024)",
+            "model_pricing": "approximate LLM rates (verify current pricing)",
         },
         "warning": (
             "This is a rough estimate. Actual costs depend on number of revisions, "

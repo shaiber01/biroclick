@@ -258,7 +258,7 @@ class ReproState(TypedDict, total=False):
     
     # ─── Paper Identification ───────────────────────────────────────────
     paper_id: str
-    paper_domain: str  # plasmonics | photonic_crystal | metamaterial | thin_film | other
+    paper_domain: str  # plasmonics | photonic_crystal | metamaterial | thin_film | waveguide | strong_coupling | nonlinear | other
     paper_text: str  # Full extracted text from PDF
     paper_title: str
     
