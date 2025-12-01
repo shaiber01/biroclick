@@ -1,0 +1,48 @@
+# ReproLab - Development Dependencies
+# 
+# Install after core requirements:
+#   pip install -r requirements.txt
+#   pip install -r requirements-dev.txt
+#
+# Or in one step:
+#   pip install -r requirements.txt -r requirements-dev.txt
+
+# ═══════════════════════════════════════════════════════════════════════
+# Testing
+# ═══════════════════════════════════════════════════════════════════════
+pytest==8.3.4              # Test framework
+pytest-asyncio==0.24.0     # Async test support
+pytest-cov==6.0.0          # Coverage reporting
+pytest-timeout==2.3.1      # Test timeouts (useful for simulation tests)
+pytest-mock==3.14.0        # Mocking support
+
+# ═══════════════════════════════════════════════════════════════════════
+# Code Quality
+# ═══════════════════════════════════════════════════════════════════════
+black==24.10.0             # Code formatter
+ruff==0.8.2                # Fast linter (replaces flake8, isort, etc.)
+mypy==1.13.0               # Static type checking
+
+# Type stubs for mypy
+types-requests==2.32.0.20241016
+types-tqdm==4.67.0.20241119
+pandas-stubs==2.2.3.241126
+
+# ═══════════════════════════════════════════════════════════════════════
+# Documentation
+# ═══════════════════════════════════════════════════════════════════════
+# mkdocs==1.6.1            # Documentation generator (optional)
+# mkdocs-material==9.5.0   # Material theme (optional)
+
+# ═══════════════════════════════════════════════════════════════════════
+# Debugging
+# ═══════════════════════════════════════════════════════════════════════
+ipython==8.30.0            # Interactive Python shell
+ipdb==0.13.13              # IPython debugger
+
+# ═══════════════════════════════════════════════════════════════════════
+# Notebook Support (optional - for experimentation)
+# ═══════════════════════════════════════════════════════════════════════
+# jupyter==1.1.1           # Jupyter notebooks (optional)
+# jupyterlab==4.3.0        # JupyterLab (optional)
+

@@ -92,7 +92,7 @@ class FigureComparisonRow(TypedDict):
     feature: str
     paper: str
     reproduction: str
-    status: str  # "✅ Match" | "⚠️ XX%" | "❌ Mismatch"
+    status: str  # "✅ Match" | "⚠️ Partial" | "❌ Mismatch"
 
 
 class ShapeComparisonRow(TypedDict):
@@ -139,7 +139,7 @@ class OverallAssessmentItem(TypedDict):
     """Item in executive summary overall assessment."""
     aspect: str
     status: str
-    icon: str  # "✅" | "⚠️" | "❌"
+    status_icon: str  # "✅" | "⚠️" | "❌" | "⏭️"
     notes: NotRequired[str]
 
 
@@ -155,15 +155,115 @@ class ReportConclusions(TypedDict):
     """Conclusions section of the reproduction report."""
     main_physics_reproduced: bool
     key_findings: List[str]
+    limitations: List[str]  # Known issues or constraints
     final_statement: str
 
 
 class ValidationHierarchyStatus(TypedDict):
-    """Status of validation hierarchy stages."""
+    """Status of validation hierarchy stages.
+    
+    Values: "passed" | "partial" | "failed" | "not_done"
+    
+    IMPORTANT: These values differ from StageProgress.status values!
+    See STAGE_STATUS_TO_HIERARCHY_MAPPING below for the mapping.
+    """
     material_validation: str  # passed | failed | partial | not_done
     single_structure: str
     arrays_systems: str
     parameter_sweeps: str
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# STAGE STATUS ↔ VALIDATION HIERARCHY SYNCHRONIZATION
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# Two state tracking systems must stay synchronized:
+#   1. progress["stages"][stage_id]["status"] - tracks individual stage completion
+#   2. validation_hierarchy[stage_type] - gates progression to dependent stages
+#
+# They use DIFFERENT terminology:
+#
+# ┌─────────────────────────┬──────────────────────────┬─────────────────────────┐
+# │ Stage Status            │ Validation Hierarchy     │ Meaning                 │
+# │ (StageProgress.status)  │ (ValidationHierarchy)    │                         │
+# ├─────────────────────────┼──────────────────────────┼─────────────────────────┤
+# │ "completed_success"     │ "passed"                 │ Stage passed all checks │
+# │ "completed_partial"     │ "partial"                │ Acceptable gaps exist   │
+# │ "completed_failed"      │ "failed"                 │ Stage failed validation │
+# │ "not_started"           │ "not_done"               │ Stage hasn't run yet    │
+# │ "in_progress"           │ (no change)              │ Currently running       │
+# │ "blocked"               │ (no change)              │ Skipped (budget/deps)   │
+# │ "needs_rerun"           │ → "not_done"             │ Backtrack target        │
+# │ "invalidated"           │ → "not_done"             │ Will re-run when ready  │
+# └─────────────────────────┴──────────────────────────┴─────────────────────────┘
+#
+# STAGE TYPE → VALIDATION HIERARCHY KEY MAPPING:
+#
+# ┌─────────────────────────┬──────────────────────────┐
+# │ Stage Type (plan)       │ Validation Hierarchy Key │
+# ├─────────────────────────┼──────────────────────────┤
+# │ "MATERIAL_VALIDATION"   │ "material_validation"    │
+# │ "SINGLE_STRUCTURE"      │ "single_structure"       │
+# │ "ARRAY_SYSTEM"          │ "arrays_systems"         │
+# │ "PARAMETER_SWEEP"       │ "parameter_sweeps"       │
+# │ "COMPLEX_PHYSICS"       │ (not in hierarchy)       │
+# └─────────────────────────┴──────────────────────────┘
+#
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Mapping from stage status to validation hierarchy value
+STAGE_STATUS_TO_HIERARCHY_MAPPING = {
+    "completed_success": "passed",
+    "completed_partial": "partial",
+    "completed_failed": "failed",
+    "not_started": "not_done",
+    "needs_rerun": "not_done",
+    "invalidated": "not_done",
+    # "in_progress" and "blocked" don't update hierarchy
+}
+
+# Mapping from stage type to validation hierarchy key
+STAGE_TYPE_TO_HIERARCHY_KEY = {
+    "MATERIAL_VALIDATION": "material_validation",
+    "SINGLE_STRUCTURE": "single_structure",
+    "ARRAY_SYSTEM": "arrays_systems",
+    "PARAMETER_SWEEP": "parameter_sweeps",
+    # "COMPLEX_PHYSICS" doesn't have a hierarchy key (optional stage type)
+}
+
+
+def update_validation_hierarchy(state: dict, stage_id: str, stages: list) -> None:
+    """Synchronize validation hierarchy after stage status changes.
+    
+    MUST be called by SupervisorAgent after updating any stage status.
+    
+    Args:
+        state: ReproState dict (will be modified in place)
+        stage_id: ID of the stage that was updated
+        stages: List of stage dicts from state["plan"]["stages"]
+    
+    Example:
+        # In SupervisorAgent node after stage completion:
+        stage["status"] = "completed_success"
+        update_validation_hierarchy(state, stage["stage_id"], state["plan"]["stages"])
+    """
+    # Find the stage
+    stage = next((s for s in stages if s["stage_id"] == stage_id), None)
+    if not stage:
+        return
+    
+    stage_type = stage.get("stage_type")
+    stage_status = stage.get("status")
+    
+    # Get hierarchy key for this stage type
+    hierarchy_key = STAGE_TYPE_TO_HIERARCHY_KEY.get(stage_type)
+    if not hierarchy_key:
+        return  # Not a validation stage (e.g., COMPLEX_PHYSICS)
+    
+    # Get hierarchy value for this status
+    hierarchy_value = STAGE_STATUS_TO_HIERARCHY_MAPPING.get(stage_status)
+    if hierarchy_value:
+        state["validation_hierarchy"][hierarchy_key] = hierarchy_value
 
 
 class UserInteractionContext(TypedDict, total=False):
@@ -191,6 +291,19 @@ class UserInteraction(TypedDict):
     user_response: str  # User's response/decision
     impact: NotRequired[str]  # How this affected the reproduction
     alternatives_considered: NotRequired[List[str]]  # Other options presented
+
+
+class MaterialValidationUserResponse(TypedDict):
+    """
+    User response to Stage 0 material validation checkpoint.
+    
+    This is the most critical checkpoint in the system. If materials are wrong,
+    all downstream simulations will produce incorrect results.
+    """
+    verdict: str  # "approve" | "change_database" | "change_material" | "need_help"
+    database_choice: NotRequired[str]  # e.g., "johnson_christy", "rakic" - if changing database
+    material_choice: NotRequired[str]  # e.g., "gold" instead of "silver" - if changing material
+    notes: str  # User explanation/reasoning
 
 
 class AgentCallMetric(TypedDict):
@@ -328,7 +441,27 @@ class ReproState(TypedDict, total=False):
     # ─── Revision Tracking ──────────────────────────────────────────────
     design_revision_count: int
     code_revision_count: int  # Tracks code generation revisions (from code review feedback)
-    execution_failure_count: int  # Tracks simulation execution failures (crashes, timeouts) - separate from code revisions
+    execution_failure_count: int
+    """Per-stage execution failure count.
+    
+    Incremented: Each time simulation crashes/fails at runtime (ExecutionValidatorAgent verdict = "fail")
+    Reset to 0: 
+        - When stage completes successfully (verdict = "pass" or "warning")
+        - When user intervenes via ASK_USER and provides guidance
+        - When moving to a new stage (counter is per-stage, not global)
+    Limit: max_execution_failures (default: 2 per stage)
+    
+    Scoping: Counter is PER-STAGE. This prevents one problematic stage from
+    poisoning the entire workflow. Each new stage starts fresh.
+    """
+    total_execution_failures: int
+    """Global counter across all stages (for metrics/reporting only).
+    
+    Never resets during a reproduction run. Used for:
+    - Final report statistics
+    - Identifying papers that are particularly difficult to simulate
+    - Comparing reproduction difficulty across papers
+    """
     analysis_revision_count: int
     replan_count: int
     
@@ -368,6 +501,10 @@ class ReproState(TypedDict, total=False):
     user_responses: Dict[str, str]  # question → response (current session)
     awaiting_user_input: bool
     user_interactions: List[UserInteraction]  # Full log of all user decisions/feedback
+    
+    # Resume context - helps agents understand what triggered ask_user
+    ask_user_trigger: Optional[str]  # What caused ask_user (e.g., "code_review_limit", "material_checkpoint")
+    last_node_before_ask_user: Optional[str]  # Which node triggered the ask_user
     
     # ─── Report Generation ──────────────────────────────────────────────
     figure_comparisons: List[FigureComparison]  # All figure comparisons
@@ -477,6 +614,7 @@ def create_initial_state(
         design_revision_count=0,
         code_revision_count=0,
         execution_failure_count=0,
+        total_execution_failures=0,
         analysis_revision_count=0,
         replan_count=0,
         
@@ -514,6 +652,8 @@ def create_initial_state(
         user_responses={},
         awaiting_user_input=False,
         user_interactions=[],  # Log of all user decisions/feedback
+        ask_user_trigger=None,  # What caused ask_user
+        last_node_before_ask_user=None,  # Which node triggered ask_user
         
         # Report generation
         figure_comparisons=[],

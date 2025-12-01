@@ -862,7 +862,7 @@ Any Agent (suggests backtrack) → SupervisorAgent (decides) → HANDLE_BACKTRAC
 - `MAX_BACKTRACKS = 2`: Prevents infinite loops
 - If limit reached + backtrack needed → escalate to user
 
-**Status:** Implemented in v1.
+**Status:** Planned for v1.
 
 ### Stage Parallelization
 
@@ -908,6 +908,232 @@ Each domain would require:
 - Logging all random seeds used
 
 **Status**: Documented for future investigation.
+
+### Platform Support and Compatibility
+
+ReproLab is designed to run on Unix-like systems (Linux, macOS) and has limited
+Windows support in v1. This section documents platform-specific considerations.
+
+#### Supported Platforms
+
+| Platform | Support Level | Notes |
+|----------|--------------|-------|
+| **Linux (x64)** | ✅ Full | Primary development platform |
+| **macOS (Intel)** | ✅ Full | Tested on macOS 12+ |
+| **macOS (Apple Silicon)** | ✅ Full | M1/M2/M3 via Rosetta or native |
+| **Windows 10/11** | ⚠️ Limited | See Windows limitations below |
+| **WSL2** | ✅ Full | Recommended for Windows users |
+
+#### Windows Limitations (v1)
+
+Windows support is limited due to the following platform differences:
+
+**1. Memory Limiting Not Available**
+
+The `resource` module used for memory limits is Unix-only:
+```python
+# This works on Unix, fails on Windows
+import resource
+resource.setrlimit(resource.RLIMIT_AS, (max_bytes, max_bytes))
+```
+
+**Impact**: Simulations can consume unlimited memory on Windows, potentially causing system instability.
+
+**Workaround**: The system automatically skips memory limits on Windows. Monitor task manager manually.
+
+**2. Process Group Signaling Differences**
+
+Unix uses `os.killpg()` for killing process groups; Windows requires different APIs.
+
+**Impact**: Timeout enforcement may not kill all child processes on Windows.
+
+**Workaround**: The system uses `subprocess.Popen.terminate()` on Windows, which handles most cases.
+
+**3. `preexec_fn` Not Supported**
+
+The `preexec_fn` parameter to `subprocess.run()` doesn't work on Windows:
+```python
+# This silently does nothing on Windows
+subprocess.run(..., preexec_fn=set_limits if os.name != 'nt' else None)
+```
+
+**Impact**: Cannot set resource limits before simulation starts.
+
+**4. Path Separator Differences**
+
+Unix uses `/`, Windows uses `\`. While Python's `pathlib` handles this, some edge cases exist.
+
+**Impact**: File paths in generated code may need adjustment.
+
+**Workaround**: Always use `pathlib.Path` instead of string concatenation.
+
+#### Windows Workarounds and Alternatives
+
+**Option 1: Use WSL2 (Recommended)**
+
+Windows Subsystem for Linux 2 provides a full Linux environment:
+
+```powershell
+# Install WSL2 (PowerShell as Administrator)
+wsl --install -d Ubuntu-22.04
+
+# Install Miniconda in WSL
+wsl
+wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
+bash Miniconda3-latest-Linux-x86_64.sh
+
+# Install Meep
+conda create -n reprolab python=3.11
+conda activate reprolab
+conda install -c conda-forge meep=1.28.0
+
+# Clone and setup ReproLab
+git clone https://github.com/youruser/reprolab.git
+cd reprolab
+pip install -r requirements.txt
+```
+
+WSL2 advantages:
+- Full Unix support including resource limits
+- Native Meep installation via conda
+- Access to Windows files via `/mnt/c/`
+- VS Code WSL integration works seamlessly
+
+**Option 2: Docker Desktop for Windows**
+
+Run simulations in a Linux container:
+
+```powershell
+# Pull or build the Meep container
+docker pull condaforge/mambaforge
+
+# Run with resource limits (works on Windows!)
+docker run --rm -it `
+    --memory=8g `
+    --cpus=4 `
+    -v ${PWD}/outputs:/outputs `
+    condaforge/mambaforge bash
+
+# Inside container: install and run
+conda install -c conda-forge meep=1.28.0
+pip install -r requirements.txt
+python -m src.graph ...
+```
+
+Docker advantages:
+- Full resource limiting works via Docker's runtime
+- Consistent environment across platforms
+- Isolation from host system
+
+**Option 3: Native Windows (Limited)**
+
+If you must run natively on Windows:
+
+1. Install Meep via conda (may have issues):
+   ```cmd
+   conda install -c conda-forge meep
+   ```
+
+2. Set `REPROLAB_SKIP_RESOURCE_LIMITS=1` to suppress warnings
+
+3. Monitor simulations manually - they can consume unlimited resources
+
+4. Consider shorter timeout values to catch runaway simulations
+
+**Native Windows Limitations Summary:**
+| Feature | Unix | Windows Native |
+|---------|------|----------------|
+| Timeout enforcement | ✅ | ⚠️ Basic only |
+| Memory limits | ✅ | ❌ Not available |
+| CPU core limits | ✅ | ✅ Via env vars |
+| Process isolation | ✅ | ⚠️ Limited |
+| Meep stability | ✅ | ⚠️ May vary |
+
+#### Code Runner Platform Detection
+
+The code runner automatically adapts to the platform:
+
+```python
+import os
+import sys
+
+def get_platform_config():
+    """Detect platform and return appropriate configuration."""
+    is_windows = sys.platform == 'win32'
+    is_wsl = 'microsoft' in os.uname().release.lower() if hasattr(os, 'uname') else False
+    
+    if is_windows:
+        return {
+            'memory_limiting_available': False,
+            'process_group_kill_available': False,
+            'preexec_fn_available': False,
+            'recommended_action': 'Consider using WSL2 or Docker for full functionality',
+        }
+    elif is_wsl:
+        return {
+            'memory_limiting_available': True,  # WSL2 supports resource module
+            'process_group_kill_available': True,
+            'preexec_fn_available': True,
+            'recommended_action': None,
+        }
+    else:  # Linux, macOS
+        return {
+            'memory_limiting_available': True,
+            'process_group_kill_available': True,
+            'preexec_fn_available': True,
+            'recommended_action': None,
+        }
+```
+
+#### Environment Variables for Platform Tuning
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `REPROLAB_SKIP_RESOURCE_LIMITS` | `0` | Set to `1` to skip memory limiting (auto-set on Windows) |
+| `REPROLAB_TIMEOUT_BUFFER_SECONDS` | `30` | Extra time before hard kill |
+| `REPROLAB_USE_PROCESS_GROUP` | `1` | Set to `0` to disable process group kills |
+
+#### Meep Installation by Platform
+
+**Linux (Ubuntu/Debian)**
+```bash
+conda install -c conda-forge meep=1.28.0
+# Or with MPI support:
+conda install -c conda-forge meep=1.28.0 mpi4py openmpi
+```
+
+**macOS (Intel)**
+```bash
+conda install -c conda-forge meep=1.28.0
+```
+
+**macOS (Apple Silicon M1/M2/M3)**
+```bash
+# Native ARM64 build (recommended)
+CONDA_SUBDIR=osx-arm64 conda install -c conda-forge meep=1.28.0
+
+# Or via Rosetta (if ARM build has issues)
+arch -x86_64 conda install -c conda-forge meep=1.28.0
+```
+
+**Windows Native (Limited Support)**
+```cmd
+:: May have stability issues
+conda install -c conda-forge meep
+```
+
+**WSL2 (Recommended for Windows)**
+```bash
+# Inside WSL2 Ubuntu
+conda install -c conda-forge meep=1.28.0
+```
+
+**Verify Installation**
+```python
+import meep as mp
+print(f"Meep version: {mp.__version__}")
+print(f"Number of processes: {mp.count_processors()}")
+```
 
 ### Sandboxed Code Execution
 

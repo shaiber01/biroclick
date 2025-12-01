@@ -4,6 +4,20 @@
 
 A LangGraph-based multi-agent system that automatically reproduces simulation results from optics and metamaterials research papers using Meep FDTD simulations.
 
+## Implementation Status
+
+| Component | Status | Location |
+|-----------|--------|----------|
+| **Core State & Schemas** | Implemented | `schemas/state.py`, `schemas/*.json` |
+| **Paper Loader** | Implemented | `src/paper_loader.py` |
+| **Code Runner (sandboxed execution)** | Implemented | `src/code_runner.py` |
+| **Graph Wiring** | Skeleton only | `src/graph.py` |
+| **Agent Node Implementations** | Stubs only | `src/agents.py` |
+| **Prompt Templates** | Complete | `prompts/*.md` |
+| **Material Database** | Complete | `materials/` |
+
+**Note:** Code snippets in `docs/workflow.md` and `docs/guidelines.md` are illustrative design specifications, not guaranteed to match current implementation.
+
 ## Overview
 
 ReproLab reads scientific papers, plans staged reproductions, generates and runs Meep simulations, and systematically compares results to published figures—all while maintaining transparency through explicit assumption tracking and structured progress logging.
@@ -247,20 +261,52 @@ Stop optimizing when:
 
 ## Installation
 
+### Platform Support
+
+| Platform | Support Level | Notes |
+|----------|--------------|-------|
+| **Linux** | ✅ Full | Primary development platform |
+| **macOS** | ✅ Full | Intel and Apple Silicon |
+| **Windows + WSL2** | ✅ Full | Recommended for Windows users |
+| **Windows Native** | ⚠️ Limited | No memory limits; see docs/guidelines.md |
+
+**Windows Users**: We recommend using [WSL2](https://learn.microsoft.com/en-us/windows/wsl/install) for full functionality. Native Windows has limited resource management. See `docs/guidelines.md` Section 14 for details.
+
+### Quick Start (Linux/macOS/WSL2)
+
 ```bash
 # Clone the repository
 git clone https://github.com/yourusername/reprolab.git
 cd reprolab
 
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # or `venv\Scripts\activate` on Windows
+# Create conda environment (recommended - required for Meep)
+conda create -n reprolab python=3.11
+conda activate reprolab
 
-# Install dependencies
+# Install Meep via conda (REQUIRED - do not use pip)
+conda install -c conda-forge meep=1.28.0
+
+# Install Python dependencies
 pip install -r requirements.txt
 
 # Set up environment variables
 export ANTHROPIC_API_KEY="your-api-key"
+
+# Verify installation
+python -c "import meep; print(f'Meep {meep.__version__} installed successfully')"
+```
+
+### Development Installation
+
+```bash
+# After the quick start above, also install dev dependencies
+pip install -r requirements-dev.txt
+
+# Run tests
+pytest tests/
+
+# Type checking
+mypy src/
 ```
 
 ## Usage
@@ -346,8 +392,8 @@ This is an early version with several known limitations:
 |------------|-------------|-------------|
 | **PDF conversion required** | PDFs must be converted to markdown first (using marker/nougat) | Direct PDF loading via `load_paper_from_pdf()` |
 | **Manual figure digitization** | Reference data requires manual digitization with tools like WebPlotDigitizer | Integration with automatic digitizers |
-| **Figure download from markdown** | ✅ `load_paper_from_markdown()` extracts and downloads figures automatically | N/A (implemented in v1) |
-| **Supplementary materials** | ✅ Supported via `supplementary_markdown_path` parameter | N/A (implemented in v1) |
+| **Figure download from markdown** | ✅ `load_paper_from_markdown()` extracts and downloads figures automatically | Planned for v1 |
+| **Supplementary materials** | ✅ Supported via `supplementary_markdown_path` parameter | Planned for v1 |
 | **Long paper handling** | ✅ Warnings displayed for papers >50K chars; manual trimming recommended | Smart chunking/summarization |
 | **Single-model decisions** | Each agent uses one LLM model | Parallel multi-model consensus for critics/supervisors/planners |
 | **Single-threaded execution** | Stages run sequentially, not in parallel | Stage parallelization where dependencies allow |

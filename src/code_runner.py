@@ -60,6 +60,159 @@ DEFAULT_CONFIG: ExecutionConfig = {
 
 
 # ═══════════════════════════════════════════════════════════════════════
+# Platform Detection and Compatibility
+# ═══════════════════════════════════════════════════════════════════════
+
+import sys
+import warnings
+
+
+class PlatformCapabilities(TypedDict):
+    """Describes what sandboxing features are available on this platform."""
+    platform: str
+    memory_limiting_available: bool
+    process_group_kill_available: bool
+    preexec_fn_available: bool
+    is_wsl: bool
+    warnings: List[str]
+    recommended_action: Optional[str]
+
+
+def detect_platform() -> PlatformCapabilities:
+    """
+    Detect the current platform and its sandboxing capabilities.
+    
+    Returns:
+        PlatformCapabilities dict describing what features are available
+        
+    Example:
+        caps = detect_platform()
+        if not caps["memory_limiting_available"]:
+            print(f"Warning: {caps['recommended_action']}")
+    """
+    platform_warnings: List[str] = []
+    recommended_action: Optional[str] = None
+    
+    # Check for WSL
+    is_wsl = False
+    try:
+        if hasattr(os, 'uname'):
+            uname = os.uname()
+            is_wsl = 'microsoft' in uname.release.lower() or 'wsl' in uname.release.lower()
+    except Exception:
+        pass
+    
+    # Windows Native
+    if sys.platform == 'win32':
+        platform_warnings.append(
+            "Running on Windows native. Memory limiting is NOT available. "
+            "Simulations can consume unlimited memory."
+        )
+        platform_warnings.append(
+            "Process group signaling is limited. Timeout enforcement may not "
+            "kill all child processes."
+        )
+        recommended_action = (
+            "For full functionality, consider using WSL2 or Docker. "
+            "See docs/guidelines.md Section 14 for setup instructions."
+        )
+        
+        return PlatformCapabilities(
+            platform="windows",
+            memory_limiting_available=False,
+            process_group_kill_available=False,
+            preexec_fn_available=False,
+            is_wsl=False,
+            warnings=platform_warnings,
+            recommended_action=recommended_action
+        )
+    
+    # WSL2 (behaves like Linux)
+    if is_wsl:
+        return PlatformCapabilities(
+            platform="wsl",
+            memory_limiting_available=True,
+            process_group_kill_available=True,
+            preexec_fn_available=True,
+            is_wsl=True,
+            warnings=[],
+            recommended_action=None
+        )
+    
+    # macOS
+    if sys.platform == 'darwin':
+        # Check for Apple Silicon
+        try:
+            import platform as plat
+            machine = plat.machine()
+            if machine == 'arm64':
+                platform_warnings.append(
+                    "Running on Apple Silicon. Ensure Meep is installed for ARM64 "
+                    "or via Rosetta for best compatibility."
+                )
+        except Exception:
+            pass
+        
+        return PlatformCapabilities(
+            platform="macos",
+            memory_limiting_available=True,
+            process_group_kill_available=True,
+            preexec_fn_available=True,
+            is_wsl=False,
+            warnings=platform_warnings,
+            recommended_action=None
+        )
+    
+    # Linux
+    return PlatformCapabilities(
+        platform="linux",
+        memory_limiting_available=True,
+        process_group_kill_available=True,
+        preexec_fn_available=True,
+        is_wsl=False,
+        warnings=[],
+        recommended_action=None
+    )
+
+
+def check_platform_and_warn() -> PlatformCapabilities:
+    """
+    Check platform capabilities and emit warnings if needed.
+    
+    Call this at module load or before first simulation to inform users
+    of any platform limitations.
+    
+    Returns:
+        PlatformCapabilities dict
+    """
+    caps = detect_platform()
+    
+    # Check environment variable to suppress warnings
+    suppress_warnings = os.environ.get("REPROLAB_SKIP_RESOURCE_LIMITS", "0") == "1"
+    
+    if caps["warnings"] and not suppress_warnings:
+        for warning in caps["warnings"]:
+            warnings.warn(warning, RuntimeWarning)
+        
+        if caps["recommended_action"]:
+            warnings.warn(f"RECOMMENDED: {caps['recommended_action']}", RuntimeWarning)
+    
+    return caps
+
+
+# Detect platform at module load time
+_PLATFORM_CAPS: Optional[PlatformCapabilities] = None
+
+
+def get_platform_capabilities() -> PlatformCapabilities:
+    """Get cached platform capabilities (detected once at module load)."""
+    global _PLATFORM_CAPS
+    if _PLATFORM_CAPS is None:
+        _PLATFORM_CAPS = detect_platform()
+    return _PLATFORM_CAPS
+
+
+# ═══════════════════════════════════════════════════════════════════════
 # Resource Limiting (Unix)
 # ═══════════════════════════════════════════════════════════════════════
 
@@ -68,9 +221,20 @@ def _create_resource_limiter(max_memory_gb: float):
     Create a preexec function that sets resource limits.
     
     Only works on Unix systems. On Windows, returns None.
+    
+    Uses platform detection to determine if memory limiting is available.
+    
+    Args:
+        max_memory_gb: Maximum memory in gigabytes
+        
+    Returns:
+        Callable to set limits, or None if not supported on this platform
     """
-    if os.name == 'nt':
-        # Windows doesn't support resource module
+    caps = get_platform_capabilities()
+    
+    if not caps["memory_limiting_available"]:
+        # Windows or other platform without resource module
+        # Warning already emitted by check_platform_and_warn()
         return None
     
     def set_limits():
@@ -81,13 +245,19 @@ def _create_resource_limiter(max_memory_gb: float):
             max_bytes = int(max_memory_gb * 1024 * 1024 * 1024)
             resource.setrlimit(resource.RLIMIT_AS, (max_bytes, max_bytes))
             
-            # Optionally set other limits
+            # Optionally set other limits for more comprehensive control
             # resource.setrlimit(resource.RLIMIT_DATA, (max_bytes, max_bytes))
             # resource.setrlimit(resource.RLIMIT_RSS, (max_bytes, max_bytes))
             
-        except (ImportError, ValueError, resource.error) as e:
+        except (ImportError, ValueError) as e:
             # Some limits may not be available on all systems
             print(f"Warning: Could not set resource limits: {e}")
+        except Exception as e:
+            # resource.error or other platform-specific errors
+            if "resource" in str(type(e).__module__):
+                print(f"Warning: Resource limit error: {e}")
+            else:
+                raise
     
     return set_limits
 

@@ -18,11 +18,29 @@ from src.agents import (
     comparison_validator_node,
     supervisor_node,
     ask_user_node,
-    generate_report_node,
+    generate_report_node as _generate_report_node,
     handle_backtrack_node
 )
 # Assuming run_code_node is in code_runner.py as per docs/workflow.md
 from src.code_runner import run_code_node
+
+
+def generate_report_node_with_checkpoint(state: ReproState) -> Dict[str, Any]:
+    """
+    Wrapper around generate_report_node that saves final checkpoint.
+    
+    Ensures the final state (including report path) is always persisted
+    for archival and debugging purposes.
+    """
+    # Call the actual report generation
+    result = _generate_report_node(state)
+    
+    # Save final checkpoint with the complete state including report
+    # Merge result into state for checkpointing
+    final_state = {**state, **result}
+    save_checkpoint(final_state, "final_report")
+    
+    return result
 
 def route_after_plan(state: ReproState) -> Literal["select_stage"]:
     """Route after planning is always to select stage."""
@@ -169,7 +187,7 @@ def create_repro_graph():
     workflow.add_node("comparison_check", comparison_validator_node)
     workflow.add_node("supervisor", supervisor_node)
     workflow.add_node("ask_user", ask_user_node)
-    workflow.add_node("generate_report", generate_report_node)
+    workflow.add_node("generate_report", generate_report_node_with_checkpoint)
     workflow.add_node("handle_backtrack", handle_backtrack_node)
 
     # Define Edges
@@ -252,25 +270,29 @@ def create_repro_graph():
     
     workflow.add_edge("handle_backtrack", "select_stage")
     
-    # Ask user always resumes to... depends on context.
-    # The AskUser node should likely look at state to know where to resume.
-    # Or we can have conditional edge from ask_user.
-    # For simplicity in v1, ask_user often resumes based on what triggered it.
-    # We can implement a router or just have it go to a "resume_router" node.
-    # Actually, the graph topology usually requires fixed edges.
-    # A common pattern is to have ask_user return to a specific node or use a "router" node.
-    # Let's assume ask_user sets a "resume_node" in state or we use a router.
+    # Ask user resumes to Supervisor, who evaluates user feedback and decides next steps.
+    # 
+    # IMPORTANT: Before routing to ask_user, nodes should set these state fields:
+    #   - ask_user_trigger: What caused the ask (e.g., "code_review_limit", "material_checkpoint")
+    #   - last_node_before_ask_user: The node that triggered ask_user (e.g., "code_review")
+    #
+    # The Supervisor will use these fields (via resume_context) to understand:
+    #   1. What the user was responding to
+    #   2. Where to route next based on user's answer
+    #
+    # Example: If code_review triggered ask_user due to revision limit, and user provides
+    # a fix hint, Supervisor can route back to generate_code with the hint in supervisor_feedback.
     
     def route_after_ask_user(state: ReproState) -> str:
-        # Logic to determine where to go after user input
-        # This depends on what triggered ask_user
-        # This is complex; simplifying assumption: 
-        # If triggered by stage 0 checkpoint -> select_stage (or design if re-doing)
-        # If triggered by supervisor -> supervisor (to re-evaluate) or select_stage
-        # If triggered by reviewer -> design or generate_code
+        """
+        Route after user provides input.
         
-        # For now, let's route back to Supervisor to re-evaluate the state with new user input
-        # The supervisor can then decide next steps.
+        Always routes to Supervisor, who has full context (including resume_context)
+        to make the appropriate next-step decision based on:
+        - What triggered the ask_user (state["ask_user_trigger"])
+        - User's response (state["user_responses"])
+        - Overall progress and validation state
+        """
         return "supervisor"
 
     workflow.add_conditional_edges(

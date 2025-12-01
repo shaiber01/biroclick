@@ -1,5 +1,8 @@
 # Workflow Documentation
 
+> **Design Document**: Code examples below are illustrative specifications. 
+> See `src/` for actual implementation status.
+
 This document describes the LangGraph workflow for paper reproduction.
 
 ## Overview
@@ -31,7 +34,7 @@ The system uses a state graph where each node represents an agent action or syst
 
 **Inputs**:
 - `paper_id`: Unique identifier
-- `paper_text`: Extracted paper content (for quick domain scan)
+- `paper_text_summary`: Abstract + Methods section (critical for material sources, geometry details)
 
 **Outputs**:
 - `prompt_modifications`: List of modifications to agent prompts
@@ -465,6 +468,50 @@ After Stage 0 completes, the Supervisor MUST trigger a user checkpoint:
 
 This is the highest-leverage checkpoint in the system. If material data is wrong, everything downstream fails.
 
+**Material Validation - User Response Handling:**
+
+| User Response | System Action | Counts Against Limits? |
+|--------------|---------------|------------------------|
+| "Materials look correct" | Proceed to Stage 1 | No |
+| "Wrong database - use Johnson-Christy instead of Palik" | Invalidate Stage 0, update assumptions, re-run | Yes (backtrack count +1) |
+| "Wrong material - should be gold not silver" | Invalidate Stage 0, update plan, re-run | Yes (backtrack count +1) |
+| "Not sure / need help comparing" | Show comparison of available databases, ask again | No (clarification only) |
+
+**Re-run behavior (database/material change):**
+```python
+if user_response.verdict == "change_database":
+    # Update assumptions with new database choice
+    state["assumptions"]["material_sources"][material] = user_response.database_choice
+    
+    # Invalidate Stage 0 for re-run
+    state["progress"]["stages"]["stage0"]["status"] = "needs_rerun"
+    
+    # Increment backtrack count (limit: 2 total)
+    state["backtrack_count"] += 1
+    
+    # Log the user decision
+    log_user_interaction(state, "material_checkpoint", user_response)
+    
+    # SimulationDesignerAgent will use updated assumptions on re-run
+
+elif user_response.verdict == "change_material":
+    # This is more severe - wrong material identified
+    # Need to update plan, not just assumptions
+    state["supervisor_feedback"] = f"User identified wrong material: use {user_response.material_choice}"
+    state["progress"]["stages"]["stage0"]["status"] = "needs_rerun"
+    state["backtrack_count"] += 1
+    
+    # Route to PLAN to update material selection
+    return "plan"
+
+elif user_response.verdict == "need_help":
+    # Show comparison and ask again (no penalty)
+    state["pending_user_questions"].append(
+        format_material_comparison_table(available_databases)
+    )
+    return "ask_user"  # Same question with more context
+```
+
 **Outputs**:
 - `supervisor_verdict`: Decision
 - `supervisor_feedback`: Recommendations
@@ -479,6 +526,33 @@ This is the highest-leverage checkpoint in the system. If material data is wrong
 | backtrack_to_stage | HANDLE_BACKTRACK | Cross-stage backtracking |
 | ask_user | ASK_USER | (MANDATORY after Stage 0) |
 | all_complete | GENERATE_REPORT | |
+
+**CRITICAL: Validation Hierarchy Synchronization**
+
+After each stage completes, SupervisorAgent MUST update both:
+1. `progress["stages"][stage_id]["status"]` - the stage's own status
+2. `validation_hierarchy[stage_type]` - the hierarchy gate for dependent stages
+
+These use **different terminology** (see `schemas/state.py` for full mapping):
+
+| Stage Status | Validation Hierarchy |
+|--------------|---------------------|
+| `completed_success` | `passed` |
+| `completed_partial` | `partial` |
+| `completed_failed` | `failed` |
+| `needs_rerun` / `invalidated` | `not_done` |
+
+Use the helper function from `schemas/state.py`:
+
+```python
+from schemas.state import update_validation_hierarchy
+
+# In SupervisorAgent node after stage completion:
+stage["status"] = "completed_success"
+update_validation_hierarchy(state, stage["stage_id"], state["plan"]["stages"])
+```
+
+**Why this matters**: `SELECT_STAGE` uses `validation_hierarchy` to enforce dependencies. If it's out of sync with actual stage status, stages may be blocked incorrectly or allowed to run prematurely.
 
 ---
 
@@ -499,17 +573,24 @@ This is the highest-leverage checkpoint in the system. If material data is wrong
 **Logic**:
 ```python
 def handle_backtrack(state):
+    from schemas.state import update_validation_hierarchy
+    
     decision = state["backtrack_decision"]
     target_stage = decision["target_stage_id"]
+    stages = state["plan"]["stages"]
     
     # Mark stages as invalidated (need to re-run after target completes)
     for stage_id in decision["stages_to_invalidate"]:
         state["progress"]["stages"][stage_id]["status"] = "invalidated"
         state["progress"]["stages"][stage_id]["invalidation_reason"] = decision["reason"]
+        # Sync validation hierarchy (invalidated → not_done)
+        update_validation_hierarchy(state, stage_id, stages)
     
     # Reset target stage to allow re-design
     state["progress"]["stages"][target_stage]["status"] = "needs_rerun"
     state["progress"]["stages"][target_stage]["revision_count"] += 1
+    # Sync validation hierarchy (needs_rerun → not_done)
+    update_validation_hierarchy(state, target_stage, stages)
     
     # Increment backtrack counter
     state["backtrack_count"] += 1
@@ -1025,8 +1106,10 @@ if execution_failed:
     return "generate_code"
 ```
 
-**Note**: `code_revision_count` is reset per stage but `execution_failure_count` is tracked separately.
-The rationale: code revisions are typically minor, while execution failures often indicate systematic issues.
+**Note**: Both `code_revision_count` and `execution_failure_count` are reset per stage. 
+Additionally, `execution_failure_count` resets when user intervenes via ASK_USER.
+Global tracking via `total_execution_failures` preserves the full count for metrics/reporting.
+See "Counter Scoping and Reset Behavior" section below for full details.
 
 ### Validation Hierarchy Enforcement
 
@@ -1062,6 +1145,39 @@ This matrix defines the system behavior for various error scenarios and edge cas
 | **LLM rate limit or timeout** | Retry with exponential backoff (1s, 2s, 4s, 8s, 16s). After 5 retries, save checkpoint and pause. | 5 retries | Checkpoint + Pause |
 | **Invalid JSON from LLM** | Retry same call up to 3 times. If still failing, escalate to user with raw output for debugging. | 3 retries | ASK_USER |
 | **File I/O errors** | Log error, attempt alternate paths. If critical file (checkpoint, output), escalate immediately. | N/A | ASK_USER |
+
+### Counter Scoping and Reset Behavior
+
+Understanding when counters reset is critical for error recovery:
+
+| Counter | Scope | Reset Conditions | Global Tracking |
+|---------|-------|------------------|-----------------|
+| `execution_failure_count` | Per-stage | Stage completes successfully, User intervenes, New stage starts | `total_execution_failures` (never resets) |
+| `code_revision_count` | Per-stage | New stage starts | No |
+| `design_revision_count` | Per-stage | New stage starts | No |
+| `physics_failure_count` | Per-stage | New stage starts | No |
+
+**Why per-stage scoping?**
+- Prevents one problematic stage from poisoning the entire workflow
+- Each new stage gets a fresh chance
+- User intervention gives the system another opportunity with guidance
+
+**Counter reset implementation:**
+```python
+def reset_stage_counters(state):
+    """Reset per-stage counters when moving to a new stage."""
+    state["execution_failure_count"] = 0
+    state["code_revision_count"] = 0
+    state["design_revision_count"] = 0
+    state["physics_failure_count"] = 0
+    # Note: total_execution_failures is NOT reset
+
+def handle_user_intervention(state):
+    """Reset counters after user provides guidance."""
+    # User guidance = fresh start for this stage
+    state["execution_failure_count"] = 0
+    # code_revision_count may or may not reset depending on intervention type
+```
 
 ### Recovery Implementation
 
@@ -1420,14 +1536,20 @@ Each agent receives **only what it needs** - not full repo access. This section 
 **Receives**:
 | Field | Source | Notes |
 |-------|--------|-------|
-| `paper_text` | `state["paper_text"]` | **Truncated** to first ~10,000 chars (abstract + intro) |
+| `paper_text_summary` | Extracted from `state["paper_text"]` | Abstract + Methods section (critical for optics papers) |
 | `paper_domain` | `state["paper_domain"]` | e.g., "plasmonics", "photonic_crystals" |
 | `available_agents` | Hardcoded list | Names and roles of all agents |
 | `available_prompts` | `prompts/*.md` file list | What can be adapted |
 
-**Does NOT receive**: Full paper text, figures, any simulation-related state.
+**Does NOT receive**: Full paper text (Results/Discussion), figures, any simulation-related state.
 
-**Rationale**: Only needs high-level domain understanding to suggest prompt adaptations.
+**Rationale**: Needs Abstract for high-level domain understanding AND Methods section for critical details:
+- Material data sources (Palik vs Johnson-Christy, etc.)
+- Exact geometry specifications and fabrication details
+- Simulation parameters mentioned by original authors
+- Measurement techniques that affect interpretation
+
+**Implementation note**: Extract Methods section by looking for common headers ("Methods", "Experimental", "Materials and Methods", "Simulation Details"). If not found, fall back to first ~15,000 chars.
 
 ---
 
@@ -1446,10 +1568,13 @@ Each agent receives **only what it needs** - not full repo access. This section 
 | `supplementary_text` | `state["supplementary_text"]` | If available |
 | `supplementary_figures` | `state["supplementary_figures"]` | If available |
 | `prompt_adaptations` | `state["prompt_adaptations"]` | From PromptAdaptorAgent |
+| `user_interactions` | `state["user_interactions"]` | **If replanning** - user corrections to apply |
+| `supervisor_feedback` | `state["supervisor_feedback"]` | **If replanning** - why we're replanning |
+| `replan_reason` | Computed from context | Summary of what triggered replanning |
 
 **Does NOT receive**: Any simulation outputs, code, progress, validation state.
 
-**Rationale**: Needs complete paper information to create comprehensive plan.
+**Rationale**: Needs complete paper information to create comprehensive plan. When replanning, also needs user corrections to avoid repeating errors.
 
 ---
 
@@ -1468,10 +1593,12 @@ Each agent receives **only what it needs** - not full repo access. This section 
 | `revision_count` | `state["design_revision_count"]` | How many revisions so far |
 | `paper_domain` | `state["paper_domain"]` | For domain-specific defaults |
 | `available_materials` | `materials/index.json` | What materials are available |
+| `user_interactions` | `state["user_interactions"]` | **If available** - user corrections that override parameters |
+| `supervisor_feedback` | `state["supervisor_feedback"]` | **If available** - supervisor guidance on design issues |
 
 **Does NOT receive**: Full paper text, figures, other stages, simulation code, outputs.
 
-**Rationale**: Focused on current stage design. Paper details already extracted to plan.
+**Rationale**: Focused on current stage design. Paper details already extracted to plan. User corrections must be checked before using extracted parameters.
 
 ---
 
@@ -1614,10 +1741,14 @@ Each agent receives **only what it needs** - not full repo access. This section 
 | `revision_counts` | Various `state` fields | How many revisions used |
 | `backtrack_suggestion` | `state["backtrack_suggestion"]` | If any agent suggested |
 | `systematic_discrepancies` | `state["systematic_discrepancies_identified"]` | Known shifts |
+| `user_responses` | `state["user_responses"]` | Current user answers (question→response) |
+| `user_interactions` | `state["user_interactions"]` | Full log of user decisions |
+| `pending_user_questions` | `state["pending_user_questions"]` | Outstanding questions |
+| `resume_context` | Computed | What triggered last ask_user and why |
 
 **Does NOT receive**: Full paper text, raw code, raw data files.
 
-**Rationale**: Strategic oversight needs summary, not raw details.
+**Rationale**: Strategic oversight needs summary, not raw details. User feedback is critical for making decisions after ask_user resumes.
 
 ---
 
@@ -1628,7 +1759,7 @@ def build_agent_context(state: ReproState, agent: str) -> Dict[str, Any]:
     """Build context dictionary for a specific agent."""
     
     if agent == "PlannerAgent":
-        return {
+        context = {
             "paper_id": state["paper_id"],
             "paper_title": state["paper_title"],
             "paper_domain": state["paper_domain"],
@@ -1638,10 +1769,16 @@ def build_agent_context(state: ReproState, agent: str) -> Dict[str, Any]:
             "supplementary_figures": state.get("supplementary_figures"),
             "prompt_adaptations": state.get("prompt_adaptations", []),
         }
+        # Add user feedback if replanning
+        if state.get("replan_count", 0) > 0:
+            context["user_interactions"] = state.get("user_interactions", [])
+            context["supervisor_feedback"] = state.get("supervisor_feedback")
+            context["replan_reason"] = _compute_replan_reason(state)
+        return context
     
     elif agent == "SimulationDesignerAgent":
         current_stage = get_current_stage(state)
-        return {
+        context = {
             "current_stage_id": state["current_stage_id"],
             "current_stage": current_stage,
             "assumptions": state["assumptions"],
@@ -1651,6 +1788,12 @@ def build_agent_context(state: ReproState, agent: str) -> Dict[str, Any]:
             "paper_domain": state["paper_domain"],
             "available_materials": load_materials_index(),
         }
+        # Always include user interactions - they may contain parameter corrections
+        if state.get("user_interactions"):
+            context["user_interactions"] = state["user_interactions"]
+        if state.get("supervisor_feedback"):
+            context["supervisor_feedback"] = state["supervisor_feedback"]
+        return context
     
     elif agent == "ResultsAnalyzerAgent":
         target_ids = get_target_figure_ids(state)
@@ -1678,9 +1821,41 @@ def build_agent_context(state: ReproState, agent: str) -> Dict[str, Any]:
             },
             "backtrack_suggestion": state.get("backtrack_suggestion"),
             "systematic_discrepancies": state["systematic_discrepancies_identified"],
+            # User feedback - critical for post-ask_user decisions
+            "user_responses": state.get("user_responses", {}),
+            "user_interactions": state.get("user_interactions", []),
+            "pending_user_questions": state.get("pending_user_questions", []),
+            "resume_context": _compute_resume_context(state),
         }
     
     # ... other agents ...
+
+
+def _compute_replan_reason(state: ReproState) -> str:
+    """Summarize why replanning was triggered."""
+    reasons = []
+    if state.get("supervisor_feedback"):
+        reasons.append(f"Supervisor: {state['supervisor_feedback']}")
+    
+    # Check recent user interactions
+    recent_corrections = [
+        ui for ui in state.get("user_interactions", [])
+        if ui.get("interaction_type") in ["parameter_confirmation", "clarification"]
+    ]
+    if recent_corrections:
+        reasons.append(f"User provided {len(recent_corrections)} correction(s)")
+    
+    return " | ".join(reasons) if reasons else "Replanning requested"
+
+
+def _compute_resume_context(state: ReproState) -> Dict[str, Any]:
+    """Compute context about what triggered ask_user and where to resume."""
+    return {
+        "triggered_by": state.get("ask_user_trigger", "unknown"),
+        "pending_questions_count": len(state.get("pending_user_questions", [])),
+        "has_new_responses": bool(state.get("user_responses")),
+        "last_node_before_ask": state.get("last_node_before_ask_user"),
+    }
 ```
 
 ---
@@ -1718,6 +1893,290 @@ src/prompts.py:format_thresholds_table() ← generates markdown
 Agent prompt at runtime                   ← LLM sees the values
 ```
 
+## Prompt Adaptation Lifecycle
+
+The PromptAdaptorAgent creates paper-specific modifications that customize agent behavior.
+This section documents the complete lifecycle of these adaptations: creation, storage,
+application, persistence, and restoration.
+
+### Lifecycle Overview
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      ADAPTATION LIFECYCLE                                    │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  1. CREATION (ADAPT_PROMPTS node)                                           │
+│     │                                                                       │
+│     ├─ PromptAdaptorAgent analyzes paper                                    │
+│     ├─ Generates modifications with confidence levels                       │
+│     ├─ Validates against forbidden modifications                            │
+│     └─ Output: prompt_adaptations[] in state                                │
+│                                                                             │
+│  2. STORAGE                                                                 │
+│     │                                                                       │
+│     ├─ In-memory: state["prompt_adaptations"]                               │
+│     ├─ On disk: outputs/<paper_id>/prompt_adaptations_<paper_id>.json       │
+│     └─ Written: Immediately after ADAPT_PROMPTS, updated at checkpoints     │
+│                                                                             │
+│  3. APPLICATION (every agent call)                                          │
+│     │                                                                       │
+│     ├─ src/prompts.py:build_prompt() reads state["prompt_adaptations"]      │
+│     ├─ Filters adaptations for target agent                                 │
+│     ├─ Injects adaptations into agent's base prompt                         │
+│     └─ Result: Agent sees modified prompt                                   │
+│                                                                             │
+│  4. PERSISTENCE (at checkpoints)                                            │
+│     │                                                                       │
+│     ├─ Saved with full state in checkpoint JSON                             │
+│     ├─ Also saved separately for human review                               │
+│     └─ Includes: adaptations + domain_analysis + warnings                   │
+│                                                                             │
+│  5. RESTORATION (on resume)                                                 │
+│     │                                                                       │
+│     ├─ Loaded from checkpoint into state["prompt_adaptations"]              │
+│     ├─ No re-execution of PromptAdaptorAgent needed                         │
+│     └─ Agents continue with same adaptations                                │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Data Flow Diagram
+
+```
+ADAPT_PROMPTS                      PLAN, DESIGN, etc.
+     │                                    │
+     ▼                                    │
+┌──────────────┐                          │
+│PromptAdaptor │                          │
+│    Agent     │                          │
+└──────┬───────┘                          │
+       │                                  │
+       │ prompt_adaptations[]             │
+       ▼                                  ▼
+┌──────────────────────────────────────────────────┐
+│                    ReproState                     │
+│  ┌────────────────────────────────────────────┐  │
+│  │ prompt_adaptations: [                      │  │
+│  │   {id: "APPEND_001", target: "Designer",...}│  │
+│  │   {id: "MOD_001", target: "Reviewer",...}  │  │
+│  │ ]                                          │  │
+│  └────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────┘
+       │                                  │
+       │                                  ▼
+       │                         ┌──────────────┐
+       │                         │ build_prompt │
+       │                         │  (prompts.py)│
+       │                         └──────┬───────┘
+       │                                │
+       │                                │ filtered adaptations
+       │                                ▼
+       │                         ┌──────────────┐
+       │                         │ base_prompt  │
+       │                         │     +        │
+       │                         │ adaptations  │
+       │                         │     =        │
+       │                         │ final_prompt │
+       │                         └──────────────┘
+       │
+       ▼ (at checkpoints)
+┌──────────────────────────────────────────────────┐
+│            Disk Artifacts                         │
+│                                                   │
+│  outputs/<paper_id>/                              │
+│  ├── checkpoints/                                 │
+│  │   └── checkpoint_*.json (includes adaptations) │
+│  ├── prompt_adaptations_<paper_id>.json           │
+│  └── adaptation_log.txt (human-readable)          │
+└──────────────────────────────────────────────────┘
+```
+
+### When Adaptations Are Written to Disk
+
+| Event | What's Saved | Location |
+|-------|-------------|----------|
+| After ADAPT_PROMPTS | Full adaptation log | `prompt_adaptations_<paper_id>.json` |
+| After PLAN | Checkpoint with adaptations | `checkpoints/checkpoint_after_plan_*.json` |
+| Before ASK_USER | Full checkpoint | `checkpoints/checkpoint_before_ask_*.json` |
+| After each stage | Updated checkpoint | `checkpoints/checkpoint_stage*_complete_*.json` |
+| On completion | Final metrics (includes adaptation count) | `metrics_<paper_id>.json` |
+
+### Adaptation Application (Implementation)
+
+The `src/prompts.py` module applies adaptations at runtime:
+
+```python
+def build_prompt(agent_name: str, state: ReproState) -> str:
+    """Build agent prompt with adaptations applied."""
+    
+    # 1. Load base prompt from file
+    base_prompt = load_base_prompt(agent_name)
+    
+    # 2. Get adaptations for this agent
+    adaptations = state.get("prompt_adaptations", [])
+    agent_adaptations = [
+        a for a in adaptations 
+        if a["target_agent"] == agent_name
+    ]
+    
+    # 3. Apply adaptations in order
+    modified_prompt = base_prompt
+    for adaptation in agent_adaptations:
+        if adaptation["modification_type"] == "append":
+            # Find target section and append
+            modified_prompt = append_to_section(
+                modified_prompt,
+                adaptation["location"],
+                adaptation["content"]
+            )
+        elif adaptation["modification_type"] == "modify":
+            # Replace content
+            modified_prompt = replace_content(
+                modified_prompt,
+                adaptation["original_content"],
+                adaptation["content"]
+            )
+        elif adaptation["modification_type"] == "remove":
+            # Comment out or mark as disabled
+            modified_prompt = disable_content(
+                modified_prompt,
+                adaptation["content"]
+            )
+    
+    # 4. Inject global rules (cannot be modified)
+    final_prompt = inject_global_rules(modified_prompt)
+    
+    return final_prompt
+```
+
+### Checkpoint/Resume Behavior
+
+**When saving a checkpoint:**
+1. State including `prompt_adaptations` is serialized to JSON
+2. Adaptations are preserved exactly as generated
+3. No re-computation needed on resume
+
+**When loading a checkpoint:**
+1. State including `prompt_adaptations` is loaded
+2. Graph resumes at the appropriate node
+3. Subsequent agent calls use the loaded adaptations
+4. PromptAdaptorAgent is NOT re-run
+
+```python
+# Resume from checkpoint
+state = load_checkpoint("paper_123", checkpoint_name="after_plan")
+
+# Adaptations are already in state - ready to use
+assert "prompt_adaptations" in state
+print(f"Loaded {len(state['prompt_adaptations'])} adaptations")
+
+# Resume graph execution
+result = app.invoke(state, resume_from="SELECT_STAGE")
+```
+
+### Versioning and Base Prompt Changes
+
+**Current Behavior (v1):**
+- Adaptations reference sections by name (e.g., "Section B: MATERIALS")
+- If base prompts change, adaptations may become invalid
+- No automatic migration
+
+**Handling Base Prompt Changes:**
+
+| Scenario | Impact | Resolution |
+|----------|--------|------------|
+| Section renamed | Adaptation won't apply | Re-run PromptAdaptorAgent |
+| Section removed | Adaptation becomes orphan | Re-run PromptAdaptorAgent |
+| Content modified | Adaptation may conflict | Re-run PromptAdaptorAgent |
+| New section added | No impact | Adaptations still apply |
+
+**Best Practices:**
+1. When updating base prompts, note which papers may be affected
+2. Consider re-running ADAPT_PROMPTS for active reproductions
+3. Version base prompts alongside adaptation logs for reproducibility
+
+**Future (v2):**
+- Adaptation schema includes base prompt version hash
+- Automatic detection of stale adaptations
+- Migration tooling for prompt updates
+
+### Reviewing Adaptations
+
+**Human-readable log:**
+```
+outputs/<paper_id>/adaptation_log.txt
+
+================================================================================
+PROMPT ADAPTATIONS FOR: aluminum_nanoantenna_2013
+Generated: 2025-12-01T10:30:00Z
+Domain: plasmonics_strong_coupling
+================================================================================
+
+ADAPTATION #1: APPEND_001
+  Target: SimulationDesignerAgent
+  Type: append
+  Confidence: 0.85
+  Location: Section B: MATERIALS
+  
+  Content:
+  ---
+  For J-aggregate materials: Use Lorentzian oscillator model. Extract 
+  parameters from absorption spectrum...
+  ---
+  
+  Reason: Paper involves J-aggregate excitons which require specific 
+  Lorentzian modeling not covered in base prompt.
+
+ADAPTATION #2: MOD_001
+  ...
+```
+
+**Programmatic access:**
+```python
+from schemas.state import load_checkpoint
+
+state = load_checkpoint("paper_123")
+
+# List all adaptations
+for adaptation in state.get("prompt_adaptations", []):
+    print(f"{adaptation['id']}: {adaptation['target_agent']}")
+    print(f"  Type: {adaptation['modification_type']}")
+    print(f"  Confidence: {adaptation['confidence']}")
+
+# Filter by agent
+designer_mods = [
+    a for a in state["prompt_adaptations"]
+    if a["target_agent"] == "SimulationDesignerAgent"
+]
+```
+
+### Adaptation Metrics
+
+Tracked in `state["metrics"]`:
+- `prompt_adaptations_count`: Number of adaptations generated
+- Per-adaptation effectiveness (filled post-reproduction)
+
+Used by future PromptEvolutionAgent to learn which adaptations help.
+
+### Troubleshooting Adaptations
+
+| Issue | Symptom | Solution |
+|-------|---------|----------|
+| Adaptation not applied | Agent behaves like base prompt | Check `target_agent` matches exactly |
+| Wrong section modified | Content appears in wrong place | Check `location` field |
+| Adaptation conflicts | Agent confused or errors | Lower confidence threshold; choose one |
+| Stale after base change | Section not found warnings | Re-run PromptAdaptorAgent |
+
+**Debug mode:**
+```python
+# See exactly what prompt each agent receives
+from src.prompts import build_prompt
+
+final_prompt = build_prompt("SimulationDesignerAgent", state)
+print(final_prompt)  # Shows base + adaptations applied
+```
+
 ## Agent Data Flow
 
 This section documents what data each agent receives and produces, clarifying the boundaries between agents.
@@ -1730,7 +2189,7 @@ This section documents what data each agent receives and produces, clarifying th
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
 │  PromptAdaptorAgent                                                         │
-│  ├─ IN:  paper_text (quick scan), paper_domain                              │
+│  ├─ IN:  paper_text_summary (abstract + Methods), paper_domain              │
 │  └─ OUT: prompt_modifications[], adaptation_log, domain_analysis            │
 │                    ↓                                                        │
 │  PlannerAgent                                                               │
