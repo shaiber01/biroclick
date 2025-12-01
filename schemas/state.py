@@ -501,7 +501,8 @@ DEFAULT_STAGE_BUDGETS = {
     "COMPLEX_PHYSICS": 120
 }
 
-# Discrepancy thresholds
+# Discrepancy thresholds (canonical source of truth)
+# Values are percentages: 2 means ±2%
 DISCREPANCY_THRESHOLDS = {
     "resonance_wavelength": {"excellent": 2, "acceptable": 5, "investigate": 10},
     "linewidth": {"excellent": 10, "acceptable": 30, "investigate": 50},
@@ -511,6 +512,63 @@ DISCREPANCY_THRESHOLDS = {
     "field_enhancement": {"excellent": 20, "acceptable": 50, "investigate": 100},
     "effective_index": {"excellent": 1, "acceptable": 3, "investigate": 5}
 }
+
+
+def format_thresholds_table() -> str:
+    """
+    Generate a markdown table from DISCREPANCY_THRESHOLDS.
+    
+    This function is used by the prompt builder to inject the canonical
+    thresholds into agent prompts at runtime, ensuring single source of truth.
+    
+    Returns:
+        Markdown table string with thresholds
+    """
+    # Human-readable names for quantities
+    quantity_names = {
+        "resonance_wavelength": "Resonance wavelength",
+        "linewidth": "Linewidth / FWHM",
+        "q_factor": "Q-factor",
+        "transmission": "Transmission",
+        "reflection": "Reflection",
+        "field_enhancement": "Field enhancement",
+        "effective_index": "Mode effective index",
+    }
+    
+    rows = [
+        "| Quantity | Excellent | Acceptable | Investigate |",
+        "|----------|-----------|------------|-------------|"
+    ]
+    
+    for key, thresholds in DISCREPANCY_THRESHOLDS.items():
+        name = quantity_names.get(key, key.replace("_", " ").title())
+        excellent = thresholds["excellent"]
+        acceptable = thresholds["acceptable"]
+        investigate = thresholds["investigate"]
+        
+        # Format: ±X% for excellent/acceptable, >X% for investigate
+        rows.append(
+            f"| {name} | ±{excellent}% | ±{acceptable}% | >{investigate}% |"
+        )
+    
+    return "\n".join(rows)
+
+
+def get_threshold_for_quantity(quantity: str, level: str = "acceptable") -> float:
+    """
+    Get the threshold value for a specific quantity and level.
+    
+    Args:
+        quantity: Key from DISCREPANCY_THRESHOLDS (e.g., "resonance_wavelength")
+        level: "excellent", "acceptable", or "investigate"
+        
+    Returns:
+        Threshold as a decimal (e.g., 0.05 for 5%)
+        
+    Raises:
+        KeyError: If quantity or level not found
+    """
+    return DISCREPANCY_THRESHOLDS[quantity][level] / 100.0
 
 # Stage types in validation hierarchy order
 STAGE_TYPE_ORDER = [

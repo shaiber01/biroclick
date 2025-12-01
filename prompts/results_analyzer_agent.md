@@ -53,13 +53,7 @@ B. COMPARISON THRESHOLDS
 
 Use these standard thresholds for classification:
 
-| Quantity               | Excellent | Acceptable | Investigate |
-|------------------------|-----------|------------|-------------|
-| Resonance wavelength   | ±2%       | ±5%        | >10%        |
-| Linewidth / Q-factor   | ±10%      | ±30%       | >50%        |
-| Transmission/reflection| ±5%       | ±15%       | >30%        |
-| Field enhancement      | ±20%      | ±50%       | >2×         |
-| Mode effective index   | ±1%       | ±3%        | >5%         |
+{THRESHOLDS_TABLE}
 
 CLASSIFICATION RULES:
 - SUCCESS: All key quantities in Excellent or Acceptable range
@@ -239,8 +233,7 @@ comparison instead of (or in addition to) visual comparison.
 F. DISCREPANCY DOCUMENTATION
 ═══════════════════════════════════════════════════════════════════════
 
-NOTE: Use thresholds from `schemas/state.py:DISCREPANCY_THRESHOLDS` for
-classification. The canonical values are defined there for consistency.
+Use the thresholds table in Section B above for classification.
 
 For EVERY discrepancy found, document:
 

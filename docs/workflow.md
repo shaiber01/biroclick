@@ -945,6 +945,91 @@ CodeReviewerAgent
     ↓ sets last_reviewer_verdict="approve_to_run"
 ```
 
+## Prompt Construction and Injection
+
+Agent prompts are constructed at runtime by the `src/prompts.py` module. This ensures:
+1. **Single source of truth** for constants (thresholds, limits)
+2. **Dynamic state injection** (paper text, figures, current stage)
+3. **Consistent prompt structure** across all agents
+
+### How Prompts Are Built
+
+```python
+from src.prompts import build_prompt
+
+# For each agent call:
+prompt = build_prompt(
+    agent_name="planner",     # Which agent
+    state=current_state,       # Current ReproState
+    include_global_rules=True  # Prepend global rules
+)
+
+response = llm.invoke(prompt)
+```
+
+### Injection Process
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    PROMPT CONSTRUCTION                          │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  1. Load global_rules.md                                        │
+│     └─ Replace {THRESHOLDS_TABLE} → actual table from state.py  │
+│     └─ Replace {MAX_DESIGN_REVISIONS} → "3"                     │
+│                                                                 │
+│  2. Load agent-specific prompt (e.g., planner_agent.md)         │
+│     └─ Replace placeholders with constants                      │
+│                                                                 │
+│  3. Append state context (agent-specific)                       │
+│     └─ PlannerAgent: paper_text, paper_figures                  │
+│     └─ DesignerAgent: current_stage, assumptions, feedback      │
+│     └─ AnalyzerAgent: stage_outputs, target_figures             │
+│                                                                 │
+│  4. Return complete prompt                                      │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Placeholders
+
+Prompts use placeholders that are replaced at runtime:
+
+| Placeholder | Source | Used In |
+|-------------|--------|---------|
+| `{THRESHOLDS_TABLE}` | `state.py:DISCREPANCY_THRESHOLDS` | global_rules.md, results_analyzer_agent.md |
+| `{MAX_DESIGN_REVISIONS}` | `state.py:MAX_DESIGN_REVISIONS` | Anywhere revision limits mentioned |
+| `{MAX_REPLANS}` | `state.py:MAX_REPLANS` | Workflow decision prompts |
+
+### State Context by Agent
+
+Each agent receives different context from state:
+
+| Agent | Context Injected |
+|-------|------------------|
+| **PlannerAgent** | paper_id, paper_title, paper_domain, paper_text, paper_figures |
+| **SimulationDesignerAgent** | current_stage_id, stage requirements, assumptions, reviewer_feedback |
+| **CodeGeneratorAgent** | design_description, reviewer_feedback, performance_estimate |
+| **ResultsAnalyzerAgent** | stage_outputs (files, stdout), target_figures, digitized_data paths |
+| **SupervisorAgent** | progress summary, validation_hierarchy, figure_comparisons, runtime budget |
+| **PromptAdaptorAgent** | paper_text (truncated), paper_domain, available agents list |
+
+### Why Runtime Injection?
+
+**Benefits:**
+- Constants defined once in code (`state.py`), no duplication
+- Changes propagate automatically to all prompts
+- State context is always current
+- Prompts in `prompts/*.md` remain readable templates
+
+**How it maintains single source of truth:**
+```
+schemas/state.py:DISCREPANCY_THRESHOLDS  ← canonical values
+        ↓
+src/prompts.py:format_thresholds_table() ← generates markdown
+        ↓
+Agent prompt at runtime                   ← LLM sees the values
+```
+
 ## Agent Data Flow
 
 This section documents what data each agent receives and produces, clarifying the boundaries between agents.

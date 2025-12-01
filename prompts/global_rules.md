@@ -121,17 +121,12 @@ RULE 5: QUANTITATIVE DISCREPANCY TRACKING
 ═══════════════════════════════════════════════════════════════════════
 ACCEPTABLE DISCREPANCY RANGES (optics/photonics):
 
-NOTE: Canonical threshold values are defined in `schemas/state.py` as
-`DISCREPANCY_THRESHOLDS`. The table below is for human readability only.
-Agents should use state.DISCREPANCY_THRESHOLDS for programmatic checks.
+{THRESHOLDS_TABLE}
 
-| Quantity               | Excellent | Acceptable | Investigate |
-|------------------------|-----------|------------|-------------|
-| Resonance wavelength   | ±2%       | ±5%        | >10%        |
-| Linewidth / Q-factor   | ±10%      | ±30%       | >50%        |
-| Transmission/reflection| ±5%       | ±15%       | >30%        |
-| Field enhancement      | ±20%      | ±50%       | >2×         |
-| Mode effective index   | ±1%       | ±3%        | >5%         |
+Classification based on thresholds:
+- **EXCELLENT**: Within "Excellent" range - high-quality reproduction
+- **ACCEPTABLE**: Within "Acceptable" range - good reproduction with minor differences  
+- **INVESTIGATE**: Beyond "Investigate" threshold - requires explanation or revision
 
 KNOWN ACCEPTABLE DISCREPANCIES (document but don't chase):
 - Fabry-Perot oscillations from thin films (real physics, may be averaged in experiment)
