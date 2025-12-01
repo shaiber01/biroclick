@@ -93,7 +93,7 @@ C. MODIFICATION TYPES AND CONFIDENCE THRESHOLDS
 
 NEVER MODIFY:
 - global_rules.md (non-negotiable rules)
-- Validation hierarchy requirements
+- Material validation requirement (Stage 0 always required)
 - Core safety checks (plt.show ban, etc.)
 - Output format structures
 
@@ -259,8 +259,8 @@ H. WHAT NOT TO ADAPT
 NEVER modify these:
 
 1. GLOBAL RULES (global_rules.md)
-   - Validation hierarchy is mandatory
-   - Staging order is fixed
+   - Material validation (Stage 0) is always required
+   - Validation hierarchy principle: foundations before complexity
    - Assumption tracking rules stay
    - Output format requirements stay
 

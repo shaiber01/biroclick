@@ -8,11 +8,21 @@ GLOBAL NON-NEGOTIABLE RULES (APPLY TO ALL AGENTS)
 ═══════════════════════════════════════════════════════════════════════
 RULE 0: VALIDATION HIERARCHY (CRITICAL)
 ═══════════════════════════════════════════════════════════════════════
-Material properties → Single structure → Arrays/systems → Sweeps → Complex physics
-        ↓                    ↓                 ↓              ↓            ↓
-   MUST PASS             MUST PASS         MUST PASS      MUST PASS   Best effort
+CORE PRINCIPLE: Validate foundations before adding complexity.
 
-EACH STAGE MUST PASS before proceeding. Early failures compound catastrophically.
+Material properties → [Paper-dependent stages: simpler → more complex]
+        ↓                              ↓
+   ALWAYS REQUIRED            Adapt to paper content
+
+STAGE 0 (Material Validation): ALWAYS REQUIRED - material errors propagate everywhere.
+STAGES 1+: Include only what the paper needs. Not all papers have arrays, sweeps, etc.
+
+Examples:
+- Single nanoparticle paper: Stage 0 → Single structure (done)
+- Photonic crystal paper: Stage 0 → Periodic structure (no "single structure" step)
+- Material study: Stage 0 → Property analysis (no geometry stages)
+
+Within your stages: Validate simpler before more complex. Build on solid foundations.
 
 ═══════════════════════════════════════════════════════════════════════
 RULE 0A: MATERIAL VALIDATION REQUIRES USER CONFIRMATION (MANDATORY)

@@ -267,7 +267,9 @@ These require investigation:
 
 ## 6. Validation Hierarchy
 
-### Why Order Matters
+### Core Principle
+
+**Validate foundations before adding complexity.** Adapt stages to what the paper actually shows.
 
 ```
 Material Error ──► Propagates to ALL subsequent stages
@@ -280,28 +282,41 @@ Numerical Error ─► Usually smaller effect
                    (noisy results, slow convergence)
 ```
 
-### Mandatory Stages
+### Always Required: Material Validation (Stage 0)
 
-1. **Material Validation**
-   - Plot ε(ω), n(ω), k(ω)
-   - Compare to any spectra in paper
-   - Validate absorption peaks, linewidths
-   
-2. **Single Structure**
-   - Isolated structure, no arrays
-   - Validate resonance position, Q-factor
-   - Check mode profile if shown
-   
-3. **Array/System**
-   - Add periodicity, coupling
-   - Validate collective effects
-   
-4. **Parameter Sweeps**
-   - Reproduce multi-parameter figures
-   - Validate trends (not just points)
-   
-5. **Complex Physics** (if needed)
-   - Only after linear validation passes
+Every reproduction must validate materials first:
+- Plot ε(ω), n(ω), k(ω)
+- Compare to any spectra in paper
+- Validate absorption peaks, linewidths
+- **Requires user confirmation before proceeding**
+
+### Paper-Dependent Stages
+
+Include only what applies to the paper's content:
+
+| Stage Type | When to Include | When to Skip |
+|------------|-----------------|--------------|
+| **Single Structure** | Paper shows isolated structures | Paper only has periodic structures |
+| **Array/System** | Paper shows periodic/coupled structures | No arrays in paper |
+| **Parameter Sweeps** | Paper shows multi-parameter data | Only single data points |
+| **Complex Physics** | Paper involves nonlinear/transient effects | Linear steady-state only |
+
+### Adapting to Different Paper Types
+
+| Paper Type | Typical Staging |
+|------------|-----------------|
+| Material study | Materials → property analysis |
+| Single nanoparticle | Materials → single structure |
+| Nanoparticle array | Materials → single → array → sweeps |
+| Photonic crystal | Materials → periodic structure (skip "single") |
+| Waveguide | Materials → mode analysis → propagation |
+| Nonlinear optics | Materials → linear validation → nonlinear |
+
+### The Key Insight
+
+The old "mandatory order" assumed all papers follow the same pattern (single → array → sweep). 
+Real papers vary widely. The principle remains: **simpler/foundational before complex/dependent**.
+But *which* stages exist depends on the paper.
 
 ---
 
@@ -310,7 +325,7 @@ Numerical Error ─► Usually smaller effect
 ### Pitfall 1: Starting Too Complex
 
 **Wrong**: "Let me simulate the full 3D periodic structure with all effects"
-**Right**: "Let me validate materials, then single structure, then add complexity"
+**Right**: "Let me validate materials first, then build up complexity appropriate to this paper"
 
 ### Pitfall 2: Ignoring Systematic Shifts
 

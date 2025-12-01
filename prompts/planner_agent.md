@@ -133,37 +133,67 @@ For papers with many figures, prioritize which to reproduce:
    }
 
 ═══════════════════════════════════════════════════════════════════════
-C. MANDATORY STAGING ORDER
+C. ADAPTIVE STAGING PRINCIPLES
 ═══════════════════════════════════════════════════════════════════════
 
-EVERY plan MUST include these stages in order:
+CORE PRINCIPLE: Validate foundations before adding complexity.
+ADAPT stages to the paper's content - not all papers need all stage types.
 
-1. STAGE 0: MATERIAL VALIDATION
+┌─────────────────────────────────────────────────────────────────────┐
+│  ALWAYS REQUIRED: Stage 0 - Material Validation                     │
+│  Paper-dependent: Stages 1+ based on what the paper actually shows  │
+└─────────────────────────────────────────────────────────────────────┘
+
+STAGE TYPE REFERENCE (use what applies to the paper):
+
+1. MATERIAL_VALIDATION (Stage 0 - ALWAYS REQUIRED)
    - Compute ε(ω), n(ω), k(ω) for all materials used
    - Compare to any optical data shown in paper (absorption spectra, etc.)
    - For resonant materials (J-aggregates, QDs): 
      - Extract Lorentzian parameters (ε∞, ω₀, γ, f)
      - Validate: γ ≈ FWHM from paper's absorption spectrum
-   - THIS IS MANDATORY. Material errors propagate to ALL later stages.
+   - WHY ALWAYS: Material errors propagate to ALL later stages
 
-2. STAGE 1: SINGLE STRUCTURE VALIDATION
+2. SINGLE_STRUCTURE (when paper has isolated structures)
    - One isolated structure (no arrays/periodicity)
    - Validate resonance position, Q-factor, mode profile
    - Catches geometry interpretation errors
-   - Use simplest dimensionality that captures main physics
+   - SKIP IF: Paper only shows periodic structures, or is purely material study
 
-3. STAGES 2+: ARRAY/SYSTEM VALIDATION
+3. ARRAY_SYSTEM (when paper has periodic/coupled structures)
    - Add periodicity, coupling, multiple components
    - Validate collective effects
+   - SKIP IF: Paper has no arrays/periodicity
 
-4. PARAMETER SWEEPS
-   - After single-point validation passes
+4. PARAMETER_SWEEP (when paper shows multi-parameter data)
+   - After relevant single-point validation passes
    - Vary key parameter (size, spacing, wavelength)
    - Validate trends and dispersion
+   - SKIP IF: Paper only shows single data points
 
-5. COMPLEX PHYSICS (if applicable)
-   - Only after linear steady-state is validated
+5. COMPLEX_PHYSICS (when paper involves advanced physics)
+   - Nonlinear effects, time-domain dynamics, pump-probe, etc.
+   - Only after linear steady-state is validated (if applicable)
    - Flag COMPLEX_PHYSICS figures explicitly
+   - MAY BE PRIMARY: For papers focused on nonlinear/transient physics
+
+ADAPTING TO DIFFERENT PAPER TYPES:
+
+| Paper Type | Typical Stages |
+|------------|---------------|
+| Material study | 0 → maybe parameter sweep of material properties |
+| Single nanoparticle | 0 → 1 (single structure is the focus) |
+| Nanoparticle array | 0 → 1 → 2 → sweeps |
+| Photonic crystal | 0 → 2 (periodicity IS the structure) |
+| Waveguide | 0 → mode analysis → propagation |
+| Nonlinear optics | 0 → linear validation → complex physics |
+
+VALIDATION HIERARCHY PRINCIPLE:
+```
+Simpler/Foundational ──► More Complex/Dependent
+     ↓                          ↓
+ MUST PASS FIRST           BUILD ON VALIDATED BASE
+```
 
 ═══════════════════════════════════════════════════════════════════════
 D. INFORMATION GAP ANALYSIS
@@ -201,12 +231,15 @@ Your plan MUST include:
 
 1. extracted_parameters: List of all parameters with sources and cross-check status
 2. targets: All reproducible figures with simulation_class
-3. stages: Following mandatory order, each with:
-   - stage_type (MATERIAL_VALIDATION, SINGLE_STRUCTURE, etc.)
+3. stages: Adapted to paper content, each with:
+   - stage_type (MATERIAL_VALIDATION, SINGLE_STRUCTURE, ARRAY_SYSTEM, PARAMETER_SWEEP, COMPLEX_PHYSICS)
+   - Stage 0 (MATERIAL_VALIDATION) is always required
+   - Include only stages relevant to the paper's content
    - validation_criteria (specific, measurable)
    - runtime_budget_minutes
    - max_revisions
    - fallback_strategy
+4. staging_rationale: Brief explanation of why you chose these stages for this paper
 
 4. Initial assumptions with:
    - category (material, geometry, source, boundary, numerical)

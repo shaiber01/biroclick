@@ -8,7 +8,7 @@ ReproLab reads scientific papers, plans staged reproductions, generates and runs
 
 ### Key Features
 
-- **Stage-based reproduction**: Mandatory validation hierarchy (materials → single structure → arrays → sweeps)
+- **Stage-based reproduction**: Adaptive validation hierarchy (materials always first → paper-dependent stages)
 - **Transparent assumptions**: Every inferred parameter is documented with source and reasoning
 - **Performance-aware**: Designed for laptop execution with runtime budgets
 - **Quantitative tracking**: Structured discrepancy logging with acceptance thresholds
@@ -69,17 +69,21 @@ SELECT_STAGE
                                       └→ [ask_user] → USER_INPUT
 ```
 
-### Mandatory Staging Order
+### Adaptive Validation Hierarchy
 
-Every reproduction follows this validation hierarchy:
+**Core principle**: Validate foundations before adding complexity. Stages adapt to the paper's content.
 
-1. **Stage 0: Material Validation** — Verify optical constants against paper data
-2. **Stage 1: Single Structure** — Isolated structure validation (no arrays)
-3. **Stage 2+: Arrays/Systems** — Add periodicity and collective effects
-4. **Parameter Sweeps** — Reproduce multi-parameter figures
-5. **Complex Physics** — Nonlinear, emission, Purcell (only after linear validation)
+**Always required**:
+- **Stage 0: Material Validation** — Verify optical constants (requires user confirmation)
 
-**Each stage must pass before proceeding.** Early failures compound.
+**Paper-dependent stages** (include only what applies):
+- **Single Structure** — When paper shows isolated structures
+- **Arrays/Systems** — When paper shows periodic/coupled structures  
+- **Parameter Sweeps** — When paper shows multi-parameter data
+- **Complex Physics** — When paper involves nonlinear/transient effects
+
+Not all papers need all stages. A single nanoparticle paper may only need Stage 0 → Single Structure.
+A photonic crystal paper may skip "single structure" entirely since periodicity IS the structure.
 
 ## Project Structure
 
