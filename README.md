@@ -115,7 +115,9 @@ reprolab/
 │
 ├── docs/                     # Additional documentation
 │   ├── workflow.md           # Detailed workflow documentation
-│   └── guidelines.md         # Optics reproduction guidelines
+│   ├── guidelines.md         # Optics reproduction guidelines
+│   ├── preparing_papers.md   # Paper preparation & ingestion guide
+│   └── prompt_building.md    # Agent prompt construction reference
 │
 └── src/                      # Source code (implementation)
     ├── __init__.py

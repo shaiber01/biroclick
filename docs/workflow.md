@@ -324,6 +324,15 @@ See `docs/guidelines.md` Section 14 for sandboxing details and future Docker sup
 
 **Purpose**: Validate that simulation ran correctly (technical checks)
 
+**Architectural Note**: This agent is the **SINGLE POINT for failure interpretation**.
+
+- `RUN_CODE` returns raw results (`stage_outputs`, `run_error`) without interpretation
+- `ExecutionValidatorAgent` is the only agent that decides:
+  - Whether to retry code generation (recoverable error)
+  - Whether to escalate to user (unknown error)
+  - Whether to proceed to physics validation
+- This keeps failure handling logic centralized, not scattered across nodes
+
 **Checks**:
 - [ ] Simulation completed without errors
 - [ ] Exit code was 0

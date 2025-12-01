@@ -598,7 +598,25 @@ EXAMPLE_PAPER_INPUT = {
             "image_path": "papers/al_nanoantenna/figures/fig4.png"
         }
     ],
-    "supplementary_text": "[Optional supplementary material text]"
+    # Supplementary materials use nested SupplementaryInput structure
+    "supplementary": {
+        "supplementary_text": "[Optional supplementary material text]",
+        "supplementary_figures": [
+            {
+                "id": "FigS1",
+                "description": "Extended material characterization",
+                "image_path": "papers/al_nanoantenna/figures/figS1.png"
+            }
+        ],
+        "supplementary_data_files": [
+            {
+                "id": "S_Al_nk",
+                "description": "Aluminum optical constants used in simulations",
+                "file_path": "papers/al_nanoantenna/data/Al_optical_constants.csv",
+                "data_type": "spectrum"
+            }
+        ]
+    }
 }
 
 

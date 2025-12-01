@@ -418,6 +418,16 @@ def run_code_node(state: Dict[str, Any]) -> Dict[str, Any]:
     
     Extracts configuration from state and executes the simulation.
     
+    ARCHITECTURAL NOTE: This node returns raw execution results.
+    It does NOT interpret failures or decide recovery strategies.
+    
+    FAILURE SEMANTICS ARE CENTRALIZED IN ExecutionValidatorAgent:
+    - ExecutionValidatorAgent receives stage_outputs and run_error
+    - It alone decides: regenerate code vs escalate vs fail stage
+    - This keeps failure handling in one place, not scattered
+    
+    See prompts/execution_validator_agent.md for failure interpretation rules.
+    
     Expected state fields:
         - code: str - The simulation code to execute
         - current_stage_id: str - Stage identifier
@@ -427,7 +437,7 @@ def run_code_node(state: Dict[str, Any]) -> Dict[str, Any]:
         
     Returns state updates:
         - stage_outputs: dict with stdout, stderr, files, etc.
-        - run_error: str or None
+        - run_error: str or None (raw error, not interpreted)
     """
     from pathlib import Path
     

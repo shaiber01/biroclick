@@ -374,7 +374,12 @@ paper_input: PaperInput = {
     "paper_domain": "plasmonics",
     "paper_text": paper_text,
     "figures": figures,
-    "supplementary": []  # Add if available
+    # Supplementary uses nested SupplementaryInput structure (optional)
+    "supplementary": {
+        "supplementary_text": "",  # Add if available
+        "supplementary_figures": [],
+        "supplementary_data_files": []
+    }
 }
 ```
 
@@ -396,7 +401,11 @@ Create a JSON file for the paper input:
       "digitized_data_path": "./figures/fig2a_absorption.csv"
     }
   ],
-  "supplementary": []
+  "supplementary": {
+    "supplementary_text": "",
+    "supplementary_figures": [],
+    "supplementary_data_files": []
+  }
 }
 ```
 
