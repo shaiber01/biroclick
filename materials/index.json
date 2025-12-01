@@ -3,7 +3,14 @@
   "title": "Materials Index",
   "description": "Index of available optical material data for Meep simulations",
   "version": "0.1.0",
-  "last_updated": "2024-01-01",
+  "last_updated": "2024-12-01",
+  
+  "status": {
+    "description": "Current availability of material data files",
+    "available_csv_files": ["palik_silver.csv"],
+    "planned_csv_files": ["palik_gold.csv", "rakic_aluminum.csv", "palik_silicon.csv"],
+    "note": "Only palik_silver.csv is provided as an example. Other materials have Drude-Lorentz fits defined but no tabulated CSV data yet. Add real data from refractiveindex.info or literature sources."
+  },
   
   "materials": [
     {
@@ -27,7 +34,8 @@
         "fit_quality": "good",
         "fit_wavelength_range_nm": [300, 1200]
       },
-      "notes": "Standard silver data for visible-NIR plasmonics"
+      "notes": "Standard silver data for visible-NIR plasmonics",
+      "csv_available": true
     },
     
     {
@@ -50,7 +58,8 @@
         "fit_quality": "good",
         "fit_wavelength_range_nm": [400, 1200]
       },
-      "notes": "Standard gold data; interband transitions important below 500nm"
+      "notes": "Standard gold data; interband transitions important below 500nm",
+      "csv_available": false
     },
     
     {
@@ -75,7 +84,8 @@
         "fit_quality": "excellent",
         "fit_wavelength_range_nm": [200, 1000]
       },
-      "notes": "Preferred for UV plasmonics; native oxide layer not included"
+      "notes": "Preferred for UV plasmonics; native oxide layer not included",
+      "csv_available": false
     },
     
     {
@@ -87,7 +97,8 @@
       "data_file": "palik_silicon.csv",
       "material_type": "semiconductor",
       "common_applications": ["Mie resonators", "metasurfaces", "waveguides"],
-      "notes": "High-index dielectric; absorption above bandgap (~1100nm)"
+      "notes": "High-index dielectric; absorption above bandgap (~1100nm)",
+      "csv_available": false
     },
     
     {
@@ -106,7 +117,8 @@
         "fit_quality": "excellent",
         "fit_wavelength_range_nm": [300, 2000]
       },
-      "notes": "Constant n=1.45 approximation; use for transparent substrates"
+      "notes": "Constant n=1.45 approximation; use for transparent substrates",
+      "csv_available": false
     }
   ],
   
