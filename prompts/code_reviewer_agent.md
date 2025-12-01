@@ -223,8 +223,7 @@ Your output must be a JSON object:
   "review_type": "pre_run | plan",
   "stage_id": "stage1_single_disk",  // null for plan review
   
-  "verdict": "approve_to_run | needs_revision",
-  // For plan: "approve | approve_with_suggestions | needs_revision"
+  "verdict": "approve | needs_revision",
   
   "checklist_results": {
     "geometry": {

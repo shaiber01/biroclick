@@ -18,6 +18,26 @@ A LangGraph-based multi-agent system that automatically reproduces simulation re
 
 **Note:** Code snippets in `docs/workflow.md` and `docs/guidelines.md` are illustrative design specifications, not guaranteed to match current implementation.
 
+## MVP Scope (v0)
+
+The first implementation targets a minimal vertical slice to validate the architecture:
+
+**Included in v0:**
+- Single test paper (Stage 0 material validation + one Stage 1 single structure)
+- Core agent path: Planner → Designer → CodeGenerator → CodeReviewer → RUN_CODE → ExecutionValidator → ResultsAnalyzer → Supervisor
+- Material checkpoint via ASK_USER
+- Basic error handling (max 3 revisions, then escalate)
+- Simple report generation
+
+**Deferred to v1.1+:**
+- Cross-stage backtracking (`handle_backtrack` node)
+- Full context management (`estimate_loop_context_tokens`)
+- Rich metrics pipeline and detailed token tracking
+- Multi-paper batch processing
+- Prompt adaptation agent customizations
+- Parameter sweep stages
+- Advanced comparison validation
+
 ## Overview
 
 ReproLab reads scientific papers, plans staged reproductions, generates and runs Meep simulations, and systematically compares results to published figures—all while maintaining transparency through explicit assumption tracking and structured progress logging.
@@ -72,6 +92,10 @@ ADAPT_PROMPTS (PromptAdaptorAgent) ← Customizes system for paper
   ↓
 PLAN (PlannerAgent) ← Uses adapted prompts
   ↓
+CODE_REVIEW (CodeReviewerAgent) ← reviews plan
+  ├→ [needs_revision] → PLAN (max 2 replans)
+  └→ [approve] ↓
+        ↓
 SELECT_STAGE
   ├→ [no more stages] → GENERATE_REPORT → END
   └→ [has next stage] ↓
@@ -141,8 +165,10 @@ reprolab/
 │   ├── plan_schema.json      # Plan file structure with example
 │   ├── assumptions_schema.json # Assumptions tracking schema
 │   ├── progress_schema.json  # Progress logging schema
+│   ├── metrics_schema.json   # Metrics tracking schema
 │   ├── report_schema.json    # Reproduction report schema
-│   └── state.py              # Python TypedDict for LangGraph state
+│   ├── prompt_adaptations_schema.json # Prompt adaptation schema
+│   └── state.py              # LangGraph workflow state (imports generated types)
 │
 ├── docs/                     # Additional documentation
 │   ├── workflow.md           # Detailed workflow documentation
@@ -225,6 +251,29 @@ Final output document with:
 - **Summary Table**: All figures at a glance
 - **Systematic Discrepancies**: Named issues affecting multiple results
 - **Conclusions**: Key findings and final statement
+
+### Type Generation from JSON Schemas
+
+**JSON schemas are the source of truth** for data types. Python TypedDicts should be generated from them to ensure consistency.
+
+```bash
+# Install generator
+pip install datamodel-code-generator
+
+# Generate Python types from all schemas
+datamodel-codegen \
+    --input schemas/plan_schema.json \
+    --input schemas/progress_schema.json \
+    --input schemas/metrics_schema.json \
+    --input schemas/report_schema.json \
+    --input-file-type jsonschema \
+    --output-model-type typing.TypedDict \
+    --output schemas/generated_types.py
+```
+
+The `schemas/state.py` file contains workflow-specific types (`ReproState`, `RuntimeConfig`, etc.) and imports the generated types for schema-defined structures.
+
+> **Note**: Re-run generation whenever JSON schemas are modified.
 
 ## Quantitative Thresholds
 

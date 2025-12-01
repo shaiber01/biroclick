@@ -11,6 +11,11 @@ V1 Implementation Features:
 - Thread/core limits via environment variables
 - Output capture and file listing
 
+Platform Detection:
+- At module import time, platform capabilities are detected and warnings emitted
+- Windows and native macOS users are warned about missing resource limiting
+- Set REPROLAB_SKIP_RESOURCE_LIMITS=1 to suppress these warnings
+
 See docs/guidelines.md Section 14 for design rationale.
 """
 
@@ -200,15 +205,19 @@ def check_platform_and_warn() -> PlatformCapabilities:
     return caps
 
 
-# Detect platform at module load time
+# Detect platform at module load time and emit warnings
 _PLATFORM_CAPS: Optional[PlatformCapabilities] = None
+
+# Emit platform warnings at module import time
+# This ensures users are informed of platform limitations when the module is first loaded
+_PLATFORM_CAPS = check_platform_and_warn()
 
 
 def get_platform_capabilities() -> PlatformCapabilities:
     """Get cached platform capabilities (detected once at module load)."""
     global _PLATFORM_CAPS
     if _PLATFORM_CAPS is None:
-        _PLATFORM_CAPS = detect_platform()
+        _PLATFORM_CAPS = check_platform_and_warn()
     return _PLATFORM_CAPS
 
 

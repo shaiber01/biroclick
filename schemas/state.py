@@ -3,6 +3,46 @@ LangGraph State Definition for Paper Reproduction System
 
 This module defines the TypedDict state that flows through the LangGraph
 state machine. State is persisted between nodes and can be checkpointed.
+
+═══════════════════════════════════════════════════════════════════════════════
+IMPORTANT: JSON SCHEMAS ARE THE SOURCE OF TRUTH
+═══════════════════════════════════════════════════════════════════════════════
+
+Many types used in this system are defined in JSON Schema files (schemas/*.json).
+These JSON schemas are the canonical definitions and should be used to generate
+Python TypedDicts to ensure consistency.
+
+JSON Schema Files:
+- plan_schema.json        → Plan structure, ExtractedParameter, Stage, Target
+- assumptions_schema.json → Assumption, GeometryInterpretation
+- progress_schema.json    → StageProgress, Output, Discrepancy, UserInteraction
+- metrics_schema.json     → AgentCallMetric, StageMetric, MetricsLog
+- report_schema.json      → FigureComparison, OverallAssessment, Conclusions
+- prompt_adaptations_schema.json → Adaptation records
+
+To generate Python types from JSON schemas:
+
+    pip install datamodel-code-generator
+    
+    datamodel-codegen \\
+        --input schemas/plan_schema.json \\
+        --input schemas/progress_schema.json \\
+        --input schemas/metrics_schema.json \\
+        --input schemas/report_schema.json \\
+        --input-file-type jsonschema \\
+        --output-model-type typing.TypedDict \\
+        --output schemas/generated_types.py
+
+Then import generated types:
+    from schemas.generated_types import ExtractedParameter, Discrepancy, ...
+
+This file (state.py) contains:
+1. Workflow-specific types NOT in JSON schemas (ReproState, RuntimeConfig, etc.)
+2. Constants and thresholds
+3. Helper functions for state management
+4. Validation hierarchy mappings
+
+═══════════════════════════════════════════════════════════════════════════════
 """
 
 from typing import TypedDict, Optional, List, Dict, Any
@@ -12,151 +52,30 @@ import re
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# Supporting Type Definitions
+# Workflow-Specific Type Definitions
 # ═══════════════════════════════════════════════════════════════════════
-
-class ExtractedParameter(TypedDict):
-    """A parameter extracted from the paper with provenance."""
-    name: str
-    value: Any  # number, string, or list
-    unit: str
-    source: str  # text | figure_caption | figure_axis | supplementary | inferred
-    location: str
-    cross_checked: bool
-    discrepancy_notes: Optional[str]
-
-
-class Discrepancy(TypedDict):
-    """A documented discrepancy between simulation and paper."""
-    id: str
-    figure: str
-    quantity: str
-    paper_value: str
-    simulation_value: str
-    difference_percent: float
-    classification: str  # excellent | acceptable | investigate
-    likely_cause: str
-    action_taken: str
-    blocking: bool
-
-
-class Output(TypedDict):
-    """An output file produced by a stage."""
-    type: str  # data | plot | log
-    filename: str
-    description: str
-    target_figure: Optional[str]
-    result_status: Optional[str]  # success | partial | failure
-    comparison_notes: NotRequired[str]
-
-
-class StageProgress(TypedDict):
-    """Progress tracking for a single stage."""
-    stage_id: str
-    # Status values (matches progress_schema.json):
-    # - not_started: Stage hasn't been attempted
-    # - in_progress: Stage is currently executing
-    # - completed_success: Stage completed with good results
-    # - completed_partial: Stage completed with partial match
-    # - completed_failed: Stage completed but failed validation
-    # - blocked: Stage skipped due to budget/dependencies
-    # - needs_rerun: Stage needs to be re-executed (backtrack target)
-    # - invalidated: Stage results invalid, will re-run when deps ready
-    status: str
-    last_updated: str  # ISO 8601
-    revision_count: int
-    runtime_seconds: NotRequired[float]
-    summary: str
-    outputs: List[Output]
-    discrepancies: List[Discrepancy]
-    issues: List[str]
-    next_actions: List[str]
-    # Backtracking support (matches progress_schema.json)
-    invalidation_reason: NotRequired[str]  # Why this stage was invalidated (if status is invalidated/needs_rerun)
-    # Confidence fields
-    classification_confidence: NotRequired[float]  # 0.0 to 1.0
-    confidence_factors: NotRequired[List[str]]  # What affected confidence
+#
+# These types are specific to the LangGraph workflow and are NOT defined
+# in the JSON schemas. They represent internal state that doesn't get
+# persisted to JSON files.
+#
+# For types that ARE defined in JSON schemas (ExtractedParameter,
+# Discrepancy, StageProgress, FigureComparison, etc.), generate them
+# from the schemas using datamodel-code-generator.
+# ═══════════════════════════════════════════════════════════════════════
 
 
 class ReviewerIssue(TypedDict):
-    """An issue identified by CodeReviewerAgent or validation agents."""
+    """
+    An issue identified by CodeReviewerAgent or validation agents.
+    
+    This is workflow-internal and not persisted to JSON schemas.
+    """
     severity: str  # blocking | major | minor
     category: str  # geometry | material | source | numerical | analysis | documentation
     description: str
     suggested_fix: str
     reference: NotRequired[str]
-
-
-class FigureComparisonRow(TypedDict):
-    """A row in a figure comparison table."""
-    feature: str
-    paper: str
-    reproduction: str
-    status: str  # "✅ Match" | "⚠️ Partial" | "❌ Mismatch"
-
-
-class ShapeComparisonRow(TypedDict):
-    """A row in a shape comparison table."""
-    aspect: str
-    paper: str
-    reproduction: str
-
-
-class FigureComparison(TypedDict):
-    """
-    Structured comparison of a reproduced figure to paper.
-    
-    This captures both the paths to images (for visual comparison by vision models)
-    and structured data about the comparison results.
-    """
-    figure_id: str
-    stage_id: str  # Which stage produced this comparison
-    title: str
-    
-    # Image paths for comparison
-    paper_image_path: str  # Path to original figure from paper (from PaperInput)
-    reproduction_image_path: NotRequired[str]  # Path to simulation output image
-    
-    # Structured comparison data
-    comparison_table: List[FigureComparisonRow]  # Quantitative comparison table
-    shape_comparison: List[ShapeComparisonRow]  # Shape/feature comparison
-    reason_for_difference: str  # Explanation of observed differences
-    
-    # Classification (from ResultsAnalyzerAgent)
-    classification: str  # "success" | "partial" | "failure"
-    
-    # Vision model assessment (qualitative)
-    visual_similarity: NotRequired[str]  # "high" | "medium" | "low"
-    features_matched: NotRequired[List[str]]  # List of matched features
-    features_mismatched: NotRequired[List[str]]  # List of mismatched features
-    
-    # Confidence fields
-    confidence: float  # 0.0 to 1.0
-    confidence_reason: str  # Explanation of confidence level
-
-
-class OverallAssessmentItem(TypedDict):
-    """Item in executive summary overall assessment."""
-    aspect: str
-    status: str
-    status_icon: str  # "✅" | "⚠️" | "❌" | "⏭️"
-    notes: NotRequired[str]
-
-
-class SystematicDiscrepancy(TypedDict):
-    """A systematic discrepancy affecting multiple figures."""
-    name: str
-    description: str
-    origin: str
-    affected_figures: List[str]
-
-
-class ReportConclusions(TypedDict):
-    """Conclusions section of the reproduction report."""
-    main_physics_reproduced: bool
-    key_findings: List[str]
-    limitations: List[str]  # Known issues or constraints
-    final_statement: str
 
 
 class ValidationHierarchyStatus(TypedDict):
@@ -266,33 +185,6 @@ def update_validation_hierarchy(state: dict, stage_id: str, stages: list) -> Non
         state["validation_hierarchy"][hierarchy_key] = hierarchy_value
 
 
-class UserInteractionContext(TypedDict, total=False):
-    """Context information for a user interaction."""
-    stage_id: Optional[str]
-    agent: str
-    reason: str
-
-
-class UserInteraction(TypedDict):
-    """
-    A logged user decision or feedback during reproduction.
-    
-    User interactions are important to track because:
-    - They document key decisions that affected the reproduction
-    - They provide context for why certain approaches were taken
-    - They help in reproducing the reproduction (meta-reproducibility)
-    - They inform future system improvements
-    """
-    id: str  # Unique ID (e.g., "U1", "U2")
-    timestamp: str  # ISO 8601
-    interaction_type: str  # material_checkpoint | clarification | trade_off_decision | parameter_confirmation | stop_decision | backtrack_approval | general_feedback
-    context: UserInteractionContext
-    question: str  # Question posed to user
-    user_response: str  # User's response/decision
-    impact: NotRequired[str]  # How this affected the reproduction
-    alternatives_considered: NotRequired[List[str]]  # Other options presented
-
-
 class MaterialValidationUserResponse(TypedDict):
     """
     User response to Stage 0 material validation checkpoint.
@@ -306,71 +198,15 @@ class MaterialValidationUserResponse(TypedDict):
     notes: str  # User explanation/reasoning
 
 
-class AgentCallMetric(TypedDict):
-    """Metrics for a single agent call."""
-    agent: str
-    node: str
-    stage_id: Optional[str]
-    timestamp: str  # ISO 8601
-    duration_seconds: float
-    input_tokens: NotRequired[int]
-    output_tokens: NotRequired[int]
-    model: NotRequired[str]
-    verdict: NotRequired[str]
-    error: NotRequired[str]
-
-
-class StageMetric(TypedDict):
-    """Metrics for a single stage."""
-    stage_id: str
-    stage_type: str
-    started_at: Optional[str]
-    completed_at: Optional[str]
-    duration_seconds: NotRequired[float]
-    simulation_runtime_seconds: NotRequired[float]
-    design_revisions: int
-    code_revisions: int
-    analysis_revisions: int
-    final_status: NotRequired[str]
-    escalated_to_user: bool
-
-
-class MetricsLog(TypedDict):
-    """
-    Minimal live metrics tracked during execution.
-    
-    Used for monitoring and future PromptEvolutionAgent learning.
-    
-    NOTE: This is intentionally simpler than metrics_schema.json.
-    The full schema (with revision_summary, token_summary, reproduction_quality,
-    etc.) is used for the final exported metrics file. That richer structure
-    is computed from this live log at GENERATE_REPORT time.
-    
-    Live tracking (this TypedDict):
-    - Basic counters and timestamps
-    - Raw agent call metrics
-    - Stage-level metrics
-    
-    Exported format (metrics_schema.json):
-    - All of the above, plus
-    - revision_summary (aggregated counts)
-    - token_summary (cost analysis)
-    - reproduction_quality (final assessment)
-    """
-    paper_id: str
-    started_at: str  # ISO 8601
-    completed_at: Optional[str]
-    total_duration_seconds: NotRequired[float]
-    final_status: str  # in_progress | completed | stopped_by_user | failed
-    agent_calls: List[AgentCallMetric]
-    stage_metrics: List[StageMetric]
-    total_input_tokens: int
-    total_output_tokens: int
-    prompt_adaptations_count: int
-
-
 # ═══════════════════════════════════════════════════════════════════════
 # Main State Definition
+# ═══════════════════════════════════════════════════════════════════════
+#
+# NOTE: Types like ExtractedParameter, Discrepancy, StageProgress,
+# FigureComparison, AgentCallMetric, StageMetric, MetricsLog, etc.
+# are defined in the JSON schemas and should be generated from there.
+#
+# See the header of this file for generation instructions.
 # ═══════════════════════════════════════════════════════════════════════
 
 class ReproState(TypedDict, total=False):
@@ -424,12 +260,14 @@ class ReproState(TypedDict, total=False):
     #    - Performed automatically by workflow runner at sync points
     #
     # See sync_extracted_parameters() function below for implementation.
-    extracted_parameters: List[ExtractedParameter]
+    # Structure matches plan_schema.json extracted_parameters items
+    extracted_parameters: List[Dict[str, Any]]
     
     # ─── Validation Tracking ────────────────────────────────────────────
     validation_hierarchy: ValidationHierarchyStatus
     geometry_interpretations: Dict[str, str]  # ambiguous_term → interpretation
-    discrepancies_log: List[Discrepancy]  # All discrepancies across all stages
+    # Structure matches progress_schema.json#/definitions/discrepancy
+    discrepancies_log: List[Dict[str, Any]]  # All discrepancies across all stages
     systematic_shifts: List[str]  # Known systematic shifts
     
     # ─── Current Control ────────────────────────────────────────────────
@@ -462,6 +300,16 @@ class ReproState(TypedDict, total=False):
     - Identifying papers that are particularly difficult to simulate
     - Comparing reproduction difficulty across papers
     """
+    physics_failure_count: int
+    """Per-stage physics sanity check failure count.
+    
+    Incremented: Each time PhysicsSanityAgent verdict = "fail"
+    Reset to 0: 
+        - When stage completes successfully
+        - When user intervenes via ASK_USER
+        - When moving to a new stage
+    Limit: max_physics_failures (default: 2 per stage)
+    """
     analysis_revision_count: int
     replan_count: int
     
@@ -473,7 +321,7 @@ class ReproState(TypedDict, total=False):
     backtrack_count: int  # Track number of backtracks (for limits)
     
     # ─── Verdicts ───────────────────────────────────────────────────────
-    last_reviewer_verdict: Optional[str]  # approve_to_run | approve_results | needs_revision
+    last_reviewer_verdict: Optional[str]  # approve | needs_revision
     reviewer_issues: List[ReviewerIssue]
     supervisor_verdict: Optional[str]  # ok_continue | replan_needed | change_priority | ask_user | backtrack_to_stage
     backtrack_decision: Optional[Dict[str, Any]]  # {accepted, target_stage_id, stages_to_invalidate, reason}
@@ -500,21 +348,24 @@ class ReproState(TypedDict, total=False):
     pending_user_questions: List[str]
     user_responses: Dict[str, str]  # question → response (current session)
     awaiting_user_input: bool
-    user_interactions: List[UserInteraction]  # Full log of all user decisions/feedback
+    # Structure matches progress_schema.json#/definitions/user_interaction
+    user_interactions: List[Dict[str, Any]]  # Full log of all user decisions/feedback
     
     # Resume context - helps agents understand what triggered ask_user
     ask_user_trigger: Optional[str]  # What caused ask_user (e.g., "code_review_limit", "material_checkpoint")
     last_node_before_ask_user: Optional[str]  # Which node triggered the ask_user
     
     # ─── Report Generation ──────────────────────────────────────────────
-    figure_comparisons: List[FigureComparison]  # All figure comparisons
-    overall_assessment: List[OverallAssessmentItem]  # Executive summary
-    systematic_discrepancies_identified: List[SystematicDiscrepancy]
-    report_conclusions: Optional[ReportConclusions]
+    # Structures match report_schema.json definitions
+    figure_comparisons: List[Dict[str, Any]]  # Matches report_schema.json#/definitions/figure_comparison
+    overall_assessment: List[Dict[str, Any]]  # Matches report_schema.json executive_summary.overall_assessment
+    systematic_discrepancies_identified: List[Dict[str, Any]]  # Matches report_schema.json systematic_discrepancies
+    report_conclusions: Optional[Dict[str, Any]]  # Matches report_schema.json conclusions
     final_report_markdown: Optional[str]  # Generated REPRODUCTION_REPORT.md
     
     # ─── Metrics Tracking ─────────────────────────────────────────────────
-    metrics: Optional[MetricsLog]  # Comprehensive metrics for monitoring and learning
+    # Structure matches metrics_schema.json
+    metrics: Optional[Dict[str, Any]]  # Comprehensive metrics for monitoring and learning
     
     # ─── Paper Figures (for multimodal comparison) ────────────────────────
     paper_figures: List[Dict[str, str]]  # [{id, description, image_path}, ...]
@@ -615,6 +466,7 @@ def create_initial_state(
         code_revision_count=0,
         execution_failure_count=0,
         total_execution_failures=0,
+        physics_failure_count=0,
         analysis_revision_count=0,
         replan_count=0,
         
@@ -742,6 +594,7 @@ class RuntimeConfig(TypedDict):
     
     # Execution failure limits (distinct from code revision limits)
     max_execution_failures: int  # Default: 2 - limit simulation runtime crashes before escalating
+    max_physics_failures: int  # Default: 2 - limit physics sanity failures before escalating
 
 
 # Default runtime configuration
@@ -759,7 +612,8 @@ DEFAULT_RUNTIME_CONFIG = RuntimeConfig(
     debug_resolution_factor=0.5,
     debug_max_stages=2,
     max_backtracks=2,
-    max_execution_failures=2
+    max_execution_failures=2,
+    max_physics_failures=2
 )
 
 # Debug mode runtime configuration preset
@@ -777,7 +631,8 @@ DEBUG_RUNTIME_CONFIG = RuntimeConfig(
     debug_resolution_factor=0.5,
     debug_max_stages=2,
     max_backtracks=1,
-    max_execution_failures=1
+    max_execution_failures=1,
+    max_physics_failures=1
 )
 
 
@@ -789,9 +644,10 @@ DEBUG_RUNTIME_CONFIG = RuntimeConfig(
 MAX_DESIGN_REVISIONS = 3
 MAX_CODE_REVISIONS = 3  # Code generation revisions per stage (from code review feedback)
 MAX_EXECUTION_FAILURES = 2  # Simulation runtime failures (crashes, timeouts) before escalating
+MAX_PHYSICS_FAILURES = 2  # Physics sanity check failures before escalating
 MAX_ANALYSIS_REVISIONS = 2
 MAX_REPLANS = 2
-# Note: MAX_BACKTRACKS and MAX_EXECUTION_FAILURES are now configurable via RuntimeConfig
+# Note: MAX_BACKTRACKS, MAX_EXECUTION_FAILURES, MAX_PHYSICS_FAILURES are now configurable via RuntimeConfig
 # These constants are kept for backwards compatibility but prefer using RuntimeConfig
 MAX_BACKTRACKS = 2  # Default limit; configurable via RuntimeConfig
 
@@ -1347,91 +1203,89 @@ def list_checkpoints(paper_id: str, output_dir: str = "outputs") -> List[Dict[st
 
 # Required state fields for each node
 # This helps catch malformed state early in the workflow
+# NOTE: Node names must match graph.py node names (lowercase)
 NODE_REQUIREMENTS: Dict[str, List[str]] = {
-    "ADAPT_PROMPTS": [
+    "adapt_prompts": [
         "paper_id",
         "paper_text",
         "paper_domain",
     ],
-    "PLAN": [
+    "plan": [
         "paper_id",
         "paper_text",
         "paper_domain",
         "paper_figures",
     ],
-    "SELECT_STAGE": [
+    "select_stage": [
         "paper_id",
         "plan",
         "validation_hierarchy",
     ],
-    "DESIGN": [
+    "design": [
         "paper_id",
         "current_stage_id",
         "plan",
         "assumptions",
     ],
-    "CODE_REVIEW_DESIGN": [
+    # code_review handles both design review and code review
+    # Requirements are the union of both contexts
+    "code_review": [
         "paper_id",
         "current_stage_id",
-        "design_description",
         "plan",
+        # design_description required for design review
+        # code required for code review (but may not exist during design review)
     ],
-    "GENERATE_CODE": [
+    "generate_code": [
         "paper_id",
         "current_stage_id",
         "design_description",
     ],
-    "CODE_REVIEW_CODE": [
-        "paper_id",
-        "current_stage_id",
-        "code",
-        "design_description",
-    ],
-    "RUN_CODE": [
+    "run_code": [
         "paper_id",
         "current_stage_id",
         "code",
     ],
-    "EXECUTION_CHECK": [
+    "execution_check": [
         "paper_id",
         "current_stage_id",
         "stage_outputs",
     ],
-    "PHYSICS_CHECK": [
+    "physics_check": [
         "paper_id",
         "current_stage_id",
         "stage_outputs",
         "code",
     ],
-    "ANALYZE": [
+    "analyze": [
         "paper_id",
         "current_stage_id",
         "stage_outputs",
         "paper_figures",
         "plan",
     ],
-    "COMPARISON_CHECK": [
+    "comparison_check": [
         "paper_id",
         "current_stage_id",
         "figure_comparisons",
         "analysis_summary",
     ],
-    "SUPERVISOR": [
+    "supervisor": [
         "paper_id",
         "plan",
         "progress",
         "validation_hierarchy",
     ],
-    "HANDLE_BACKTRACK": [
+    "handle_backtrack": [
         "paper_id",
         "backtrack_decision",
         "progress",
     ],
-    "ASK_USER": [
+    "ask_user": [
         "paper_id",
         "pending_user_questions",
     ],
-    "GENERATE_REPORT": [
+    "generate_report": [
         "paper_id",
         "plan",
         "progress",
@@ -1456,9 +1310,9 @@ def validate_state_for_node(state: ReproState, node_name: str) -> List[str]:
         List of missing field names (empty if all required fields present)
         
     Example:
-        >>> missing = validate_state_for_node(state, "ANALYZE")
+        >>> missing = validate_state_for_node(state, "analyze")
         >>> if missing:
-        ...     raise ValueError(f"State missing required fields for ANALYZE: {missing}")
+        ...     raise ValueError(f"State missing required fields for analyze: {missing}")
     """
     if node_name not in NODE_REQUIREMENTS:
         # Unknown node - no validation defined
@@ -1506,22 +1360,23 @@ def validate_state_transition(
         issues.extend([f"Missing field for {to_node}: {f}" for f in missing])
     
     # Check specific transition requirements
+    # NOTE: Node names must match graph.py node names (lowercase)
     transition_checks = {
-        ("DESIGN", "CODE_REVIEW_DESIGN"): [
-            ("design_description", "Design description not set after DESIGN node"),
+        ("design", "code_review"): [
+            ("design_description", "Design description not set after design node"),
         ],
-        ("GENERATE_CODE", "CODE_REVIEW_CODE"): [
-            ("code", "Code not set after GENERATE_CODE node"),
+        ("generate_code", "code_review"): [
+            ("code", "Code not set after generate_code node"),
         ],
-        ("RUN_CODE", "EXECUTION_CHECK"): [
-            ("stage_outputs", "Stage outputs not set after RUN_CODE node"),
+        ("run_code", "execution_check"): [
+            ("stage_outputs", "Stage outputs not set after run_code node"),
         ],
-        ("ANALYZE", "COMPARISON_CHECK"): [
-            ("analysis_summary", "Analysis summary not set after ANALYZE node"),
+        ("analyze", "comparison_check"): [
+            ("analysis_summary", "Analysis summary not set after analyze node"),
         ],
-        ("PLAN", "SELECT_STAGE"): [
-            ("plan", "Plan not set after PLAN node"),
-            ("assumptions", "Assumptions not set after PLAN node"),
+        ("plan", "select_stage"): [
+            ("plan", "Plan not set after plan node"),
+            ("assumptions", "Assumptions not set after plan node"),
         ],
     }
     
@@ -1562,20 +1417,21 @@ def sync_extracted_parameters(state: ReproState) -> ReproState:
         state = sync_extracted_parameters(state)
         
         # Or in workflow runner
-        if current_node == "PLAN":
+        if current_node == "plan":
             state = sync_extracted_parameters(state)
     """
     plan = state.get("plan", {})
     plan_params = plan.get("extracted_parameters", [])
     
-    # Convert to typed list of ExtractedParameter
-    typed_params: List[ExtractedParameter] = []
+    # Copy parameters from plan to state
+    # Structure matches plan_schema.json extracted_parameters items
+    typed_params: List[Dict[str, Any]] = []
     
     for param in plan_params:
         if isinstance(param, dict):
             # Ensure required fields exist with defaults
-            # Fields match ExtractedParameter TypedDict and plan_schema.json
-            typed_param: ExtractedParameter = {
+            # Fields match plan_schema.json extracted_parameters items
+            typed_param: Dict[str, Any] = {
                 "name": param.get("name", "unnamed"),
                 "value": param.get("value"),
                 "unit": param.get("unit", ""),
@@ -1665,4 +1521,5 @@ def list_extracted_parameters(
         })
     
     return result
+
 

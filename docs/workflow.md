@@ -79,9 +79,10 @@ The system uses a state graph where each node represents an agent action or syst
 - `assumptions`: Initial assumptions with sources
 - `progress`: Initialized progress structure
 - `extracted_parameters`: Parameters with provenance
+- `review_context`: Set to `"plan"` for CODE_REVIEW
 
 **Transitions**:
-- → SELECT_STAGE (normal)
+- → CODE_REVIEW (plan review before proceeding)
 
 ---
 
@@ -198,11 +199,18 @@ def select_next_stage(state):
 
 ### 5. CODE_REVIEW Node (CodeReviewerAgent)
 
-**Purpose**: Review design or code before proceeding
+**Purpose**: Review plan, design, or code before proceeding
 
-**Why one agent for both reviews?** A single CodeReviewerAgent handles both design and code review because both tasks require the same technical expertise (Meep API knowledge, physics constraints, performance considerations). Splitting into two agents would add complexity without significant benefit since the review checklists share common quality criteria.
+**Why one agent for all reviews?** A single CodeReviewerAgent handles plan, design, and code review because all tasks require the same technical expertise (Meep API knowledge, physics constraints, validation hierarchy understanding). The `review_context` field determines which checklist to use.
 
-**When reviewing DESIGN**:
+**When reviewing PLAN** (`review_context = "plan"`):
+- [ ] All key simulation-reproducible figures identified
+- [ ] Validation hierarchy respected (Stage 0 first)
+- [ ] Stage dependencies make sense
+- [ ] Runtime budgets realistic
+- [ ] Assumptions properly initialized
+
+**When reviewing DESIGN** (`review_context = "design"`):
 - [ ] Geometry matches paper interpretation
 - [ ] Materials correctly selected with sources
 - [ ] Source configuration appropriate
@@ -210,7 +218,7 @@ def select_next_stage(state):
 - [ ] Resolution adequate for features
 - [ ] Performance within budget
 
-**When reviewing CODE**:
+**When reviewing CODE** (`review_context = "code"`):
 - [ ] Code implements design correctly
 - [ ] Progress prints included
 - [ ] No blocking calls (plt.show, input)
@@ -221,6 +229,11 @@ def select_next_stage(state):
 - `reviewer_verdict`: "approve" | "needs_revision"
 - `reviewer_issues`: List of issues found
 - `reviewer_feedback`: Detailed feedback
+
+**Transitions** (after plan review):
+- → SELECT_STAGE (approved)
+- → PLAN (needs revision, replan_count < 2)
+- → ASK_USER (needs revision, replan_count >= 2)
 
 **Transitions** (after design review):
 - → GENERATE_CODE (approved)
@@ -922,6 +935,34 @@ This section documents which nodes mutate which state fields, when state is pers
    - `plan["extracted_parameters"]` is canonical; `state.extracted_parameters` is synced view
    - `DISCREPANCY_THRESHOLDS` in state.py is canonical for threshold values
 
+### State Validation Contract
+
+Every node invocation is wrapped with validation to catch malformed state early:
+
+1. **Pre-node validation**: `validate_state_for_node(state, node_name)` checks required fields
+2. **Post-node validation**: `validate_state_transition(old_state, new_state, from_node, to_node)` validates mutations
+3. **Failures are structured**: Missing fields surface as structured `ValidationError`, not cryptic `KeyError`s
+
+This wrapper is **mandatory** for all nodes and must not be bypassed:
+
+```python
+def run_node_with_validation(state: ReproState, node_name: str, node_fn: Callable) -> Dict[str, Any]:
+    """Wrapper that validates state before and after node execution."""
+    # Pre-validation
+    missing = validate_state_for_node(state, node_name)
+    if missing:
+        raise ValidationError(f"Missing fields for {node_name}: {missing}")
+    
+    # Execute node
+    old_state = state.copy()
+    result = node_fn(state)
+    
+    # Post-validation (for transitions)
+    # ...
+    
+    return result
+```
+
 ### Checkpoint Trigger Points
 
 | Checkpoint Name | Trigger Location | Contents Saved |
@@ -1465,7 +1506,7 @@ CodeGeneratorAgent (attempt 2)
     ↓ uses feedback to improve code
 CodeReviewerAgent
     ↓ reviews improved code
-    ↓ sets last_reviewer_verdict="approve_to_run"
+    ↓ sets last_reviewer_verdict="approve"
 ```
 
 ## Prompt Construction and Injection

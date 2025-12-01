@@ -1597,6 +1597,58 @@ def call_agent(agent_name: str, system_prompt: str, user_input: str, output_sche
     return json.loads(response.choices[0].message.tool_calls[0].function.arguments)
 ```
 
+### Schema-First Design Rule
+
+**Rule**: All agents with structured outputs MUST have a JSON schema in `schemas/`.
+Tool definitions for function calling are constructed directly from these schemas,
+never hand-specified in code.
+
+This prevents schema drift between:
+- JSON validation schemas (`schemas/*.json`)
+- Python TypedDicts (generated from schemas via `datamodel-codegen`)
+- LLM function calling tool definitions
+
+**When adding a new structured output:**
+
+1. Define the schema in `schemas/<name>_schema.json`
+2. Generate Python types: `datamodel-codegen --input schemas/<name>_schema.json ...`
+3. Build tool definitions by loading the JSON schema directly (as shown in examples above)
+
+**Anti-pattern (don't do this):**
+
+```python
+# BAD: Hand-written tool schema that will drift from JSON schema
+tools = [{
+    "type": "function",
+    "function": {
+        "name": "submit_plan",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "stages": {"type": "array"},  # Schema drift risk!
+                # ... manually maintained, will diverge from plan_schema.json
+            }
+        }
+    }
+}]
+```
+
+**Correct pattern:**
+
+```python
+# GOOD: Load schema from single source of truth
+with open("schemas/plan_schema.json") as f:
+    plan_schema = json.load(f)
+
+tools = [{
+    "type": "function",
+    "function": {
+        "name": "submit_plan",
+        "parameters": plan_schema  # Always in sync
+    }
+}]
+```
+
 ### Fallback for Non-Compliant Models
 
 If using a model without function calling support:

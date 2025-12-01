@@ -4,7 +4,17 @@ from typing import Literal, Dict, Any
 from langgraph.graph import StateGraph, END, START
 from langgraph.checkpoint.memory import MemorySaver
 
-from schemas.state import ReproState, save_checkpoint, checkpoint_name_for_stage
+from schemas.state import (
+    ReproState, 
+    save_checkpoint, 
+    checkpoint_name_for_stage,
+    MAX_DESIGN_REVISIONS,
+    MAX_CODE_REVISIONS,
+    MAX_EXECUTION_FAILURES,
+    MAX_PHYSICS_FAILURES,
+    MAX_ANALYSIS_REVISIONS,
+    MAX_REPLANS,
+)
 from src.agents import (
     adapt_prompts_node,
     plan_node,
@@ -42,11 +52,17 @@ def generate_report_node_with_checkpoint(state: ReproState) -> Dict[str, Any]:
     
     return result
 
-def route_after_plan(state: ReproState) -> Literal["select_stage"]:
-    """Route after planning is always to select stage."""
+def route_after_plan(state: ReproState) -> Literal["code_review"]:
+    """Route after planning to plan review.
+    
+    The plan goes through CODE_REVIEW with review_context="plan" before
+    proceeding to stage selection. This ensures plan quality before execution.
+    """
     # Save checkpoint after planning
     save_checkpoint(state, "after_plan")
-    return "select_stage"
+    # Note: plan_node should set review_context="plan" before returning
+    # If not set, we set it here as a safety measure
+    return "code_review"
 
 def route_after_select_stage(state: ReproState) -> Literal["design", "generate_report"]:
     """
@@ -64,38 +80,54 @@ def route_after_select_stage(state: ReproState) -> Literal["design", "generate_r
         return "design"
     return "generate_report"
 
-def route_after_code_review(state: ReproState) -> Literal["generate_code", "run_code", "design", "ask_user"]:
+def route_after_code_review(state: ReproState) -> Literal["generate_code", "run_code", "design", "ask_user", "select_stage", "plan"]:
     """
     Route based on reviewer verdict.
-    Context: CodeReviewer reviews DESIGN first, then CODE.
     
     Uses review_context field (set by caller) to determine what we're reviewing:
+    - "plan" → reviewing reproduction plan from PlannerAgent
     - "design" → reviewing simulation design from SimulationDesignerAgent
     - "code" → reviewing code from CodeGeneratorAgent
     """
     verdict = state.get("last_reviewer_verdict")
+    runtime_config = state.get("runtime_config", {})
     
     # review_context is set by the node that called code_review:
+    # - plan_node sets "plan"
     # - simulation_designer_node sets "design"
     # - code_generator_node sets "code"
     context = state.get("review_context", "")
     
-    if context == "design":
+    if context == "plan":
+        # Plan review: approve → proceed to stages, needs_revision → replan
+        replan_count = state.get("replan_count", 0)
+        max_replans = runtime_config.get("max_replans", MAX_REPLANS)
+        if verdict == "approve":
+            return "select_stage"
+        elif verdict == "needs_revision":
+            if replan_count < max_replans:
+                return "plan"
+            else:
+                return "ask_user"
+    
+    elif context == "design":
         revision_count = state.get("design_revision_count", 0)
+        max_design = runtime_config.get("max_design_revisions", MAX_DESIGN_REVISIONS)
         if verdict == "approve":
             return "generate_code"
         elif verdict == "needs_revision":
-            if revision_count < 3:  # MAX_DESIGN_REVISIONS
+            if revision_count < max_design:
                 return "design"
             else:
                 return "ask_user"
                 
     elif context == "code":
         revision_count = state.get("code_revision_count", 0)
+        max_code = runtime_config.get("max_code_revisions", MAX_CODE_REVISIONS)
         if verdict == "approve":
             return "run_code"
         elif verdict == "needs_revision":
-            if revision_count < 3:  # MAX_CODE_REVISIONS
+            if revision_count < max_code:
                 return "generate_code"
             else:
                 return "ask_user"
@@ -105,38 +137,65 @@ def route_after_code_review(state: ReproState) -> Literal["generate_code", "run_
     return "ask_user"
 
 def route_after_execution_check(state: ReproState) -> Literal["physics_check", "generate_code", "ask_user"]:
+    """
+    Route based on execution validator verdict.
+    
+    Uses execution_failure_count (not code_revision_count) to track runtime failures.
+    These are distinct: code revision is for code review feedback, execution failure
+    is for simulation crashes/timeouts.
+    """
     verdict = state.get("execution_verdict")
+    runtime_config = state.get("runtime_config", {})
+    max_failures = runtime_config.get("max_execution_failures", MAX_EXECUTION_FAILURES)
+    
     if verdict in ["pass", "warning"]:
         return "physics_check"
     elif verdict == "fail":
-        # If recoverable error (not explicitly defined in simple state, assume recoverable for now)
-        # For now, fail goes to generate_code unless revisions exceeded (handled in node or here)
-        if state.get("code_revision_count", 0) < 3:
-             return "generate_code"
+        # Use execution_failure_count for runtime failures, not code_revision_count
+        if state.get("execution_failure_count", 0) < max_failures:
+            return "generate_code"
         else:
-             return "ask_user"
+            return "ask_user"
     return "ask_user"
 
 def route_after_physics_check(state: ReproState) -> Literal["analyze", "generate_code", "ask_user"]:
+    """
+    Route based on physics sanity check verdict.
+    
+    Uses physics_failure_count to track physics validation failures.
+    This is distinct from execution_failure_count (runtime crashes) and
+    code_revision_count (code review feedback).
+    """
     verdict = state.get("physics_verdict")
+    runtime_config = state.get("runtime_config", {})
+    max_failures = runtime_config.get("max_physics_failures", MAX_PHYSICS_FAILURES)
+    
     if verdict in ["pass", "warning"]:
         return "analyze"
     elif verdict == "fail":
-        if state.get("code_revision_count", 0) < 3:
+        if state.get("physics_failure_count", 0) < max_failures:
             return "generate_code"
         else:
             return "ask_user"
     return "ask_user"
 
 def route_after_comparison_check(state: ReproState) -> Literal["supervisor", "analyze"]:
+    """
+    Route based on comparison validator verdict.
+    
+    Uses analysis_revision_count with configurable limit.
+    """
     verdict = state.get("comparison_verdict")
+    runtime_config = state.get("runtime_config", {})
+    max_analysis = runtime_config.get("max_analysis_revisions", MAX_ANALYSIS_REVISIONS)
+    
     if verdict == "approve":
         return "supervisor"
     elif verdict == "needs_revision":
-        if state.get("analysis_revision_count", 0) < 2: # MAX_ANALYSIS_REVISIONS
+        if state.get("analysis_revision_count", 0) < max_analysis:
             return "analyze"
         else:
-            return "supervisor" # Proceed with flag
+            return "supervisor"  # Proceed with flag
     return "supervisor"
 
 def route_after_supervisor(state: ReproState) -> Literal["select_stage", "plan", "ask_user", "handle_backtrack", "generate_report"]:
@@ -197,7 +256,7 @@ def create_repro_graph():
     workflow.add_conditional_edges(
         "plan",
         route_after_plan,
-        {"select_stage": "select_stage"}
+        {"code_review": "code_review"}  # Plan goes to review before stage selection
     )
     
     workflow.add_conditional_edges(
@@ -215,9 +274,15 @@ def create_repro_graph():
         "code_review",
         route_after_code_review,
         {
+            # Plan review routes
+            "select_stage": "select_stage",  # Plan approved → proceed to stages
+            "plan": "plan",                  # Plan needs revision → replan
+            # Design review routes
             "generate_code": "generate_code",
-            "run_code": "run_code",
             "design": "design",
+            # Code review routes
+            "run_code": "run_code",
+            # Common fallback
             "ask_user": "ask_user"
         }
     )

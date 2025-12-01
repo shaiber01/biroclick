@@ -32,6 +32,9 @@ def plan_node(state: ReproState) -> ReproState:
     # - Classify figures
     # - Design staged reproduction plan
     # - Initialize assumptions
+    
+    # Set review context for CODE_REVIEW node to know it's reviewing a plan
+    state["review_context"] = "plan"
     return state
 
 
