@@ -727,43 +727,105 @@ Each domain would require:
 
 ### Sandboxed Code Execution
 
-LLM-generated Meep code must be executed safely. Options include:
+LLM-generated Meep code must be executed safely to prevent:
+- Runaway simulations consuming all resources
+- Malicious or buggy code affecting the host system
+- Infinite loops blocking the workflow
 
-**Option A: Subprocess with Resource Limits**
+#### V1 Implementation: Subprocess with Resource Limits
+
+For the initial version, we use Python subprocess with timeout and memory limits.
+See `src/code_runner.py` for the full implementation.
+
+**Core approach:**
 ```python
 import subprocess
 import resource
+import os
+import time
+from pathlib import Path
 
-# Set limits
-resource.setrlimit(resource.RLIMIT_CPU, (timeout_seconds, timeout_seconds))
-resource.setrlimit(resource.RLIMIT_AS, (max_memory_bytes, max_memory_bytes))
-
-# Execute in subprocess
-result = subprocess.run(
-    ["python", "simulation.py"],
-    timeout=timeout_seconds,
-    capture_output=True
-)
+def run_simulation_sandboxed(
+    code: str,
+    stage_id: str,
+    output_dir: Path,
+    timeout_seconds: int = 3600,
+    max_memory_gb: float = 8.0,
+    max_cpu_cores: int = 4
+) -> dict:
+    """Execute Meep simulation in sandboxed subprocess."""
+    
+    # Write code to file
+    script_path = output_dir / f"simulation_{stage_id}.py"
+    script_path.write_text(code)
+    
+    # Resource limits (Unix only)
+    def set_limits():
+        max_bytes = int(max_memory_gb * 1024**3)
+        resource.setrlimit(resource.RLIMIT_AS, (max_bytes, max_bytes))
+    
+    # Execute with controlled environment
+    result = subprocess.run(
+        ["python", str(script_path)],
+        cwd=str(output_dir),
+        timeout=timeout_seconds,
+        capture_output=True,
+        text=True,
+        preexec_fn=set_limits if os.name != 'nt' else None,
+        env={
+            **os.environ,
+            "OMP_NUM_THREADS": str(max_cpu_cores),
+            "OPENBLAS_NUM_THREADS": str(max_cpu_cores),
+            "MKL_NUM_THREADS": str(max_cpu_cores),
+        }
+    )
+    
+    return {
+        "stdout": result.stdout,
+        "stderr": result.stderr,
+        "exit_code": result.returncode,
+        "output_files": [f.name for f in output_dir.glob("*") if f.is_file()],
+    }
 ```
 
-**Option B: Docker Container**
+**Key features:**
+- **Timeout**: `subprocess.run(timeout=...)` kills process after time limit
+- **Memory limit**: `resource.setrlimit(RLIMIT_AS, ...)` sets address space limit
+- **Thread limits**: Environment variables control OpenMP/BLAS parallelism
+- **Working directory isolation**: Each stage runs in its own output directory
+- **Output capture**: stdout/stderr captured for debugging
+
+**V1 Limitations:**
+| Limitation | Risk Level | Mitigation |
+|------------|------------|------------|
+| No network isolation | Medium | Simulations shouldn't need network |
+| Filesystem access | Medium | Working directory is isolated |
+| Memory limits are soft (Unix) | Low | Process killed if exceeded |
+| Windows compatibility | Medium | Use job objects on Windows |
+
+#### Future: Docker Container (v2)
+
+For production deployments, Docker provides better isolation:
+
 ```bash
 docker run --rm \
     --memory=8g \
     --cpus=4 \
-    --timeout=3600 \
-    -v $(pwd)/outputs:/outputs \
+    --network=none \
+    --read-only \
+    -v $(pwd)/outputs:/outputs:rw \
     meep-sandbox:latest \
     python simulation.py
 ```
 
-**Considerations:**
-- Subprocess is simpler, Docker more isolated
-- Docker requires Docker installation
-- Both need file system access controls
-- Both need network isolation
+**Docker advantages:**
+- Network isolation (`--network=none`)
+- Read-only filesystem (`--read-only`)
+- Hard memory limits
+- User namespace isolation
+- Reproducible environment
 
-**Status**: Document requirements now, implement later.
+**Status**: V1 uses subprocess (implemented in `src/code_runner.py`). Docker support planned for v2.
 
 ---
 

@@ -273,7 +273,7 @@ This is an early version with several known limitations:
 | **Single-threaded execution** | Stages run sequentially, not in parallel | Stage parallelization where dependencies allow |
 | **Optics/photonics focus** | Primarily tested on plasmonics/metamaterials papers | Domain expansion to other physics areas |
 | **Meep-only simulations** | Only supports Meep FDTD backend | Multi-backend support (COMSOL, Lumerical) |
-| **No code sandboxing** | Generated code runs in main environment | Containerized execution for safety |
+| **Basic sandboxing** | Subprocess isolation with timeout/memory limits | Full container isolation (Docker) for production |
 
 See `docs/guidelines.md` Section 14 for future improvement roadmap.
 

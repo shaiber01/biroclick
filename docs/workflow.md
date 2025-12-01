@@ -218,37 +218,69 @@ def select_next_stage(state):
 
 ### 7. RUN_CODE Node (Python Execution)
 
-**Purpose**: Execute the simulation code
+**Purpose**: Execute the simulation code in a sandboxed subprocess
 
-**Implementation**:
+**Implementation**: See `src/code_runner.py` for full implementation.
+
 ```python
+from src.code_runner import run_code_node
+
+# The run_code_node function:
+# 1. Validates code for dangerous/blocking patterns
+# 2. Executes in subprocess with timeout and memory limits
+# 3. Captures stdout, stderr, and output files
+# 4. Returns structured result with error handling
+
 def run_code_node(state):
-    try:
-        # Create isolated environment
-        env = create_sandbox_env(state["current_stage_id"])
-        
-        # Execute with timeout
-        result = execute_with_timeout(
-            state["code"],
-            timeout=state["plan"]["stages"][idx]["runtime_budget_minutes"] * 60,
-            env=env
-        )
-        
-        return {
-            "stage_outputs": {
-                "stdout": result.stdout,
-                "stderr": result.stderr,
-                "files": list_output_files(env),
-                "exit_code": result.returncode
-            },
-            "run_error": None
-        }
+    """
+    LangGraph node for RUN_CODE.
     
-    except TimeoutError:
-        return {"run_error": "Simulation exceeded runtime budget"}
-    except Exception as e:
-        return {"run_error": str(e)}
+    Sandboxing features:
+    - Subprocess isolation
+    - Configurable timeout (from stage runtime_budget_minutes)
+    - Memory limits (from runtime_config.max_memory_gb)
+    - Thread/core limits via environment variables
+    - Code validation before execution
+    """
+    from src.code_runner import run_simulation, validate_code
+    
+    # Validate code first
+    warnings = validate_code(state["code"])
+    blocking = [w for w in warnings if w.startswith("BLOCKING")]
+    if blocking:
+        return {"run_error": f"Code validation failed: {blocking}"}
+    
+    # Execute with sandboxing
+    result = run_simulation(
+        code=state["code"],
+        stage_id=state["current_stage_id"],
+        output_dir=Path(f"outputs/{state['paper_id']}/{state['current_stage_id']}"),
+        config={
+            "timeout_seconds": state["plan"]["stages"][idx]["runtime_budget_minutes"] * 60,
+            "max_memory_gb": state.get("runtime_config", {}).get("max_memory_gb", 8.0),
+            "max_cpu_cores": state.get("runtime_config", {}).get("max_cpu_cores", 4),
+        }
+    )
+    
+    return {
+        "stage_outputs": {
+            "stdout": result["stdout"],
+            "stderr": result["stderr"],
+            "files": result["output_files"],
+            "exit_code": result["exit_code"],
+            "runtime_seconds": result["runtime_seconds"],
+        },
+        "run_error": result["error"]
+    }
 ```
+
+**Sandboxing limitations (v1)**:
+- No network isolation (simulations shouldn't need network)
+- Filesystem limited to working directory
+- Memory limits are soft limits on Unix
+- Windows requires different approach
+
+See `docs/guidelines.md` Section 14 for sandboxing details and future Docker support.
 
 **Transitions**:
 - → EXECUTION_CHECK (always)
