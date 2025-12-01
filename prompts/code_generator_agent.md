@@ -131,7 +131,68 @@ a_unit = {value_from_design}  # characteristic length in meters
 ```
 
 ═══════════════════════════════════════════════════════════════════════
-B. PROGRESS PRINT STATEMENTS
+B. MANDATORY OUTPUT MARKERS (REPROLAB_RESULT_JSON)
+═══════════════════════════════════════════════════════════════════════
+
+At the END of every simulation script, you MUST print a structured JSON summary.
+This is REQUIRED for reliable result parsing by ExecutionValidatorAgent.
+
+WHY THIS IS MANDATORY:
+- Meep's stdout can be extremely verbose (thousands of lines)
+- Output format varies between Meep versions
+- Without a structured marker, parsing is unreliable
+- ExecutionValidatorAgent looks for this specific delimiter
+
+REQUIRED OUTPUT FORMAT:
+```python
+import json
+
+# ... at the very end of your script, after all computation and file saving ...
+
+# ═══════════════════════════════════════════════════════════════════════
+# REPROLAB RESULT SUMMARY (MANDATORY - DO NOT REMOVE)
+# ═══════════════════════════════════════════════════════════════════════
+
+result_summary = {
+    "status": "completed",  # or "partial" if some outputs missing
+    "stage_id": "{stage_id}",
+    "output_files": {
+        "data": ["spectrum.csv", "field_data.npz"],
+        "plots": ["spectrum.png", "field_map.png"]
+    },
+    "key_results": {
+        # Include the most important numerical results for quick validation
+        # These should match what the stage is trying to measure
+        "resonance_wavelength_nm": 520.5,
+        "peak_transmission": 0.85,
+        "Q_factor": 15.2
+        # Add/remove keys as appropriate for the simulation
+    },
+    "runtime_seconds": runtime,
+    "meep_version": mp.__version__ if hasattr(mp, '__version__') else "unknown"
+}
+
+print("\n" + "=" * 60)
+print("REPROLAB_RESULT_JSON_START")
+print(json.dumps(result_summary, indent=2))
+print("REPROLAB_RESULT_JSON_END")
+print("=" * 60)
+```
+
+PARSING BY EXECUTIONVALIDATORAGENT:
+The ExecutionValidatorAgent will search for text between 
+`REPROLAB_RESULT_JSON_START` and `REPROLAB_RESULT_JSON_END` markers
+and parse it as JSON. This provides reliable extraction regardless of
+how verbose Meep's output is.
+
+FAILURE MODE:
+If you omit this marker:
+- ExecutionValidatorAgent may fail to find results
+- Manual parsing of stdout will be attempted (unreliable)
+- Stage may be marked as failed even if simulation succeeded
+
+═══════════════════════════════════════════════════════════════════════
+B2. PROGRESS PRINT STATEMENTS
 ═══════════════════════════════════════════════════════════════════════
 
 Include USEFUL progress information:

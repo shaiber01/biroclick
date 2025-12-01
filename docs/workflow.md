@@ -853,6 +853,66 @@ This section documents which nodes mutate which state fields, when state is pers
 
 ## State Persistence
 
+### IMPORTANT: Dual Checkpointing Strategy
+
+The system uses TWO checkpointing mechanisms that serve different purposes:
+
+#### 1. LangGraph's MemorySaver (Source of Truth for Execution)
+
+```python
+checkpointer = MemorySaver()
+workflow.compile(checkpointer=checkpointer, interrupt_before=["ask_user"])
+```
+
+**Purpose**: Graph execution state management
+**Used for**: Resuming graph execution after interrupts (e.g., `ask_user`)
+**Scope**: Complete `ReproState` including internal workflow state
+**Managed by**: LangGraph runtime automatically
+
+#### 2. Disk JSON Files (Artifacts for Humans/Debugging)
+
+```
+outputs/<paper_id>/
+├── plan_<paper_id>.json
+├── assumptions_<paper_id>.json
+├── progress_<paper_id>.json
+└── checkpoints/checkpoint_*.json
+```
+
+**Purpose**: Human-readable artifacts, debugging, manual inspection
+**Used for**: Reviewing what happened, debugging failures, archival
+**Scope**: Selected state fields (plan, assumptions, progress)
+**Managed by**: Explicit `save_checkpoint()` calls in routing functions
+
+#### Why This Matters (Potential Sync Issues)
+
+These two systems can get out of sync:
+
+| Scenario | LangGraph State | Disk JSON | Risk |
+|----------|-----------------|-----------|------|
+| Normal operation | Current | Slightly behind | Low - disk updated at checkpoints |
+| Crash mid-node | Last checkpoint | Further behind | Medium - disk may be stale |
+| Manual JSON edit | Unchanged | Modified | **HIGH** - systems diverge |
+
+#### Rules to Prevent Issues
+
+1. **NEVER read from disk JSONs for execution decisions**
+   - Always use `state` passed by LangGraph
+   - Disk JSONs are OUTPUT only, not INPUT
+
+2. **Treat disk JSONs as artifacts**
+   - For debugging: "What did the plan look like at stage 2?"
+   - For review: "What assumptions were made?"
+   - NOT for: "What should happen next?"
+
+3. **LangGraph state is authoritative**
+   - If resuming after crash, resume from LangGraph checkpoint
+   - Disk JSONs may be regenerated from state if needed
+
+4. **save_checkpoint() is for humans, not the graph**
+   - Called at strategic points for human inspection
+   - Does not affect graph execution flow
+
 ### Checkpointing
 
 The graph supports checkpointing at key points:
@@ -930,23 +990,43 @@ outputs/<paper_id>/
 
 ### Simulation Errors
 
+The system tracks two distinct types of code-related failures:
+
+1. **`code_revision_count`**: Incremented when CodeReviewerAgent requests changes (before execution)
+2. **`execution_failure_count`**: Incremented when simulation runs but crashes/fails at runtime
+
+This distinction is important because:
+- Code revisions from review are typically style/correctness issues fixable by the LLM
+- Execution failures may indicate fundamental issues (memory, timeout, numerical instability)
+- Different escalation paths may be appropriate
+
 ```python
-if state["run_error"]:
-    # Increment revision count
-    state["code_revision_count"] += 1
+# ExecutionValidatorAgent determines if execution failed
+if execution_failed:
+    # Increment execution failure count (distinct from code_revision_count)
+    state["execution_failure_count"] += 1
     
-    if state["code_revision_count"] >= MAX_CODE_REVISIONS:
-        # Escalate to user
+    max_failures = state["runtime_config"].get("max_execution_failures", MAX_EXECUTION_FAILURES)
+    
+    if state["execution_failure_count"] >= max_failures:
+        # Escalate to user - execution failures may need human intervention
         state["pending_user_questions"].append(
-            f"Simulation failed after {MAX_CODE_REVISIONS} attempts. "
-            f"Error: {state['run_error']}. How should we proceed?"
+            f"Simulation crashed {state['execution_failure_count']} times. "
+            f"Error: {state['run_error']}. This may indicate:\n"
+            f"1. Memory issues (try reducing resolution)\n"
+            f"2. Numerical instability (check source/geometry)\n"
+            f"3. Meep version incompatibility\n"
+            f"How should we proceed?"
         )
         return "ask_user"
     
-    # Try again with error context
-    state["reviewer_feedback"] = f"Simulation failed: {state['run_error']}"
+    # Try regenerating code with execution error context
+    state["reviewer_feedback"] = f"Simulation execution failed: {state['run_error']}"
     return "generate_code"
 ```
+
+**Note**: `code_revision_count` is reset per stage but `execution_failure_count` is tracked separately.
+The rationale: code revisions are typically minor, while execution failures often indicate systematic issues.
 
 ### Validation Hierarchy Enforcement
 
@@ -972,11 +1052,13 @@ This matrix defines the system behavior for various error scenarios and edge cas
 
 | Scenario | Behavior | Limit | Escalation |
 |----------|----------|-------|------------|
+| **Simulation execution fails (crash/timeout)** | Increment `execution_failure_count`. Regenerate code with error context. After limit, escalate to user. | `max_execution_failures` (default: 2) | ASK_USER |
+| **Code review rejects code** | Increment `code_revision_count`. Regenerate with reviewer feedback. After limit, escalate. | `MAX_CODE_REVISIONS` (3) | ASK_USER |
 | **PHYSICS_CHECK fails repeatedly** | After 2 failures at same stage, escalate to SUPERVISOR with `physics_stuck` flag. Supervisor can try alternative approach or ask user. | 2 per stage | SUPERVISOR → ASK_USER |
 | **User doesn't respond to ASK_USER** | Timeout after configurable period (default: 24 hours). Auto-save checkpoint, pause workflow. Can be resumed later. | 24 hours (default) | Checkpoint + Pause |
 | **Total runtime exceeded** | Hard abort after `max_total_runtime_hours`. Save checkpoint, generate partial report with whatever results are available. | 8 hours (default) | Partial report |
 | **Consecutive stage failures** | After 2 consecutive stage failures (different stages), trigger replanning via SUPERVISOR | 2 consecutive | SUPERVISOR → PLAN |
-| **Memory exhaustion during simulation** | Capture error, suggest resolution reduction or cell size adjustment. Return to CODE_REVIEW with memory_error flag. | N/A | CODE_REVIEW |
+| **Memory exhaustion during simulation** | Capture error, increment `execution_failure_count`, suggest resolution reduction or cell size adjustment. | `max_execution_failures` | ASK_USER |
 | **LLM rate limit or timeout** | Retry with exponential backoff (1s, 2s, 4s, 8s, 16s). After 5 retries, save checkpoint and pause. | 5 retries | Checkpoint + Pause |
 | **Invalid JSON from LLM** | Retry same call up to 3 times. If still failing, escalate to user with raw output for debugging. | 3 retries | ASK_USER |
 | **File I/O errors** | Log error, attempt alternate paths. If critical file (checkpoint, output), escalate immediately. | N/A | ASK_USER |

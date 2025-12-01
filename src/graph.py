@@ -4,7 +4,7 @@ from typing import Literal, Dict, Any
 from langgraph.graph import StateGraph, END, START
 from langgraph.checkpoint.memory import MemorySaver
 
-from schemas.state import ReproState, save_checkpoint
+from schemas.state import ReproState, save_checkpoint, checkpoint_name_for_stage
 from src.agents import (
     adapt_prompts_node,
     plan_node,
@@ -50,38 +50,40 @@ def route_after_code_review(state: ReproState) -> Literal["generate_code", "run_
     """
     Route based on reviewer verdict.
     Context: CodeReviewer reviews DESIGN first, then CODE.
-    We need to know which phase we are in.
+    
+    Uses review_context field (set by caller) to determine what we're reviewing:
+    - "design" → reviewing simulation design from SimulationDesignerAgent
+    - "code" → reviewing code from CodeGeneratorAgent
     """
     verdict = state.get("last_reviewer_verdict")
-    revision_count = 0
     
-    # Determine if we are in design or code phase based on state
-    # This logic relies on the node that just ran.
-    # Ideally state has a flag, or we infer.
-    # Let's assume state["workflow_phase"] is updated by nodes.
-    phase = state.get("workflow_phase", "")
+    # review_context is set by the node that called code_review:
+    # - simulation_designer_node sets "design"
+    # - code_generator_node sets "code"
+    context = state.get("review_context", "")
     
-    if phase == "design_review":
+    if context == "design":
         revision_count = state.get("design_revision_count", 0)
         if verdict == "approve":
             return "generate_code"
         elif verdict == "needs_revision":
-            if revision_count < 3: # MAX_DESIGN_REVISIONS
+            if revision_count < 3:  # MAX_DESIGN_REVISIONS
                 return "design"
             else:
                 return "ask_user"
                 
-    elif phase == "code_review":
+    elif context == "code":
         revision_count = state.get("code_revision_count", 0)
         if verdict == "approve":
             return "run_code"
         elif verdict == "needs_revision":
-            if revision_count < 3: # MAX_CODE_REVISIONS
+            if revision_count < 3:  # MAX_CODE_REVISIONS
                 return "generate_code"
             else:
                 return "ask_user"
     
-    # Fallback/Safety
+    # Fallback/Safety - should not reach here if review_context is set correctly
+    # Log warning and escalate to user
     return "ask_user"
 
 def route_after_execution_check(state: ReproState) -> Literal["physics_check", "generate_code", "ask_user"]:
@@ -125,8 +127,9 @@ def route_after_supervisor(state: ReproState) -> Literal["select_stage", "plan",
     if verdict == "ok_continue" or verdict == "change_priority":
         if state.get("should_stop"):
             return "generate_report"
-        # Save checkpoint after stage completion
-        save_checkpoint(state, f"stage_{state.get('current_stage_id')}_complete")
+        # Save checkpoint after stage completion using consistent naming
+        checkpoint_name = checkpoint_name_for_stage(state, "complete")
+        save_checkpoint(state, checkpoint_name)
         return "select_stage"
         
     elif verdict == "replan_needed":
@@ -281,5 +284,13 @@ def create_repro_graph():
     # Initialize memory checkpointer
     checkpointer = MemorySaver()
 
-    return workflow.compile(checkpointer=checkpointer)
+    # Compile with interrupt_before for ask_user node
+    # This pauses the graph BEFORE ask_user executes, allowing external code to:
+    # 1. Inspect state["pending_user_questions"]
+    # 2. Collect user input
+    # 3. Resume with user_response in state
+    return workflow.compile(
+        checkpointer=checkpointer,
+        interrupt_before=["ask_user"]
+    )
 

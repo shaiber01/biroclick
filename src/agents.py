@@ -47,7 +47,8 @@ def select_stage_node(state: ReproState) -> ReproState:
 
 def simulation_designer_node(state: ReproState) -> ReproState:
     """SimulationDesignerAgent: Design simulation setup for current stage."""
-    state["workflow_phase"] = "design_review"  # Indicates next phase is design review
+    state["workflow_phase"] = "design"
+    state["review_context"] = "design"  # Tell router this is design review
     # TODO: Implement design logic
     # - Interpret geometry from plan
     # - Select materials
@@ -59,6 +60,8 @@ def simulation_designer_node(state: ReproState) -> ReproState:
 def code_reviewer_node(state: ReproState) -> ReproState:
     """CodeReviewerAgent: Review design or code before proceeding."""
     state["workflow_phase"] = "review"
+    # Note: review_context is set by the CALLER (designer or generator), not here
+    # This allows route_after_code_review to know what we're reviewing
     # TODO: Implement review logic
     # - Check design/code against checklists
     # - Identify issues
@@ -68,7 +71,8 @@ def code_reviewer_node(state: ReproState) -> ReproState:
 
 def code_generator_node(state: ReproState) -> ReproState:
     """CodeGeneratorAgent: Generate Python+Meep code from approved design."""
-    state["workflow_phase"] = "code_review"  # Indicates next phase is code review
+    state["workflow_phase"] = "code_generation"
+    state["review_context"] = "code"  # Tell router this is code review
     # TODO: Implement code generation logic
     # - Convert design to Meep code
     # - Include progress prints

@@ -5,7 +5,7 @@
   "description": "Schema for progress_<paper_id>.json files",
   
   "type": "object",
-  "required": ["paper_id", "stages"],
+  "required": ["paper_id", "stage_progress"],
   
   "properties": {
     "paper_id": {
@@ -19,10 +19,10 @@
       "description": "Total computation time spent"
     },
     
-    "stages": {
-      "type": "array",
-      "description": "Progress for each stage",
-      "items": {
+    "stage_progress": {
+      "type": "object",
+      "description": "Progress for each stage, keyed by stage_id. Using a dict (not array) enables O(1) lookups and easier LangGraph state merging.",
+      "additionalProperties": {
         "$ref": "#/definitions/stage_progress"
       }
     },
@@ -59,12 +59,9 @@
   "definitions": {
     "stage_progress": {
       "type": "object",
-      "required": ["stage_id", "status", "last_updated", "summary"],
+      "description": "Progress for a single stage. The stage_id is the key in the parent dict.",
+      "required": ["status", "last_updated", "summary"],
       "properties": {
-        "stage_id": {
-          "type": "string",
-          "description": "Stage identifier"
-        },
         "status": {
           "type": "string",
           "enum": ["not_started", "in_progress", "completed_success", "completed_partial", "completed_failed", "blocked", "needs_rerun", "invalidated"],
@@ -264,9 +261,8 @@
     "paper_id": "aluminum_nanoantenna_2013",
     "total_runtime_seconds": 487,
     
-    "stages": [
-      {
-        "stage_id": "stage0_material_validation",
+    "stage_progress": {
+      "stage0_material_validation": {
         "status": "completed_success",
         "last_updated": "2025-11-29T10:00:00Z",
         "revision_count": 1,
@@ -293,8 +289,7 @@
         "issues": [],
         "next_actions": ["Proceed to stage1_single_disk"]
       },
-      {
-        "stage_id": "stage1_single_disk",
+      "stage1_single_disk": {
         "status": "completed_partial",
         "last_updated": "2025-11-29T10:15:00Z",
         "revision_count": 2,
@@ -340,8 +335,7 @@
           "Optional: run one 3D validation for D=75nm to quantify 2D error"
         ]
       },
-      {
-        "stage_id": "stage2_bare_disk_sweep",
+      "stage2_bare_disk_sweep": {
         "status": "completed_success",
         "last_updated": "2025-11-29T10:30:00Z",
         "revision_count": 1,
@@ -381,8 +375,7 @@
         "issues": [],
         "next_actions": ["Proceed to stage3_coated_single"]
       },
-      {
-        "stage_id": "stage3_coated_single",
+      "stage3_coated_single": {
         "status": "not_started",
         "last_updated": "2025-11-29T10:00:00Z",
         "revision_count": 0,
@@ -392,8 +385,7 @@
         "issues": [],
         "next_actions": ["Design conformal coating geometry", "Run single coated disk simulation"]
       },
-      {
-        "stage_id": "stage4_dispersion",
+      "stage4_dispersion": {
         "status": "not_started",
         "last_updated": "2025-11-29T10:00:00Z",
         "revision_count": 0,
@@ -403,7 +395,7 @@
         "issues": [],
         "next_actions": ["Wait for stage3 completion"]
       }
-    ],
+    },
     
     "discrepancy_summary": {
       "total_discrepancies": 2,

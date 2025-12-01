@@ -17,6 +17,21 @@ ReproLab reads scientific papers, plans staged reproductions, generates and runs
 - **Scientific rigor**: Multi-agent review system with specialized validators
 - **Multimodal AI**: Uses Claude Opus 4.5 for all agents (vision-capable for figure comparison)
 
+### How This Differs From Typical LangGraph Demos
+
+Most LangGraph tutorials show chatbots or simple pipelines. ReproLab is designed for **scientific reproducibility**, which requires different patterns:
+
+| Typical Demo | ReproLab |
+|--------------|----------|
+| Free-form dict state | Heavily typed `TypedDict` with validation |
+| Linear or simple branching | Strict validation hierarchy (can't run Stage 2 until Stage 1 passes) |
+| Trust LLM output | Multi-agent review before every execution |
+| Implicit assumptions | Every inferred parameter documented with source and reasoning |
+| Run until done | Runtime budgets, revision limits, mandatory user checkpoints |
+| Success/failure binary | Quantitative thresholds (excellent/acceptable/investigate) |
+
+This isn't "just another agents demo"—it's a framework for rigorous, auditable computational science.
+
 ## Architecture
 
 ### Agents (10 total)
@@ -272,6 +287,56 @@ paper_input = create_paper_input(
 # Run reproduction
 result = app.invoke(paper_input)
 ```
+
+### Quick Debug Mode
+
+Don't want to commit to a full multi-hour run? Use debug mode for fast sanity checks:
+
+```python
+from src.graph import create_repro_graph
+from schemas.state import DEBUG_RUNTIME_CONFIG
+
+# Debug mode: 30 min max, minimal stages, lower resolution
+app = create_repro_graph()
+result = app.invoke({
+    **paper_input,
+    "runtime_config": DEBUG_RUNTIME_CONFIG
+})
+
+# Check diagnostic summary
+print(result.get("debug_summary"))
+```
+
+Debug mode runs Stage 0 (materials) + minimal Stage 1 only, with reduced resolution. Use it to verify paper loading, material models, and basic geometry before committing to a full reproduction. See `docs/workflow.md` for detailed debug mode documentation.
+
+## Security Notice ⚠️
+
+**v1 sandboxing is suitable for local use with trusted inputs only.**
+
+The code execution sandbox (`src/code_runner.py`) uses subprocess isolation with:
+- Timeout limits
+- Memory limits (Unix only, via `resource` module)
+- Text-based pattern detection for dangerous operations
+
+**Known Limitations**:
+- Python is dynamic; determined/malicious code can bypass text-based checks:
+  ```python
+  # These patterns are NOT detected by simple regex:
+  getattr(__import__('os'), 'sys'+'tem')('dangerous')
+  exec(__import__('base64').b64decode('...'))
+  ```
+- No network isolation (simulations shouldn't need network, but it's not enforced)
+- LLM-generated code runs with your user privileges
+- Windows has no memory limiting (only timeout)
+
+**Recommendations**:
+| Use Case | Recommendation |
+|----------|---------------|
+| Local development | Current sandbox is acceptable |
+| Shared server | Use Docker/Podman container isolation |
+| Production/hosted | **Mandatory**: Container with ephemeral filesystem, no network |
+
+**Future (v2)**: Full container-based isolation with network disabled at container level.
 
 ## Current Limitations (v1)
 

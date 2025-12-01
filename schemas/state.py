@@ -8,6 +8,7 @@ state machine. State is persisted between nodes and can be checkpointed.
 from typing import TypedDict, Optional, List, Dict, Any
 from typing_extensions import NotRequired
 from datetime import datetime
+import re
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -322,10 +323,12 @@ class ReproState(TypedDict, total=False):
     current_stage_id: Optional[str]
     current_stage_type: Optional[str]  # MATERIAL_VALIDATION | SINGLE_STRUCTURE | etc.
     workflow_phase: str  # planning | design | pre_run_review | running | analysis | post_run_review | supervision
+    review_context: Optional[str]  # "design" | "code" - set by caller before CODE_REVIEW node, used by router
     
     # ─── Revision Tracking ──────────────────────────────────────────────
     design_revision_count: int
-    code_revision_count: int  # Tracks code generation revisions
+    code_revision_count: int  # Tracks code generation revisions (from code review feedback)
+    execution_failure_count: int  # Tracks simulation execution failures (crashes, timeouts) - separate from code revisions
     analysis_revision_count: int
     replan_count: int
     
@@ -468,10 +471,12 @@ def create_initial_state(
         current_stage_id=None,
         current_stage_type=None,
         workflow_phase="planning",
+        review_context=None,
         
         # Revision tracking
         design_revision_count=0,
         code_revision_count=0,
+        execution_failure_count=0,
         analysis_revision_count=0,
         replan_count=0,
         
@@ -594,6 +599,9 @@ class RuntimeConfig(TypedDict):
     
     # Backtracking limits (moved from constants for configurability)
     max_backtracks: int  # Default: 2 - limit total backtracks to prevent infinite loops
+    
+    # Execution failure limits (distinct from code revision limits)
+    max_execution_failures: int  # Default: 2 - limit simulation runtime crashes before escalating
 
 
 # Default runtime configuration
@@ -610,7 +618,8 @@ DEFAULT_RUNTIME_CONFIG = RuntimeConfig(
     debug_mode=False,
     debug_resolution_factor=0.5,
     debug_max_stages=2,
-    max_backtracks=2
+    max_backtracks=2,
+    max_execution_failures=2
 )
 
 # Debug mode runtime configuration preset
@@ -627,7 +636,8 @@ DEBUG_RUNTIME_CONFIG = RuntimeConfig(
     debug_mode=True,
     debug_resolution_factor=0.5,
     debug_max_stages=2,
-    max_backtracks=1
+    max_backtracks=1,
+    max_execution_failures=1
 )
 
 
@@ -637,11 +647,12 @@ DEBUG_RUNTIME_CONFIG = RuntimeConfig(
 
 # Revision limits
 MAX_DESIGN_REVISIONS = 3
-MAX_CODE_REVISIONS = 3  # Code generation revisions per stage
+MAX_CODE_REVISIONS = 3  # Code generation revisions per stage (from code review feedback)
+MAX_EXECUTION_FAILURES = 2  # Simulation runtime failures (crashes, timeouts) before escalating
 MAX_ANALYSIS_REVISIONS = 2
 MAX_REPLANS = 2
-# Note: MAX_BACKTRACKS is now configurable via RuntimeConfig.max_backtracks
-# This constant is kept for backwards compatibility but prefer using RuntimeConfig
+# Note: MAX_BACKTRACKS and MAX_EXECUTION_FAILURES are now configurable via RuntimeConfig
+# These constants are kept for backwards compatibility but prefer using RuntimeConfig
 MAX_BACKTRACKS = 2  # Default limit; configurable via RuntimeConfig
 
 # Default runtime budgets (in minutes)
@@ -993,6 +1004,42 @@ CHECKPOINT_LOCATIONS = [
 ]
 
 # Checkpoint naming convention: checkpoint_<paper_id>_<location>_<timestamp>.json
+
+
+def checkpoint_name_for_stage(state: "ReproState", event: str) -> str:
+    """
+    Generate consistent checkpoint names for stage-related events.
+    
+    This helper ensures checkpoint names follow a consistent convention:
+    - stage0_complete, stage1_complete, etc. for completed stages
+    - stage0_user_confirm, etc. for user confirmations
+    
+    Args:
+        state: Current ReproState
+        event: Event type (e.g., "complete", "user_confirm")
+        
+    Returns:
+        Checkpoint name like "stage0_complete" or "stage2_user_confirm"
+        
+    Examples:
+        >>> state = {"current_stage_id": "stage0_material_validation"}
+        >>> checkpoint_name_for_stage(state, "complete")
+        'stage0_complete'
+        
+        >>> state = {"current_stage_id": "stage2_bare_disk_sweep"}
+        >>> checkpoint_name_for_stage(state, "user_confirm")
+        'stage2_user_confirm'
+    """
+    stage_id = state.get("current_stage_id", "unknown")
+    
+    # Extract stage number from stage_id (e.g., "stage0_material_validation" → "0")
+    match = re.match(r"stage(\d+)_", stage_id)
+    if match:
+        stage_num = match.group(1)
+        return f"stage{stage_num}_{event}"
+    
+    # Fallback: use full stage_id if pattern doesn't match
+    return f"{stage_id}_{event}"
 
 
 def save_checkpoint(
