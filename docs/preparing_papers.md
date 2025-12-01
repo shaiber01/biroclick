@@ -122,11 +122,60 @@ The loader automatically checks paper length and displays warnings:
 | 50-150K chars | ⚠️ Long | Consider trimming references |
 | > 150K chars | ⚠️ Very long | May hit context limits; trim non-essential sections |
 
-**Recommended trimming for long papers:**
-1. **References section** (20-30% of text, not needed for reproduction)
-2. **Acknowledgments** (not relevant)
-3. **Author contributions** (not relevant)
-4. **Detailed literature review** (keep only methodology-relevant citations)
+#### Context Window Budget
+
+Claude Opus 4.5 has a 200K token context window. Budget allocation:
+
+| Component | Typical Tokens | Notes |
+|-----------|---------------|-------|
+| Paper text | 10K-50K | Main variable |
+| System prompt | 2K-5K | Agent-specific |
+| State context | 1K-3K | Grows with stages |
+| Figure descriptions | 500-2K | Per figure ~100-200 tokens |
+| Response space | 4K-8K | Leave room for output |
+| **Safe paper limit** | **~150K tokens** | ~600K chars |
+
+#### v1 Behavior: Paper Too Long
+
+**In the current implementation (v1), papers exceeding the safe limit will cause the system to exit with an error.** The loader validates paper length and fails fast if it's too large.
+
+```python
+# v1 behavior - exits with error if too long
+paper_input = load_paper_from_markdown(
+    markdown_path="./extracted/paper.md",
+    output_dir="./figures"
+)
+# Raises: ValueError("Paper exceeds maximum length (600K chars). 
+#         Please manually trim references and non-essential sections before loading.")
+```
+
+**If you encounter this error:**
+1. Manually remove the References section from your markdown
+2. Remove Acknowledgments, Author Contributions, Funding sections
+3. Remove detailed literature review paragraphs (keep methodology citations)
+4. Re-run the loader
+
+**Sections safe to remove manually:**
+- References (20-30% of text)
+- Acknowledgments
+- Author contributions  
+- Funding statements
+- Detailed literature review
+
+**NEVER remove:**
+- Methods/Experimental
+- Results
+- Figure captions
+- Key equations
+
+#### Future Improvements (v2+)
+
+The following features are planned for future versions:
+
+- **Automatic trimming**: Smart removal of references and non-essential sections
+- **Chunking strategy**: Split long papers by sections, load incrementally
+- **Section filtering**: Load only sections relevant to target figures
+- **Iterative loading**: Start with abstract+methods, add sections as needed
 
 **Example output for a long paper:**
 ```
@@ -316,6 +365,51 @@ Skip digitization for:
 - Schematic diagrams
 - 2D field maps (qualitative comparison is sufficient)
 - Setup photographs
+
+### Reproduction Quality Tiers
+
+The quality of figure comparison depends on what data you provide. Understanding these tiers helps you decide where to invest preparation effort:
+
+| Tier | Data Provided | Comparison Method | Confidence Level | Best For |
+|------|---------------|-------------------|------------------|----------|
+| **Gold** | Digitized CSV + images | MSE, R², correlation, peak extraction | Highest | Spectra, resonance positions, quantitative claims |
+| **Silver** | Images only | Vision-based qualitative comparison | Medium | Field maps, complex multi-panel figures |
+| **Bronze** | Text descriptions only | Manual comparison | Lowest | Schematics, when images unavailable |
+
+**Gold Tier Benefits:**
+- Automatic computation of mean squared error (MSE)
+- Correlation coefficient and R² values
+- Automatic peak detection and wavelength extraction
+- Objective pass/fail based on thresholds
+- Removes subjective visual judgment
+
+**When to Invest in Gold Tier:**
+- Main result figures supporting paper's key claims
+- Figures showing resonance positions (wavelength shifts matter)
+- Transmission/reflection/absorption spectra
+- Any figure where you need <5% accuracy verification
+
+**Silver Tier is Sufficient For:**
+- Near-field maps (|E|² distributions)
+- Mode profiles (shape matters more than exact values)
+- Multi-panel figures with complex layouts
+- Figures where qualitative agreement is acceptable
+
+**Example Investment Strategy:**
+```
+Paper has 8 figures:
+- Fig 1: Schematic → Skip (not reproducible)
+- Fig 2a: Absorption spectrum → Gold tier (digitize - key validation)
+- Fig 2b: Field map → Silver tier (image only)
+- Fig 3a: Transmission spectrum → Gold tier (digitize - main result)
+- Fig 3b: Transmission spectrum → Gold tier (digitize - main result)
+- Fig 4: Dispersion diagram → Gold tier (digitize - quantitative claim)
+- Fig S1: SEM image → Skip (not reproducible)
+- Fig S2: Extended spectra → Silver tier (supporting data)
+
+Digitization effort: 4 figures (~30-60 minutes)
+Expected confidence: High for main claims
+```
 
 ---
 
@@ -508,10 +602,55 @@ my_reproduction/
 | 403/404 errors | Some servers block automated downloads; manually download figures |
 | Wrong figure IDs | Alt text missing; manually rename or edit `paper_input.json` |
 | SVG/EPS figures | Convert to PNG for best vision model compatibility |
-| Duplicate figure IDs | Loader auto-appends `_1`, `_2`, etc. to duplicates |
+| Duplicate figure IDs | Loader auto-appends `_1`, `_2`, etc. to duplicates (see below) |
 | Paper too long warning | Remove references, acknowledgments, or trim literature review |
 | Supplementary not loading | Check path is correct; ensure file exists |
 | SI figures mixed with main | SI figures are auto-prefixed with "S"; check `supplementary_figures` field |
+
+#### Figure ID Collision Handling
+
+When the markdown loader encounters figures with duplicate IDs, it automatically renames them to ensure uniqueness:
+
+**How It Works:**
+1. First figure with an ID keeps the original: `Fig1`
+2. Subsequent figures get suffixed: `Fig1_1`, `Fig1_2`, etc.
+3. This applies within a single paper's main text OR supplementary material
+4. Main + supplementary figures don't conflict (SI prefixed with "S")
+
+**Common Causes of Duplicate IDs:**
+- Markdown has multiple `![Figure 1](...)` references
+- PDF converter extracted figure twice (from different pages)
+- Multi-panel figures (`a`, `b`, `c`) extracted separately without unique alt text
+- Inline equations extracted as "Figure" with generic captions
+
+**Example Collision Resolution:**
+```
+Markdown content:
+![Figure 1](overview.png)      # → fig1
+![Figure 1](detail_a.png)      # → fig1_1 (duplicate!)
+![Figure 1](detail_b.png)      # → fig1_2 (duplicate!)
+![Figure 2](spectrum.png)      # → fig2 (unique)
+
+Resulting IDs:
+- fig1, fig1_1, fig1_2, fig2
+```
+
+**How to Fix Collisions:**
+1. **Best approach:** Edit the markdown before loading to use unique alt text
+2. **After loading:** Edit the `paper_input.json` to rename IDs
+3. **Accept as-is:** The auto-generated IDs work, but may be confusing in reports
+
+**Checking for Collisions:**
+```python
+from src.paper_loader import load_paper_from_markdown
+
+paper_input = load_paper_from_markdown(...)
+
+# Check if any IDs were auto-renamed
+for fig in paper_input['figures']:
+    if '_1' in fig['id'] or '_2' in fig['id']:
+        print(f"⚠️ Renamed figure: {fig['id']} from {fig.get('original_id', 'unknown')}")
+```
 
 ### Text Extraction Issues
 

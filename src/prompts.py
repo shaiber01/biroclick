@@ -107,18 +107,31 @@ def inject_constants(template: str) -> str:
     Replaces placeholders like {THRESHOLDS_TABLE} with actual values
     generated from the canonical source in state.py.
     
+    Supported placeholders:
+    - {THRESHOLDS_TABLE}: Markdown table of discrepancy thresholds
+    - {MAX_DESIGN_REVISIONS}: Maximum design revision attempts
+    - {MAX_CODE_REVISIONS}: Maximum code revision attempts per stage
+    - {MAX_ANALYSIS_REVISIONS}: Maximum analysis revision attempts
+    - {MAX_REPLANS}: Maximum full replan attempts
+    - {MAX_BACKTRACKS}: Default max backtracks (note: configurable via RuntimeConfig)
+    
     Args:
         template: Prompt template with placeholders
         
     Returns:
         Template with placeholders replaced
     """
+    # Import additional constants for injection
+    from schemas.state import DEFAULT_RUNTIME_CONFIG
+    
     # Define all constant placeholders and their values
     constants = {
         "{THRESHOLDS_TABLE}": format_thresholds_table(),
         "{MAX_DESIGN_REVISIONS}": str(MAX_DESIGN_REVISIONS),
+        "{MAX_CODE_REVISIONS}": str(MAX_CODE_REVISIONS),
         "{MAX_ANALYSIS_REVISIONS}": str(MAX_ANALYSIS_REVISIONS),
         "{MAX_REPLANS}": str(MAX_REPLANS),
+        "{MAX_BACKTRACKS}": str(DEFAULT_RUNTIME_CONFIG.get("max_backtracks", 2)),
     }
     
     # Replace each placeholder

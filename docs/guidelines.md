@@ -1154,7 +1154,101 @@ on adaptation effectiveness.
 
 ---
 
-## 15. Structured Output with Function Calling
+## 15b. API Cost Estimation
+
+Understanding token usage helps estimate costs before running reproductions.
+
+### Token Usage by Agent
+
+| Agent | Typical Input Tokens | Typical Output Tokens | Notes |
+|-------|---------------------|----------------------|-------|
+| **PromptAdaptorAgent** | 15K-25K | 1K-2K | Scans paper text (truncated) |
+| **PlannerAgent** | 30K-50K | 3K-5K | Full paper + figures, largest input |
+| **SimulationDesignerAgent** | 5K-10K | 1K-3K | Stage context + assumptions |
+| **CodeGeneratorAgent** | 3K-5K | 2K-4K | Design spec + feedback |
+| **CodeReviewerAgent** | 4K-8K | 1K-2K | Design or code to review |
+| **ExecutionValidatorAgent** | 2K-4K | 0.5K-1K | Simulation outputs |
+| **PhysicsSanityAgent** | 3K-6K | 1K-2K | Output data analysis |
+| **ResultsAnalyzerAgent** | 10K-20K | 2K-4K | Includes figure images |
+| **ComparisonValidatorAgent** | 5K-10K | 1K-2K | Comparison validation |
+| **SupervisorAgent** | 8K-15K | 1K-3K | Summary context |
+
+### Typical Reproduction Costs
+
+| Paper Complexity | Stages | Agent Calls | Est. Input Tokens | Est. Output Tokens | Est. Cost (Opus) |
+|-----------------|--------|-------------|-------------------|--------------------|--------------------|
+| Simple (1-2 figures) | 2-3 | 15-25 | 200K-400K | 30K-60K | $3-8 |
+| Medium (3-5 figures) | 4-5 | 30-50 | 500K-800K | 80K-120K | $10-20 |
+| Complex (6+ figures) | 6-8 | 60-100 | 1M-1.5M | 150K-250K | $25-50 |
+
+*Cost estimates based on Claude Opus 4.5 pricing (~$15/M input, ~$75/M output). Actual costs vary.*
+
+### Cost Breakdown by Workflow Phase
+
+| Phase | % of Total Cost | Notes |
+|-------|-----------------|-------|
+| Planning (Planner + Adaptor) | 25-35% | Large paper input |
+| Design/Code Generation | 20-30% | Multiple revision cycles |
+| Validation (Reviewers) | 15-25% | Per-stage reviews |
+| Analysis (Analyzer + Comparison) | 20-30% | Figure images add tokens |
+| Supervision | 5-10% | Summary-level context |
+
+### Cost Optimization Strategies
+
+1. **Trim Paper Text Before Loading**
+   - Remove references section (20-30% savings)
+   - Remove acknowledgments, author contributions
+   - Keep Methods and Results sections intact
+   
+2. **Digitize Key Figures**
+   - Digitized CSV data is cheaper to process than images
+   - Vision model calls for image comparison are expensive
+   
+3. **Use Debug Mode First**
+   - Quick validation run catches obvious issues
+   - Prevents wasted tokens on fundamentally broken setups
+   
+4. **Reduce Revision Cycles**
+   - Well-prepared paper inputs reduce planning revisions
+   - Good material data reduces Stage 0 iterations
+   
+5. **Future: Use Cheaper Models for Validators**
+   - v2 will support per-agent model selection
+   - Validation agents can use Claude Sonnet (5x cheaper)
+
+### Token Counting
+
+The system tracks token usage in the metrics log:
+
+```python
+# Access token metrics after a run
+metrics = state["metrics"]
+print(f"Total input tokens: {metrics['total_input_tokens']:,}")
+print(f"Total output tokens: {metrics['total_output_tokens']:,}")
+
+# Per-agent breakdown
+for call in metrics["agent_calls"]:
+    print(f"{call['agent']}: {call.get('input_tokens', 0):,} in / {call.get('output_tokens', 0):,} out")
+```
+
+### Cost Estimation Before Running
+
+```python
+from src.paper_loader import estimate_token_cost
+
+# Before running, estimate costs
+cost_estimate = estimate_token_cost(paper_input)
+print(f"Paper text: ~{cost_estimate['text_tokens']:,} tokens")
+print(f"Figures: ~{cost_estimate['figure_tokens']:,} tokens")
+print(f"Estimated total cost: ${cost_estimate['estimated_cost_usd']:.2f}")
+
+if cost_estimate['estimated_cost_usd'] > 20:
+    print("⚠️ High cost - consider trimming paper or using debug mode first")
+```
+
+---
+
+## 15c. Structured Output with Function Calling
 
 ### The Problem with Free-Text JSON
 

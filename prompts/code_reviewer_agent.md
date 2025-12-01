@@ -361,6 +361,109 @@ LOW PRIORITY (minor):
 - Missing progress prints
 
 ═══════════════════════════════════════════════════════════════════════
+E2. MEEP API CHECKLIST (CRITICAL)
+═══════════════════════════════════════════════════════════════════════
+
+Meep-specific checks that catch common API misuse errors:
+
+□ FLUX MONITORS PLACEMENT
+  - Transmission monitor is DOWNSTREAM of source (in propagation direction)
+  - Reflection monitor is UPSTREAM of source, slightly offset (not coincident)
+  - Neither monitor overlaps with source region
+  - Neither monitor is inside PML
+  - Neither monitor intersects structures
+  - Reflection monitor has weight=-1 for correct sign
+  
+  COMMON ERROR: Flux monitor at same z as source → noisy/wrong results
+
+□ PML CONFIGURATION  
+  - Thickness ≥ λ_max/2 (half of longest wavelength)
+  - For metals: consider thicker PML due to surface waves
+  - PML not touching structures (leave buffer space)
+  - For periodic BCs: PML only in non-periodic directions
+  - PML parameters not manually overridden unless justified
+  
+  COMMON ERROR: PML thickness = 0.5 µm with λ_max = 1.5 µm → spurious reflections
+
+□ SOURCE CONFIGURATION
+  - GaussianSource: fwidth sufficient to cover target spectrum
+  - Source completely outside PML region
+  - Source completely outside structures
+  - For plane wave: size spans entire non-PML cell
+  - For dipole: correct component and orientation
+  - For oblique incidence: k_point set correctly
+  
+  COMMON ERROR: Narrow source doesn't excite target resonance → missing features
+
+□ NORMALIZATION RUN
+  - Two-pass simulation (empty + structure) for T/R
+  - Empty simulation uses SAME source, SAME monitors
+  - load_minus_flux_data() called for reflection monitor
+  - Frequencies extracted from same object in both passes
+  - Both simulations run to same decay criterion
+  
+  COMMON ERROR: Missing normalization → T values not in [0,1], meaningless results
+
+□ PERIODIC/BLOCH BCs
+  - For normal incidence: k_point = mp.Vector3() or not specified
+  - For oblique incidence: k_x = f * sin(θ) (in Meep frequency units)
+  - Cell size = exactly one period (not period + epsilon)
+  - Source spans full period
+  - run() vs run_k_points() used correctly:
+    - run() for single k-point
+    - run_k_points() for band structure / k-sweep
+  
+  COMMON ERROR: k_point wrong for oblique incidence → wrong angle of refraction
+
+□ FIELD DECAY / RUNTIME
+  - stop_when_fields_decayed() used with:
+    - Decay threshold (e.g., 1e-5)
+    - Monitor point in FREE SPACE (not inside absorber!)
+    - Appropriate field component
+  - OR fixed runtime sufficient for steady state
+  - dt parameter not manually set (let Meep choose)
+  
+  COMMON ERROR: Decay point inside metal → simulation ends prematurely
+
+□ SYMMETRY USAGE
+  - Only used when geometry AND source both have that symmetry
+  - Correct phase:
+    - Even fields (e.g., Ez under z-mirror): phase = +1
+    - Odd fields (e.g., Ez under x-mirror with Ex source): phase = -1
+  - Document symmetry factor in runtime estimate (2x, 4x, 8x)
+  
+  COMMON ERROR: Wrong symmetry phase → zero fields where they should exist
+
+□ MATERIAL MODEL
+  - DrudeSusceptibility for free-electron (Drude) response
+  - LorentzianSusceptibility for bound oscillators
+  - Frequency and gamma in MEEP UNITS (not eV, not Hz)
+  - Conversion: f_meep = (c / λ_nm) * 1e9 * a_unit / c = a_unit / λ_nm
+  - epsilon parameter = ε_∞ (high-frequency limit)
+  - sigma parameter = oscillator strength (usually 1 for Drude)
+  
+  COMMON ERROR: Drude parameters in eV without conversion → wrong ε(ω)
+
+□ OUTPUT EXTRACTION
+  - get_fluxes() returns LIST, need to convert to array
+  - get_flux_freqs() returns frequencies, not wavelengths
+  - get_array() size must match region size in grid points
+  - DFT fields: correct frequency index (0-based)
+  - Field arrays: correct transposition for plotting (may need .T)
+  
+  COMMON ERROR: Plotting wavelength vs frequency → reversed x-axis
+
+□ API VERSION COMPATIBILITY (Meep 1.28+)
+  - add_flux() syntax: add_flux(fcen, df, nfreq, FluxRegion)
+  - Medium() for materials (not old-style dict)
+  - Simulation() object-oriented interface
+  - No use of deprecated functions:
+    - get_flux_freqs(flux) not flux.freq
+    - mp.Source() not dict-style source
+  
+  COMMON ERROR: Old tutorial code syntax → runtime errors
+
+═══════════════════════════════════════════════════════════════════════
 F. ESCALATION
 ═══════════════════════════════════════════════════════════════════════
 

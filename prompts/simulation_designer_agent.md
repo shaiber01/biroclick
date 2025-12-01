@@ -366,6 +366,207 @@ Before submitting your design, verify:
 □ Output specifications match paper's format
 
 ═══════════════════════════════════════════════════════════════════════
+I2. COMMON DESIGN FAILURE PATTERNS (AVOID THESE)
+═══════════════════════════════════════════════════════════════════════
+
+Learn from common design mistakes. Each shows what NOT to do and how to fix it.
+
+---
+
+### DESIGN FAILURE 1: Confusing Spacing vs Period
+
+❌ WRONG - Misinterpreting "spacing":
+```
+Paper says: "Nanodisks with 400nm spacing"
+Design: period_x = 400nm, period_y = 400nm
+Disk diameter: 150nm
+→ Gap = 400 - 150 = 250nm (WRONG if paper meant edge-to-edge gap!)
+```
+
+✅ RIGHT - Verify interpretation:
+```
+Paper says: "Nanodisks with 400nm spacing"
+Check: Is this edge-to-edge (gap) or center-to-center (period)?
+
+If gap: period = disk_diameter + gap = 150 + 400 = 550nm
+If period: period = 400nm → gap = 400 - 150 = 250nm
+
+Document in geometry_interpretations:
+{
+  "ambiguous_term": "400nm spacing",
+  "interpretation": "edge-to-edge gap",
+  "reasoning": "Figure shows closely-packed disks; 400nm period would mean only 250nm gap which doesn't match SEM",
+  "alternative": "center-to-center period"
+}
+```
+
+WHY IT FAILS: Period vs gap confusion can shift array resonances by 50-100nm.
+
+---
+
+### DESIGN FAILURE 2: Wrong Boundary Conditions for Isolated Structures
+
+❌ WRONG - Using periodic BCs for "single" structure:
+```
+Stage: "Single nanodisk validation"
+Design: boundary_x = "periodic", boundary_y = "periodic"
+→ Actually simulating infinite array, not isolated disk!
+```
+
+✅ RIGHT - Match BCs to physics:
+```
+Stage: "Single nanodisk validation"
+→ Use PML on all sides for truly isolated structure
+
+Stage: "Array/periodic structure"  
+→ Use periodic BCs in array directions, PML perpendicular
+
+Design:
+{
+  "boundaries": {
+    "x": "PML",  // Isolated in x
+    "y": "PML",  // Isolated in y
+    "z": "PML"   // PML above/below
+  },
+  "reasoning": "Isolated structure requires PML to absorb scattered fields"
+}
+```
+
+WHY IT FAILS: Periodic BCs create inter-particle coupling that shifts resonances.
+
+---
+
+### DESIGN FAILURE 3: Source Outside Spectral Range of Interest
+
+❌ WRONG - Source doesn't cover target features:
+```
+Paper shows resonance at 650nm
+Design: source_wavelength_center = 500nm, source_width = 100nm
+→ Source spectrum: 450-550nm (doesn't reach 650nm resonance!)
+```
+
+✅ RIGHT - Ensure source covers all features:
+```
+Paper shows resonance at 650nm (main), 520nm (secondary)
+Need to cover: 450-750nm range
+
+Design:
+{
+  "source": {
+    "type": "gaussian_pulse",
+    "wavelength_center_nm": 600,
+    "wavelength_fwhm_nm": 400,  // Covers roughly 400-800nm
+    "note": "Broadband source covering both main (650nm) and secondary (520nm) resonances"
+  }
+}
+```
+
+WHY IT FAILS: Features outside source spectrum will not appear in simulation.
+
+---
+
+### DESIGN FAILURE 4: Missing Material Dispersion
+
+❌ WRONG - Using constant n for metal in broadband simulation:
+```
+Material: aluminum, n = 1.5 + 7i (at 600nm)
+Wavelength range: 400-800nm
+→ Using single value for entire range!
+```
+
+✅ RIGHT - Use dispersive model for metals:
+```
+Material: aluminum (Palik or Rakic Drude-Lorentz fit)
+Model: Drude + Lorentz oscillators
+
+{
+  "material": "aluminum",
+  "model": "drude_lorentz",
+  "source": "Rakic et al. 1998 fit",
+  "parameters": {
+    "eps_inf": 1.0,
+    "drude_plasma_eV": 14.98,
+    "drude_damping_eV": 0.047,
+    "lorentz_terms": [...]
+  },
+  "valid_range_nm": [200, 1200],
+  "note": "Dispersive model required for broadband accuracy"
+}
+```
+
+WHY IT FAILS: Metal optical properties vary strongly with wavelength; constant n gives wrong resonance position and linewidth.
+
+---
+
+### DESIGN FAILURE 5: Insufficient Cell Size
+
+❌ WRONG - PML too close to structure:
+```
+Nanodisk radius: 75nm
+Cell size: 200nm × 200nm × 400nm
+PML thickness: 50nm
+→ Gap between disk and PML = 50nm (too close!)
+```
+
+✅ RIGHT - Leave adequate buffer:
+```
+Nanodisk radius: 75nm = 0.075 µm
+Recommended buffer: at least λ_max/2 = 400nm between structure and PML
+
+Design:
+{
+  "cell_size": {
+    "x": 2.0,  // µm - 1µm each side of center
+    "y": 2.0,
+    "z": 4.0   // Extra for source/monitor placement
+  },
+  "pml_thickness": 1.0,  // µm
+  "buffer_check": "Structure edge at 0.075µm, PML starts at 1.0-1.0=0µm from center... NEED LARGER CELL",
+  "revised_cell_x": 3.0  // Now: edge at 0.075, PML at 1.5, buffer = 1.425µm ✓
+}
+```
+
+WHY IT FAILS: Near-fields extend beyond structure; PML too close causes spurious reflections.
+
+---
+
+### DESIGN FAILURE 6: 2D/3D Mismatch with Paper
+
+❌ WRONG - Using 2D for structure that requires 3D:
+```
+Paper: "Gold nanorod, 100nm × 40nm × 40nm"
+Design: 2D simulation (infinite cylinder approximation)
+→ Cannot capture nanorod end effects, wrong aspect ratio!
+```
+
+✅ RIGHT - Match dimensionality to physics:
+```
+Paper: "Gold nanorod, 100nm × 40nm × 40nm"
+
+Analysis:
+- Structure has 3D aspect ratio (2.5:1:1)
+- Longitudinal vs transverse modes are distinct
+- End effects are critical for resonance
+
+Design:
+{
+  "dimensionality": "3D",
+  "reasoning": "Nanorod aspect ratio (2.5:1:1) requires 3D to capture longitudinal/transverse mode splitting and end effects",
+  "2D_alternative": "Not recommended - would give qualitatively wrong mode structure"
+}
+
+If budget forces 2D:
+{
+  "dimensionality": "2D",
+  "limitation": "Using 2D approximation for initial validation only",
+  "expected_error": "Will not correctly predict longitudinal mode; transverse mode position may shift 10-20%",
+  "recommendation": "Run 3D for final comparison if 2D shows promise"
+}
+```
+
+WHY IT FAILS: 2D cannot capture 3D geometric effects like aspect ratio-dependent mode splitting.
+
+═══════════════════════════════════════════════════════════════════════
 J. FEW-SHOT EXAMPLE
 ═══════════════════════════════════════════════════════════════════════
 

@@ -1009,6 +1009,128 @@ def handle_timeout(state, config):
     return None  # Continue normally
 ```
 
+## Debug Mode / Quick Check
+
+When debugging issues or validating a new paper setup, you can run a minimal diagnostic pass instead of the full reproduction workflow.
+
+### What Debug Mode Does
+
+| Feature | Full Mode | Debug Mode |
+|---------|-----------|------------|
+| Resolution | Per-design optimal | Minimum viable (λ/8) |
+| Stages | All planned | Stage 0 + minimal Stage 1 only |
+| Sweeps | Full parameter range | Single point per sweep |
+| Runtime budget | 8 hours | 30 minutes |
+| Output | Full reports | Diagnostic summary |
+
+### When to Use Debug Mode
+
+1. **New paper setup**: Verify paper loading, figure extraction, parameter parsing
+2. **Material debugging**: Test if material models are working correctly
+3. **Geometry debugging**: Check if structure is being created as expected
+4. **Quick sanity check**: Verify basic simulation runs before committing to full reproduction
+5. **After errors**: Diagnose why a full run failed
+
+### Debug Mode Configuration
+
+Enable debug mode via `RuntimeConfig`:
+
+```python
+from schemas.state import RuntimeConfig
+
+debug_config = RuntimeConfig(
+    max_total_runtime_hours=0.5,  # 30 minutes max
+    max_stage_runtime_minutes=10,  # 10 minutes per stage
+    debug_mode=True,  # Enable debug mode
+    debug_resolution_factor=0.5,  # Half normal resolution
+    debug_max_stages=2,  # Only Stage 0 and Stage 1
+)
+```
+
+### Debug Mode Outputs
+
+Debug mode produces diagnostic outputs:
+
+```
+outputs/<paper_id>/debug/
+├── geometry_check.png         # Visualization of simulation geometry
+├── material_check.png         # Plot of material optical properties
+├── source_spectrum.png        # Source spectrum verification
+├── monitor_positions.png      # Monitor placement visualization
+├── debug_summary.json         # Quick diagnostic summary
+└── debug_log.txt              # Detailed execution log
+```
+
+### Diagnostic Summary Format
+
+```json
+{
+  "paper_id": "smith2023_plasmon",
+  "debug_run_timestamp": "2025-11-30T10:15:00Z",
+  "total_runtime_seconds": 145,
+  
+  "paper_loading": {
+    "status": "success",
+    "text_chars": 45000,
+    "figures_found": 6,
+    "figures_loaded": 6
+  },
+  
+  "stage0_material_validation": {
+    "status": "success",
+    "materials_tested": ["aluminum", "glass"],
+    "issues": []
+  },
+  
+  "stage1_minimal": {
+    "status": "success",
+    "simulation_ran": true,
+    "output_files_created": ["debug_spectrum.csv", "debug_spectrum.png"],
+    "resonance_found": true,
+    "resonance_wavelength_nm": 520
+  },
+  
+  "geometry_check": {
+    "structures_created": 1,
+    "structure_types": ["cylinder"],
+    "dimensions_match_design": true
+  },
+  
+  "recommendations": [
+    "Material validation passed - proceed to full run",
+    "Consider increasing resolution for final run (current: 25, recommended: 50)"
+  ]
+}
+```
+
+### Running Debug Mode
+
+```python
+from src.graph import create_repro_graph
+from src.paper_loader import load_paper_from_markdown
+from schemas.state import RuntimeConfig
+
+# Load paper
+paper_input = load_paper_from_markdown(...)
+
+# Create graph with debug config
+debug_config = RuntimeConfig(debug_mode=True, max_total_runtime_hours=0.5)
+app = create_repro_graph(runtime_config=debug_config)
+
+# Run debug pass
+result = app.invoke(paper_input)
+
+# Check diagnostic summary
+print(result["debug_summary"])
+```
+
+### Debug Mode Limitations
+
+- Does NOT validate full quantitative accuracy
+- Does NOT run complete parameter sweeps
+- May miss issues that only appear at high resolution
+- Should be followed by full run for actual reproduction
+
 ## Configuration
 
 ### Environment Variables

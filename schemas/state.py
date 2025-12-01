@@ -270,11 +270,29 @@ class ReproState(TypedDict, total=False):
     
     # ─── Extracted Parameters ───────────────────────────────────────────
     # NOTE: Data Ownership Contract
-    # - plan["extracted_parameters"] = canonical persisted structure (saved to disk)
-    # - state.extracted_parameters = typed in-memory view, synced FROM plan
-    # - PlannerAgent writes to plan["extracted_parameters"]
-    # - Other agents READ from state.extracted_parameters
-    # - Sync happens at checkpoint boundaries
+    # 
+    # The extracted_parameters field follows a specific sync pattern:
+    #
+    # 1. CANONICAL SOURCE: plan["extracted_parameters"]
+    #    - Persisted to disk in plan_{paper_id}.json
+    #    - PlannerAgent is the ONLY writer
+    #    - Updated during PLAN node execution
+    #
+    # 2. IN-MEMORY VIEW: state.extracted_parameters
+    #    - Typed in-memory copy for type safety
+    #    - All agents (except Planner) READ from this field
+    #    - Do NOT modify directly; changes won't persist
+    #
+    # 3. SYNC TIMING:
+    #    - After PLAN node completes → sync from plan to state
+    #    - At each checkpoint save → sync from plan to state
+    #    - On checkpoint load → sync from loaded plan to state
+    #
+    # 4. SYNC IMPLEMENTATION:
+    #    - Use sync_extracted_parameters(state) helper function
+    #    - Performed automatically by workflow runner at sync points
+    #
+    # See sync_extracted_parameters() function below for implementation.
     extracted_parameters: List[ExtractedParameter]
     
     # ─── Validation Tracking ────────────────────────────────────────────
@@ -519,6 +537,14 @@ class RuntimeConfig(TypedDict):
     # LLM retry backoff (exponential: 1s, 2s, 4s, 8s, 16s)
     llm_retry_base_seconds: float  # Default: 1.0
     llm_retry_max_seconds: float  # Default: 16.0
+    
+    # Debug mode settings
+    debug_mode: bool  # Default: False - enables diagnostic quick-check mode
+    debug_resolution_factor: float  # Default: 0.5 - multiplier for resolution in debug mode
+    debug_max_stages: int  # Default: 2 - max stages to run in debug mode (Stage 0 + Stage 1)
+    
+    # Backtracking limits (moved from constants for configurability)
+    max_backtracks: int  # Default: 2 - limit total backtracks to prevent infinite loops
 
 
 # Default runtime configuration
@@ -531,7 +557,28 @@ DEFAULT_RUNTIME_CONFIG = RuntimeConfig(
     json_parse_retry_limit=3,
     consecutive_failure_limit=2,
     llm_retry_base_seconds=1.0,
-    llm_retry_max_seconds=16.0
+    llm_retry_max_seconds=16.0,
+    debug_mode=False,
+    debug_resolution_factor=0.5,
+    debug_max_stages=2,
+    max_backtracks=2
+)
+
+# Debug mode runtime configuration preset
+DEBUG_RUNTIME_CONFIG = RuntimeConfig(
+    max_total_runtime_hours=0.5,  # 30 minutes max
+    max_stage_runtime_minutes=10.0,  # 10 minutes per stage
+    user_response_timeout_hours=1.0,  # 1 hour timeout in debug
+    physics_retry_limit=1,  # Fewer retries in debug mode
+    llm_retry_limit=3,
+    json_parse_retry_limit=2,
+    consecutive_failure_limit=1,
+    llm_retry_base_seconds=1.0,
+    llm_retry_max_seconds=8.0,
+    debug_mode=True,
+    debug_resolution_factor=0.5,
+    debug_max_stages=2,
+    max_backtracks=1
 )
 
 
@@ -544,7 +591,9 @@ MAX_DESIGN_REVISIONS = 3
 MAX_CODE_REVISIONS = 3  # Code generation revisions per stage
 MAX_ANALYSIS_REVISIONS = 2
 MAX_REPLANS = 2
-MAX_BACKTRACKS = 2  # Limit total backtracks to prevent infinite loops
+# Note: MAX_BACKTRACKS is now configurable via RuntimeConfig.max_backtracks
+# This constant is kept for backwards compatibility but prefer using RuntimeConfig
+MAX_BACKTRACKS = 2  # Default limit; configurable via RuntimeConfig
 
 # Default runtime budgets (in minutes)
 DEFAULT_STAGE_BUDGETS = {
@@ -565,6 +614,25 @@ DISCREPANCY_THRESHOLDS = {
     "reflection": {"excellent": 5, "acceptable": 15, "investigate": 30},
     "field_enhancement": {"excellent": 20, "acceptable": 50, "investigate": 100},
     "effective_index": {"excellent": 1, "acceptable": 3, "investigate": 5}
+}
+
+# Context window limits (for paper length validation)
+# Claude Opus 4.5 has 200K token context window
+CONTEXT_WINDOW_LIMITS = {
+    "model_max_tokens": 200000,  # Claude Opus 4.5 limit
+    "system_prompt_reserve": 5000,  # Reserved for system prompts
+    "state_context_reserve": 3000,  # Reserved for state context
+    "response_reserve": 8000,  # Reserved for model response
+    "safe_paper_tokens": 150000,  # Safe limit for paper text
+    "chars_per_token_estimate": 4,  # Rough estimate for character counting
+    "max_paper_chars": 600000,  # Hard limit for v1 (exits with error if exceeded)
+}
+
+# Paper length warning thresholds (in characters)
+PAPER_LENGTH_THRESHOLDS = {
+    "normal_max_chars": 50000,  # < 50K chars = normal
+    "long_max_chars": 150000,  # 50K-150K chars = long (consider trimming)
+    "very_long_max_chars": 600000,  # > 150K chars = very long (likely needs trimming)
 }
 
 
@@ -656,6 +724,10 @@ def save_checkpoint(
     """
     Save a checkpoint of the current state.
     
+    Also creates a "latest" pointer to this checkpoint for easy access.
+    On Unix systems, the "latest" pointer is a symlink (space-efficient).
+    On Windows or if symlink creation fails, falls back to a copy.
+    
     Args:
         state: Current ReproState to save
         checkpoint_name: Name for this checkpoint (e.g., "after_plan", "stage2_complete")
@@ -663,8 +735,14 @@ def save_checkpoint(
         
     Returns:
         Path to saved checkpoint file
+        
+    Note:
+        Windows symlink creation may fail without admin privileges or Developer Mode.
+        The function gracefully falls back to file copy in such cases.
     """
     import json
+    import os
+    import shutil
     from pathlib import Path
     
     paper_id = state.get("paper_id", "unknown")
@@ -682,10 +760,27 @@ def save_checkpoint(
     with open(filepath, 'w', encoding='utf-8') as f:
         json.dump(state_dict, f, indent=2, default=str)
     
-    # Also save as "latest" for easy access
+    # Create "latest" pointer for easy access
+    # Try symlink first (more space-efficient), fall back to copy
     latest_path = checkpoint_dir / f"checkpoint_{checkpoint_name}_latest.json"
-    with open(latest_path, 'w', encoding='utf-8') as f:
-        json.dump(state_dict, f, indent=2, default=str)
+    
+    # Remove existing latest pointer (may be symlink or file)
+    if latest_path.exists() or latest_path.is_symlink():
+        latest_path.unlink()
+    
+    symlink_created = False
+    try:
+        # Try to create a relative symlink (works better across systems)
+        latest_path.symlink_to(filename)
+        symlink_created = True
+    except (OSError, NotImplementedError):
+        # Symlink creation failed (common on Windows without admin/Developer Mode)
+        # Fall back to file copy
+        pass
+    
+    if not symlink_created:
+        # Fall back: copy the checkpoint file
+        shutil.copy2(filepath, latest_path)
     
     return str(filepath)
 
@@ -778,4 +873,327 @@ def list_checkpoints(paper_id: str, output_dir: str = "outputs") -> List[Dict[st
     checkpoints.sort(key=lambda x: x["timestamp"], reverse=True)
     
     return checkpoints
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# State Validation Guards
+# ═══════════════════════════════════════════════════════════════════════
+
+# Required state fields for each node
+# This helps catch malformed state early in the workflow
+NODE_REQUIREMENTS: Dict[str, List[str]] = {
+    "ADAPT_PROMPTS": [
+        "paper_id",
+        "paper_text",
+        "paper_domain",
+    ],
+    "PLAN": [
+        "paper_id",
+        "paper_text",
+        "paper_domain",
+        "paper_figures",
+    ],
+    "SELECT_STAGE": [
+        "paper_id",
+        "plan",
+        "validation_hierarchy",
+    ],
+    "DESIGN": [
+        "paper_id",
+        "current_stage_id",
+        "plan",
+        "assumptions",
+    ],
+    "CODE_REVIEW_DESIGN": [
+        "paper_id",
+        "current_stage_id",
+        "design_description",
+        "plan",
+    ],
+    "GENERATE_CODE": [
+        "paper_id",
+        "current_stage_id",
+        "design_description",
+    ],
+    "CODE_REVIEW_CODE": [
+        "paper_id",
+        "current_stage_id",
+        "code",
+        "design_description",
+    ],
+    "RUN_CODE": [
+        "paper_id",
+        "current_stage_id",
+        "code",
+    ],
+    "EXECUTION_CHECK": [
+        "paper_id",
+        "current_stage_id",
+        "stage_outputs",
+    ],
+    "PHYSICS_CHECK": [
+        "paper_id",
+        "current_stage_id",
+        "stage_outputs",
+        "code",
+    ],
+    "ANALYZE": [
+        "paper_id",
+        "current_stage_id",
+        "stage_outputs",
+        "paper_figures",
+        "plan",
+    ],
+    "COMPARISON_CHECK": [
+        "paper_id",
+        "current_stage_id",
+        "figure_comparisons",
+        "analysis_summary",
+    ],
+    "SUPERVISOR": [
+        "paper_id",
+        "plan",
+        "progress",
+        "validation_hierarchy",
+    ],
+    "HANDLE_BACKTRACK": [
+        "paper_id",
+        "backtrack_decision",
+        "progress",
+    ],
+    "ASK_USER": [
+        "paper_id",
+        "pending_user_questions",
+    ],
+    "GENERATE_REPORT": [
+        "paper_id",
+        "plan",
+        "progress",
+        "figure_comparisons",
+        "assumptions",
+    ],
+}
+
+
+def validate_state_for_node(state: ReproState, node_name: str) -> List[str]:
+    """
+    Check that state has all required fields for a specific node.
+    
+    This helps catch malformed state early, preventing cryptic errors
+    from missing fields deep in agent logic.
+    
+    Args:
+        state: Current ReproState to validate
+        node_name: Name of the node about to execute
+        
+    Returns:
+        List of missing field names (empty if all required fields present)
+        
+    Example:
+        >>> missing = validate_state_for_node(state, "ANALYZE")
+        >>> if missing:
+        ...     raise ValueError(f"State missing required fields for ANALYZE: {missing}")
+    """
+    if node_name not in NODE_REQUIREMENTS:
+        # Unknown node - no validation defined
+        return []
+    
+    required = NODE_REQUIREMENTS[node_name]
+    missing = []
+    
+    for field in required:
+        if field not in state:
+            missing.append(field)
+        elif state.get(field) is None:
+            # Field exists but is None - may be acceptable for some fields
+            # Only flag as missing if it's a critical field
+            if field in ["paper_id", "paper_text", "plan", "code", "stage_outputs"]:
+                missing.append(f"{field} (is None)")
+    
+    return missing
+
+
+def validate_state_transition(
+    state: ReproState, 
+    from_node: str, 
+    to_node: str
+) -> List[str]:
+    """
+    Validate that state is ready for transition between nodes.
+    
+    Checks both that required fields exist and that expected outputs
+    from the previous node are present.
+    
+    Args:
+        state: Current ReproState
+        from_node: Node that just completed
+        to_node: Node about to execute
+        
+    Returns:
+        List of validation issues (empty if transition is valid)
+    """
+    issues = []
+    
+    # Check required fields for target node
+    missing = validate_state_for_node(state, to_node)
+    if missing:
+        issues.extend([f"Missing field for {to_node}: {f}" for f in missing])
+    
+    # Check specific transition requirements
+    transition_checks = {
+        ("DESIGN", "CODE_REVIEW_DESIGN"): [
+            ("design_description", "Design description not set after DESIGN node"),
+        ],
+        ("GENERATE_CODE", "CODE_REVIEW_CODE"): [
+            ("code", "Code not set after GENERATE_CODE node"),
+        ],
+        ("RUN_CODE", "EXECUTION_CHECK"): [
+            ("stage_outputs", "Stage outputs not set after RUN_CODE node"),
+        ],
+        ("ANALYZE", "COMPARISON_CHECK"): [
+            ("analysis_summary", "Analysis summary not set after ANALYZE node"),
+        ],
+        ("PLAN", "SELECT_STAGE"): [
+            ("plan", "Plan not set after PLAN node"),
+            ("assumptions", "Assumptions not set after PLAN node"),
+        ],
+    }
+    
+    transition_key = (from_node, to_node)
+    if transition_key in transition_checks:
+        for field, message in transition_checks[transition_key]:
+            if field not in state or state.get(field) is None:
+                issues.append(message)
+    
+    return issues
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Extracted Parameters Sync
+# ═══════════════════════════════════════════════════════════════════════
+
+def sync_extracted_parameters(state: ReproState) -> ReproState:
+    """
+    Synchronize extracted_parameters from plan to state.
+    
+    The canonical source for extracted parameters is plan["extracted_parameters"].
+    This function copies that data to state.extracted_parameters for type-safe
+    access by agents.
+    
+    Call this function:
+    - After PLAN node completes
+    - After loading a checkpoint
+    - Before each checkpoint save (ensures consistency)
+    
+    Args:
+        state: ReproState to update (modified in place)
+        
+    Returns:
+        The same state object (for chaining)
+        
+    Example:
+        # After planning completes
+        state = sync_extracted_parameters(state)
+        
+        # Or in workflow runner
+        if current_node == "PLAN":
+            state = sync_extracted_parameters(state)
+    """
+    plan = state.get("plan", {})
+    plan_params = plan.get("extracted_parameters", [])
+    
+    # Convert to typed list of ExtractedParameter
+    typed_params: List[ExtractedParameter] = []
+    
+    for param in plan_params:
+        if isinstance(param, dict):
+            # Ensure required fields exist with defaults
+            typed_param: ExtractedParameter = {
+                "name": param.get("name", "unnamed"),
+                "value": param.get("value"),
+                "unit": param.get("unit"),
+                "source": param.get("source", "unknown"),
+                "confidence": param.get("confidence", "low"),
+                "alternatives": param.get("alternatives"),
+                "notes": param.get("notes"),
+            }
+            typed_params.append(typed_param)
+    
+    state["extracted_parameters"] = typed_params
+    
+    return state
+
+
+def get_extracted_parameter(
+    state: ReproState,
+    name: str,
+    default: Any = None
+) -> Any:
+    """
+    Get a specific extracted parameter by name.
+    
+    Convenience function for looking up parameter values.
+    
+    Args:
+        state: Current ReproState
+        name: Parameter name to find
+        default: Value to return if not found
+        
+    Returns:
+        Parameter value, or default if not found
+        
+    Example:
+        disk_diameter = get_extracted_parameter(state, "disk_diameter", default=75)
+    """
+    params = state.get("extracted_parameters", [])
+    
+    for param in params:
+        if param.get("name") == name:
+            return param.get("value", default)
+    
+    return default
+
+
+def list_extracted_parameters(
+    state: ReproState,
+    confidence_filter: Optional[str] = None
+) -> List[Dict[str, Any]]:
+    """
+    List all extracted parameters, optionally filtered by confidence.
+    
+    Args:
+        state: Current ReproState
+        confidence_filter: Only return params with this confidence level
+                          ("high", "medium", "low") or None for all
+                          
+    Returns:
+        List of parameter dicts with name, value, unit, confidence
+        
+    Example:
+        # Get all high-confidence parameters
+        confirmed = list_extracted_parameters(state, confidence_filter="high")
+    """
+    params = state.get("extracted_parameters", [])
+    
+    if confidence_filter is None:
+        return [
+            {
+                "name": p.get("name"),
+                "value": p.get("value"),
+                "unit": p.get("unit"),
+                "confidence": p.get("confidence"),
+            }
+            for p in params
+        ]
+    
+    return [
+        {
+            "name": p.get("name"),
+            "value": p.get("value"),
+            "unit": p.get("unit"),
+            "confidence": p.get("confidence"),
+        }
+        for p in params
+        if p.get("confidence") == confidence_filter
+    ]
 

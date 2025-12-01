@@ -19,6 +19,9 @@ import urllib.request
 import urllib.error
 from urllib.parse import urlparse, unquote, urljoin
 
+# Import context limits for paper length validation
+from schemas.state import CONTEXT_WINDOW_LIMITS
+
 
 # ═══════════════════════════════════════════════════════════════════════
 # Supported Image Formats
@@ -144,6 +147,22 @@ def validate_paper_input(paper_input: Dict[str, Any]) -> List[str]:
     paper_text = paper_input["paper_text"]
     if not paper_text or len(paper_text.strip()) < 100:
         raise ValidationError("paper_text is empty or too short (< 100 chars)")
+    
+    # Validate paper_text is not too long (v1: hard limit, no auto-trimming)
+    # See CONTEXT_WINDOW_LIMITS in schemas/state.py for the canonical source
+    max_chars = CONTEXT_WINDOW_LIMITS["max_paper_chars"]
+    paper_length = len(paper_text)
+    if paper_length > max_chars:
+        raise ValidationError(
+            f"Paper exceeds maximum length ({max_chars:,} chars). "
+            f"Current length: {paper_length:,} chars (~{paper_length // 4:,} tokens).\n\n"
+            f"Please manually trim the paper before loading:\n"
+            f"1. Remove the References section\n"
+            f"2. Remove Acknowledgments, Author Contributions, Funding sections\n"
+            f"3. Remove detailed literature review paragraphs\n\n"
+            f"DO NOT remove: Methods, Results, Figure captions, or Key equations.\n\n"
+            f"Future versions will support automatic trimming and chunking."
+        )
     
     # Validate figures
     figures = paper_input["figures"]

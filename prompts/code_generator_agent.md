@@ -261,6 +261,174 @@ NEVER include:
 5. Missing file closes  - Use context managers (with statement)
 
 ═══════════════════════════════════════════════════════════════════════
+F2. COMMON FAILURE PATTERNS (AVOID THESE)
+═══════════════════════════════════════════════════════════════════════
+
+Learn from common mistakes. Each example shows what NOT to do and how to fix it.
+
+---
+
+### FAILURE 1: Hardcoded Unit System
+
+❌ WRONG - Hardcoding a_unit independently:
+```python
+a_unit = 1e-6  # Arbitrarily chosen
+disk_radius = 0.075  # 75 nm in some units?
+```
+
+✅ RIGHT - Reading from design specification:
+```python
+# From design["unit_system"]["characteristic_length_m"]
+a_unit = 1e-6  # MUST MATCH DESIGN
+disk_radius = 75e-9 / a_unit  # 75 nm → 0.075 Meep units
+print(f"Disk radius: {disk_radius} Meep units = {disk_radius * a_unit * 1e9:.1f} nm")
+```
+
+WHY IT FAILS: If design uses a_unit=1e-6 but code uses a_unit=1e-9, ALL dimensions are wrong by 1000x. Simulation runs but produces completely wrong physics.
+
+---
+
+### FAILURE 2: Flux Monitor Inside Source Region
+
+❌ WRONG - Monitor overlaps with source:
+```python
+# Source at z = 1.5
+sources = [mp.Source(..., center=mp.Vector3(0, 0, 1.5), ...)]
+# Reflection monitor at z = 1.5 (same location!)
+refl_region = mp.FluxRegion(center=mp.Vector3(0, 0, 1.5), ...)
+```
+
+✅ RIGHT - Monitor offset from source:
+```python
+src_z = 1.5
+refl_z = src_z + 0.2  # AFTER source (in propagation direction)
+trans_z = -sz/2 + pml_thickness + 0.5  # Far from source
+
+sources = [mp.Source(..., center=mp.Vector3(0, 0, src_z), ...)]
+refl_region = mp.FluxRegion(center=mp.Vector3(0, 0, refl_z), ...)
+trans_region = mp.FluxRegion(center=mp.Vector3(0, 0, trans_z), ...)
+```
+
+WHY IT FAILS: Flux monitors inside or overlapping with source region give incorrect/noisy results.
+
+---
+
+### FAILURE 3: Incorrect Symmetry Usage
+
+❌ WRONG - Applying symmetry without checking geometry:
+```python
+# Disk at origin - seems symmetric
+symmetries = [mp.Mirror(direction=mp.X), mp.Mirror(direction=mp.Y)]
+# But source is polarized along X!
+sources = [mp.Source(..., component=mp.Ex, ...)]  # X-polarized
+```
+
+✅ RIGHT - Check BOTH geometry AND source symmetry:
+```python
+# X-polarized source: Ex is ODD in X, EVEN in Y
+# Only use Y mirror symmetry for this polarization
+if geometry_is_y_symmetric and source_component == mp.Ex:
+    symmetries = [mp.Mirror(direction=mp.Y, phase=+1)]  # Even in Y
+elif geometry_is_y_symmetric and source_component == mp.Ey:
+    symmetries = [mp.Mirror(direction=mp.Y, phase=-1)]  # Odd in Y
+else:
+    symmetries = []  # No symmetry if not applicable
+```
+
+WHY IT FAILS: Wrong symmetry produces incorrect field patterns or zero fields where they should exist.
+
+---
+
+### FAILURE 4: Insufficient PML Thickness
+
+❌ WRONG - PML too thin for wavelength:
+```python
+pml_thickness = 0.1  # 100 nm PML
+# But wavelength is 600 nm → PML < λ/6 (too thin!)
+```
+
+✅ RIGHT - PML at least half-wavelength:
+```python
+wl_max_nm = 800  # Maximum wavelength in simulation
+wl_max_meep = wl_max_nm * 1e-3 / a_unit  # Convert to Meep units
+pml_thickness = max(0.5 * wl_max_meep, 1.0)  # At least λ/2 or 1 μm
+print(f"PML thickness: {pml_thickness} = {pml_thickness * a_unit * 1e6:.2f} μm")
+```
+
+WHY IT FAILS: Thin PML causes reflections from boundaries, corrupting results with interference artifacts.
+
+---
+
+### FAILURE 5: Missing Normalization Run
+
+❌ WRONG - Computing transmission without empty reference:
+```python
+sim.run(until=200)
+trans_flux = mp.get_fluxes(flux_trans)
+T = trans_flux  # This is NOT normalized transmission!
+```
+
+✅ RIGHT - Two-pass normalization:
+```python
+# PASS 1: Empty simulation (no structure)
+sim_empty.run(until_after_sources=...)
+empty_flux = np.array(mp.get_fluxes(flux_trans))
+
+# PASS 2: With structure
+sim_struct.run(until_after_sources=...)
+struct_flux = np.array(mp.get_fluxes(flux_trans))
+
+# Normalized transmission
+T = struct_flux / empty_flux  # Now T ∈ [0, 1] for lossless
+```
+
+WHY IT FAILS: Without normalization, "transmission" has arbitrary units and varies with source strength, making comparison impossible.
+
+---
+
+### FAILURE 6: Wrong Decay Point for stop_when_fields_decayed
+
+❌ WRONG - Decay point inside absorbing structure:
+```python
+decay_point = mp.Vector3(0, 0, 0)  # Center of metal nanoparticle
+sim.run(until_after_sources=mp.stop_when_fields_decayed(50, mp.Ez, decay_point, 1e-5))
+# Fields inside metal are always small → simulation ends too early!
+```
+
+✅ RIGHT - Decay point in free space near monitor:
+```python
+# Place decay point in free space, near transmission monitor
+trans_z = -sz/2 + pml_thickness + 0.5
+decay_point = mp.Vector3(0, 0, trans_z)
+sim.run(until_after_sources=mp.stop_when_fields_decayed(50, mp.Ez, decay_point, 1e-5))
+```
+
+WHY IT FAILS: Fields inside absorbing structures decay quickly regardless of whether the simulation has reached steady state.
+
+---
+
+### FAILURE 7: Forgetting to Reset Between Sweeps
+
+❌ WRONG - Reusing simulation object:
+```python
+for diameter in diameters:
+    geometry[0] = mp.Cylinder(radius=diameter/2, ...)
+    sim.run(...)  # First run works, subsequent runs accumulate fields!
+```
+
+✅ RIGHT - Reset simulation between runs:
+```python
+for diameter in diameters:
+    sim.reset_meep()  # Clear all fields and monitors
+    sim.geometry = [mp.Cylinder(radius=diameter/2, ...)]
+    # Re-add flux monitors after reset!
+    flux_trans = sim.add_flux(...)
+    sim.run(...)
+```
+
+WHY IT FAILS: Without reset, fields from previous run contaminate the next run, causing incorrect results.
+
+═══════════════════════════════════════════════════════════════════════
 G. MEMORY EFFICIENCY
 ═══════════════════════════════════════════════════════════════════════
 
