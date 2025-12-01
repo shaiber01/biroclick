@@ -77,9 +77,23 @@ def adapt_prompts_node(state: ReproState) -> ReproState:
     return state
 
 
-def plan_node(state: ReproState) -> ReproState:
-    """PlannerAgent: Analyze paper and create reproduction plan."""
-    state["workflow_phase"] = "planning"
+def plan_node(state: ReproState) -> dict:
+    """
+    PlannerAgent: Analyze paper and create reproduction plan.
+    
+    Returns dict with state updates (LangGraph merges this into state).
+    
+    IMPORTANT: This node makes LLM calls with full paper text, so it must 
+    check context first. The planner receives the largest context of any node.
+    """
+    # ═══════════════════════════════════════════════════════════════════════
+    # CONTEXT CHECK: CRITICAL for planner - receives full paper text
+    # ═══════════════════════════════════════════════════════════════════════
+    escalation = _check_context_or_escalate(state, "plan")
+    if escalation is not None:
+        # Context overflow - return escalation state updates
+        return escalation
+    
     # TODO: Implement planning logic
     # - Extract parameters from paper
     # - Classify figures
@@ -88,20 +102,28 @@ def plan_node(state: ReproState) -> ReproState:
     # - Call LLM with planner_agent.md prompt
     # - Parse agent output per planner_output_schema.json
     
-    # STUB: Replace with actual LLM call that populates state["plan"]
-    # state["plan"] = generated_plan
-    # state["assumptions"] = generated_assumptions
+    # STUB: Replace with actual LLM call that populates plan, assumptions, etc.
+    result = {
+        "workflow_phase": "planning",
+        # state["plan"] = generated_plan
+        # state["assumptions"] = generated_assumptions
+        # state["planned_materials"] = extracted_materials
+    }
     
     # ═══════════════════════════════════════════════════════════════════════
     # MANDATORY: Initialize progress stages from plan (after plan is set)
     # This converts plan stages into progress stages with status tracking.
     # Must be called before select_stage_node runs.
     # ═══════════════════════════════════════════════════════════════════════
-    if state.get("plan") and state["plan"].get("stages"):
-        state = initialize_progress_from_plan(state)
-        state = sync_extracted_parameters(state)
+    # NOTE: When implementing, call after plan is generated:
+    # if result.get("plan") and result["plan"].get("stages"):
+    #     state_with_plan = {**state, **result}
+    #     state_with_plan = initialize_progress_from_plan(state_with_plan)
+    #     state_with_plan = sync_extracted_parameters(state_with_plan)
+    #     result["progress"] = state_with_plan.get("progress")
+    #     result["extracted_parameters"] = state_with_plan.get("extracted_parameters")
     
-    return state
+    return result
 
 
 def plan_reviewer_node(state: ReproState) -> dict:
@@ -259,15 +281,35 @@ def select_stage_node(state: ReproState) -> dict:
     }
 
 
-def simulation_designer_node(state: ReproState) -> ReproState:
-    """SimulationDesignerAgent: Design simulation setup for current stage."""
-    state["workflow_phase"] = "design"
+def simulation_designer_node(state: ReproState) -> dict:
+    """
+    SimulationDesignerAgent: Design simulation setup for current stage.
+    
+    Returns dict with state updates (LangGraph merges this into state).
+    
+    IMPORTANT: This node makes LLM calls, so it must check context first.
+    """
+    # ═══════════════════════════════════════════════════════════════════════
+    # CONTEXT CHECK: Required for all nodes that make LLM calls
+    # ═══════════════════════════════════════════════════════════════════════
+    escalation = _check_context_or_escalate(state, "design")
+    if escalation is not None:
+        # Context overflow - return escalation state updates
+        return escalation
+    
     # TODO: Implement design logic
     # - Interpret geometry from plan
-    # - Select materials
+    # - Select materials from validated_materials (Stage 1+) or planned_materials (Stage 0)
     # - Configure sources, BCs, monitors
     # - Estimate performance
-    return state
+    # - Call LLM with simulation_designer_agent.md prompt
+    # - Parse agent output per simulation_designer_output_schema.json
+    
+    # STUB: Replace with actual LLM call
+    return {
+        "workflow_phase": "design",
+        # agent_output fields would go here
+    }
 
 
 def design_reviewer_node(state: ReproState) -> dict:
@@ -351,14 +393,39 @@ def code_reviewer_node(state: ReproState) -> dict:
     return result
 
 
-def code_generator_node(state: ReproState) -> ReproState:
-    """CodeGeneratorAgent: Generate Python+Meep code from approved design."""
-    state["workflow_phase"] = "code_generation"
+def code_generator_node(state: ReproState) -> dict:
+    """
+    CodeGeneratorAgent: Generate Python+Meep code from approved design.
+    
+    Returns dict with state updates (LangGraph merges this into state).
+    
+    IMPORTANT: This node makes LLM calls, so it must check context first.
+    
+    For Stage 1+, code generator MUST read material paths from 
+    state["validated_materials"], NOT hardcode paths. validated_materials 
+    is populated after Stage 0 + user approval.
+    """
+    # ═══════════════════════════════════════════════════════════════════════
+    # CONTEXT CHECK: Required for all nodes that make LLM calls
+    # ═══════════════════════════════════════════════════════════════════════
+    escalation = _check_context_or_escalate(state, "generate_code")
+    if escalation is not None:
+        # Context overflow - return escalation state updates
+        return escalation
+    
     # TODO: Implement code generation logic
     # - Convert design to Meep code
+    # - For Stage 1+: Read material paths from state["validated_materials"]
     # - Include progress prints
-    # - Set expected outputs
-    return state
+    # - Set expected outputs per stage specification
+    # - Call LLM with code_generator_agent.md prompt
+    # - Parse agent output per code_generator_output_schema.json
+    
+    # STUB: Replace with actual LLM call
+    return {
+        "workflow_phase": "code_generation",
+        # agent_output fields would go here (simulation_code, etc.)
+    }
 
 
 def execution_validator_node(state: ReproState) -> dict:
@@ -575,6 +642,11 @@ def supervisor_node(state: ReproState) -> dict:
             if "APPROVE" in response_text:
                 result["supervisor_verdict"] = "ok_continue"
                 result["supervisor_feedback"] = "Material validation approved by user."
+                # CRITICAL: Move pending materials to validated_materials on approval
+                pending_materials = state.get("pending_validated_materials", [])
+                if pending_materials:
+                    result["validated_materials"] = pending_materials
+                    result["pending_validated_materials"] = []  # Clear pending
             elif "CHANGE_DATABASE" in response_text:
                 # Invalidate Stage 0, will re-run with new database
                 result["supervisor_verdict"] = "backtrack_to_stage"
@@ -913,15 +985,16 @@ def material_checkpoint_node(state: ReproState) -> dict:
     This node ALWAYS routes to ask_user to require user confirmation
     of material validation results before proceeding to Stage 1+.
     
-    Also extracts and populates `validated_materials` from the plan,
-    which Code Generator will use to find material file paths.
+    IMPORTANT: This node stores extracted materials in `pending_validated_materials`,
+    NOT in `validated_materials`. The supervisor_node will move them to 
+    `validated_materials` ONLY when the user approves.
     
     Per global_rules.md RULE 0A:
     "After Stage 0 completes, you MUST pause and ask the user to confirm
     the material optical constants are correct before proceeding."
     
     Returns:
-        Dict with state updates including pending_user_questions and validated_materials
+        Dict with state updates including pending_user_questions and pending_validated_materials
     """
     from schemas.state import get_validation_hierarchy
     
@@ -941,11 +1014,11 @@ def material_checkpoint_node(state: ReproState) -> dict:
     output_files = stage_outputs.get("files", [])
     plot_files = [f for f in output_files if f.endswith(('.png', '.pdf', '.jpg'))]
     
-    # Extract validated materials from plan parameters
-    validated_materials = _extract_validated_materials(state)
+    # Extract materials from plan parameters - stored as PENDING until user approves
+    pending_materials = _extract_validated_materials(state)
     
     # Build the checkpoint question per global_rules.md RULE 0A format
-    question = _format_material_checkpoint_question(state, stage0_info, plot_files, validated_materials)
+    question = _format_material_checkpoint_question(state, stage0_info, plot_files, pending_materials)
     
     return {
         "workflow_phase": "material_checkpoint",
@@ -953,7 +1026,8 @@ def material_checkpoint_node(state: ReproState) -> dict:
         "awaiting_user_input": True,
         "ask_user_trigger": "material_checkpoint",
         "last_node_before_ask_user": "material_checkpoint",
-        "validated_materials": validated_materials,
+        # Store as PENDING - will be moved to validated_materials on user approval
+        "pending_validated_materials": pending_materials,
     }
 
 

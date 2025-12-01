@@ -45,6 +45,8 @@ This file (state.py) contains:
 ═══════════════════════════════════════════════════════════════════════════════
 """
 
+from __future__ import annotations  # Enable forward references for type hints
+
 from typing import TypedDict, Optional, List, Dict, Any
 from typing_extensions import NotRequired
 from datetime import datetime
@@ -699,6 +701,12 @@ class ReproState(TypedDict, total=False):
     # Example: [{"material_id": "palik_gold", "name": "Gold", "source": "palik", "path": "materials/palik_gold.csv"}]
     validated_materials: List[Dict[str, str]]
     
+    # PENDING: Materials extracted during material_checkpoint but not yet approved
+    # - Set by material_checkpoint_node
+    # - Moved to validated_materials by supervisor_node on user approval
+    # - Cleared after approval or rejection
+    pending_validated_materials: List[Dict[str, str]]
+    
     # ─── Validation Tracking ────────────────────────────────────────────
     # NOTE: validation_hierarchy is computed on demand via get_validation_hierarchy()
     # from progress["stages"]. It is not stored in state to avoid sync issues.
@@ -893,6 +901,7 @@ def create_initial_state(
         # Materials (two-phase handling)
         planned_materials=[],  # Populated by PlannerAgent, used by Stage 0
         validated_materials=[],  # Populated after Stage 0 + user confirmation, used by Stage 1+
+        pending_validated_materials=[],  # Pending materials awaiting user approval
         
         # Validation tracking
         # NOTE: validation_hierarchy is computed on demand via get_validation_hierarchy()

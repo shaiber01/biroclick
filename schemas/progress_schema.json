@@ -5,7 +5,7 @@
   "description": "Schema for _artifact_progress.json files (artifact naming: underscore prefix indicates output-only)",
   
   "type": "object",
-  "required": ["paper_id", "stage_progress"],
+  "required": ["paper_id", "stages"],
   
   "properties": {
     "paper_id": {
@@ -19,10 +19,10 @@
       "description": "Total computation time spent"
     },
     
-    "stage_progress": {
-      "type": "object",
-      "description": "Progress for each stage, keyed by stage_id. Using a dict (not array) enables O(1) lookups and easier LangGraph state merging.",
-      "additionalProperties": {
+    "stages": {
+      "type": "array",
+      "description": "Progress for each stage. Array maintains execution order and matches code structure in state.py.",
+      "items": {
         "$ref": "#/definitions/stage_progress"
       }
     },
@@ -59,9 +59,18 @@
   "definitions": {
     "stage_progress": {
       "type": "object",
-      "description": "Progress for a single stage. The stage_id is the key in the parent dict.",
-      "required": ["status", "last_updated", "summary"],
+      "description": "Progress for a single stage.",
+      "required": ["stage_id", "stage_type", "status", "last_updated", "summary"],
       "properties": {
+        "stage_id": {
+          "type": "string",
+          "description": "Unique stage identifier matching plan stage_id (e.g., 'stage0_material_validation')"
+        },
+        "stage_type": {
+          "type": "string",
+          "enum": ["MATERIAL_VALIDATION", "SINGLE_STRUCTURE", "ARRAY_SYSTEM", "PARAMETER_SWEEP", "COMPLEX_PHYSICS"],
+          "description": "Stage type from plan, used for validation hierarchy computation"
+        },
         "status": {
           "type": "string",
           "enum": ["not_started", "in_progress", "completed_success", "completed_partial", "completed_failed", "blocked", "needs_rerun", "invalidated"],
@@ -215,7 +224,7 @@
         },
         "interaction_type": {
           "type": "string",
-          "enum": ["material_checkpoint", "clarification", "trade_off_decision", "parameter_confirmation", "stop_decision", "backtrack_approval", "general_feedback"],
+          "enum": ["material_checkpoint", "clarification", "trade_off_decision", "parameter_confirmation", "stop_decision", "backtrack_approval", "context_overflow", "general_feedback"],
           "description": "Type of user interaction"
         },
         "context": {
@@ -261,8 +270,10 @@
     "paper_id": "aluminum_nanoantenna_2013",
     "total_runtime_seconds": 487,
     
-    "stage_progress": {
-      "stage0_material_validation": {
+    "stages": [
+      {
+        "stage_id": "stage0_material_validation",
+        "stage_type": "MATERIAL_VALIDATION",
         "status": "completed_success",
         "last_updated": "2025-11-29T10:00:00Z",
         "revision_count": 1,
@@ -289,7 +300,9 @@
         "issues": [],
         "next_actions": ["Proceed to stage1_single_disk"]
       },
-      "stage1_single_disk": {
+      {
+        "stage_id": "stage1_single_disk",
+        "stage_type": "SINGLE_STRUCTURE",
         "status": "completed_partial",
         "last_updated": "2025-11-29T10:15:00Z",
         "revision_count": 2,
@@ -335,7 +348,9 @@
           "Optional: run one 3D validation for D=75nm to quantify 2D error"
         ]
       },
-      "stage2_bare_disk_sweep": {
+      {
+        "stage_id": "stage2_bare_disk_sweep",
+        "stage_type": "PARAMETER_SWEEP",
         "status": "completed_success",
         "last_updated": "2025-11-29T10:30:00Z",
         "revision_count": 1,
@@ -375,7 +390,9 @@
         "issues": [],
         "next_actions": ["Proceed to stage3_coated_single"]
       },
-      "stage3_coated_single": {
+      {
+        "stage_id": "stage3_coated_single",
+        "stage_type": "SINGLE_STRUCTURE",
         "status": "not_started",
         "last_updated": "2025-11-29T10:00:00Z",
         "revision_count": 0,
@@ -385,7 +402,9 @@
         "issues": [],
         "next_actions": ["Design conformal coating geometry", "Run single coated disk simulation"]
       },
-      "stage4_dispersion": {
+      {
+        "stage_id": "stage4_dispersion",
+        "stage_type": "PARAMETER_SWEEP",
         "status": "not_started",
         "last_updated": "2025-11-29T10:00:00Z",
         "revision_count": 0,
@@ -395,7 +414,7 @@
         "issues": [],
         "next_actions": ["Wait for stage3 completion"]
       }
-    },
+    ],
     
     "discrepancy_summary": {
       "total_discrepancies": 2,
@@ -444,4 +463,3 @@
     ]
   }
 }
-
