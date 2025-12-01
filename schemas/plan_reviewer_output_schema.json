@@ -4,7 +4,7 @@
   "title": "PlanReviewerAgentOutput",
   "description": "Output schema for PlanReviewerAgent - reproduction plan quality review",
   "type": "object",
-  "required": ["verdict", "coverage_check", "staging_check", "parameter_check", "assumptions_check", "performance_check", "issues", "summary"],
+  "required": ["verdict", "coverage_check", "digitized_data_check", "staging_check", "parameter_check", "assumptions_check", "performance_check", "issues", "summary"],
   "properties": {
     "verdict": {
       "type": "string",
@@ -28,6 +28,25 @@
         "notes": { "type": "string" }
       },
       "required": ["status", "figures_covered", "figures_missing"]
+    },
+    "digitized_data_check": {
+      "type": "object",
+      "description": "Assessment of digitized data availability for quantitative comparison",
+      "properties": {
+        "status": { "type": "string", "enum": ["pass", "fail", "warning"] },
+        "excellent_targets": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Targets requiring <2% precision (excellent)"
+        },
+        "missing_digitized": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Targets that require excellent precision but lack digitized_data_path"
+        },
+        "notes": { "type": "string" }
+      },
+      "required": ["status", "excellent_targets", "missing_digitized"]
     },
     "staging_check": {
       "type": "object",
@@ -95,7 +114,7 @@
         "type": "object",
         "properties": {
           "severity": { "type": "string", "enum": ["blocking", "major", "minor"] },
-          "category": { "type": "string", "enum": ["coverage", "staging", "parameters", "assumptions", "performance"] },
+          "category": { "type": "string", "enum": ["coverage", "staging", "parameters", "assumptions", "performance", "digitized_data"] },
           "description": { "type": "string" },
           "suggested_fix": { "type": "string" }
         },

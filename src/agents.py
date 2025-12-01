@@ -277,12 +277,15 @@ def material_checkpoint_node(state: ReproState) -> dict:
     This node ALWAYS routes to ask_user to require user confirmation
     of material validation results before proceeding to Stage 1+.
     
+    Also extracts and populates `validated_materials` from the plan,
+    which Code Generator will use to find material file paths.
+    
     Per global_rules.md RULE 0A:
     "After Stage 0 completes, you MUST pause and ask the user to confirm
     the material optical constants are correct before proceeding."
     
     Returns:
-        Dict with state updates including pending_user_questions
+        Dict with state updates including pending_user_questions and validated_materials
     """
     from schemas.state import get_validation_hierarchy
     
@@ -302,8 +305,11 @@ def material_checkpoint_node(state: ReproState) -> dict:
     output_files = stage_outputs.get("files", [])
     plot_files = [f for f in output_files if f.endswith(('.png', '.pdf', '.jpg'))]
     
+    # Extract validated materials from plan parameters
+    validated_materials = _extract_validated_materials(state)
+    
     # Build the checkpoint question per global_rules.md RULE 0A format
-    question = _format_material_checkpoint_question(state, stage0_info, plot_files)
+    question = _format_material_checkpoint_question(state, stage0_info, plot_files, validated_materials)
     
     return {
         "workflow_phase": "material_checkpoint",
@@ -311,30 +317,111 @@ def material_checkpoint_node(state: ReproState) -> dict:
         "awaiting_user_input": True,
         "ask_user_trigger": "material_checkpoint",
         "last_node_before_ask_user": "material_checkpoint",
+        "validated_materials": validated_materials,
     }
+
+
+def _extract_validated_materials(state: ReproState) -> list:
+    """
+    Extract material information from plan and build validated_materials list.
+    
+    Scans extracted_parameters for material-related entries and maps them
+    to file paths in the materials/ directory.
+    
+    Returns:
+        List of dicts: [{"material": "gold", "source": "palik", "path": "materials/palik_gold.csv"}]
+    """
+    import os
+    
+    plan = state.get("plan", {})
+    extracted_params = plan.get("extracted_parameters", [])
+    assumptions = state.get("assumptions", {})
+    
+    validated_materials = []
+    seen_materials = set()
+    
+    # Known material databases and their naming conventions
+    KNOWN_SOURCES = ["palik", "johnson_christy", "rakic", "malitson"]
+    KNOWN_MATERIALS = ["gold", "silver", "aluminum", "silicon", "sio2", "glass"]
+    
+    # Scan extracted parameters for material info
+    for param in extracted_params:
+        name = param.get("name", "").lower()
+        value = str(param.get("value", "")).lower()
+        
+        # Look for material-related parameters
+        if "material" in name or any(mat in name for mat in KNOWN_MATERIALS):
+            material = None
+            source = "palik"  # Default source
+            
+            # Try to identify the material
+            for mat in KNOWN_MATERIALS:
+                if mat in value or mat in name:
+                    material = mat
+                    break
+            
+            # Try to identify the source
+            for src in KNOWN_SOURCES:
+                if src in value.lower():
+                    source = src
+                    break
+            
+            if material and material not in seen_materials:
+                # Construct file path
+                path = f"materials/{source}_{material}.csv"
+                
+                validated_materials.append({
+                    "material": material,
+                    "source": source,
+                    "path": path,
+                    "from_parameter": param.get("name"),
+                })
+                seen_materials.add(material)
+    
+    # Also check assumptions for material choices
+    global_assumptions = assumptions.get("global_assumptions", {})
+    material_assumptions = global_assumptions.get("materials", [])
+    
+    for assumption in material_assumptions:
+        if isinstance(assumption, dict):
+            desc = assumption.get("description", "").lower()
+            for mat in KNOWN_MATERIALS:
+                if mat in desc and mat not in seen_materials:
+                    source = "palik"
+                    for src in KNOWN_SOURCES:
+                        if src in desc:
+                            source = src
+                            break
+                    
+                    validated_materials.append({
+                        "material": mat,
+                        "source": source,
+                        "path": f"materials/{source}_{mat}.csv",
+                        "from_assumption": assumption.get("description"),
+                    })
+                    seen_materials.add(mat)
+    
+    return validated_materials
 
 
 def _format_material_checkpoint_question(
     state: ReproState, 
     stage0_info: dict, 
-    plot_files: list
+    plot_files: list,
+    validated_materials: list
 ) -> str:
     """Format the material checkpoint question per global_rules.md RULE 0A."""
     paper_id = state.get("paper_id", "unknown")
     
-    # Get materials used from plan or assumptions
-    plan = state.get("plan", {})
-    assumptions = state.get("assumptions", {})
-    
-    # Try to extract material info
-    materials_info = []
-    extracted_params = plan.get("extracted_parameters", [])
-    for param in extracted_params:
-        if "material" in param.get("name", "").lower():
-            materials_info.append(f"- {param.get('name')}: {param.get('value')} (source: {param.get('source', 'unknown')})")
-    
-    if not materials_info:
-        materials_info = ["- Material information not explicitly extracted"]
+    # Format validated materials
+    if validated_materials:
+        materials_info = []
+        for mat in validated_materials:
+            materials_info.append(
+                f"- {mat['material'].upper()}: source={mat['source']}, file={mat['path']}"
+            )
+    else:
+        materials_info = ["- No materials automatically detected"]
     
     # Format plot files list
     plots_text = "\n".join(f"- {f}" for f in plot_files) if plot_files else "- No plots generated"
@@ -346,7 +433,7 @@ MANDATORY MATERIAL VALIDATION CHECKPOINT
 
 Stage 0 (Material Validation) has completed for paper: {paper_id}
 
-**Materials validated:**
+**Validated materials (will be used for all subsequent stages):**
 {chr(10).join(materials_info)}
 
 **Generated plots:**
@@ -364,6 +451,9 @@ Options:
 2. CHANGE_DATABASE - Use different material database (specify which)
 3. CHANGE_MATERIAL - Paper uses different material than assumed (specify which)
 4. NEED_HELP - Unclear how to validate, need guidance
+
+Note: If you APPROVE, the validated_materials list above will be passed
+to Code Generator for all subsequent stages.
 
 Please respond with your choice and any notes.
 ═══════════════════════════════════════════════════════════════════════

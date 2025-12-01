@@ -66,6 +66,67 @@ FAILURE MODE EXAMPLE:
 - Now radius = 0.0375 nm instead of 37.5 nm → completely wrong simulation!
 
 ═══════════════════════════════════════════════════════════════════════
+A2. MANDATORY: MATERIAL FILE PATHS FROM STATE (DO NOT HARDCODE)
+═══════════════════════════════════════════════════════════════════════
+
+After Stage 0 (Material Validation), the workflow provides a `validated_materials`
+list in the state with confirmed material file paths.
+
+YOU MUST READ MATERIAL PATHS FROM state["validated_materials"]. DO NOT:
+- Hardcode material file paths
+- Guess which CSV file to use
+- Assume "palik" or any default source
+
+The validated_materials list looks like:
+```json
+[
+  {"material": "gold", "source": "palik", "path": "materials/palik_gold.csv"},
+  {"material": "silicon", "source": "palik", "path": "materials/palik_silicon.csv"}
+]
+```
+
+In your generated code, use a pattern like:
+```python
+# ═══════════════════════════════════════════════════════════════════════
+# MATERIAL DEFINITIONS (from validated_materials)
+# ═══════════════════════════════════════════════════════════════════════
+
+# Read from materials/ directory - paths provided by material_checkpoint
+gold_data = np.loadtxt('materials/palik_gold.csv', delimiter=',', skiprows=1)
+# ... fit Drude-Lorentz model from data ...
+```
+
+If validated_materials is empty or missing, ASK FOR CLARIFICATION before proceeding.
+Never guess material sources - wrong optical constants invalidate all physics.
+
+═══════════════════════════════════════════════════════════════════════
+A3. MANDATORY: OUTPUT FILE NAMES FROM STAGE SPEC
+═══════════════════════════════════════════════════════════════════════
+
+Each stage in the plan has an `expected_outputs` array specifying what files
+to produce. You MUST use these exact filename patterns and column names.
+
+Example stage spec:
+```json
+"expected_outputs": [
+  {
+    "artifact_type": "spectrum_csv",
+    "filename_pattern": "{paper_id}_stage1_spectrum.csv",
+    "columns": ["wavelength_nm", "transmission", "reflection", "absorption"],
+    "target_figure": "Fig3a"
+  }
+]
+```
+
+Your code MUST:
+- Use the filename pattern (substituting {paper_id}, {stage_id}, etc.)
+- Include the exact column names in CSV headers
+- Map to the correct target_figure
+
+DO NOT invent your own output filenames like "out.h5" or "results.csv".
+ResultsAnalyzerAgent will look for files matching the spec.
+
+═══════════════════════════════════════════════════════════════════════
 B. CODE STRUCTURE REQUIREMENTS
 ═══════════════════════════════════════════════════════════════════════
 

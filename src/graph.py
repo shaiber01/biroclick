@@ -171,23 +171,35 @@ def route_after_execution_check(state: ReproState) -> Literal["physics_check", "
             return "ask_user"
     return "ask_user"
 
-def route_after_physics_check(state: ReproState) -> Literal["analyze", "generate_code", "ask_user"]:
+def route_after_physics_check(state: ReproState) -> Literal["analyze", "generate_code", "design", "ask_user"]:
     """
     Route based on physics sanity check verdict.
     
     Uses physics_failure_count to track physics validation failures.
     This is distinct from execution_failure_count (runtime crashes) and
     code_revision_count (code review feedback).
+    
+    New: design_flaw verdict routes to design (not code) for fundamental
+    geometry/physics issues that cannot be fixed by tweaking code.
     """
     verdict = state.get("physics_verdict")
     runtime_config = state.get("runtime_config", {})
     max_failures = runtime_config.get("max_physics_failures", MAX_PHYSICS_FAILURES)
+    max_design = runtime_config.get("max_design_revisions", MAX_DESIGN_REVISIONS)
     
     if verdict in ["pass", "warning"]:
         return "analyze"
     elif verdict == "fail":
+        # Code/numerics issue - route to code generator
         if state.get("physics_failure_count", 0) < max_failures:
             return "generate_code"
+        else:
+            return "ask_user"
+    elif verdict == "design_flaw":
+        # Fundamental design issue - route to design, NOT code
+        # Use design_revision_count to prevent infinite loops
+        if state.get("design_revision_count", 0) < max_design:
+            return "design"
         else:
             return "ask_user"
     return "ask_user"
@@ -356,6 +368,7 @@ def create_repro_graph():
         {
             "analyze": "analyze",
             "generate_code": "generate_code",
+            "design": "design",  # design_flaw verdict routes here
             "ask_user": "ask_user"
         }
     )

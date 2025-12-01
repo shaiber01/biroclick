@@ -12,8 +12,8 @@
     },
     "verdict": {
       "type": "string",
-      "enum": ["pass", "warning", "fail"],
-      "description": "Overall verdict on physics validity"
+      "enum": ["pass", "warning", "fail", "design_flaw"],
+      "description": "Overall verdict: pass=OK, warning=OK with concerns, fail=code/numerics issue, design_flaw=fundamental geometry/physics design problem"
     },
     "conservation_checks": {
       "type": "array",

@@ -460,6 +460,12 @@ class ReproState(TypedDict, total=False):
     # Structure matches plan_schema.json extracted_parameters items
     extracted_parameters: List[Dict[str, Any]]
     
+    # ─── Validated Materials ─────────────────────────────────────────────
+    # After material_checkpoint (Stage 0), stores validated material mappings.
+    # Code Generator MUST read material file paths from here, NOT hardcode them.
+    # Example: [{"material": "gold", "source": "palik", "path": "materials/palik_gold.csv"}]
+    validated_materials: List[Dict[str, str]]
+    
     # ─── Validation Tracking ────────────────────────────────────────────
     # NOTE: validation_hierarchy is computed on demand via get_validation_hierarchy()
     # from progress["stages"]. It is not stored in state to avoid sync issues.
@@ -644,6 +650,9 @@ def create_initial_state(
         
         # Extracted parameters
         extracted_parameters=[],
+        
+        # Validated materials (populated after Stage 0 material checkpoint)
+        validated_materials=[],
         
         # Validation tracking
         # NOTE: validation_hierarchy is computed on demand via get_validation_hierarchy()

@@ -157,6 +157,16 @@
           "complexity_notes": {
             "type": ["string", "null"],
             "description": "Any special considerations"
+          },
+          "precision_requirement": {
+            "type": "string",
+            "enum": ["excellent", "good", "acceptable", "qualitative"],
+            "default": "good",
+            "description": "Required precision: excellent (<2%), good (<5%), acceptable (<10%), qualitative (visual only)"
+          },
+          "digitized_data_path": {
+            "type": ["string", "null"],
+            "description": "Path to CSV/JSON of digitized (x,y) points extracted from paper figure. REQUIRED if precision_requirement is 'excellent'."
           }
         }
       }
@@ -228,6 +238,38 @@
             "type": "array",
             "items": {"type": "string"},
             "description": "Specific measurable criteria for success"
+          },
+          "expected_outputs": {
+            "type": "array",
+            "description": "Specification of expected output files. Code Generator MUST use these specs, Results Analyzer MUST read them.",
+            "items": {
+              "type": "object",
+              "required": ["artifact_type", "filename_pattern", "description"],
+              "properties": {
+                "artifact_type": {
+                  "type": "string",
+                  "enum": ["spectrum_csv", "field_data_npz", "field_plot_png", "spectrum_plot_png", "dispersion_csv", "raw_h5"],
+                  "description": "Type of output artifact"
+                },
+                "filename_pattern": {
+                  "type": "string",
+                  "description": "Expected filename pattern (e.g., '{paper_id}_{stage_id}_spectrum.csv')"
+                },
+                "description": {
+                  "type": "string",
+                  "description": "What data this file contains"
+                },
+                "columns": {
+                  "type": "array",
+                  "items": {"type": "string"},
+                  "description": "For CSV files: column names (e.g., ['wavelength_nm', 'transmission', 'reflection'])"
+                },
+                "target_figure": {
+                  "type": "string",
+                  "description": "Which paper figure this output maps to"
+                }
+              }
+            }
           },
           "reference_data_path": {
             "type": ["string", "null"],
@@ -358,6 +400,21 @@
         "validation_criteria": [
           "Resonance wavelength within 5% of paper value for D=75nm",
           "Peak shape qualitatively similar (single dip in transmission)"
+        ],
+        "expected_outputs": [
+          {
+            "artifact_type": "spectrum_csv",
+            "filename_pattern": "{paper_id}_stage1_spectrum.csv",
+            "description": "Transmission and reflection spectrum vs wavelength",
+            "columns": ["wavelength_nm", "transmission", "reflection", "absorption"],
+            "target_figure": "Fig3a"
+          },
+          {
+            "artifact_type": "spectrum_plot_png",
+            "filename_pattern": "{paper_id}_stage1_spectrum.png",
+            "description": "Plot comparing simulated transmission to paper Fig3a",
+            "target_figure": "Fig3a"
+          }
         ],
         "reference_data_path": null
       },

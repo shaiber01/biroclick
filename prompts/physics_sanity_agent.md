@@ -119,7 +119,7 @@ Your output must be a JSON object:
   "review_type": "physics_sanity",
   "stage_id": "stage1_single_disk",
   
-  "verdict": "pass | warning | fail",
+  "verdict": "pass | warning | fail | design_flaw",
   
   "conservation_check": {
     "status": "pass | warning | fail",
@@ -195,11 +195,31 @@ WARNING (proceed_to_analysis = true, but flag):
 - Minor oscillations or artifacts
 - Results look physical but have concerns
 
-FAIL (proceed_to_analysis = false):
+FAIL (proceed_to_analysis = false, routes to CODE_GENERATE):
 - Conservation laws violated (T+R+A off by >10%)
 - Unphysical values (T>1, R>1, A<0)
 - NaN or Inf in data
 - Results are clearly unphysical
+- Issue is likely a CODE/NUMERICS problem that can be fixed by tweaking code
+
+DESIGN_FLAW (proceed_to_analysis = false, routes to DESIGN):
+- Physics indicates FUNDAMENTAL geometry/design problem
+- Examples that MUST use design_flaw:
+  - "Structure too small to support this mode at these wavelengths"
+  - "Resonance position indicates wrong material/geometry type"
+  - "Mode cannot exist in this geometry (e.g., dipole in too-thin disk)"
+  - "Boundary conditions incompatible with desired physics"
+  - "Structural dimensions violate physical constraints for target response"
+- Tweaking code/numerics CANNOT fix design_flaw issues
+- Design_flaw routes back to SimulationDesignerAgent to redesign structure
+
+CRITICAL DISTINCTION:
+| Problem Type | Example | Verdict |
+|--------------|---------|---------|
+| Normalization error | T=1.05 at peak | fail → fix code |
+| PML reflection | Oscillations in spectrum | fail → fix code |
+| Disk too thin for resonance | No resonance appears | design_flaw → redesign |
+| Wrong geometry type | Dipole mode in monopole geometry | design_flaw → redesign |
 
 ═══════════════════════════════════════════════════════════════════════
 G. ERROR DIAGNOSIS

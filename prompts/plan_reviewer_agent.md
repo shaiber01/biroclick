@@ -34,6 +34,13 @@ When reviewing a reproduction plan, verify EVERY item:
   - Target quantities match what's shown in paper figures?
   - All relevant wavelength/parameter ranges covered?
 
+□ DIGITIZED DATA (for quantitative comparison)
+  - precision_requirement set appropriately for each target?
+  - Targets with precision_requirement="excellent" (<2%) have digitized_data_path?
+  - If digitized data missing but needed, flag as BLOCKING issue
+  - Cannot achieve <2% error comparing against PNG images
+  - User must be asked to provide digitized (x,y) CSV if not available
+
 □ STAGING
   - MANDATORY stages present:
     - Stage 0: Material validation (MUST be first)
@@ -72,6 +79,13 @@ When reviewing a reproduction plan, verify EVERY item:
   - Validation criteria clear (compare to paper's absorption/n&k)?
   - Wavelength range covers all subsequent stages?
 
+□ OUTPUT SPECIFICATIONS
+  - Each stage has expected_outputs defined?
+  - Filename patterns include {paper_id} and {stage_id}?
+  - Column names specified for CSV outputs?
+  - Each output maps to a target_figure?
+  - ResultsAnalyzer will know exactly what files to look for?
+
 ═══════════════════════════════════════════════════════════════════════
 B. OUTPUT FORMAT
 ═══════════════════════════════════════════════════════════════════════
@@ -87,6 +101,13 @@ Use function calling with this schema to ensure valid output.
     "figures_covered": ["fig1a", "fig2b"],
     "figures_missing": ["fig3c - appears reproducible but not staged"],
     "notes": "details on coverage gaps"
+  },
+  
+  "digitized_data_check": {
+    "status": "pass | fail | warning",
+    "excellent_targets": ["fig3a"],
+    "missing_digitized": ["fig3a - requires <2% but no digitized data path"],
+    "notes": "targets needing digitized data for quantitative comparison"
   },
   
   "staging_check": {
@@ -174,6 +195,8 @@ HIGH PRIORITY (blocking):
 - Reproducible figure not assigned to any stage
 - Material used in stages but not validated in Stage 0
 - Circular dependencies in stage order
+- Target with precision_requirement="excellent" but no digitized_data_path
+  → Must ask user to provide digitized (x,y) data via helper tool
 
 MEDIUM PRIORITY (major):
 - Parameter extracted from wrong section

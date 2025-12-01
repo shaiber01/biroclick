@@ -27,10 +27,22 @@ A. ANALYSIS WORKFLOW
 For each completed simulation:
 
 1) LOAD AND INSPECT OUTPUTS
-   - Verify all expected files exist
-   - Load data files and check array shapes
+   - Read `expected_outputs` from the stage spec in the plan
+   - Verify all specified files exist (using filename_pattern)
+   - Load data files with expected columns from spec
+   - If files missing or columns wrong: flag as execution issue
    - View generated plots
    - Extract key values for comparison
+   
+   Example expected_outputs spec:
+   ```json
+   {
+     "artifact_type": "spectrum_csv",
+     "filename_pattern": "{paper_id}_stage1_spectrum.csv",
+     "columns": ["wavelength_nm", "transmission"],
+     "target_figure": "Fig3a"
+   }
+   ```
 
 2) COMPARE TO PAPER
    - Qualitative comparison (shapes, trends, features)
