@@ -248,27 +248,13 @@ D. OUTPUT FORMAT
 ═══════════════════════════════════════════════════════════════════════
 
 {
-  "supervisor_verdict": "ok_continue | replan_needed | change_priority | ask_user | backtrack_to_stage",
+  "verdict": "ok_continue | replan_needed | change_priority | ask_user | backtrack_to_stage | all_complete",
   
   "validation_hierarchy_status": {
-    "material_validation": {
-      "status": "passed | failed | partial | not_done",
-      "blocking_next_stages": false,
-      "notes": "summary"
-    },
-    "single_structure": {
-      "status": "passed | failed | partial | not_done",
-      "blocking_next_stages": false,
-      "notes": "summary"
-    },
-    "arrays_systems": {
-      "status": "passed | failed | partial | not_done | not_applicable",
-      "notes": "summary"
-    },
-    "parameter_sweeps": {
-      "status": "passed | failed | partial | not_done | not_applicable",
-      "notes": "summary"
-    }
+    "material_validation": "passed | partial | failed | not_done",
+    "single_structure": "passed | partial | failed | not_done",
+    "arrays_systems": "passed | partial | failed | not_done",
+    "parameter_sweeps": "passed | partial | failed | not_done"
   },
   
   "main_physics_assessment": {

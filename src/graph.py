@@ -248,7 +248,7 @@ def route_after_supervisor(state: ReproState) -> Literal["select_stage", "plan",
         return "select_stage"
         
     elif verdict == "replan_needed":
-        if state.get("replan_count", 0) < 2: # MAX_REPLANS
+        if state.get("replan_count", 0) < MAX_REPLANS:
             return "plan"
         else:
             return "ask_user"
