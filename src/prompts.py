@@ -231,12 +231,44 @@ CURRENT TASK (injected at runtime)
 """
 
 
+def _extract_unit_system(state: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract unit_system from design JSON or performance estimate."""
+    # Try to get from performance_estimate (which may contain parsed design)
+    perf = state.get('performance_estimate', {})
+    if isinstance(perf, dict) and 'unit_system' in perf:
+        return perf['unit_system']
+    
+    # Try to parse from design_description if it's JSON
+    design = state.get('design_description', '')
+    if isinstance(design, str) and '"unit_system"' in design:
+        try:
+            import re
+            # Try to extract unit_system block
+            match = re.search(r'"unit_system"\s*:\s*\{[^}]+\}', design)
+            if match:
+                # This is a rough extraction - in production, parse the full JSON
+                return {"note": "unit_system found in design - parse the full design JSON"}
+        except:
+            pass
+    
+    return {}
+
+
 def _build_generator_context(state: Dict[str, Any]) -> str:
     """Build context section for CodeGeneratorAgent."""
+    unit_system = _extract_unit_system(state)
+    unit_system_text = json.dumps(unit_system, indent=2) if unit_system else "Not found in state - CHECK DESIGN JSON"
+    
     return f"""
 ═══════════════════════════════════════════════════════════════════════
 CURRENT TASK (injected at runtime)
 ═══════════════════════════════════════════════════════════════════════
+
+### ⚠️ UNIT SYSTEM (CRITICAL - USE THESE VALUES)
+{unit_system_text}
+
+**You MUST use the characteristic_length_m value for a_unit in your code.**
+If unit_system is not shown above, extract it from the design JSON below.
 
 ### Design to Implement:
 
@@ -290,7 +322,16 @@ REVIEW TASK (injected at runtime)
 """
     elif review_type == "code":
         code = state.get('code', '')
+        unit_system = _extract_unit_system(state)
+        unit_system_text = json.dumps(unit_system, indent=2) if unit_system else "Extract from design below"
+        
         context += f"""
+### ⚠️ UNIT SYSTEM (VERIFY a_unit MATCHES THIS)
+{unit_system_text}
+
+**BLOCKING CHECK**: Verify that the code's `a_unit` value matches 
+`design["unit_system"]["characteristic_length_m"]`
+
 ### Code to Review:
 
 ```python

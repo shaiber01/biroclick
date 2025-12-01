@@ -59,6 +59,40 @@ RATIONALE: If material data is wrong, EVERY subsequent stage will fail.
 A 30-second user review here can save hours of debugging.
 
 ═══════════════════════════════════════════════════════════════════════
+RULE 0B: UNIT SYSTEM MUST FLOW FROM DESIGN TO CODE (CRITICAL)
+═══════════════════════════════════════════════════════════════════════
+
+Meep uses normalized units where c = 1. The `a_unit` value defines the mapping.
+
+THE CHAIN OF RESPONSIBILITY:
+1. SimulationDesignerAgent: MUST output unit_system in design JSON:
+   ```json
+   "unit_system": {
+     "characteristic_length_m": 1e-6,  // e.g., 1 µm
+     "length_unit": "µm"
+   }
+   ```
+
+2. CodeGeneratorAgent: MUST read a_unit from design, NOT hardcode it:
+   ```python
+   a_unit = 1e-6  # FROM design["unit_system"]["characteristic_length_m"]
+   ```
+
+3. CodeReviewerAgent: MUST verify a_unit matches design["unit_system"]
+   - If mismatch: BLOCKING issue
+
+WHY THIS MATTERS:
+- Unit mismatch = SILENT physics error
+- Simulation runs, but ALL results are wrong
+- Resonances at wrong wavelengths, wrong field strengths
+- Extremely hard to debug after the fact
+
+FAILURE EXAMPLE:
+- Design: a_unit = 1e-6 (1 µm), disk radius = 0.0375 (37.5 nm real)
+- Code accidentally uses: a_unit = 1e-9 (1 nm)
+- Result: disk radius = 0.0375 nm (not 37.5 nm) → completely wrong physics
+
+═══════════════════════════════════════════════════════════════════════
 RULE 1: FIGURES OVER TEXT
 ═══════════════════════════════════════════════════════════════════════
 When extracting parameters, cross-check:

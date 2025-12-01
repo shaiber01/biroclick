@@ -9,7 +9,7 @@ __version__ = "0.1.0"
 __author__ = "ReproLab Team"
 
 from .graph import create_repro_graph
-from ..schemas.state import ReproState, create_initial_state
+from schemas.state import ReproState, create_initial_state
 
 __all__ = [
     "create_repro_graph",

@@ -167,14 +167,19 @@ Before approving code to run, verify EVERY item:
   - Flux region syntax matches current API
   - Material definitions use supported format
 
-□ MEEP UNIT NORMALIZATION (CRITICAL)
-  - Characteristic length (a_unit) defined at top of code
+□ MEEP UNIT NORMALIZATION (CRITICAL - BLOCKING IF WRONG)
+  - a_unit defined at top of code
+  - **a_unit MUST MATCH design["unit_system"]["characteristic_length_m"]**
+    → If mismatch: BLOCKING issue - "a_unit doesn't match design unit system"
+    → Example: design says 1e-6, code must have a_unit = 1e-6
   - All geometry expressed in Meep normalized units
   - Wavelength/frequency conversion shown explicitly
   - Comment showing real-world values alongside Meep units
   - NO mixing of units (e.g., geometry in µm, wavelength in nm without conversion)
-  - Unit system documented in design output
   - Example: "# D = 75 nm → 0.075 in Meep units (a = 1 µm)"
+  
+  WHY BLOCKING: Unit mismatch causes SILENT physics errors - simulation runs
+  but produces wrong results. This is extremely hard to debug after the fact.
 
 ═══════════════════════════════════════════════════════════════════════
 B. PLAN REVIEW (when reviewing PlannerAgent)
@@ -331,6 +336,8 @@ E. COMMON ISSUES TO CATCH
 HIGH PRIORITY (blocking):
 - plt.show() in code → ALWAYS flag, will block headless execution
 - input() in code → ALWAYS flag, will block automation
+- **a_unit MISMATCH** → a_unit doesn't match design["unit_system"]["characteristic_length_m"]
+  → Causes silent physics errors, completely wrong results
 - Missing material data for wavelength range
 - Resolution too low for features (<5 points across)
 - PML inside structures or too thin

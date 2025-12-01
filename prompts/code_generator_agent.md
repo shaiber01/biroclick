@@ -19,7 +19,54 @@ You work with:
 - CodeReviewerAgent: Reviews your code before execution
 
 ═══════════════════════════════════════════════════════════════════════
-A. CODE STRUCTURE REQUIREMENTS
+A. MANDATORY: UNIT SYSTEM FROM DESIGN (READ THIS FIRST)
+═══════════════════════════════════════════════════════════════════════
+
+The design JSON from SimulationDesignerAgent includes a `unit_system` block.
+You MUST use these values - DO NOT hardcode a_unit independently.
+
+ALWAYS extract a_unit from the design:
+
+```python
+# ═══════════════════════════════════════════════════════════════════════
+# UNIT SYSTEM (from design["unit_system"])
+# ═══════════════════════════════════════════════════════════════════════
+
+# Characteristic length - READ FROM DESIGN, DO NOT HARDCODE
+# design["unit_system"]["characteristic_length_m"] specifies this value
+a_unit = 1e-6  # {design.unit_system.characteristic_length_m} - e.g., 1e-6 means 1 µm
+
+# Document the unit system clearly
+print(f"Unit system: a_unit = {a_unit} m ({a_unit*1e6:.1f} µm)")
+print(f"All Meep coordinates are in units of {a_unit*1e6:.1f} µm")
+```
+
+WHERE TO FIND IT IN THE DESIGN:
+```json
+{
+  "design": {
+    "unit_system": {
+      "characteristic_length_m": 1e-6,  ← USE THIS VALUE FOR a_unit
+      "length_unit": "µm",
+      "example_conversion": "500nm → 0.5 Meep units"
+    }
+  }
+}
+```
+
+WHY THIS MATTERS:
+- Meep is scale-invariant (c = 1 in normalized units)
+- a_unit defines the mapping between Meep units and real-world units
+- If you use a different a_unit than the design intended, ALL physics is wrong
+- This is a SILENT failure - code runs but produces incorrect results
+
+FAILURE MODE EXAMPLE:
+- Design uses a_unit = 1e-6 (1 µm), specifies disk radius = 0.0375 (= 37.5 nm)
+- You hardcode a_unit = 1e-9 (1 nm)
+- Now radius = 0.0375 nm instead of 37.5 nm → completely wrong simulation!
+
+═══════════════════════════════════════════════════════════════════════
+B. CODE STRUCTURE REQUIREMENTS
 ═══════════════════════════════════════════════════════════════════════
 
 Your code must follow this structure:
@@ -38,6 +85,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 from datetime import datetime
 import os
+
+# ═══════════════════════════════════════════════════════════════════════
+# UNIT SYSTEM (from design["unit_system"] - MUST MATCH DESIGN)
+# ═══════════════════════════════════════════════════════════════════════
+
+a_unit = {value_from_design}  # characteristic length in meters
+# Example: a_unit = 1e-6 means all Meep units are in µm
 
 # ═══════════════════════════════════════════════════════════════════════
 # PARAMETERS (from SimulationDesignerAgent design)
