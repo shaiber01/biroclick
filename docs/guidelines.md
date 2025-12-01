@@ -666,6 +666,94 @@ For high-confidence validation of generated simulation code, consider running th
 
 **Not implemented in v1** — consider for future versions when base system is validated.
 
+### Parallel Multi-Model Decision Making
+
+Extend multi-model consensus beyond code generation to **decision-making agents**: critics, supervisors, and planners. These agents make critical choices that affect the entire workflow.
+
+**Concept:**
+```
+                    ┌─────────────────┐
+                    │  Same Prompt    │
+                    └────────┬────────┘
+                             │
+         ┌───────────────────┼───────────────────┐
+         ▼                   ▼                   ▼
+    ┌─────────┐        ┌─────────┐        ┌─────────┐
+    │ Claude  │        │  GPT-4  │        │ Gemini  │
+    └────┬────┘        └────┬────┘        └────┬────┘
+         │                   │                   │
+         └───────────────────┼───────────────────┘
+                             ▼
+                    ┌─────────────────┐
+                    │  Merge/Vote     │
+                    └────────┬────────┘
+                             ▼
+                    ┌─────────────────┐
+                    │  Single Output  │
+                    │  to Next Agent  │
+                    └─────────────────┘
+```
+
+**Target Agents:**
+| Agent | Decision Type | Merge Strategy |
+|-------|---------------|----------------|
+| **PlannerAgent** | Stage decomposition, milestones | Union of stages, intersection of critical paths |
+| **SupervisorAgent** | Accept/revise/escalate decisions | Majority vote; escalate if disagreement |
+| **PhysicsSanityAgent** | Validation pass/fail + concerns | Union of concerns; fail if any model fails |
+| **ResultsAnalyzerAgent** | Match assessment, discrepancies | Conservative: report all discrepancies found |
+| **CodeReviewerAgent** | Code approval, issues found | Union of issues; require unanimous approval |
+
+**Merge Strategies:**
+
+1. **Majority Vote** (for binary decisions):
+   - 2/3 or 3/3 agree → Use that decision
+   - Complete disagreement → Escalate to human or use most conservative
+
+2. **Union Merge** (for lists/concerns):
+   - Combine all unique items from all models
+   - Example: All physics concerns from all models included
+
+3. **Intersection Merge** (for high-confidence items):
+   - Only include items all models agree on
+   - Example: Only stages all models identified as critical
+
+4. **Weighted Consensus** (for nuanced outputs):
+   - Weight models by historical accuracy on similar tasks
+   - Synthesize a combined response using an aggregator prompt
+
+**Implementation Sketch:**
+```python
+async def parallel_agent_call(prompt: str, agent_type: str) -> MergedOutput:
+    # Run same prompt on multiple models in parallel
+    results = await asyncio.gather(
+        call_model("claude-sonnet-4-20250514", prompt),
+        call_model("gpt-4o", prompt),
+        call_model("gemini-pro", prompt),
+    )
+    
+    # Merge based on agent type
+    if agent_type in ["supervisor", "reviewer"]:
+        return majority_vote_merge(results)
+    elif agent_type in ["planner", "analyzer"]:
+        return union_merge(results)
+    elif agent_type == "physics_sanity":
+        return conservative_merge(results)  # Fail if ANY fails
+```
+
+**Benefits:**
+- Critical decisions validated by multiple "perspectives"
+- Reduces risk of single-model blind spots in planning
+- Catches edge cases one model might miss
+- Higher confidence in workflow decisions
+
+**Trade-offs:**
+- 3× cost for decision agents (but these are typically cheaper than code gen)
+- Added latency (mitigated by parallel execution)
+- Merge logic complexity
+- May surface genuine ambiguity that requires human resolution
+
+**Status**: Planned for v2. Current v1 uses single model per agent.
+
 ### Direct PDF Loading
 
 Currently, users must convert PDFs to markdown using external tools (marker, nougat) before loading into the system. The `load_paper_from_markdown()` function then parses the markdown and downloads embedded figures.

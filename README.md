@@ -272,6 +272,7 @@ This is an early version with several known limitations:
 | **Figure download from markdown** | ✅ `load_paper_from_markdown()` extracts and downloads figures automatically | N/A (implemented in v1) |
 | **Supplementary materials** | ✅ Supported via `supplementary_markdown_path` parameter | N/A (implemented in v1) |
 | **Long paper handling** | ✅ Warnings displayed for papers >50K chars; manual trimming recommended | Smart chunking/summarization |
+| **Single-model decisions** | Each agent uses one LLM model | Parallel multi-model consensus for critics/supervisors/planners |
 | **Single-threaded execution** | Stages run sequentially, not in parallel | Stage parallelization where dependencies allow |
 | **Optics/photonics focus** | Primarily tested on plasmonics/metamaterials papers | Domain expansion to other physics areas |
 | **Meep-only simulations** | Only supports Meep FDTD backend | Multi-backend support (COMSOL, Lumerical) |
