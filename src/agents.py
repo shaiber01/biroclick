@@ -262,6 +262,9 @@ def select_stage_node(state: ReproState) -> dict:
                 "execution_failure_count": 0,
                 "physics_failure_count": 0,
                 "analysis_revision_count": 0,
+                # Reset per-stage outputs (prevent stale data from previous stage)
+                "stage_outputs": {},
+                "run_error": None,
             }
     
     # Priority 2: Find not_started stages with satisfied dependencies
@@ -316,6 +319,9 @@ def select_stage_node(state: ReproState) -> dict:
             "execution_failure_count": 0,
             "physics_failure_count": 0,
             "analysis_revision_count": 0,
+            # Reset per-stage outputs (prevent stale data from previous stage)
+            "stage_outputs": {},
+            "run_error": None,
         }
     
     # No more stages to run

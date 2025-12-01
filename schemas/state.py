@@ -2843,3 +2843,95 @@ def update_progress_stage_status(
     return state
 
 
+def archive_stage_outputs_to_progress(
+    state: ReproState,
+    stage_id: str,
+    runtime_seconds: Optional[float] = None
+) -> ReproState:
+    """
+    Archive current stage_outputs to the progress entry for a stage.
+    
+    This should be called when a stage completes (success or partial) to persist
+    the output file references in progress before moving to the next stage.
+    
+    The stage_outputs field contains transient data that gets reset between stages.
+    This function copies the relevant parts to progress.stages[].outputs for
+    permanent storage.
+    
+    Args:
+        state: ReproState containing stage_outputs to archive
+        stage_id: Stage to update in progress
+        runtime_seconds: Optional runtime to record (from stage_outputs or passed directly)
+        
+    Returns:
+        The same state object (for chaining)
+        
+    Example:
+        >>> # After supervisor approves a stage as completed_success:
+        >>> archive_stage_outputs_to_progress(state, "stage1_single_disk")
+        >>> update_progress_stage_status(state, "stage1_single_disk", "completed_success")
+    """
+    progress = state.get("progress", {})
+    stages = progress.get("stages", [])
+    stage_outputs = state.get("stage_outputs", {})
+    
+    # Build outputs list from stage_outputs files
+    outputs = []
+    files = stage_outputs.get("files", [])
+    
+    for file_path in files:
+        # Create output entry matching progress_schema.json#/definitions/output
+        output_entry = {
+            "filename": file_path if isinstance(file_path, str) else file_path.get("path", str(file_path)),
+            "type": _infer_output_type(file_path),
+        }
+        outputs.append(output_entry)
+    
+    # Find and update the stage
+    for stage in stages:
+        if stage.get("stage_id") == stage_id:
+            stage["outputs"] = outputs
+            stage["last_updated"] = datetime.now().isoformat()
+            
+            # Record runtime if available
+            if runtime_seconds is not None:
+                stage["runtime_seconds"] = runtime_seconds
+            elif "runtime_seconds" in stage_outputs:
+                stage["runtime_seconds"] = stage_outputs["runtime_seconds"]
+            break
+    
+    return state
+
+
+def _infer_output_type(file_path: Any) -> str:
+    """
+    Infer output type from filename extension.
+    
+    Maps file extensions to output types defined in progress_schema.json.
+    """
+    if isinstance(file_path, dict):
+        file_path = file_path.get("path", "")
+    
+    path_str = str(file_path).lower()
+    
+    if path_str.endswith(".csv"):
+        if "spectrum" in path_str or "flux" in path_str:
+            return "spectrum_csv"
+        elif "dispersion" in path_str or "band" in path_str:
+            return "dispersion_csv"
+        return "data_csv"
+    elif path_str.endswith(".png") or path_str.endswith(".jpg") or path_str.endswith(".jpeg"):
+        if "spectrum" in path_str or "flux" in path_str:
+            return "spectrum_plot"
+        elif "field" in path_str:
+            return "field_plot"
+        return "plot_image"
+    elif path_str.endswith(".npz") or path_str.endswith(".npy"):
+        return "field_data"
+    elif path_str.endswith(".h5") or path_str.endswith(".hdf5"):
+        return "raw_h5"
+    elif path_str.endswith(".json"):
+        return "result_json"
+    
+    return "other"
+
