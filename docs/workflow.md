@@ -166,6 +166,8 @@ def select_next_stage(state):
 
 **Purpose**: Review design or code before proceeding
 
+**Why one agent for both reviews?** A single CodeReviewerAgent handles both design and code review because both tasks require the same technical expertise (Meep API knowledge, physics constraints, performance considerations). Splitting into two agents would add complexity without significant benefit since the review checklists share common quality criteria.
+
 **When reviewing DESIGN**:
 - [ ] Geometry matches paper interpretation
 - [ ] Materials correctly selected with sources
