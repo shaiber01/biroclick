@@ -90,6 +90,59 @@ paper_input = load_paper_from_markdown(
 )
 ```
 
+### Loading Supplementary Materials
+
+If your paper has separate supplementary materials (common for scientific papers), convert the SI PDF to markdown separately and provide both:
+
+```python
+# Convert both PDFs
+# $ marker_single paper.pdf --output_dir ./extracted/
+# $ marker_single supplementary.pdf --output_dir ./extracted/
+
+paper_input = load_paper_from_markdown(
+    markdown_path="./extracted/paper.md",
+    output_dir="./extracted/figures",
+    supplementary_markdown_path="./extracted/supplementary.md",  # Optional SI
+    paper_id="smith2023_plasmon"
+)
+```
+
+The loader will:
+- Load supplementary text into `paper_input['supplementary']['supplementary_text']`
+- Extract supplementary figures into `paper_input['supplementary']['supplementary_figures']`
+- Prefix supplementary figure IDs with "S" (e.g., "SFig1", "SFig2")
+
+### Handling Long Papers
+
+The loader automatically checks paper length and displays warnings:
+
+| Length | Status | Recommendation |
+|--------|--------|----------------|
+| < 50K chars | ✅ Normal | Most papers fit here |
+| 50-150K chars | ⚠️ Long | Consider trimming references |
+| > 150K chars | ⚠️ Very long | May hit context limits; trim non-essential sections |
+
+**Recommended trimming for long papers:**
+1. **References section** (20-30% of text, not needed for reproduction)
+2. **Acknowledgments** (not relevant)
+3. **Author contributions** (not relevant)
+4. **Detailed literature review** (keep only methodology-relevant citations)
+
+**Example output for a long paper:**
+```
+Paper loaded from markdown:
+  Title: Extended Review of Plasmonic Nanoantennas...
+  ID: review_plasmonics_2023
+  Main text: 180,432 chars (~45,108 tokens)
+  Supplementary text: 42,156 chars (~10,539 tokens)
+  Total: 222,588 chars (~55,647 tokens)
+  Main figures: 24
+  Supplementary figures: 8
+
+📏 Length warnings:
+  ⚠️  Main paper is long: 180,432 chars (~45,108 tokens). Consider trimming references section to reduce costs.
+```
+
 ### Saving for Reuse
 
 After loading, save the `PaperInput` to avoid re-downloading:
@@ -447,6 +500,9 @@ my_reproduction/
 | Wrong figure IDs | Alt text missing; manually rename or edit `paper_input.json` |
 | SVG/EPS figures | Convert to PNG for best vision model compatibility |
 | Duplicate figure IDs | Loader auto-appends `_1`, `_2`, etc. to duplicates |
+| Paper too long warning | Remove references, acknowledgments, or trim literature review |
+| Supplementary not loading | Check path is correct; ensure file exists |
+| SI figures mixed with main | SI figures are auto-prefixed with "S"; check `supplementary_figures` field |
 
 ### Text Extraction Issues
 

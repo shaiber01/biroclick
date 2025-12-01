@@ -857,12 +857,59 @@ def extract_paper_title(markdown_text: str) -> str:
     return "Untitled Paper"
 
 
+# ═══════════════════════════════════════════════════════════════════════
+# Paper Length Thresholds
+# ═══════════════════════════════════════════════════════════════════════
+
+# Character thresholds for paper length warnings
+PAPER_LENGTH_NORMAL = 50_000       # ~12,500 tokens - typical paper
+PAPER_LENGTH_LONG = 150_000        # ~37,500 tokens - long paper, consider trimming
+PAPER_LENGTH_VERY_LONG = 300_000   # ~75,000 tokens - very long, may hit context limits
+
+
+def estimate_tokens(text: str) -> int:
+    """Rough token estimate (~4 chars per token for English text)."""
+    return len(text) // 4
+
+
+def check_paper_length(text: str, label: str = "Paper") -> List[str]:
+    """
+    Check paper text length and return warnings if too long.
+    
+    Args:
+        text: The paper text to check
+        label: Label for the text (e.g., "Paper", "Supplementary")
+        
+    Returns:
+        List of warning strings (empty if length is normal)
+    """
+    warnings = []
+    char_count = len(text)
+    token_estimate = estimate_tokens(text)
+    
+    if char_count > PAPER_LENGTH_VERY_LONG:
+        warnings.append(
+            f"{label} is VERY LONG: {char_count:,} chars (~{token_estimate:,} tokens). "
+            f"This may exceed LLM context limits and significantly increase costs. "
+            f"Consider removing references, acknowledgments, or non-essential sections."
+        )
+    elif char_count > PAPER_LENGTH_LONG:
+        warnings.append(
+            f"{label} is long: {char_count:,} chars (~{token_estimate:,} tokens). "
+            f"Consider trimming references section to reduce costs."
+        )
+    
+    return warnings
+
+
 def load_paper_from_markdown(
     markdown_path: str,
     output_dir: str,
     paper_id: Optional[str] = None,
     paper_domain: str = "other",
     base_url: Optional[str] = None,
+    supplementary_markdown_path: Optional[str] = None,
+    supplementary_base_url: Optional[str] = None,
     download_figures: bool = True,
     figure_timeout: int = 30
 ) -> PaperInput:
@@ -883,12 +930,19 @@ def load_paper_from_markdown(
     - Vector: SVG (may need conversion for some vision models)
     - Scientific: EPS, PDF (may need conversion)
     
+    Paper Length Guidelines:
+    - < 50K chars: Normal (most papers)
+    - 50-150K chars: Long - consider trimming references
+    - > 150K chars: Very long - may exceed context limits, trim non-essential sections
+    
     Args:
         markdown_path: Path to the markdown file containing the paper
         output_dir: Directory to store downloaded figures
         paper_id: Optional paper ID (defaults to markdown filename)
         paper_domain: Domain classification for the paper
         base_url: Optional base URL for resolving relative URLs in markdown
+        supplementary_markdown_path: Optional path to supplementary materials markdown
+        supplementary_base_url: Optional base URL for supplementary figure URLs
         download_figures: Whether to download figures (if False, just extract info)
         figure_timeout: Timeout for figure downloads in seconds
         
@@ -908,6 +962,13 @@ def load_paper_from_markdown(
             paper_domain="plasmonics"
         )
         
+        # Load with supplementary materials
+        paper_input = load_paper_from_markdown(
+            markdown_path="papers/smith2023/paper.md",
+            output_dir="papers/smith2023/figures",
+            supplementary_markdown_path="papers/smith2023/supplementary.md"
+        )
+        
         # Load from markdown with remote image URLs needing a base URL
         paper_input = load_paper_from_markdown(
             markdown_path="papers/downloaded.md",
@@ -922,6 +983,10 @@ def load_paper_from_markdown(
     # Read markdown content
     with open(md_path, 'r', encoding='utf-8') as f:
         markdown_text = f.read()
+    
+    # Check paper length and collect warnings
+    length_warnings: List[str] = []
+    length_warnings.extend(check_paper_length(markdown_text, "Main paper"))
     
     # Generate paper_id from filename if not provided
     if paper_id is None:
@@ -940,11 +1005,11 @@ def load_paper_from_markdown(
     # Base path for resolving relative local paths
     md_base_path = md_path.parent
     
-    # Process figures
+    # Process main paper figures
     figures: List[Dict[str, Any]] = []
     download_errors: List[str] = []
     
-    print(f"Processing {len(figure_refs)} figure(s)...")
+    print(f"Processing {len(figure_refs)} main figure(s)...")
     
     for i, fig_ref in enumerate(figure_refs):
         fig_id = generate_figure_id(i, fig_ref['alt'], fig_ref['url'])
@@ -998,6 +1063,84 @@ def load_paper_from_markdown(
         
         figures.append(figure_entry)
     
+    # Process supplementary materials if provided
+    supplementary_text: Optional[str] = None
+    supplementary_figures: List[Dict[str, Any]] = []
+    supp_download_errors: List[str] = []
+    
+    if supplementary_markdown_path:
+        supp_path = Path(supplementary_markdown_path)
+        if not supp_path.exists():
+            print(f"\n⚠️  Supplementary file not found: {supplementary_markdown_path}")
+        else:
+            # Read supplementary markdown
+            with open(supp_path, 'r', encoding='utf-8') as f:
+                supplementary_text = f.read()
+            
+            # Check supplementary length
+            length_warnings.extend(check_paper_length(supplementary_text, "Supplementary"))
+            
+            # Extract supplementary figures
+            supp_figure_refs = extract_figures_from_markdown(supplementary_text)
+            supp_base_path = supp_path.parent
+            supp_base = supplementary_base_url or base_url  # Fall back to main base_url
+            
+            print(f"\nProcessing {len(supp_figure_refs)} supplementary figure(s)...")
+            
+            for i, fig_ref in enumerate(supp_figure_refs):
+                # Generate ID with "S" prefix for supplementary
+                fig_id = generate_figure_id(i, fig_ref['alt'], fig_ref['url'])
+                if not fig_id.upper().startswith('S'):
+                    fig_id = f"S{fig_id}"
+                
+                # Ensure unique IDs (check against both main and supp figures)
+                all_existing_ids = [f['id'] for f in figures] + [f['id'] for f in supplementary_figures]
+                base_id = fig_id
+                counter = 1
+                while fig_id in all_existing_ids:
+                    fig_id = f"{base_id}_{counter}"
+                    counter += 1
+                
+                # Resolve URL
+                resolved_url = resolve_figure_url(
+                    fig_ref['url'],
+                    base_path=supp_base_path,
+                    base_url=supp_base
+                )
+                
+                # Determine output filename
+                ext = get_file_extension(fig_ref['url'])
+                fig_filename = f"{fig_id}{ext}"
+                fig_output_path = output_path / fig_filename
+                
+                figure_entry = {
+                    'id': fig_id,
+                    'description': fig_ref['alt'] or "Supplementary figure",
+                    'image_path': str(fig_output_path),
+                    'source_url': fig_ref['url'],
+                }
+                
+                if ext not in VISION_MODEL_PREFERRED_FORMATS:
+                    figure_entry['format_warning'] = (
+                        f"Format {ext} may need conversion for optimal vision model performance."
+                    )
+                
+                if download_figures:
+                    try:
+                        download_figure(
+                            resolved_url,
+                            fig_output_path,
+                            timeout=figure_timeout,
+                            base_path=supp_base_path
+                        )
+                        print(f"  ✓ Downloaded {fig_id}: {fig_ref['url'][:60]}{'...' if len(fig_ref['url']) > 60 else ''}")
+                    except FigureDownloadError as e:
+                        supp_download_errors.append(f"{fig_id}: {e}")
+                        print(f"  ✗ Failed to download {fig_id}: {e}")
+                        figure_entry['download_error'] = str(e)
+                
+                supplementary_figures.append(figure_entry)
+    
     # Build PaperInput
     paper_input: Dict[str, Any] = {
         'paper_id': paper_id,
@@ -1007,24 +1150,55 @@ def load_paper_from_markdown(
         'figures': figures,
     }
     
+    # Add supplementary section if we have any supplementary content
+    if supplementary_text or supplementary_figures:
+        paper_input['supplementary'] = {}
+        if supplementary_text:
+            paper_input['supplementary']['supplementary_text'] = supplementary_text
+        if supplementary_figures:
+            paper_input['supplementary']['supplementary_figures'] = supplementary_figures
+    
+    # Combine all download errors for reporting
+    all_download_errors = download_errors + supp_download_errors
+    
+    # Calculate total text length and tokens
+    total_text_length = len(markdown_text)
+    if supplementary_text:
+        total_text_length += len(supplementary_text)
+    total_tokens = estimate_tokens(markdown_text)
+    if supplementary_text:
+        total_tokens += estimate_tokens(supplementary_text)
+    
     # Report results
     print(f"\n{'='*60}")
     print(f"Paper loaded from markdown:")
     print(f"  Title: {paper_title[:80]}{'...' if len(paper_title) > 80 else ''}")
     print(f"  ID: {paper_id}")
-    print(f"  Text length: {len(markdown_text):,} characters")
-    print(f"  Figures found: {len(figure_refs)}")
+    print(f"  Main text: {len(markdown_text):,} chars (~{estimate_tokens(markdown_text):,} tokens)")
+    if supplementary_text:
+        print(f"  Supplementary text: {len(supplementary_text):,} chars (~{estimate_tokens(supplementary_text):,} tokens)")
+    print(f"  Total: {total_text_length:,} chars (~{total_tokens:,} tokens)")
+    print(f"  Main figures: {len(figures)}")
+    if supplementary_figures:
+        print(f"  Supplementary figures: {len(supplementary_figures)}")
     if download_figures:
-        successful = len(figures) - len(download_errors)
-        print(f"  Figures downloaded: {successful}/{len(figures)}")
+        total_figs = len(figures) + len(supplementary_figures)
+        successful = total_figs - len(all_download_errors)
+        print(f"  Figures downloaded: {successful}/{total_figs}")
     print(f"{'='*60}")
     
-    if download_errors:
-        print(f"\n⚠️  {len(download_errors)} figure(s) failed to download:")
-        for err in download_errors[:5]:  # Show first 5 errors
+    # Display length warnings
+    if length_warnings:
+        print(f"\n📏 Length warnings:")
+        for w in length_warnings:
+            print(f"  ⚠️  {w}")
+    
+    if all_download_errors:
+        print(f"\n⚠️  {len(all_download_errors)} figure(s) failed to download:")
+        for err in all_download_errors[:5]:  # Show first 5 errors
             print(f"    - {err}")
-        if len(download_errors) > 5:
-            print(f"    ... and {len(download_errors) - 5} more")
+        if len(all_download_errors) > 5:
+            print(f"    ... and {len(all_download_errors) - 5} more")
     
     # Validate (will raise if critical errors)
     warnings = validate_paper_input(paper_input)
@@ -1076,7 +1250,7 @@ if __name__ == "__main__":
 Usage:
     from src.paper_loader import load_paper_from_markdown
     
-    # Load from local markdown with relative image paths
+    # Basic: Load from local markdown with relative image paths
     paper_input = load_paper_from_markdown(
         markdown_path="papers/smith2023/paper.md",
         output_dir="papers/smith2023/figures",
@@ -1084,7 +1258,15 @@ Usage:
         paper_domain="plasmonics"
     )
     
-    # Load with a base URL for remote relative images
+    # With supplementary materials (separate SI PDF converted to markdown)
+    paper_input = load_paper_from_markdown(
+        markdown_path="papers/smith2023/paper.md",
+        output_dir="papers/smith2023/figures",
+        supplementary_markdown_path="papers/smith2023/supplementary.md",
+        paper_id="smith2023_plasmon"
+    )
+    
+    # With a base URL for remote relative images
     paper_input = load_paper_from_markdown(
         markdown_path="papers/downloaded.md",
         output_dir="papers/figures",
@@ -1093,9 +1275,18 @@ Usage:
 
 Supported image formats: {}
 Preferred for vision models: {}
+
+Paper length thresholds:
+    < {:,} chars: Normal (most papers)
+    {:,}-{:,} chars: Long - consider trimming references
+    > {:,} chars: Very long - may exceed context limits
 """.format(
         ', '.join(sorted(SUPPORTED_IMAGE_FORMATS.keys())),
-        ', '.join(sorted(VISION_MODEL_PREFERRED_FORMATS))
+        ', '.join(sorted(VISION_MODEL_PREFERRED_FORMATS)),
+        PAPER_LENGTH_NORMAL,
+        PAPER_LENGTH_NORMAL,
+        PAPER_LENGTH_LONG,
+        PAPER_LENGTH_LONG
     ))
 
 
