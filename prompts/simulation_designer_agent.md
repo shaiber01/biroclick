@@ -166,6 +166,18 @@ MATERIAL MODEL SELECTION:
    If simulation resonance is shifted from paper, 
    material data is the FIRST suspect. Document which data you used.
 
+6. USING VALIDATED MATERIALS (from Stage 0)
+   After Stage 0 material validation, check state.validated_materials for 
+   approved materials. Each entry contains:
+   - material_id: Unique ID (e.g., "palik_gold")
+   - path: CSV file path (e.g., "materials/palik_gold.csv")
+   - drude_lorentz_fit: Drude-Lorentz parameters for Meep model
+   - wavelength_range_nm: Valid wavelength range
+   
+   ALWAYS reference materials by material_id in your design.
+   If a material you need is NOT in validated_materials, flag it as an
+   assumption that needs validation.
+
 ═══════════════════════════════════════════════════════════════════════
 D. RESOLUTION GUIDELINES
 ═══════════════════════════════════════════════════════════════════════

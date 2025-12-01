@@ -29,16 +29,20 @@ The first implementation targets a minimal vertical slice to validate the archit
 - **Mandatory material checkpoint**: Explicit `material_checkpoint` node after Stage 0 requiring user confirmation
 - **Cross-stage backtracking**: `handle_backtrack` node for invalidating and re-running stages
 - **Single source of truth**: Validation hierarchy computed from progress (not stored separately)
+- **Context management**: `context_budget` tracking in state for loop context estimation
+- **Metrics pipeline**: Token usage tracking via `metrics` field in state
+- **Physics-driven redesign**: `design_flaw` verdict routes physics failures to design (not code)
+- **Validated materials handoff**: `validated_materials` field passed from Stage 0 to all subsequent stages
+- **Output artifact specs**: `expected_outputs` in stage schema for consistent file naming
+- **Digitized data enforcement**: Targets requiring <2% precision must have digitized data paths
 - Basic error handling (max 3 revisions, then escalate)
 - Simple report generation
 
-**Deferred to v1.1+:**
-- Full context management (`estimate_loop_context_tokens`)
-- Rich metrics pipeline and detailed token tracking
+**Out of scope for v0 (true deferrals):**
 - Multi-paper batch processing
-- Prompt adaptation agent customizations
-- Parameter sweep stages
-- Advanced comparison validation
+- Prompt adaptation agent customizations (PromptAdaptorAgent is stub-only)
+- Parameter sweep stages (only Stage 0 + Stage 1 single structure)
+- Advanced comparison validation refinements
 
 ## Overview
 
@@ -451,9 +455,9 @@ The code execution sandbox (`src/code_runner.py`) uses subprocess isolation with
 
 **Future (v2)**: Full container-based isolation with network disabled at container level.
 
-## Current Limitations (v1)
+## Current Limitations (v0)
 
-This is an early version with several known limitations:
+These are implementation quality limitations, not missing features. All features in "MVP Scope (v0)" are fully designed and wired into the system:
 
 | Limitation | Description | Future Plan |
 |------------|-------------|-------------|

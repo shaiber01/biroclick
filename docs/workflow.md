@@ -9,20 +9,115 @@ This document describes the LangGraph workflow for paper reproduction.
 
 The system uses a state graph where each node represents an agent action or system operation. State flows through the graph, accumulating results and tracking progress.
 
-## Agent Summary (10 Agents)
+## Agent Summary (12 Agents)
 
 | Agent | Node | Role |
 |-------|------|------|
 | PromptAdaptorAgent | adapt_prompts | Customizes prompts for paper-specific needs |
 | PlannerAgent | plan | Reads paper, creates staged plan |
+| PlanReviewerAgent | plan_review | Reviews reproduction plan before stage execution |
 | SimulationDesignerAgent | design | Designs simulation setup |
-| CodeReviewerAgent | CODE_REVIEW | Reviews design and code |
+| DesignReviewerAgent | design_review | Reviews simulation design before code generation |
 | CodeGeneratorAgent | generate_code | Writes Python+Meep code |
-| ExecutionValidatorAgent | EXECUTION_CHECK | Validates simulation ran correctly |
+| CodeReviewerAgent | code_review | Reviews generated code before execution |
+| ExecutionValidatorAgent | execution_check | Validates simulation ran correctly |
 | PhysicsSanityAgent | physics_check | Validates physics (conservation, value ranges) |
 | ResultsAnalyzerAgent | analyze | Compares results to paper |
-| ComparisonValidatorAgent | COMPARISON_CHECK | Validates comparison accuracy |
+| ComparisonValidatorAgent | comparison_check | Validates comparison accuracy |
 | SupervisorAgent | supervisor | Big-picture decisions |
+
+## Data Ownership Matrix
+
+Clear ownership of state artifacts prevents conflicts and ensures single source of truth:
+
+| Artifact | Created By | Updated By | Read By |
+|----------|------------|------------|---------|
+| `plan` | PlannerAgent | Never (immutable after approval) | All agents |
+| `assumptions` | PlannerAgent (initial) | SupervisorAgent (user corrections) | All agents |
+| `progress` | select_stage_node (init) | All validators, supervisor | SupervisorAgent, Report |
+| `validated_materials` | material_checkpoint_node | Never (immutable) | CodeGeneratorAgent |
+| `code` | CodeGeneratorAgent | CodeGeneratorAgent (revisions) | CodeReviewerAgent, ExecutionValidator |
+| `design_description` | SimulationDesignerAgent | SimulationDesignerAgent (revisions) | DesignReviewerAgent, CodeGenerator |
+| `stage_outputs` | code_runner | Never | ResultsAnalyzer, PhysicsSanity |
+| `extracted_parameters` | PlannerAgent | sync_extracted_parameters() | All agents |
+| `validation_hierarchy` | Computed via get_validation_hierarchy() | N/A (derived) | SupervisorAgent |
+
+**Ownership Rules:**
+- **"Created By"** agent is the authoritative source for that data
+- **"Updated By"** agents can modify only via defined mechanisms (e.g., user corrections via Supervisor)
+- **"Never"** means immutable after initial creation - modifications require new creation
+- **Computed** fields are derived on-demand and never stored directly
+
+## Agent Call Pattern
+
+All agent nodes follow this standardized pattern to ensure consistency and schema compliance:
+
+### 1. Input Assembly
+
+Each agent reads only the state fields it needs (defined in `NODE_REQUIREMENTS` in `state.py`):
+
+```python
+def agent_node(state: ReproState) -> dict:
+    # Read only the fields this agent needs
+    context = {
+        "paper_id": state["paper_id"],
+        "plan": state.get("plan", {}),
+        "current_stage_id": state.get("current_stage_id"),
+        # ... agent-specific fields from NODE_REQUIREMENTS
+    }
+```
+
+### 2. LLM Call with Schema-Based Function Calling
+
+All agents use structured output via JSON schemas (no free-form text parsing):
+
+```python
+    # Load agent's output schema from schemas/*_output_schema.json
+    schema = load_output_schema("agent_name")
+    
+    # Build prompt from template + context
+    prompt = build_prompt("agent_name", context)
+    
+    # Call LLM with function calling (schema enforced)
+    response = llm.invoke(prompt, tools=[schema])
+```
+
+### 3. Validate and Merge
+
+Return only the fields this agent is allowed to update (per Ownership Matrix):
+
+```python
+    # Response is already validated against schema by LLM
+    output = response.tool_calls[0].args
+    
+    # Return only the fields this agent is allowed to update
+    return {
+        "field_to_update": output["field"],
+        "another_field": output["other"],
+    }
+```
+
+### Output Schema Files
+
+Each agent has a corresponding schema in `schemas/`:
+
+| Agent | Schema File |
+|-------|-------------|
+| SupervisorAgent | `supervisor_output_schema.json` |
+| PlanReviewerAgent | `plan_reviewer_output_schema.json` |
+| DesignReviewerAgent | `design_reviewer_output_schema.json` |
+| CodeReviewerAgent | `code_reviewer_output_schema.json` |
+| ResultsAnalyzerAgent | `results_analyzer_output_schema.json` |
+| ExecutionValidatorAgent | `execution_validator_output_schema.json` |
+| PhysicsSanityAgent | `physics_sanity_output_schema.json` |
+| ComparisonValidatorAgent | `comparison_validator_output_schema.json` |
+
+### Benefits of This Pattern
+
+1. **No parsing failures**: LLM outputs are validated against schema at call time
+2. **Clear contracts**: Each agent has explicit input fields and output schema
+3. **Easy debugging**: Schema violations surface immediately
+4. **Consistent structure**: All agents follow the same pattern
 
 ## Node Definitions
 
@@ -1943,7 +2038,8 @@ Each agent receives **only what it needs** - not full repo access. This section 
 | `user_responses` | `state["user_responses"]` | Current user answers (question→response) |
 | `user_interactions` | `state["user_interactions"]` | Full log of user decisions |
 | `pending_user_questions` | `state["pending_user_questions"]` | Outstanding questions |
-| `resume_context` | Computed | What triggered last ask_user and why |
+| `ask_user_trigger` | `state["ask_user_trigger"]` | What triggered last ask_user (e.g., "material_checkpoint") |
+| `last_node_before_ask_user` | `state["last_node_before_ask_user"]` | Which node triggered the interrupt |
 
 **Does NOT receive**: Full paper text, raw code, raw data files.
 
@@ -2024,7 +2120,8 @@ def build_agent_context(state: ReproState, agent: str) -> Dict[str, Any]:
             "user_responses": state.get("user_responses", {}),
             "user_interactions": state.get("user_interactions", []),
             "pending_user_questions": state.get("pending_user_questions", []),
-            "resume_context": _compute_resume_context(state),
+            "ask_user_trigger": state.get("ask_user_trigger"),
+            "last_node_before_ask_user": state.get("last_node_before_ask_user"),
         }
     
     # ... other agents ...
@@ -2047,14 +2144,6 @@ def _compute_replan_reason(state: ReproState) -> str:
     return " | ".join(reasons) if reasons else "Replanning requested"
 
 
-def _compute_resume_context(state: ReproState) -> Dict[str, Any]:
-    """Compute context about what triggered ask_user and where to resume."""
-    return {
-        "triggered_by": state.get("ask_user_trigger", "unknown"),
-        "pending_questions_count": len(state.get("pending_user_questions", [])),
-        "has_new_responses": bool(state.get("user_responses")),
-        "last_node_before_ask": state.get("last_node_before_ask_user"),
-    }
 ```
 
 ---

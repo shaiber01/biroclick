@@ -325,24 +325,41 @@ def _extract_validated_materials(state: ReproState) -> list:
     """
     Extract material information from plan and build validated_materials list.
     
-    Scans extracted_parameters for material-related entries and maps them
-    to file paths in the materials/ directory.
+    Uses materials/index.json as the authoritative source for material data.
+    Scans extracted_parameters for material-related entries and matches them
+    against material_id values in the index.
     
     Returns:
-        List of dicts: [{"material": "gold", "source": "palik", "path": "materials/palik_gold.csv"}]
+        List of dicts with material_id, data_file, drude_lorentz_fit, etc.
     """
+    import json
     import os
     
     plan = state.get("plan", {})
     extracted_params = plan.get("extracted_parameters", [])
     assumptions = state.get("assumptions", {})
     
-    validated_materials = []
-    seen_materials = set()
+    # Load material database
+    material_db = _load_material_database()
+    if not material_db:
+        return []
     
-    # Known material databases and their naming conventions
-    KNOWN_SOURCES = ["palik", "johnson_christy", "rakic", "malitson"]
-    KNOWN_MATERIALS = ["gold", "silver", "aluminum", "silicon", "sio2", "glass"]
+    # Build lookup tables from material database
+    material_lookup = {}
+    for mat in material_db.get("materials", []):
+        mat_id = mat.get("material_id", "")
+        material_lookup[mat_id] = mat
+        
+        # Also index by simple name (e.g., "silver" -> "palik_silver")
+        # Extract simple name from material_id (e.g., "palik_silver" -> "silver")
+        parts = mat_id.split("_")
+        if len(parts) >= 2:
+            simple_name = parts[-1]  # e.g., "silver", "gold", "aluminum"
+            if simple_name not in material_lookup:
+                material_lookup[simple_name] = mat
+    
+    validated_materials = []
+    seen_material_ids = set()
     
     # Scan extracted parameters for material info
     for param in extracted_params:
@@ -350,33 +367,14 @@ def _extract_validated_materials(state: ReproState) -> list:
         value = str(param.get("value", "")).lower()
         
         # Look for material-related parameters
-        if "material" in name or any(mat in name for mat in KNOWN_MATERIALS):
-            material = None
-            source = "palik"  # Default source
-            
-            # Try to identify the material
-            for mat in KNOWN_MATERIALS:
-                if mat in value or mat in name:
-                    material = mat
-                    break
-            
-            # Try to identify the source
-            for src in KNOWN_SOURCES:
-                if src in value.lower():
-                    source = src
-                    break
-            
-            if material and material not in seen_materials:
-                # Construct file path
-                path = f"materials/{source}_{material}.csv"
-                
-                validated_materials.append({
-                    "material": material,
-                    "source": source,
-                    "path": path,
-                    "from_parameter": param.get("name"),
-                })
-                seen_materials.add(material)
+        if "material" in name:
+            matched_material = _match_material_from_text(value, material_lookup)
+            if matched_material and matched_material["material_id"] not in seen_material_ids:
+                validated_materials.append(_format_validated_material(
+                    matched_material, 
+                    from_source=f"parameter: {param.get('name')}"
+                ))
+                seen_material_ids.add(matched_material["material_id"])
     
     # Also check assumptions for material choices
     global_assumptions = assumptions.get("global_assumptions", {})
@@ -385,23 +383,78 @@ def _extract_validated_materials(state: ReproState) -> list:
     for assumption in material_assumptions:
         if isinstance(assumption, dict):
             desc = assumption.get("description", "").lower()
-            for mat in KNOWN_MATERIALS:
-                if mat in desc and mat not in seen_materials:
-                    source = "palik"
-                    for src in KNOWN_SOURCES:
-                        if src in desc:
-                            source = src
-                            break
-                    
-                    validated_materials.append({
-                        "material": mat,
-                        "source": source,
-                        "path": f"materials/{source}_{mat}.csv",
-                        "from_assumption": assumption.get("description"),
-                    })
-                    seen_materials.add(mat)
+            matched_material = _match_material_from_text(desc, material_lookup)
+            if matched_material and matched_material["material_id"] not in seen_material_ids:
+                validated_materials.append(_format_validated_material(
+                    matched_material,
+                    from_source=f"assumption: {assumption.get('description', '')[:50]}"
+                ))
+                seen_material_ids.add(matched_material["material_id"])
     
     return validated_materials
+
+
+def _load_material_database() -> dict:
+    """Load materials/index.json database."""
+    import json
+    import os
+    
+    index_path = os.path.join(os.path.dirname(__file__), "..", "materials", "index.json")
+    if not os.path.exists(index_path):
+        # Try relative to current working directory
+        index_path = "materials/index.json"
+    
+    try:
+        with open(index_path, "r") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        print(f"Warning: Could not load materials/index.json: {e}")
+        return {}
+
+
+def _match_material_from_text(text: str, material_lookup: dict) -> dict:
+    """
+    Match material name from text against material database.
+    
+    Returns the best matching material entry or None.
+    """
+    text_lower = text.lower()
+    
+    # Priority 1: Exact material_id match (e.g., "palik_gold")
+    for mat_id, mat_entry in material_lookup.items():
+        if mat_id in text_lower:
+            return mat_entry
+    
+    # Priority 2: Simple material name match (e.g., "gold", "silver")
+    simple_names = ["gold", "silver", "aluminum", "silicon", "sio2", "glass", "water", "air"]
+    for name in simple_names:
+        if name in text_lower:
+            # Find the best match in lookup (prefer entries with csv_available=true)
+            candidates = [v for k, v in material_lookup.items() if name in k]
+            csv_available = [c for c in candidates if c.get("csv_available", False)]
+            if csv_available:
+                return csv_available[0]
+            elif candidates:
+                return candidates[0]
+    
+    return None
+
+
+def _format_validated_material(mat_entry: dict, from_source: str) -> dict:
+    """Format a material database entry for validated_materials list."""
+    data_file = mat_entry.get("data_file")
+    path = f"materials/{data_file}" if data_file else None
+    
+    return {
+        "material_id": mat_entry.get("material_id"),
+        "name": mat_entry.get("name"),
+        "source": mat_entry.get("source"),
+        "path": path,
+        "csv_available": mat_entry.get("csv_available", False),
+        "drude_lorentz_fit": mat_entry.get("drude_lorentz_fit"),
+        "wavelength_range_nm": mat_entry.get("wavelength_range_nm"),
+        "from": from_source,
+    }
 
 
 def _format_material_checkpoint_question(

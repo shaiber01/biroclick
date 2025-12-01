@@ -181,7 +181,8 @@ You will receive:
 5. user_responses - Current user answers (question→response mapping)
 6. user_interactions - Full log of all user decisions/feedback
 7. pending_user_questions - Any outstanding questions
-8. resume_context - What triggered the last ask_user and why
+8. ask_user_trigger - What caused the last ask_user (e.g., "material_checkpoint")
+9. last_node_before_ask_user - Which node triggered the interrupt
 
 Focus on:
 - progress.stages[*].status - Are validation stages passing?
@@ -200,10 +201,10 @@ C2. HANDLING USER FEEDBACK AND RESUME SCENARIOS
 
 When you receive user feedback (after an ask_user interrupt), you must:
 
-1. CHECK `resume_context`:
-   - `triggered_by`: What caused the ask_user (e.g., "code_review_limit", 
+1. CHECK `ask_user_trigger` and `last_node_before_ask_user`:
+   - `ask_user_trigger`: What caused the ask_user (e.g., "code_review_limit", 
      "material_checkpoint", "ambiguous_parameter")
-   - `last_node_before_ask`: Where in the workflow we paused
+   - `last_node_before_ask_user`: Where in the workflow we paused
    - This tells you WHAT the user was responding to
 
 2. READ `user_responses` and `user_interactions`:
@@ -229,10 +230,8 @@ When you receive user feedback (after an ask_user interrupt), you must:
 
 Example resume scenario:
 ```
-resume_context: {
-  "triggered_by": "code_review_limit",
-  "last_node_before_ask": "code_review"
-}
+ask_user_trigger: "code_review_limit"
+last_node_before_ask_user: "code_review"
 user_responses: {
   "Code failed 3 times with memory error. How to proceed?": 
     "Reduce resolution to 20 pixels/wavelength for now."
