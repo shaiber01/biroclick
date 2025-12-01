@@ -89,9 +89,14 @@
       "description": "Explanation of why this classification was chosen"
     },
     "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Confidence in the analysis (0.0-1.0). HIGH: 0.8-1.0, MEDIUM: 0.5-0.8, LOW: 0.0-0.5"
+    },
+    "confidence_reason": {
       "type": "string",
-      "enum": ["high", "medium", "low"],
-      "description": "Confidence in the analysis"
+      "description": "One sentence explaining the main factors affecting confidence"
     },
     "confidence_factors": {
       "type": "array",
