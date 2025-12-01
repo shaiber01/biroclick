@@ -45,6 +45,14 @@
           "description": "Known systematic shifts that affect multiple results"
         }
       }
+    },
+    
+    "user_interactions": {
+      "type": "array",
+      "description": "Log of all user decisions and feedback during reproduction",
+      "items": {
+        "$ref": "#/definitions/user_interaction"
+      }
     }
   },
   
@@ -190,6 +198,63 @@
         "blocking": {
           "type": "boolean",
           "description": "Whether this blocks further progress"
+        }
+      }
+    },
+    
+    "user_interaction": {
+      "type": "object",
+      "required": ["id", "timestamp", "interaction_type", "context"],
+      "description": "A logged user decision or feedback during reproduction",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique interaction ID (e.g., 'U1', 'U2')"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the interaction occurred"
+        },
+        "interaction_type": {
+          "type": "string",
+          "enum": ["material_checkpoint", "clarification", "trade_off_decision", "parameter_confirmation", "stop_decision", "backtrack_approval", "general_feedback"],
+          "description": "Type of user interaction"
+        },
+        "context": {
+          "type": "object",
+          "description": "Context when user was asked",
+          "properties": {
+            "stage_id": {
+              "type": ["string", "null"],
+              "description": "Stage during which interaction occurred"
+            },
+            "agent": {
+              "type": "string",
+              "description": "Agent that triggered the interaction (e.g., 'SupervisorAgent')"
+            },
+            "reason": {
+              "type": "string",
+              "description": "Why user input was requested"
+            }
+          }
+        },
+        "question": {
+          "type": "string",
+          "description": "Question posed to user"
+        },
+        "user_response": {
+          "type": "string",
+          "description": "User's response/decision"
+        },
+        "impact": {
+          "type": "string",
+          "description": "How this decision affected the reproduction (e.g., 'Proceeded with Palik Al data')"
+        },
+        "alternatives_considered": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Other options that were presented to user"
         }
       }
     }
@@ -346,7 +411,45 @@
       "systematic_shifts_identified": [
         "~4% red-shift from 2D approximation (affects all resonance wavelengths)"
       ]
-    }
+    },
+    
+    "user_interactions": [
+      {
+        "id": "U1",
+        "timestamp": "2025-11-29T10:05:00Z",
+        "interaction_type": "material_checkpoint",
+        "context": {
+          "stage_id": "stage0_material_validation",
+          "agent": "SupervisorAgent",
+          "reason": "Mandatory material validation checkpoint after Stage 0"
+        },
+        "question": "Material Validation Checkpoint: Al optical properties from Palik show n=0.5-1.2, k=5-8 in 400-800nm range. J-aggregate absorption peak at 589nm (paper: 590nm). Do you approve these materials for simulation?",
+        "user_response": "Approved. Palik Al data is appropriate for this wavelength range.",
+        "impact": "Proceeded with Palik Al optical constants for all subsequent stages",
+        "alternatives_considered": [
+          "Johnson-Christy Al data",
+          "Rakic Al model"
+        ]
+      },
+      {
+        "id": "U2",
+        "timestamp": "2025-11-29T10:20:00Z",
+        "interaction_type": "trade_off_decision",
+        "context": {
+          "stage_id": "stage1_single_disk",
+          "agent": "SupervisorAgent",
+          "reason": "4% wavelength shift observed; user decision needed on acceptable tolerance"
+        },
+        "question": "Stage 1 shows 4% red-shift in resonance wavelength (540nm vs paper 520nm). This is likely due to 2D approximation. Options: (A) Accept and proceed, documenting as systematic shift. (B) Switch to 3D simulation (10x slower). (C) Try alternative material data.",
+        "user_response": "Option A - Accept the 4% shift as a known limitation of 2D simulations. Document it and proceed.",
+        "impact": "Accepted ~4% systematic shift; all subsequent resonance comparisons account for this offset",
+        "alternatives_considered": [
+          "Switch to 3D simulation",
+          "Try Rakic Al model",
+          "Adjust geometry parameters"
+        ]
+      }
+    ]
   }
 }
 

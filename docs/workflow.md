@@ -518,7 +518,7 @@ def handle_backtrack(state):
 
 ### 14. ASK_USER Node
 
-**Purpose**: Pause for user input
+**Purpose**: Pause for user input and log decisions
 
 **Triggers**:
 - **Material validation checkpoint** (MANDATORY after Stage 0)
@@ -526,13 +526,47 @@ def handle_backtrack(state):
 - Ambiguous paper information
 - Trade-off decisions needed
 - Domain expertise required
+- Backtrack approval needed
 
 **Behavior**:
 1. Set `awaiting_user_input = True`
 2. Populate `pending_user_questions`
 3. Pause graph execution
 4. Wait for `user_responses` to be filled
-5. Resume to appropriate node
+5. **Log user interaction** to `user_interactions` list
+6. Update `progress["user_interactions"]` for persistence
+7. Resume to appropriate node
+
+**User Interaction Logging**:
+```python
+def log_user_interaction(state, question, response, interaction_type):
+    interaction = {
+        "id": f"U{len(state['user_interactions']) + 1}",
+        "timestamp": datetime.now().isoformat(),
+        "interaction_type": interaction_type,  # e.g., "material_checkpoint", "trade_off_decision"
+        "context": {
+            "stage_id": state.get("current_stage_id"),
+            "agent": "SupervisorAgent",
+            "reason": state.get("supervisor_feedback", "User input required")
+        },
+        "question": question,
+        "user_response": response,
+        "impact": "",  # Filled after decision is applied
+        "alternatives_considered": []
+    }
+    state["user_interactions"].append(interaction)
+```
+
+**Interaction Types**:
+| Type | When Used |
+|------|-----------|
+| `material_checkpoint` | Mandatory Stage 0 approval |
+| `clarification` | Ambiguous paper information |
+| `trade_off_decision` | Accuracy vs runtime, 2D vs 3D, etc. |
+| `parameter_confirmation` | Key parameter values |
+| `stop_decision` | Whether to stop reproduction |
+| `backtrack_approval` | Approving suggested backtrack |
+| `general_feedback` | Other user input |
 
 ---
 

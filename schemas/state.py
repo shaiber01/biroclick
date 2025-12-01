@@ -154,6 +154,33 @@ class ValidationHierarchyStatus(TypedDict):
     parameter_sweeps: str
 
 
+class UserInteractionContext(TypedDict, total=False):
+    """Context information for a user interaction."""
+    stage_id: Optional[str]
+    agent: str
+    reason: str
+
+
+class UserInteraction(TypedDict):
+    """
+    A logged user decision or feedback during reproduction.
+    
+    User interactions are important to track because:
+    - They document key decisions that affected the reproduction
+    - They provide context for why certain approaches were taken
+    - They help in reproducing the reproduction (meta-reproducibility)
+    - They inform future system improvements
+    """
+    id: str  # Unique ID (e.g., "U1", "U2")
+    timestamp: str  # ISO 8601
+    interaction_type: str  # material_checkpoint | clarification | trade_off_decision | parameter_confirmation | stop_decision | backtrack_approval | general_feedback
+    context: UserInteractionContext
+    question: str  # Question posed to user
+    user_response: str  # User's response/decision
+    impact: NotRequired[str]  # How this affected the reproduction
+    alternatives_considered: NotRequired[List[str]]  # Other options presented
+
+
 class AgentCallMetric(TypedDict):
     """Metrics for a single agent call."""
     agent: str
@@ -299,8 +326,9 @@ class ReproState(TypedDict, total=False):
     
     # ─── User Interaction ───────────────────────────────────────────────
     pending_user_questions: List[str]
-    user_responses: Dict[str, str]  # question → response
+    user_responses: Dict[str, str]  # question → response (current session)
     awaiting_user_input: bool
+    user_interactions: List[UserInteraction]  # Full log of all user decisions/feedback
     
     # ─── Report Generation ──────────────────────────────────────────────
     figure_comparisons: List[FigureComparison]  # All figure comparisons
@@ -407,6 +435,7 @@ def create_initial_state(
         pending_user_questions=[],
         user_responses={},
         awaiting_user_input=False,
+        user_interactions=[],  # Log of all user decisions/feedback
         
         # Report generation
         figure_comparisons=[],
