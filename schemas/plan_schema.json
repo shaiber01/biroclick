@@ -162,12 +162,12 @@
             "type": "string",
             "enum": ["excellent", "good", "acceptable", "qualitative"],
             "default": "good",
-            "description": "Required precision: excellent (<2%), good (<5%), acceptable (<10%), qualitative (visual only)"
+            "description": "Required precision: excellent (<2%), good (<5%), acceptable (<10%), qualitative (visual only). ENFORCED RULE: 'excellent' requires digitized_data_path to be set."
           },
           "digitized_data_path": {
             "type": ["string", "null"],
             "default": null,
-            "description": "[DEFERRED TO V2] Path to CSV/JSON of digitized (x,y) points. Auto-digitization not yet implemented. Can be provided manually if available."
+            "description": "Path to CSV/JSON of digitized (x,y) reference points. REQUIRED if precision_requirement='excellent'. Validated by validate_plan_targets_precision() - plans with 'excellent' precision but no digitized data will be rejected. Can be created using WebPlotDigitizer."
           }
         }
       }

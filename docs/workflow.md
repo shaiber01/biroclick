@@ -33,8 +33,10 @@ Clear ownership of state artifacts prevents conflicts and ensures single source 
 | Artifact | Created By | Updated By | Read By |
 |----------|------------|------------|---------|
 | `plan` | PlannerAgent | Never (immutable after approval) | All agents |
-| `assumptions` | PlannerAgent (initial) | SupervisorAgent (user corrections) | All agents |
+| `plan["stages"]` | PlannerAgent | Never | Use `get_plan_stage()` to look up design specs |
 | `progress` | select_stage_node (init) | All validators, supervisor | SupervisorAgent, Report |
+| `progress["stages"]` | initialize_progress_from_plan() | All stage executors | Reference plan by stage_id for design specs |
+| `assumptions` | PlannerAgent (initial) | SupervisorAgent (user corrections) | All agents |
 | `validated_materials` | material_checkpoint_node | Never (immutable) | CodeGeneratorAgent |
 | `code` | CodeGeneratorAgent | CodeGeneratorAgent (revisions) | CodeReviewerAgent, ExecutionValidator |
 | `design_description` | SimulationDesignerAgent | SimulationDesignerAgent (revisions) | DesignReviewerAgent, CodeGenerator |
@@ -47,6 +49,36 @@ Clear ownership of state artifacts prevents conflicts and ensures single source 
 - **"Updated By"** agents can modify only via defined mechanisms (e.g., user corrections via Supervisor)
 - **"Never"** means immutable after initial creation - modifications require new creation
 - **Computed** fields are derived on-demand and never stored directly
+
+### Plan vs Progress Separation
+
+**Critical Design Principle**: Plan stages and progress stages serve different purposes:
+
+| Aspect | `plan["stages"]` | `progress["stages"]` |
+|--------|------------------|---------------------|
+| **Contains** | Design specs (WHAT should happen) | Execution state (WHAT did happen) |
+| **Mutability** | Immutable after approval | Mutable during execution |
+| **Fields** | expected_outputs, validation_criteria, runtime_budget_minutes, complexity_class | status, outputs, discrepancies, runtime_seconds, issues |
+| **Access** | `get_plan_stage(state, stage_id)` | `get_progress_stage(state, stage_id)` |
+
+**Why This Matters:**
+- **No duplication**: Design specs exist only in plan, not copied to progress
+- **No drift risk**: Can't have progress.expected_outputs diverge from plan.expected_outputs
+- **Clear semantics**: Plan = contract, Progress = execution log
+
+**Usage Pattern:**
+```python
+# WRONG: Looking for expected_outputs in progress (won't exist)
+progress_stage = get_progress_stage(state, "stage1")
+outputs = progress_stage.get("expected_outputs", [])  # ❌ Empty!
+
+# CORRECT: Get design specs from plan, execution state from progress
+plan_stage = get_plan_stage(state, "stage1")
+expected = plan_stage.get("expected_outputs", [])  # ✅ Design spec
+
+progress_stage = get_progress_stage(state, "stage1")
+actual = progress_stage.get("outputs", [])  # ✅ What was produced
+```
 
 ## Agent Call Pattern
 
@@ -220,13 +252,17 @@ def select_next_stage(state):
     
     # ─── PRIORITY 3: Normal stage selection ──────────────────────────────
     # Check validation hierarchy first (uses canonical names from ValidationHierarchyStatus)
-    hierarchy = state["validation_hierarchy"]
+    hierarchy = get_validation_hierarchy(state)  # Computed from progress["stages"]
     if hierarchy["material_validation"] != "passed":
         # Cannot proceed past Stage 0 without material validation
         return "stage0_material_validation"
     
     # Check runtime budget
     budget_remaining = state.get("runtime_budget_remaining_seconds", float("inf"))
+    
+    # Build set of stage types that exist in this paper's plan
+    # This enables paper-dependent hierarchy (not all papers have all stage types)
+    plan_stage_types = {s.get("stage_type") for s in state["plan"]["stages"]}
     
     for stage in state["plan"]["stages"]:
         # Skip completed, blocked, or invalidated stages
@@ -242,14 +278,36 @@ def select_next_stage(state):
         if not deps_met:
             continue
         
-        # Check validation hierarchy requirements (canonical names from state.py)
+        # Check validation hierarchy requirements (PAPER-DEPENDENT)
+        # Only enforce hierarchy gates for stage types that exist in this plan.
+        # Example: A photonic crystal paper may have no SINGLE_STRUCTURE stage,
+        # so ARRAY_SYSTEM should not be blocked waiting for it.
         stage_type = stage.get("stage_type", "")
-        if stage_type == "ARRAY_SYSTEM" and hierarchy["single_structure"] != "passed":
-            continue  # Cannot do array without single structure
-        if stage_type == "PARAMETER_SWEEP" and hierarchy["arrays_systems"] != "passed":
-            continue  # Cannot sweep without array validation
-        if stage_type == "COMPLEX_PHYSICS" and hierarchy["parameter_sweeps"] != "passed":
-            continue  # Cannot do complex physics without sweep validation
+        
+        if stage_type == "ARRAY_SYSTEM":
+            # Only require single_structure if it exists in this plan
+            if "SINGLE_STRUCTURE" in plan_stage_types and hierarchy["single_structure"] != "passed":
+                continue  # Cannot do array without single structure (when it exists)
+        
+        if stage_type == "PARAMETER_SWEEP":
+            # Sweeps can follow either single structure OR array, depending on plan
+            # Only block if the prerequisite stage type exists AND hasn't passed
+            requires_single = "SINGLE_STRUCTURE" in plan_stage_types
+            requires_array = "ARRAY_SYSTEM" in plan_stage_types
+            
+            if requires_array and hierarchy["arrays_systems"] != "passed":
+                continue  # Cannot sweep without array validation (when array exists)
+            elif requires_single and not requires_array and hierarchy["single_structure"] != "passed":
+                continue  # Cannot sweep without single structure (when no array stage)
+        
+        if stage_type == "COMPLEX_PHYSICS":
+            # Complex physics requires ALL applicable prerequisite stages to pass
+            if "PARAMETER_SWEEP" in plan_stage_types and hierarchy["parameter_sweeps"] != "passed":
+                continue
+            elif "ARRAY_SYSTEM" in plan_stage_types and hierarchy["arrays_systems"] != "passed":
+                continue
+            elif "SINGLE_STRUCTURE" in plan_stage_types and hierarchy["single_structure"] != "passed":
+                continue
         
         # Check if budget allows this stage
         estimated_runtime = stage.get("estimated_runtime_seconds", 0)
@@ -696,7 +754,154 @@ if hierarchy["single_structure"] in ["passed", "partial"]:
 
 ---
 
-### 13. handle_backtrack Node
+### 13. material_checkpoint Node
+
+**Purpose**: Mandatory user confirmation after Stage 0 that populates `validated_materials` for all subsequent stages.
+
+**When Called**: After SupervisorAgent sets `ask_user` verdict following Stage 0 completion.
+
+**Why This Node Exists**:
+This is a **critical handoff point** in the workflow. The `validated_materials` field is:
+- **Required** by CodeGeneratorAgent for Stage 1+ (see `NODE_REQUIREMENTS`)
+- **Never modified** after creation (immutable per Data Ownership Matrix)
+- **Only populated here** after user confirmation
+
+Without this node, Stage 1+ would have no material paths and would fail.
+
+**Inputs**:
+- `planned_materials`: Materials identified by PlannerAgent from paper analysis
+- `stage_outputs`: Stage 0 output files (material property plots, ε/n/k data)
+- `user_responses`: User confirmation or correction
+
+**Logic**:
+```python
+def material_checkpoint_node(state):
+    """
+    Populate validated_materials after user confirms Stage 0 results.
+    
+    This is the ONLY place validated_materials gets populated.
+    CodeGeneratorAgent for Stage 1+ reads from validated_materials, NOT planned_materials.
+    """
+    user_response = state.get("user_responses", {})
+    
+    # Check what the user decided
+    material_verdict = user_response.get("material_validation", {})
+    verdict = material_verdict.get("verdict", "")
+    
+    if verdict == "approve":
+        # ═══════════════════════════════════════════════════════════════════
+        # SUCCESS PATH: Populate validated_materials from planned_materials
+        # ═══════════════════════════════════════════════════════════════════
+        validated = []
+        for mat in state.get("planned_materials", []):
+            validated.append({
+                "material_id": mat["material_id"],
+                "name": mat["name"],
+                "source": mat.get("source", "unknown"),
+                "path": mat["path"],  # Path to material data file
+                "validated_by_user": True,
+                "validation_timestamp": datetime.now().isoformat(),
+            })
+        
+        # Log the user interaction
+        log_user_interaction(
+            state,
+            interaction_type="material_checkpoint",
+            question=state.get("pending_user_questions", [""])[0],
+            response=material_verdict,
+            context={"stage_id": "stage0_material_validation", "agent": "material_checkpoint"}
+        )
+        
+        # Clear pending questions
+        state["pending_user_questions"] = []
+        state["awaiting_user_input"] = False
+        
+        return {
+            "validated_materials": validated,
+            "pending_user_questions": [],
+            "awaiting_user_input": False,
+            "user_responses": {},  # Clear for next interaction
+        }
+    
+    elif verdict == "change_database":
+        # ═══════════════════════════════════════════════════════════════════
+        # USER WANTS DIFFERENT DATABASE: Update assumptions, re-run Stage 0
+        # ═══════════════════════════════════════════════════════════════════
+        new_database = material_verdict.get("database_choice")
+        material_id = material_verdict.get("material_id")
+        
+        # Update planned_materials with new database
+        updated_materials = []
+        for mat in state.get("planned_materials", []):
+            if mat["material_id"] == material_id:
+                # Replace with new database path
+                mat = {**mat, "source": new_database, "path": f"materials/{new_database}_{mat['name'].lower()}.csv"}
+            updated_materials.append(mat)
+        
+        # Mark Stage 0 for re-run
+        update_progress_stage_status(state, "stage0_material_validation", "needs_rerun",
+            summary=f"User requested material database change: {new_database}")
+        
+        log_user_interaction(
+            state,
+            interaction_type="material_checkpoint",
+            question=state.get("pending_user_questions", [""])[0],
+            response=material_verdict,
+            context={"stage_id": "stage0_material_validation", "action": "database_change"}
+        )
+        
+        return {
+            "planned_materials": updated_materials,
+            "backtrack_count": state.get("backtrack_count", 0) + 1,
+            "pending_user_questions": [],
+            "awaiting_user_input": False,
+            "user_responses": {},
+        }
+    
+    elif verdict == "change_material":
+        # ═══════════════════════════════════════════════════════════════════
+        # WRONG MATERIAL: This requires replanning (more severe)
+        # ═══════════════════════════════════════════════════════════════════
+        log_user_interaction(
+            state,
+            interaction_type="material_checkpoint",
+            question=state.get("pending_user_questions", [""])[0],
+            response=material_verdict,
+            context={"stage_id": "stage0_material_validation", "action": "material_change"}
+        )
+        
+        return {
+            "planner_feedback": f"User identified wrong material: use {material_verdict.get('material_choice')}",
+            "replan_count": state.get("replan_count", 0) + 1,
+            "backtrack_count": state.get("backtrack_count", 0) + 1,
+            "pending_user_questions": [],
+            "awaiting_user_input": False,
+            "user_responses": {},
+        }
+    
+    else:
+        # User needs more information - keep awaiting input
+        return {"awaiting_user_input": True}
+```
+
+**Outputs**:
+| User Verdict | Output Fields | Next Node |
+|--------------|---------------|-----------|
+| `approve` | `validated_materials` populated | select_stage |
+| `change_database` | `planned_materials` updated, Stage 0 `needs_rerun` | select_stage |
+| `change_material` | `planner_feedback` set | plan |
+| `need_help` | Additional context added | ask_user |
+
+**Transitions**:
+- → select_stage (user approved, or database change)
+- → plan (user identified wrong material)
+- → ask_user (user needs more information)
+
+**STATE INVARIANT**: After this node completes with `approve` verdict, `validated_materials` is guaranteed non-empty. CodeGeneratorAgent for Stage 1+ can safely read from it.
+
+---
+
+### 14. handle_backtrack Node
 
 **Purpose**: Process cross-stage backtracking when Supervisor accepts a backtrack suggestion
 
@@ -1309,6 +1514,152 @@ outputs/<paper_id>/
 │   └── *.png
 └── ...
 ```
+
+## Context Window Management
+
+### Overview
+
+Claude Opus 4.5 has a 200K token context window, but we reserve tokens for prompts, state context, and response generation. Long papers, accumulated feedback, or many revision cycles can exceed safe limits.
+
+**Key functions** (defined in `schemas/state.py`):
+- `check_context_before_node(state, node_name)` - Main entry point
+- `estimate_context_for_node(state, node_name)` - Calculate tokens
+- `get_context_recovery_actions(node_name, tokens, state)` - Recovery options
+
+### Integration Points
+
+**Every LLM-calling node MUST call `check_context_before_node()` at the start:**
+
+```python
+from schemas.state import check_context_before_node
+
+def design_node(state):
+    """Example: SimulationDesignerAgent node with context management."""
+    
+    # ═══════════════════════════════════════════════════════════════════
+    # STEP 1: Check context limits before LLM call
+    # ═══════════════════════════════════════════════════════════════════
+    check = check_context_before_node(state, "design")
+    
+    if check["escalate"]:
+        # Context overflow - need user guidance
+        return {
+            "pending_user_questions": [check["user_question"]],
+            "awaiting_user_input": True,
+            "ask_user_trigger": "context_overflow",
+            "last_node_before_ask_user": "design",
+        }
+    
+    if check["state_updates"]:
+        # Auto-recovery was applied (e.g., feedback truncation)
+        # Merge updates into state
+        state = {**state, **check["state_updates"]}
+    
+    # ═══════════════════════════════════════════════════════════════════
+    # STEP 2: Proceed with normal LLM call
+    # ═══════════════════════════════════════════════════════════════════
+    prompt = build_prompt("simulation_designer", state)
+    response = llm.invoke(prompt, tools=[design_schema])
+    
+    return {"design_description": response.content}
+```
+
+### Which Nodes Need Context Checks
+
+| Node | Needs Check | Reason |
+|------|-------------|--------|
+| `plan` | ✅ Yes | Receives full paper text (largest input) |
+| `adapt_prompts` | ✅ Yes | Receives full paper text |
+| `design` | ✅ Yes | Accumulates feedback over revisions |
+| `generate_code` | ✅ Yes | Design + feedback + code grows |
+| `plan_review` | ✅ Yes | Full plan context |
+| `design_review` | ✅ Yes | Design description |
+| `code_review` | ✅ Yes | Code + design |
+| `analyze` | ✅ Yes | Multiple figures + outputs |
+| `supervisor` | ⚠️ Minimal | Receives summaries, not raw data |
+| `run_code` | ❌ No | Not an LLM call |
+| `select_stage` | ❌ No | Pure logic, no LLM |
+| `material_checkpoint` | ❌ No | User interaction, no LLM |
+
+### Recovery Priority Order
+
+When context exceeds limits, recovery actions are attempted in this order:
+
+| Priority | Action | Risk | Auto-Applied? |
+|----------|--------|------|---------------|
+| 1 | Summarize feedback | Low | ❌ Needs LLM |
+| 2 | Truncate feedback to last 2000 chars | Low | ✅ Yes |
+| 3 | Use Methods section only | Medium | ❌ No |
+| 4 | Clear non-critical working fields | Medium | ❌ No |
+| 5 | Escalate to user | None | Always available |
+
+### Context Budget Tracking
+
+The `context_budget` field in state tracks estimated tokens across the workflow:
+
+```python
+# After each LLM call, update context budget tracking
+state["metrics"]["agent_calls"].append({
+    "agent": "SimulationDesignerAgent",
+    "timestamp": datetime.now().isoformat(),
+    "input_tokens": response.usage.input_tokens,
+    "output_tokens": response.usage.output_tokens,
+    "context_estimate": check["estimation"]["estimated_tokens"],
+})
+```
+
+### Handling Context Overflow Escalation
+
+When `check_context_before_node()` returns `escalate=True`:
+
+1. Set `ask_user_trigger = "context_overflow"`
+2. Present user with recovery options from `check["available_actions"]`
+3. User selects action (summarize, truncate, skip stage, stop)
+4. Apply selected action and resume
+
+```python
+# In ask_user node, handle context_overflow trigger
+if state.get("ask_user_trigger") == "context_overflow":
+    user_choice = state["user_responses"].get("context_recovery")
+    
+    if user_choice == "summarize_feedback":
+        # Use LLM to summarize, then retry
+        summary = summarize_feedback(state["reviewer_feedback"])
+        return {"reviewer_feedback": summary, "awaiting_user_input": False}
+    
+    elif user_choice == "truncate_paper":
+        # Keep only Methods section
+        state["paper_text"] = extract_methods_section(state["paper_text"])
+        return {"paper_text": state["paper_text"], "awaiting_user_input": False}
+    
+    elif user_choice == "skip_stage":
+        # Mark current stage as blocked
+        update_progress_stage_status(state, state["current_stage_id"], "blocked",
+            summary="Skipped due to context limits")
+        return {"awaiting_user_input": False}
+```
+
+### Loop Context Estimation
+
+During revision loops (design→review→revise), context grows. Use these helpers:
+
+```python
+from schemas.state import check_loop_context_status
+
+# Before starting a revision iteration
+status = check_loop_context_status(
+    loop_type="design",
+    iteration=state["design_revision_count"],
+    current_artifact_chars=len(state.get("design_description", "")),
+    feedback_history_chars=len(state.get("reviewer_feedback", ""))
+)
+
+if status["should_summarize"]:
+    # Summarize feedback before continuing
+    state["reviewer_feedback"] = summarize_feedback(state["reviewer_feedback"])
+```
+
+---
 
 ## Error Handling
 

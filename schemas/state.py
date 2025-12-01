@@ -210,6 +210,94 @@ def get_validation_hierarchy(state: dict) -> "ValidationHierarchyStatus":
     return hierarchy
 
 
+def get_plan_stage_types(state: dict) -> set:
+    """
+    Get the set of stage types present in this paper's plan.
+    
+    This enables paper-dependent validation hierarchy. Not all papers have
+    all stage types - some skip single structure, some have no parameter sweeps.
+    
+    Args:
+        state: ReproState dict containing plan with stages
+        
+    Returns:
+        Set of stage type strings present in the plan
+        
+    Example:
+        >>> stage_types = get_plan_stage_types(state)
+        >>> if "SINGLE_STRUCTURE" not in stage_types:
+        ...     # This paper skips single structure (e.g., photonic crystal)
+        ...     # ARRAY_SYSTEM can proceed without single_structure passing
+    """
+    plan = state.get("plan", {})
+    stages = plan.get("stages", [])
+    return {s.get("stage_type") for s in stages if s.get("stage_type")}
+
+
+def check_hierarchy_gate(
+    state: dict,
+    target_stage_type: str
+) -> tuple:
+    """
+    Check if a stage type can proceed based on paper-dependent validation hierarchy.
+    
+    This function implements paper-adaptive hierarchy checks. It only enforces
+    gates for stage types that actually exist in the plan.
+    
+    Args:
+        state: ReproState dict
+        target_stage_type: Stage type to check (e.g., "ARRAY_SYSTEM")
+        
+    Returns:
+        Tuple of (can_proceed: bool, blocking_reason: str or None)
+        
+    Example:
+        >>> can_proceed, reason = check_hierarchy_gate(state, "ARRAY_SYSTEM")
+        >>> if not can_proceed:
+        ...     print(f"Blocked: {reason}")
+    """
+    hierarchy = get_validation_hierarchy(state)
+    plan_stage_types = get_plan_stage_types(state)
+    
+    # Material validation is ALWAYS required
+    if hierarchy["material_validation"] != "passed":
+        return (False, "Material validation (Stage 0) must pass first")
+    
+    if target_stage_type == "ARRAY_SYSTEM":
+        # Only require single_structure if it exists in this plan
+        if "SINGLE_STRUCTURE" in plan_stage_types:
+            if hierarchy["single_structure"] != "passed":
+                return (False, "Single structure validation must pass first")
+        # If no SINGLE_STRUCTURE stage exists, ARRAY_SYSTEM can proceed
+        return (True, None)
+    
+    if target_stage_type == "PARAMETER_SWEEP":
+        # Sweeps can follow either single structure OR array, depending on plan
+        if "ARRAY_SYSTEM" in plan_stage_types:
+            if hierarchy["arrays_systems"] != "passed":
+                return (False, "Array/system validation must pass first")
+        elif "SINGLE_STRUCTURE" in plan_stage_types:
+            if hierarchy["single_structure"] != "passed":
+                return (False, "Single structure validation must pass first")
+        return (True, None)
+    
+    if target_stage_type == "COMPLEX_PHYSICS":
+        # Complex physics requires ALL applicable prerequisite stages
+        if "PARAMETER_SWEEP" in plan_stage_types:
+            if hierarchy["parameter_sweeps"] != "passed":
+                return (False, "Parameter sweep validation must pass first")
+        elif "ARRAY_SYSTEM" in plan_stage_types:
+            if hierarchy["arrays_systems"] != "passed":
+                return (False, "Array/system validation must pass first")
+        elif "SINGLE_STRUCTURE" in plan_stage_types:
+            if hierarchy["single_structure"] != "passed":
+                return (False, "Single structure validation must pass first")
+        return (True, None)
+    
+    # MATERIAL_VALIDATION and SINGLE_STRUCTURE only require material validation (already checked)
+    return (True, None)
+
+
 # ═══════════════════════════════════════════════════════════════════════
 # User Interaction Logging
 # ═══════════════════════════════════════════════════════════════════════
@@ -392,7 +480,142 @@ class MaterialValidationUserResponse(TypedDict):
     verdict: str  # "approve" | "change_database" | "change_material" | "need_help"
     database_choice: NotRequired[str]  # e.g., "johnson_christy", "rakic" - if changing database
     material_choice: NotRequired[str]  # e.g., "gold" instead of "silver" - if changing material
+    material_id: NotRequired[str]  # Which material to change (if changing database)
     notes: str  # User explanation/reasoning
+
+
+class ValidatedMaterial(TypedDict):
+    """
+    A user-confirmed material for use in Stage 1+ simulations.
+    
+    This is populated ONLY by material_checkpoint_node after user approval.
+    Immutable after creation per Data Ownership Matrix.
+    """
+    material_id: str  # e.g., "palik_gold"
+    name: str  # e.g., "Gold"
+    source: str  # e.g., "palik", "johnson_christy", "rakic"
+    path: str  # Path to material data file
+    validated_by_user: bool  # Always True when in validated_materials
+    validation_timestamp: str  # ISO 8601 timestamp
+
+
+def populate_validated_materials(
+    state: dict,
+    user_response: MaterialValidationUserResponse
+) -> List[ValidatedMaterial]:
+    """
+    Populate validated_materials from planned_materials after user approval.
+    
+    This function is called by material_checkpoint_node when the user approves
+    the materials. It converts planned_materials to validated_materials format.
+    
+    IMPORTANT: This is the ONLY place validated_materials should be populated.
+    Stage 1+ CodeGeneratorAgent reads from validated_materials, not planned_materials.
+    
+    Args:
+        state: ReproState dict containing planned_materials
+        user_response: User's material checkpoint response (must have verdict="approve")
+        
+    Returns:
+        List of ValidatedMaterial dicts ready to set on state["validated_materials"]
+        
+    Raises:
+        ValueError: If user_response verdict is not "approve"
+        
+    Example:
+        >>> if user_response["verdict"] == "approve":
+        ...     validated = populate_validated_materials(state, user_response)
+        ...     return {"validated_materials": validated}
+    """
+    if user_response.get("verdict") != "approve":
+        raise ValueError(
+            f"Cannot populate validated_materials: verdict is '{user_response.get('verdict')}', not 'approve'"
+        )
+    
+    planned_materials = state.get("planned_materials", [])
+    if not planned_materials:
+        raise ValueError(
+            "Cannot populate validated_materials: planned_materials is empty. "
+            "PlannerAgent should have populated this during planning phase."
+        )
+    
+    validated: List[ValidatedMaterial] = []
+    timestamp = datetime.now().isoformat()
+    
+    for mat in planned_materials:
+        validated.append(ValidatedMaterial(
+            material_id=mat.get("material_id", "unknown"),
+            name=mat.get("name", "Unknown"),
+            source=mat.get("source", "unknown"),
+            path=mat.get("path", ""),
+            validated_by_user=True,
+            validation_timestamp=timestamp,
+        ))
+    
+    return validated
+
+
+def get_material_path(state: dict, material_name: str) -> Optional[str]:
+    """
+    Get the file path for a validated material by name.
+    
+    This is a convenience function for CodeGeneratorAgent to look up material paths.
+    
+    Args:
+        state: ReproState dict containing validated_materials
+        material_name: Material name to find (case-insensitive)
+        
+    Returns:
+        Path to material data file, or None if not found
+        
+    Example:
+        >>> gold_path = get_material_path(state, "Gold")
+        >>> if gold_path:
+        ...     # Use gold_path in code generation
+    """
+    validated = state.get("validated_materials", [])
+    name_lower = material_name.lower()
+    
+    for mat in validated:
+        if mat.get("name", "").lower() == name_lower:
+            return mat.get("path")
+    
+    return None
+
+
+def check_materials_validated(state: dict) -> tuple:
+    """
+    Check if materials have been validated (required for Stage 1+).
+    
+    This should be called by CodeGeneratorAgent at the start of Stage 1+ code generation.
+    If materials are not validated, code generation should fail with a clear error.
+    
+    Args:
+        state: ReproState dict
+        
+    Returns:
+        Tuple of (is_validated: bool, error_message: str or None)
+        
+    Example:
+        >>> is_valid, error = check_materials_validated(state)
+        >>> if not is_valid:
+        ...     return {"run_error": error}
+    """
+    current_stage_type = state.get("current_stage_type", "")
+    
+    # Stage 0 doesn't need validated_materials - it creates them
+    if current_stage_type == "MATERIAL_VALIDATION":
+        return (True, None)
+    
+    validated = state.get("validated_materials", [])
+    if not validated:
+        return (False, 
+            "validated_materials is empty but required for Stage 1+ code generation. "
+            "This indicates material_checkpoint_node did not run or user did not approve materials. "
+            "Check that Stage 0 completed and user confirmation was received."
+        )
+    
+    return (True, None)
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -1965,6 +2188,138 @@ NODE_REQUIREMENTS: Dict[str, List[str]] = {
 }
 
 
+def validate_plan_targets_precision(plan: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """
+    Validate that targets with high precision requirements have digitized data.
+    
+    RULE: Targets with precision_requirement="excellent" (<2%) MUST have
+    digitized_data_path set. Without digitized data, we cannot accurately
+    measure sub-2% discrepancies using vision comparison alone.
+    
+    Args:
+        plan: Plan dict containing targets
+        
+    Returns:
+        List of validation issues, each with:
+        - figure_id: The affected target
+        - issue: Description of the problem
+        - severity: "blocking" (must fix) or "warning" (should fix)
+        - suggestion: How to resolve
+        
+    Example:
+        >>> issues = validate_plan_targets_precision(state["plan"])
+        >>> blocking = [i for i in issues if i["severity"] == "blocking"]
+        >>> if blocking:
+        ...     raise ValueError(f"Plan has blocking issues: {blocking}")
+    """
+    issues = []
+    targets = plan.get("targets", [])
+    
+    for target in targets:
+        figure_id = target.get("figure_id", "unknown")
+        precision = target.get("precision_requirement", "good")
+        digitized_path = target.get("digitized_data_path")
+        
+        # ─── BLOCKING: Excellent precision requires digitized data ────────
+        if precision == "excellent" and not digitized_path:
+            issues.append({
+                "figure_id": figure_id,
+                "issue": f"Target {figure_id} has precision_requirement='excellent' (<2%) but no digitized_data_path",
+                "severity": "blocking",
+                "suggestion": (
+                    f"Either: (1) Provide digitized data via WebPlotDigitizer and set digitized_data_path, "
+                    f"or (2) Downgrade precision_requirement to 'good' (5%) for vision-only comparison. "
+                    f"Sub-2% accuracy cannot be reliably achieved with vision comparison alone."
+                ),
+            })
+        
+        # ─── WARNING: Good precision benefits from digitized data ─────────
+        elif precision == "good" and not digitized_path:
+            issues.append({
+                "figure_id": figure_id,
+                "issue": f"Target {figure_id} has precision_requirement='good' (5%) without digitized_data_path",
+                "severity": "warning",
+                "suggestion": (
+                    f"Digitized data is recommended for 'good' precision to enable quantitative metrics. "
+                    f"Vision comparison may achieve this but with less certainty."
+                ),
+            })
+    
+    return issues
+
+
+def validate_plan_completeness(plan: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """
+    Comprehensive validation of a reproduction plan.
+    
+    Checks:
+    1. Precision/digitized data requirements
+    2. Stage dependencies are valid
+    3. Material validation stage exists
+    4. Target coverage
+    
+    Args:
+        plan: Plan dict to validate
+        
+    Returns:
+        List of validation issues with severity and suggestions
+        
+    Example:
+        >>> issues = validate_plan_completeness(state["plan"])
+        >>> for issue in issues:
+        ...     if issue["severity"] == "blocking":
+        ...         print(f"BLOCKING: {issue['issue']}")
+    """
+    all_issues = []
+    
+    # ─── Check 1: Precision requirements ─────────────────────────────────
+    precision_issues = validate_plan_targets_precision(plan)
+    all_issues.extend(precision_issues)
+    
+    # ─── Check 2: Material validation stage exists ───────────────────────
+    stages = plan.get("stages", [])
+    stage_types = {s.get("stage_type") for s in stages}
+    
+    if "MATERIAL_VALIDATION" not in stage_types:
+        all_issues.append({
+            "figure_id": None,
+            "issue": "Plan is missing MATERIAL_VALIDATION stage (Stage 0)",
+            "severity": "blocking",
+            "suggestion": "Every plan MUST start with material validation. Add a Stage 0.",
+        })
+    
+    # ─── Check 3: Stage dependencies reference valid stages ──────────────
+    stage_ids = {s.get("stage_id") for s in stages}
+    
+    for stage in stages:
+        stage_id = stage.get("stage_id", "unknown")
+        for dep in stage.get("dependencies", []):
+            if dep not in stage_ids:
+                all_issues.append({
+                    "figure_id": None,
+                    "issue": f"Stage '{stage_id}' depends on '{dep}' which doesn't exist in plan",
+                    "severity": "blocking",
+                    "suggestion": f"Either add stage '{dep}' or remove it from dependencies.",
+                })
+    
+    # ─── Check 4: Targets are covered by stages ──────────────────────────
+    target_ids = {t.get("figure_id") for t in plan.get("targets", [])}
+    covered_targets = set()
+    for stage in stages:
+        covered_targets.update(stage.get("targets", []))
+    
+    uncovered = target_ids - covered_targets
+    if uncovered:
+        all_issues.append({
+            "figure_id": None,
+            "issue": f"Targets not covered by any stage: {uncovered}",
+            "severity": "warning",
+            "suggestion": "Add stages to cover these targets or remove them from targets list.",
+        })
+    
+    return all_issues
+
+
 def validate_state_for_node(state: ReproState, node_name: str) -> List[str]:
     """
     Check that state has all required fields for a specific node.
@@ -2009,6 +2364,16 @@ def validate_state_for_node(state: ReproState, node_name: str) -> List[str]:
             validated_materials = state.get("validated_materials", [])
             if not validated_materials:
                 missing.append("validated_materials (required for Stage 1+ code generation)")
+    
+    # ─── Conditional Validation: Plan targets precision for plan_review ───
+    # During plan review, validate that high-precision targets have digitized data.
+    if node_name == "plan_review":
+        plan = state.get("plan", {})
+        if plan:
+            precision_issues = validate_plan_targets_precision(plan)
+            blocking = [i for i in precision_issues if i["severity"] == "blocking"]
+            for issue in blocking:
+                missing.append(f"PLAN_ISSUE: {issue['issue']}")
     
     return missing
 
@@ -2215,14 +2580,34 @@ def list_extracted_parameters(
 # ═══════════════════════════════════════════════════════════════════════
 # Progress Stages Initialization
 # ═══════════════════════════════════════════════════════════════════════
+#
+# DESIGN PRINCIPLE: Separation of Plan vs Progress
+#
+# Plan stages (plan["stages"]) contain DESIGN SPECS - immutable after approval:
+#   - expected_outputs, validation_criteria, runtime_budget_minutes
+#   - complexity_class, fallback_strategy, max_revisions
+#   - These define WHAT should happen
+#
+# Progress stages (progress["stages"]) contain EXECUTION STATE - mutable:
+#   - status, outputs, discrepancies, issues, runtime_seconds
+#   - These track WHAT actually happened
+#
+# Progress stages reference plan stages by stage_id. Use get_plan_stage()
+# to look up design specs when needed - don't duplicate them in progress.
+# ═══════════════════════════════════════════════════════════════════════
 
 def initialize_progress_from_plan(state: ReproState) -> ReproState:
     """
     Initialize progress["stages"] from plan["stages"] after planning completes.
     
-    This function converts plan stages (which contain design specs like 
-    expected_outputs, validation_criteria) into progress stages (which track
-    execution status like status, outputs, discrepancies).
+    This creates progress entries that REFERENCE plan stages by stage_id.
+    Design specs (expected_outputs, validation_criteria, etc.) are NOT copied
+    to progress - use get_plan_stage() to look them up when needed.
+    
+    This separation ensures:
+    - Single source of truth for design specs (plan)
+    - Single source of truth for execution state (progress)
+    - No risk of drift between duplicated data
     
     MUST be called after plan_node completes and before select_stage_node runs.
     
@@ -2260,6 +2645,7 @@ def initialize_progress_from_plan(state: ReproState) -> ReproState:
         }
     
     # Convert plan stages to progress stages
+    # Only store EXECUTION STATE fields - design specs stay in plan
     progress_stages = []
     current_time = datetime.now().isoformat()
     
@@ -2267,17 +2653,14 @@ def initialize_progress_from_plan(state: ReproState) -> ReproState:
         stage_id = plan_stage.get("stage_id", "unknown")
         stage_type = plan_stage.get("stage_type", "SINGLE_STRUCTURE")
         
-        # Create progress stage entry with status tracking fields
+        # Create progress stage entry with ONLY execution-state fields
+        # Reference plan by stage_id for design specs
         progress_stage = {
-            # Identification (from plan)
-            "stage_id": stage_id,
-            "stage_type": stage_type,
-            "name": plan_stage.get("name", ""),
-            "description": plan_stage.get("description", ""),
-            "targets": plan_stage.get("targets", []),
-            "dependencies": plan_stage.get("dependencies", []),
+            # ─── Reference to Plan (immutable identifier) ────────────────
+            "stage_id": stage_id,  # Use this to look up plan specs
+            "stage_type": stage_type,  # Cached for validation hierarchy
             
-            # Status tracking (progress-specific)
+            # ─── Status Tracking (execution state) ───────────────────────
             "status": "not_started",
             "invalidation_reason": None,
             "last_updated": current_time,
@@ -2285,16 +2668,11 @@ def initialize_progress_from_plan(state: ReproState) -> ReproState:
             "runtime_seconds": 0,
             "summary": f"Planned: {plan_stage.get('description', '')}",
             
-            # Output tracking (progress-specific)
-            "outputs": [],
-            "discrepancies": [],
-            "issues": [],
-            "next_actions": [],
-            
-            # Reference to plan-level specs (for Code Generator)
-            "expected_outputs": plan_stage.get("expected_outputs", []),
-            "validation_criteria": plan_stage.get("validation_criteria", []),
-            "runtime_budget_minutes": plan_stage.get("runtime_budget_minutes", 30),
+            # ─── Output Tracking (execution results) ─────────────────────
+            "outputs": [],  # Actual output files produced
+            "discrepancies": [],  # Discrepancies found during analysis
+            "issues": [],  # Problems encountered
+            "next_actions": [],  # Suggested follow-ups
         }
         
         progress_stages.append(progress_stage)
@@ -2302,6 +2680,91 @@ def initialize_progress_from_plan(state: ReproState) -> ReproState:
     state["progress"]["stages"] = progress_stages
     
     return state
+
+
+def get_plan_stage(state: ReproState, stage_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Get a stage's DESIGN SPECS from the plan by stage_id.
+    
+    Use this to look up immutable design specs like expected_outputs,
+    validation_criteria, runtime_budget_minutes, etc. These are NOT
+    stored in progress to avoid duplication.
+    
+    Args:
+        state: Current ReproState
+        stage_id: Stage identifier to find
+        
+    Returns:
+        Plan stage dict with design specs, or None if not found
+        
+    Example:
+        >>> plan_stage = get_plan_stage(state, "stage1_single_disk")
+        >>> expected_outputs = plan_stage.get("expected_outputs", [])
+        >>> runtime_budget = plan_stage.get("runtime_budget_minutes", 30)
+    """
+    plan = state.get("plan", {})
+    stages = plan.get("stages", [])
+    
+    for stage in stages:
+        if stage.get("stage_id") == stage_id:
+            return stage
+    
+    return None
+
+
+def get_stage_design_spec(
+    state: ReproState,
+    stage_id: str,
+    spec_name: str,
+    default: Any = None
+) -> Any:
+    """
+    Get a specific design spec for a stage from the plan.
+    
+    Convenience function for looking up individual design specs.
+    
+    Args:
+        state: Current ReproState
+        stage_id: Stage identifier
+        spec_name: Name of spec to retrieve (e.g., "expected_outputs", "runtime_budget_minutes")
+        default: Value to return if stage or spec not found
+        
+    Returns:
+        The spec value, or default if not found
+        
+    Example:
+        >>> outputs = get_stage_design_spec(state, "stage1", "expected_outputs", [])
+        >>> budget = get_stage_design_spec(state, "stage1", "runtime_budget_minutes", 30)
+    """
+    plan_stage = get_plan_stage(state, stage_id)
+    if plan_stage is None:
+        return default
+    return plan_stage.get(spec_name, default)
+
+
+def get_current_stage_specs(state: ReproState) -> Optional[Dict[str, Any]]:
+    """
+    Get design specs for the CURRENT stage being executed.
+    
+    Convenience function that combines current_stage_id lookup with
+    plan stage retrieval.
+    
+    Args:
+        state: Current ReproState (must have current_stage_id set)
+        
+    Returns:
+        Plan stage dict with design specs, or None if no current stage
+        
+    Example:
+        >>> specs = get_current_stage_specs(state)
+        >>> if specs:
+        ...     for output_spec in specs.get("expected_outputs", []):
+        ...         generate_output(output_spec)
+    """
+    current_stage_id = state.get("current_stage_id")
+    if not current_stage_id:
+        return None
+    return get_plan_stage(state, current_stage_id)
 
 
 def get_progress_stage(state: ReproState, stage_id: str) -> Optional[Dict[str, Any]]:
