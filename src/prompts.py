@@ -158,13 +158,20 @@ def inject_state_context(
         context_section = _build_designer_context(state)
     elif agent_name == "code_generator":
         context_section = _build_generator_context(state)
+    elif agent_name == "code_reviewer":
+        context_section = _build_reviewer_context(state)
+    elif agent_name == "execution_validator":
+        context_section = _build_execution_context(state)
+    elif agent_name == "physics_sanity":
+        context_section = _build_physics_context(state)
     elif agent_name == "results_analyzer":
         context_section = _build_analyzer_context(state)
+    elif agent_name == "comparison_validator":
+        context_section = _build_comparison_validator_context(state)
     elif agent_name == "supervisor":
         context_section = _build_supervisor_context(state)
     elif agent_name == "prompt_adaptor":
         context_section = _build_adaptor_context(state)
-    # Other agents get minimal context (most info is in their prompts)
     
     if context_section:
         return template + "\n\n" + context_section
@@ -240,6 +247,156 @@ CURRENT TASK (injected at runtime)
 
 ### Performance Estimate:
 {json.dumps(state.get('performance_estimate', {}), indent=2) if state.get('performance_estimate') else 'N/A'}
+
+### Output Configuration:
+- **Paper ID**: {state.get('paper_id', 'unknown')}
+- **Stage ID**: {state.get('current_stage_id', 'unknown')}
+"""
+
+
+def _build_reviewer_context(state: Dict[str, Any]) -> str:
+    """Build context section for CodeReviewerAgent."""
+    # Determine if reviewing design or code
+    has_code = bool(state.get('code'))
+    has_design = bool(state.get('design_description'))
+    review_type = "code" if has_code else "design" if has_design else "unknown"
+    
+    stage_info = _get_current_stage_info(state)
+    
+    context = f"""
+═══════════════════════════════════════════════════════════════════════
+REVIEW TASK (injected at runtime)
+═══════════════════════════════════════════════════════════════════════
+
+### Review Type: {review_type.upper()} REVIEW
+
+### Stage Information:
+- **Stage ID**: {state.get('current_stage_id', 'unknown')}
+- **Stage Type**: {state.get('current_stage_type', 'unknown')}
+- **Domain**: {state.get('paper_domain', 'other')}
+
+### Stage Requirements:
+{stage_info}
+"""
+    
+    if review_type == "design":
+        context += f"""
+### Design to Review:
+
+{state.get('design_description', '[No design provided]')}
+
+### Performance Estimate:
+{json.dumps(state.get('performance_estimate', {}), indent=2) if state.get('performance_estimate') else 'N/A'}
+"""
+    elif review_type == "code":
+        code = state.get('code', '')
+        context += f"""
+### Code to Review:
+
+```python
+{code}
+```
+
+### What the Code Should Implement:
+{state.get('design_description', '[Design not available]')[:500]}{'...' if len(state.get('design_description', '')) > 500 else ''}
+"""
+    
+    return context
+
+
+def _build_execution_context(state: Dict[str, Any]) -> str:
+    """Build context section for ExecutionValidatorAgent."""
+    outputs = state.get("stage_outputs", {})
+    
+    return f"""
+═══════════════════════════════════════════════════════════════════════
+EXECUTION VALIDATION TASK (injected at runtime)
+═══════════════════════════════════════════════════════════════════════
+
+### Execution Results:
+
+- **Exit Code**: {outputs.get('exit_code', 'unknown')}
+- **Runtime**: {outputs.get('runtime_seconds', 0):.1f} seconds
+- **Stage ID**: {state.get('current_stage_id', 'unknown')}
+
+### Output Files Created:
+{chr(10).join('- ' + f for f in outputs.get('files', [])) or 'None'}
+
+### Expected Outputs (from design):
+{json.dumps(state.get('performance_estimate', {}).get('expected_outputs', []), indent=2) if state.get('performance_estimate') else 'Not specified'}
+
+### Stdout:
+```
+{_truncate_output(outputs.get('stdout', ''), 100)}
+```
+
+### Stderr:
+```
+{outputs.get('stderr', '[no stderr]')}
+```
+"""
+
+
+def _build_physics_context(state: Dict[str, Any]) -> str:
+    """Build context section for PhysicsSanityAgent."""
+    outputs = state.get("stage_outputs", {})
+    
+    # Get data file names
+    data_files = [f for f in outputs.get('files', []) if f.endswith(('.csv', '.h5', '.npy'))]
+    
+    return f"""
+═══════════════════════════════════════════════════════════════════════
+PHYSICS VALIDATION TASK (injected at runtime)
+═══════════════════════════════════════════════════════════════════════
+
+### Stage Information:
+- **Stage ID**: {state.get('current_stage_id', 'unknown')}
+- **Stage Type**: {state.get('current_stage_type', 'unknown')}
+- **Domain**: {state.get('paper_domain', 'other')}
+
+### Data Files to Validate:
+{chr(10).join('- ' + f for f in data_files) or 'No data files found'}
+
+### Simulation Code (for context):
+```python
+{state.get('code', '[code not available]')[:2000]}{'...' if len(state.get('code', '')) > 2000 else ''}
+```
+
+### What Physics to Expect:
+{_get_current_stage_info(state)}
+"""
+
+
+def _build_comparison_validator_context(state: Dict[str, Any]) -> str:
+    """Build context section for ComparisonValidatorAgent."""
+    comparisons = state.get("figure_comparisons", [])
+    
+    # Format recent comparisons for review
+    comparisons_text = ""
+    if comparisons:
+        for comp in comparisons[-3:]:  # Last 3 comparisons
+            comparisons_text += f"""
+**{comp.get('figure_id', 'unknown')}**:
+- Classification: {comp.get('classification', 'unknown')}
+- Confidence: {comp.get('confidence', 0):.0%}
+- Comparison Table: {json.dumps(comp.get('comparison_table', []), indent=2)}
+"""
+    else:
+        comparisons_text = "No comparisons to validate"
+    
+    return f"""
+═══════════════════════════════════════════════════════════════════════
+COMPARISON VALIDATION TASK (injected at runtime)
+═══════════════════════════════════════════════════════════════════════
+
+### Analysis Summary:
+{state.get('analysis_summary', '[No analysis summary available]')}
+
+### Figure Comparisons to Validate:
+{comparisons_text}
+
+### Target Figures (reference):
+{_get_target_figures_for_stage(state)}
 """
 
 
