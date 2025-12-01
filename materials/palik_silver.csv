@@ -2,8 +2,9 @@
 # Source: E.D. Palik, Handbook of Optical Constants of Solids (1998)
 # Format: wavelength_nm, n (real part of refractive index), k (imaginary part)
 # 
-# This is placeholder data showing expected format.
-# Replace with actual tabulated data from reference.
+# STATUS: Placeholder data showing expected format.
+# TODO: Replace with actual tabulated data from Palik reference or refractiveindex.info
+# Real data source: https://refractiveindex.info/?shelf=main&book=Ag&page=Johnson
 #
 wavelength_nm,n,k
 200,1.07,1.21

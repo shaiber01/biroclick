@@ -1,5 +1,7 @@
 # ReproLab: Multi-Agent Paper Reproduction System
 
+**Status**: v0.1.0 (Planning + Foundation)
+
 A LangGraph-based multi-agent system that automatically reproduces simulation results from optics and metamaterials research papers using Meep FDTD simulations.
 
 ## Overview
@@ -119,12 +121,16 @@ reprolab/
 │   ├── preparing_papers.md   # Paper preparation & ingestion guide
 │   └── prompt_building.md    # Agent prompt construction reference
 │
+├── outputs/                  # Simulation outputs (gitignored except .gitkeep)
+├── papers/                   # Paper markdown and figures (gitignored except .gitkeep)
+├── tests/                    # Unit tests
+│
 └── src/                      # Source code (implementation)
     ├── __init__.py
     ├── paper_loader.py       # Paper input schema and validation
-    ├── agents.py             # Agent node implementations
+    ├── agents.py             # Agent node implementations (stubs)
     ├── graph.py              # LangGraph state graph definition
-    ├── utils.py              # Utility functions
+    ├── prompts.py            # Prompt building and context injection
     └── code_runner.py        # Sandboxed Python execution
 ```
 
