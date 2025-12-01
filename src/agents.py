@@ -21,6 +21,7 @@ from schemas.state import (
     check_context_before_node,
     initialize_progress_from_plan,
     sync_extracted_parameters,
+    validate_state_for_node,
 )
 
 
@@ -65,6 +66,29 @@ def _check_context_or_escalate(state: ReproState, node_name: str) -> Optional[Di
         "ask_user_trigger": "context_overflow",
         "last_node_before_ask_user": node_name,
     }
+
+
+def _validate_state_or_warn(state: ReproState, node_name: str) -> list:
+    """
+    Validate state for a node and return list of issues.
+    
+    This wraps validate_state_for_node() to provide consistent validation
+    across agent nodes. Returns empty list if state is valid.
+    
+    Args:
+        state: Current ReproState
+        node_name: Name of the node about to execute
+        
+    Returns:
+        List of validation issues (empty if valid)
+    """
+    issues = validate_state_for_node(state, node_name)
+    if issues:
+        import logging
+        logger = logging.getLogger(__name__)
+        for issue in issues:
+            logger.warning(f"State validation issue for {node_name}: {issue}")
+    return issues
 
 
 def adapt_prompts_node(state: ReproState) -> ReproState:
@@ -136,7 +160,16 @@ def plan_reviewer_node(state: ReproState) -> dict:
     - Sets `last_plan_review_verdict` state field.
     - Increments `replan_count` when verdict is "needs_revision".
     The routing function `route_after_plan_review` reads these fields.
+    - Validates plan precision requirements (excellent targets need digitized data).
     """
+    # ═══════════════════════════════════════════════════════════════════════
+    # STATE VALIDATION: Check plan meets requirements before review
+    # ═══════════════════════════════════════════════════════════════════════
+    validation_issues = _validate_state_or_warn(state, "plan_review")
+    
+    # Separate blocking issues (PLAN_ISSUE) from other validation warnings
+    blocking_issues = [i for i in validation_issues if i.startswith("PLAN_ISSUE:")]
+    
     # TODO: Implement plan review logic using prompts/plan_reviewer_agent.md
     # - Check coverage of reproducible figures
     # - Verify Stage 0 and Stage 1 present
@@ -146,12 +179,22 @@ def plan_reviewer_node(state: ReproState) -> dict:
     # - Call LLM with plan_reviewer_agent.md prompt
     # - Parse agent output per plan_reviewer_output_schema.json
     
-    # STUB: Replace with actual LLM call
-    agent_output = {
-        "verdict": "approve",  # "approve" | "needs_revision"
-        "issues": [],
-        "summary": "Plan review stub - implement with LLM call",
-    }
+    # If there are blocking plan issues (e.g., excellent precision without digitized data),
+    # automatically flag for revision
+    if blocking_issues:
+        agent_output = {
+            "verdict": "needs_revision",
+            "issues": [{"severity": "blocking", "description": issue} for issue in blocking_issues],
+            "summary": f"Plan has {len(blocking_issues)} blocking issue(s) requiring revision",
+            "feedback": "The following issues must be resolved:\n" + "\n".join(blocking_issues),
+        }
+    else:
+        # STUB: Replace with actual LLM call
+        agent_output = {
+            "verdict": "approve",  # "approve" | "needs_revision"
+            "issues": [],
+            "summary": "Plan review stub - implement with LLM call",
+        }
     
     result = {
         "workflow_phase": "plan_review",
@@ -209,16 +252,17 @@ def select_stage_node(state: ReproState) -> dict:
     # Priority 1: Find stages that need re-run (backtrack targets)
     for stage in stages:
         if stage.get("status") == "needs_rerun":
-            return {
-                "workflow_phase": "stage_selection",
-                "current_stage_id": stage.get("stage_id"),
-                "current_stage_type": stage.get("stage_type"),
-                # Reset per-stage counters when entering a new stage
-                "design_revision_count": 0,
-                "code_revision_count": 0,
-                "execution_failure_count": 0,
-                "physics_failure_count": 0,
-            }
+        return {
+            "workflow_phase": "stage_selection",
+            "current_stage_id": stage.get("stage_id"),
+            "current_stage_type": stage.get("stage_type"),
+            # Reset per-stage counters when entering a new stage
+            "design_revision_count": 0,
+            "code_revision_count": 0,
+            "execution_failure_count": 0,
+            "physics_failure_count": 0,
+            "analysis_revision_count": 0,
+        }
     
     # Priority 2: Find not_started stages with satisfied dependencies
     for stage in stages:
@@ -271,6 +315,7 @@ def select_stage_node(state: ReproState) -> dict:
             "code_revision_count": 0,
             "execution_failure_count": 0,
             "physics_failure_count": 0,
+            "analysis_revision_count": 0,
         }
     
     # No more stages to run
@@ -1297,5 +1342,6 @@ def handle_backtrack_node(state: ReproState) -> dict:
         "code_revision_count": 0,
         "execution_failure_count": 0,
         "physics_failure_count": 0,
+        "analysis_revision_count": 0,
     }
 
