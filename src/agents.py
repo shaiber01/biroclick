@@ -252,17 +252,17 @@ def select_stage_node(state: ReproState) -> dict:
     # Priority 1: Find stages that need re-run (backtrack targets)
     for stage in stages:
         if stage.get("status") == "needs_rerun":
-        return {
-            "workflow_phase": "stage_selection",
-            "current_stage_id": stage.get("stage_id"),
-            "current_stage_type": stage.get("stage_type"),
-            # Reset per-stage counters when entering a new stage
-            "design_revision_count": 0,
-            "code_revision_count": 0,
-            "execution_failure_count": 0,
-            "physics_failure_count": 0,
-            "analysis_revision_count": 0,
-        }
+            return {
+                "workflow_phase": "stage_selection",
+                "current_stage_id": stage.get("stage_id"),
+                "current_stage_type": stage.get("stage_type"),
+                # Reset per-stage counters when entering a new stage
+                "design_revision_count": 0,
+                "code_revision_count": 0,
+                "execution_failure_count": 0,
+                "physics_failure_count": 0,
+                "analysis_revision_count": 0,
+            }
     
     # Priority 2: Find not_started stages with satisfied dependencies
     for stage in stages:
