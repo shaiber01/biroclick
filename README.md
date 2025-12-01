@@ -267,9 +267,9 @@ This is an early version with several known limitations:
 
 | Limitation | Description | Future Plan |
 |------------|-------------|-------------|
-| **Manual text extraction** | Paper text must be manually copied from PDF | Automated PDF parsing |
+| **PDF conversion required** | PDFs must be converted to markdown first (using marker/nougat) | Direct PDF loading via `load_paper_from_pdf()` |
 | **Manual figure digitization** | Reference data requires manual digitization with tools like WebPlotDigitizer | Integration with automatic digitizers |
-| **No automated PDF parsing** | System cannot read PDFs directly | PDF text/figure extraction pipeline |
+| **Figure download from markdown** | ✅ `load_paper_from_markdown()` extracts and downloads figures automatically | N/A (implemented in v1) |
 | **Single-threaded execution** | Stages run sequentially, not in parallel | Stage parallelization where dependencies allow |
 | **Optics/photonics focus** | Primarily tested on plasmonics/metamaterials papers | Domain expansion to other physics areas |
 | **Meep-only simulations** | Only supports Meep FDTD backend | Multi-backend support (COMSOL, Lumerical) |

@@ -24,6 +24,8 @@ Requires manually specifying figure paths in a JSON file.
 
 The fastest way to prepare a paper is using the markdown loader:
 
+> **Future Plan (v2):** Direct PDF loading via `load_paper_from_pdf()` will eliminate the manual conversion step. See `docs/guidelines.md` Section 14 for roadmap.
+
 ```python
 from src.paper_loader import load_paper_from_markdown
 

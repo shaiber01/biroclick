@@ -666,6 +666,43 @@ For high-confidence validation of generated simulation code, consider running th
 
 **Not implemented in v1** — consider for future versions when base system is validated.
 
+### Direct PDF Loading
+
+Currently, users must convert PDFs to markdown using external tools (marker, nougat) before loading into the system. The `load_paper_from_markdown()` function then parses the markdown and downloads embedded figures.
+
+**Future versions could handle PDFs directly:**
+- Accept PDF file path as input to paper loader
+- Internally convert to markdown using marker or nougat
+- Extract and store figures in one step
+- Handle both local PDFs and URLs to remote PDFs
+
+**Implementation approach:**
+```python
+# Future API (v2)
+paper_input = load_paper_from_pdf(
+    pdf_path="paper.pdf",           # or URL
+    output_dir="./extracted",
+    converter="marker",             # or "nougat" 
+    paper_id="smith2023_plasmon"
+)
+```
+
+**Dependencies to add:**
+- `marker-pdf` for standard PDFs
+- `nougat-ocr` for complex scientific papers (equations, tables)
+- Automatic fallback if one converter fails
+
+**Current workaround:**
+```bash
+# Manual step (v1)
+marker_single paper.pdf --output_dir ./extracted/
+
+# Then use current loader
+paper_input = load_paper_from_markdown("./extracted/paper.md", ...)
+```
+
+**Status**: Planned for v2. Current v1 requires manual PDF-to-markdown conversion.
+
 ### Automated Figure Digitization
 
 Currently, users must manually digitize paper figures for quantitative comparison. Future versions could:
