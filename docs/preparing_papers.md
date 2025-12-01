@@ -4,13 +4,103 @@ This guide explains how to prepare a scientific paper for use with the ReproLab 
 
 ## Overview
 
-The current system (v1) requires manual preparation of paper inputs:
+The system supports two methods for loading papers:
 
+### Method A: Markdown Loading (Recommended)
 ```
-Paper (PDF) → Manual Extraction → PaperInput → ReproLab System
+Paper (PDF) → marker/nougat → Markdown with figures → load_paper_from_markdown() → PaperInput
+```
+The loader automatically extracts and downloads figures from the markdown.
+
+### Method B: Manual JSON Preparation
+```
+Paper (PDF) → Manual Extraction → JSON file → load_paper_input() → PaperInput
+```
+Requires manually specifying figure paths in a JSON file.
+
+---
+
+## Quick Start: Markdown Loading
+
+The fastest way to prepare a paper is using the markdown loader:
+
+```python
+from src.paper_loader import load_paper_from_markdown
+
+# Convert PDF to markdown using marker
+# $ marker_single paper.pdf --output_dir ./extracted/
+
+# Load the markdown and automatically download figures
+paper_input = load_paper_from_markdown(
+    markdown_path="./extracted/paper.md",
+    output_dir="./extracted/figures",
+    paper_id="smith2023_plasmon",
+    paper_domain="plasmonics"
+)
 ```
 
-Future versions may automate parts of this process, but manual preparation ensures highest quality inputs.
+The loader will:
+1. Parse the markdown file
+2. Extract all figure references (`![alt](url)` and `<img src="...">`)
+3. Download figures to the output directory
+4. Generate figure IDs from alt text or filenames
+5. Return a validated `PaperInput` structure
+
+### Supported Figure Formats
+
+| Format | Extension | Vision Model Support |
+|--------|-----------|---------------------|
+| PNG | `.png` | ✅ Preferred |
+| JPEG | `.jpg`, `.jpeg` | ✅ Preferred |
+| GIF | `.gif` | ✅ Preferred |
+| WebP | `.webp` | ✅ Preferred |
+| BMP | `.bmp` | ⚠️ Supported |
+| TIFF | `.tiff`, `.tif` | ⚠️ May need conversion |
+| SVG | `.svg` | ⚠️ May need conversion |
+| EPS | `.eps` | ⚠️ May need conversion |
+| PDF | `.pdf` | ⚠️ May need conversion |
+
+### Handling Relative Paths
+
+The loader supports various path formats:
+
+```python
+# Figures with relative paths (resolved against markdown file location)
+# Markdown: ![Figure 1](images/fig1.png)
+paper_input = load_paper_from_markdown(
+    markdown_path="papers/smith2023/paper.md",  # figures resolved from papers/smith2023/
+    output_dir="papers/smith2023/figures"
+)
+
+# Figures with remote URLs needing a base URL
+# Markdown: ![Figure 1](fig1.png)  (needs https://example.com/paper/fig1.png)
+paper_input = load_paper_from_markdown(
+    markdown_path="downloaded_paper.md",
+    output_dir="./figures",
+    base_url="https://example.com/paper/"
+)
+
+# Figures with absolute URLs (downloaded directly)
+# Markdown: ![Figure 1](https://arxiv.org/html/1234/fig1.png)
+paper_input = load_paper_from_markdown(
+    markdown_path="paper.md",
+    output_dir="./figures"
+)
+```
+
+### Saving for Reuse
+
+After loading, save the `PaperInput` to avoid re-downloading:
+
+```python
+from src.paper_loader import save_paper_input_json
+
+save_paper_input_json(paper_input, "papers/smith2023/paper_input.json")
+
+# Later, load directly from JSON (faster, no downloads)
+from src.paper_loader import load_paper_input
+paper_input = load_paper_input("papers/smith2023/paper_input.json")
+```
 
 ---
 
@@ -176,7 +266,30 @@ Skip digitization for:
 
 ## Step 4: Create PaperInput Structure
 
-### Python Example
+### Option A: Automatic from Markdown (Recommended)
+
+If your markdown from Step 1 contains embedded figure links, use the automatic loader:
+
+```python
+from src.paper_loader import load_paper_from_markdown, save_paper_input_json
+
+# Load and download figures automatically
+paper_input = load_paper_from_markdown(
+    markdown_path="./extracted/paper.md",
+    output_dir="./figures",
+    paper_id="smith2023_plasmon",
+    paper_domain="plasmonics"
+)
+
+# Save for later use
+save_paper_input_json(paper_input, "./paper_input.json")
+```
+
+This is the fastest approach when figures are embedded in the markdown output.
+
+### Option B: Manual Python Construction
+
+For more control, or when figures need manual handling:
 
 ```python
 from src.paper_loader import PaperInput, FigureInput, load_paper_text
@@ -184,7 +297,7 @@ from src.paper_loader import PaperInput, FigureInput, load_paper_text
 # Load extracted text
 paper_text = load_paper_text("./extracted/paper.md")
 
-# Define figures
+# Define figures manually
 figures = [
     {
         "id": "fig2a",
@@ -210,7 +323,9 @@ paper_input: PaperInput = {
 }
 ```
 
-### JSON Example
+### Option C: JSON File
+
+Create a JSON file for the paper input:
 
 ```json
 {
@@ -228,6 +343,13 @@ paper_input: PaperInput = {
   ],
   "supplementary": []
 }
+```
+
+Then load it:
+
+```python
+from src.paper_loader import load_paper_input
+paper_input = load_paper_input("./paper_input.json")
 ```
 
 ---
@@ -268,18 +390,40 @@ print(f"({cost_estimate['warning']})")
 
 ## Example Directory Structure
 
+### Using Markdown Loader (Recommended)
+
+```
+my_reproduction/
+├── paper.pdf                    # Original paper
+├── extracted/
+│   └── paper.md                 # Extracted text with figure links (from marker/nougat)
+├── figures/                     # Auto-created by load_paper_from_markdown()
+│   ├── Fig1.png                 # Downloaded figures
+│   ├── Fig2a.png
+│   ├── Fig2b.png
+│   └── Fig3.png
+├── paper_input.json             # Generated by save_paper_input_json()
+└── outputs/                     # Created by ReproLab
+    └── smith2023_plasmon/
+        ├── plan.json
+        ├── assumptions.json
+        └── ...
+```
+
+### Using Manual Preparation
+
 ```
 my_reproduction/
 ├── paper.pdf                    # Original paper
 ├── extracted/
 │   └── paper.md                 # Extracted text (markdown)
 ├── figures/
-│   ├── fig1_schematic.png       # Extracted figures
+│   ├── fig1_schematic.png       # Manually extracted figures
 │   ├── fig2a_absorption.png
 │   ├── fig2a_absorption.csv     # Digitized data
 │   ├── fig2b_transmission.png
 │   └── fig3_field_map.png
-├── paper_input.json             # Your PaperInput definition
+├── paper_input.json             # Manually created PaperInput definition
 └── outputs/                     # Created by ReproLab
     └── smith2023_plasmon/
         ├── plan.json
@@ -290,6 +434,17 @@ my_reproduction/
 ---
 
 ## Troubleshooting
+
+### Markdown Loading Issues
+
+| Problem | Solution |
+|---------|----------|
+| Figures not found | Check if paths are relative; provide `base_url` parameter |
+| Download timeout | Increase `figure_timeout` parameter (default: 30s) |
+| 403/404 errors | Some servers block automated downloads; manually download figures |
+| Wrong figure IDs | Alt text missing; manually rename or edit `paper_input.json` |
+| SVG/EPS figures | Convert to PNG for best vision model compatibility |
+| Duplicate figure IDs | Loader auto-appends `_1`, `_2`, etc. to duplicates |
 
 ### Text Extraction Issues
 
@@ -326,6 +481,7 @@ my_reproduction/
 |------|------|---------|
 | PDF → Text | marker | `pip install marker-pdf` |
 | PDF → Text (complex) | nougat | `pip install nougat-ocr` |
+| Markdown → PaperInput | `load_paper_from_markdown()` | Built-in (auto-downloads figures) |
 | Extract images | PyMuPDF | `pip install pymupdf` |
 | Digitize plots | WebPlotDigitizer | [Online tool](https://automeris.io/WebPlotDigitizer/) |
 | Image editing | GIMP, Preview | Standard tools |

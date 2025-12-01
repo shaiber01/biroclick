@@ -3,12 +3,49 @@ Paper Input Loader for Paper Reproduction System
 
 This module handles loading and validating paper inputs including
 text, figures, and optional digitized data.
+
+Supports two loading modes:
+1. JSON-based: Load from a pre-prepared JSON file with explicit figure paths
+2. Markdown-based: Parse markdown (from marker/nougat), extract and download figures
 """
 
 from typing import TypedDict, Optional, List, Dict, Any
 from typing_extensions import NotRequired
 from pathlib import Path
 import json
+import re
+import shutil
+import urllib.request
+import urllib.error
+from urllib.parse import urlparse, unquote, urljoin
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Supported Image Formats
+# ═══════════════════════════════════════════════════════════════════════
+
+# Image formats supported by vision models (GPT-4o, Claude)
+SUPPORTED_IMAGE_FORMATS = {
+    # Raster formats - widely supported
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.gif': 'image/gif',
+    '.webp': 'image/webp',
+    # Additional raster formats
+    '.bmp': 'image/bmp',
+    '.tiff': 'image/tiff',
+    '.tif': 'image/tiff',
+    '.ico': 'image/x-icon',
+    # Vector formats (may need conversion for some models)
+    '.svg': 'image/svg+xml',
+    # Scientific formats (require special handling)
+    '.eps': 'application/postscript',
+    '.pdf': 'application/pdf',
+}
+
+# Formats that vision models handle well
+VISION_MODEL_PREFERRED_FORMATS = {'.png', '.jpg', '.jpeg', '.gif', '.webp'}
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -565,6 +602,459 @@ EXAMPLE_PAPER_INPUT = {
 }
 
 
+# ═══════════════════════════════════════════════════════════════════════
+# Markdown Paper Loading with Figure Download
+# ═══════════════════════════════════════════════════════════════════════
+
+class FigureDownloadError(Exception):
+    """Raised when a figure cannot be downloaded."""
+    pass
+
+
+def extract_figures_from_markdown(markdown_text: str) -> List[Dict[str, str]]:
+    """
+    Extract figure references from markdown text.
+    
+    Supports:
+    - Markdown images: ![alt text](url)
+    - Markdown images with title: ![alt text](url "title")
+    - HTML img tags: <img src="url" alt="..." />
+    
+    Args:
+        markdown_text: The markdown content
+        
+    Returns:
+        List of dicts with 'alt', 'url', and 'original_match' keys
+    """
+    figures = []
+    
+    # Pattern for markdown images: ![alt](url) or ![alt](url "title")
+    markdown_pattern = r'!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)'
+    for match in re.finditer(markdown_pattern, markdown_text):
+        alt_text = match.group(1).strip()
+        url = match.group(2).strip()
+        figures.append({
+            'alt': alt_text,
+            'url': url,
+            'original_match': match.group(0)
+        })
+    
+    # Pattern for HTML img tags: <img src="url" ... />
+    # Handles both src before alt and alt before src
+    html_pattern = r'<img\s+[^>]*src=["\']([^"\']+)["\'][^>]*/?>'
+    alt_pattern = r'alt=["\']([^"\']*)["\']'
+    
+    for match in re.finditer(html_pattern, markdown_text, re.IGNORECASE):
+        url = match.group(1).strip()
+        # Try to find alt text in the same tag
+        alt_match = re.search(alt_pattern, match.group(0), re.IGNORECASE)
+        alt_text = alt_match.group(1).strip() if alt_match else ''
+        
+        # Avoid duplicates if same URL found in both formats
+        if not any(f['url'] == url for f in figures):
+            figures.append({
+                'alt': alt_text,
+                'url': url,
+                'original_match': match.group(0)
+            })
+    
+    return figures
+
+
+def resolve_figure_url(url: str, base_path: Optional[Path] = None, base_url: Optional[str] = None) -> str:
+    """
+    Resolve a figure URL, handling relative paths.
+    
+    Resolution order:
+    1. If URL is absolute (http/https/file://), use as-is
+    2. If base_url is provided and URL is relative, join with base_url
+    3. If base_path is provided and URL is relative, resolve against base_path
+    4. Otherwise, return URL as-is
+    
+    Args:
+        url: The figure URL or path from markdown
+        base_path: Optional base path (typically the markdown file's directory)
+        base_url: Optional base URL for remote relative paths
+        
+    Returns:
+        Resolved URL or path string
+    """
+    parsed = urlparse(url)
+    
+    # Already absolute URL
+    if parsed.scheme in ('http', 'https', 'file'):
+        return url
+    
+    # Relative URL with base_url provided
+    if base_url and not parsed.scheme:
+        return urljoin(base_url, url)
+    
+    # Relative path with base_path provided
+    if base_path and not parsed.scheme:
+        resolved = base_path / url
+        return str(resolved)
+    
+    # Return as-is
+    return url
+
+
+def generate_figure_id(index: int, alt_text: str, url: str) -> str:
+    """
+    Generate a figure ID from available information.
+    
+    Extraction priority:
+    1. Figure number from alt text (e.g., "Figure 3a" -> "Fig3a")
+    2. Figure number from URL filename
+    3. Sequential numbering as fallback
+    
+    Args:
+        index: Figure index (0-based)
+        alt_text: Alt text from markdown
+        url: Original URL
+        
+    Returns:
+        A figure ID string like "Fig1" or "Fig3a"
+    """
+    # Try to extract figure number from alt text
+    fig_match = re.search(r'(?:fig(?:ure)?|fig\.?)\s*(\d+[a-z]?)', alt_text, re.IGNORECASE)
+    if fig_match:
+        return f"Fig{fig_match.group(1)}"
+    
+    # Try to extract from URL filename
+    parsed = urlparse(url)
+    filename = Path(unquote(parsed.path)).stem
+    fig_match = re.search(r'fig(?:ure)?[_\-]?(\d+[a-z]?)', filename, re.IGNORECASE)
+    if fig_match:
+        return f"Fig{fig_match.group(1)}"
+    
+    # Fall back to sequential numbering
+    return f"Fig{index + 1}"
+
+
+def get_file_extension(url: str, default: str = '.png') -> str:
+    """
+    Determine the file extension from a URL.
+    
+    Args:
+        url: The figure URL
+        default: Default extension if none can be determined
+        
+    Returns:
+        File extension including the dot (e.g., '.png')
+    """
+    parsed = urlparse(url)
+    path = unquote(parsed.path)
+    ext = Path(path).suffix.lower()
+    
+    if ext in SUPPORTED_IMAGE_FORMATS:
+        return ext
+    return default
+
+
+def download_figure(
+    url: str, 
+    output_path: Path, 
+    timeout: int = 30,
+    base_path: Optional[Path] = None
+) -> None:
+    """
+    Download a figure from a URL or copy from local path.
+    
+    Supports:
+    - Remote URLs (http, https)
+    - Local file paths (absolute or relative)
+    - file:// URLs
+    
+    Args:
+        url: URL or path of the figure to download
+        output_path: Local path to save the figure
+        timeout: Download timeout in seconds (for remote URLs)
+        base_path: Base path for resolving relative local paths
+        
+    Raises:
+        FigureDownloadError: If download/copy fails
+    """
+    try:
+        parsed = urlparse(url)
+        
+        if parsed.scheme in ('http', 'https'):
+            # Remote URL - download it
+            request = urllib.request.Request(
+                url,
+                headers={'User-Agent': 'Mozilla/5.0 (compatible; PaperLoader/1.0)'}
+            )
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                content = response.read()
+            
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(output_path, 'wb') as f:
+                f.write(content)
+                
+        elif parsed.scheme == 'file':
+            # file:// URL - extract path and copy
+            local_path = Path(unquote(parsed.path))
+            if not local_path.exists():
+                raise FigureDownloadError(f"Local file not found: {local_path}")
+            
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(local_path, output_path)
+            
+        else:
+            # Assume local file path (relative or absolute)
+            local_path = Path(url)
+            
+            # If relative and base_path provided, resolve against it
+            if not local_path.is_absolute() and base_path:
+                local_path = base_path / url
+            
+            if not local_path.exists():
+                raise FigureDownloadError(f"Local file not found: {local_path}")
+            
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(local_path, output_path)
+            
+    except urllib.error.URLError as e:
+        raise FigureDownloadError(f"Failed to download {url}: {e}")
+    except urllib.error.HTTPError as e:
+        raise FigureDownloadError(f"HTTP error downloading {url}: {e.code} {e.reason}")
+    except OSError as e:
+        raise FigureDownloadError(f"Failed to save figure to {output_path}: {e}")
+
+
+def extract_paper_title(markdown_text: str) -> str:
+    """
+    Extract paper title from markdown.
+    
+    Looks for (in order):
+    1. First H1 heading: # Title
+    2. HTML h1 tag: <h1>Title</h1>
+    3. First non-empty, non-image line
+    
+    Args:
+        markdown_text: The markdown content
+        
+    Returns:
+        Paper title string, or "Untitled Paper" if not found
+    """
+    # Look for first H1 heading: # Title
+    h1_match = re.search(r'^#\s+(.+?)(?:\n|$)', markdown_text, re.MULTILINE)
+    if h1_match:
+        return h1_match.group(1).strip()
+    
+    # Look for HTML h1
+    html_h1_match = re.search(r'<h1[^>]*>(.+?)</h1>', markdown_text, re.IGNORECASE | re.DOTALL)
+    if html_h1_match:
+        # Strip any HTML tags inside
+        title = re.sub(r'<[^>]+>', '', html_h1_match.group(1))
+        return title.strip()
+    
+    # Look for first non-empty line as fallback
+    for line in markdown_text.split('\n'):
+        line = line.strip()
+        if line and not line.startswith('!') and not line.startswith('<'):
+            return line[:200]  # Truncate very long lines
+    
+    return "Untitled Paper"
+
+
+def load_paper_from_markdown(
+    markdown_path: str,
+    output_dir: str,
+    paper_id: Optional[str] = None,
+    paper_domain: str = "other",
+    base_url: Optional[str] = None,
+    download_figures: bool = True,
+    figure_timeout: int = 30
+) -> PaperInput:
+    """
+    Load a paper from a markdown file and download embedded figures.
+    
+    This function parses a markdown file (e.g., output from marker or nougat),
+    extracts figure references, downloads them, and creates a PaperInput structure.
+    
+    Figure URL Resolution:
+    - Absolute URLs (http/https): Downloaded directly
+    - Relative URLs with base_url: Joined with base_url before downloading
+    - Relative paths: Resolved against the markdown file's directory
+    - file:// URLs: Extracted and copied
+    
+    Supported Image Formats:
+    - Raster: PNG, JPG/JPEG, GIF, WebP, BMP, TIFF/TIF, ICO
+    - Vector: SVG (may need conversion for some vision models)
+    - Scientific: EPS, PDF (may need conversion)
+    
+    Args:
+        markdown_path: Path to the markdown file containing the paper
+        output_dir: Directory to store downloaded figures
+        paper_id: Optional paper ID (defaults to markdown filename)
+        paper_domain: Domain classification for the paper
+        base_url: Optional base URL for resolving relative URLs in markdown
+        download_figures: Whether to download figures (if False, just extract info)
+        figure_timeout: Timeout for figure downloads in seconds
+        
+    Returns:
+        PaperInput dictionary with paper content and figure references
+        
+    Raises:
+        FileNotFoundError: If markdown file doesn't exist
+        ValidationError: If resulting paper input is invalid
+        
+    Example:
+        # Load from local markdown with relative image paths
+        paper_input = load_paper_from_markdown(
+            markdown_path="papers/smith2023/paper.md",
+            output_dir="papers/smith2023/figures",
+            paper_id="smith2023_plasmon",
+            paper_domain="plasmonics"
+        )
+        
+        # Load from markdown with remote image URLs needing a base URL
+        paper_input = load_paper_from_markdown(
+            markdown_path="papers/downloaded.md",
+            output_dir="papers/figures",
+            base_url="https://arxiv.org/html/paper123/"
+        )
+    """
+    md_path = Path(markdown_path)
+    if not md_path.exists():
+        raise FileNotFoundError(f"Markdown file not found: {markdown_path}")
+    
+    # Read markdown content
+    with open(md_path, 'r', encoding='utf-8') as f:
+        markdown_text = f.read()
+    
+    # Generate paper_id from filename if not provided
+    if paper_id is None:
+        paper_id = md_path.stem.replace(' ', '_').replace('-', '_').lower()
+    
+    # Extract paper title
+    paper_title = extract_paper_title(markdown_text)
+    
+    # Extract figure references
+    figure_refs = extract_figures_from_markdown(markdown_text)
+    
+    # Set up output directory
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
+    
+    # Base path for resolving relative local paths
+    md_base_path = md_path.parent
+    
+    # Process figures
+    figures: List[Dict[str, Any]] = []
+    download_errors: List[str] = []
+    
+    print(f"Processing {len(figure_refs)} figure(s)...")
+    
+    for i, fig_ref in enumerate(figure_refs):
+        fig_id = generate_figure_id(i, fig_ref['alt'], fig_ref['url'])
+        
+        # Ensure unique IDs
+        base_id = fig_id
+        counter = 1
+        while any(f['id'] == fig_id for f in figures):
+            fig_id = f"{base_id}_{counter}"
+            counter += 1
+        
+        # Resolve the URL (handle relative paths)
+        resolved_url = resolve_figure_url(
+            fig_ref['url'], 
+            base_path=md_base_path, 
+            base_url=base_url
+        )
+        
+        # Determine output filename
+        ext = get_file_extension(fig_ref['url'])
+        fig_filename = f"{fig_id}{ext}"
+        fig_output_path = output_path / fig_filename
+        
+        figure_entry: Dict[str, Any] = {
+            'id': fig_id,
+            'description': fig_ref['alt'] or f"Figure from paper",
+            'image_path': str(fig_output_path),
+            'source_url': fig_ref['url'],  # Keep original URL for reference
+        }
+        
+        # Check if format is preferred by vision models
+        if ext not in VISION_MODEL_PREFERRED_FORMATS:
+            figure_entry['format_warning'] = (
+                f"Format {ext} may need conversion for optimal vision model performance. "
+                f"Preferred formats: {', '.join(sorted(VISION_MODEL_PREFERRED_FORMATS))}"
+            )
+        
+        if download_figures:
+            try:
+                download_figure(
+                    resolved_url, 
+                    fig_output_path, 
+                    timeout=figure_timeout,
+                    base_path=md_base_path
+                )
+                print(f"  ✓ Downloaded {fig_id}: {fig_ref['url'][:60]}{'...' if len(fig_ref['url']) > 60 else ''}")
+            except FigureDownloadError as e:
+                download_errors.append(f"{fig_id}: {e}")
+                print(f"  ✗ Failed to download {fig_id}: {e}")
+                figure_entry['download_error'] = str(e)
+        
+        figures.append(figure_entry)
+    
+    # Build PaperInput
+    paper_input: Dict[str, Any] = {
+        'paper_id': paper_id,
+        'paper_title': paper_title,
+        'paper_text': markdown_text,
+        'paper_domain': paper_domain,
+        'figures': figures,
+    }
+    
+    # Report results
+    print(f"\n{'='*60}")
+    print(f"Paper loaded from markdown:")
+    print(f"  Title: {paper_title[:80]}{'...' if len(paper_title) > 80 else ''}")
+    print(f"  ID: {paper_id}")
+    print(f"  Text length: {len(markdown_text):,} characters")
+    print(f"  Figures found: {len(figure_refs)}")
+    if download_figures:
+        successful = len(figures) - len(download_errors)
+        print(f"  Figures downloaded: {successful}/{len(figures)}")
+    print(f"{'='*60}")
+    
+    if download_errors:
+        print(f"\n⚠️  {len(download_errors)} figure(s) failed to download:")
+        for err in download_errors[:5]:  # Show first 5 errors
+            print(f"    - {err}")
+        if len(download_errors) > 5:
+            print(f"    ... and {len(download_errors) - 5} more")
+    
+    # Validate (will raise if critical errors)
+    warnings = validate_paper_input(paper_input)
+    if warnings:
+        print(f"\nValidation warnings:")
+        for w in warnings:
+            print(f"  ⚠️  {w}")
+    
+    return paper_input
+
+
+def save_paper_input_json(paper_input: PaperInput, output_path: str) -> None:
+    """
+    Save a PaperInput to a JSON file.
+    
+    Useful for saving the parsed paper for later use without re-downloading figures.
+    
+    Args:
+        paper_input: The PaperInput dictionary
+        output_path: Path for the output JSON file
+    """
+    path = Path(output_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    
+    with open(path, 'w', encoding='utf-8') as f:
+        json.dump(paper_input, f, indent=2, ensure_ascii=False)
+    
+    print(f"Paper input saved to: {output_path}")
+
+
 if __name__ == "__main__":
     # Example usage
     print("Example paper input structure:")
@@ -577,6 +1067,36 @@ if __name__ == "__main__":
         print(f"Validation passed with {len(warnings)} warnings")
     except ValidationError as e:
         print(f"Validation failed: {e}")
+    
+    # Show markdown loading example
+    print("\n" + "=" * 60)
+    print("Markdown Loading Example")
+    print("=" * 60)
+    print("""
+Usage:
+    from src.paper_loader import load_paper_from_markdown
+    
+    # Load from local markdown with relative image paths
+    paper_input = load_paper_from_markdown(
+        markdown_path="papers/smith2023/paper.md",
+        output_dir="papers/smith2023/figures",
+        paper_id="smith2023_plasmon",
+        paper_domain="plasmonics"
+    )
+    
+    # Load with a base URL for remote relative images
+    paper_input = load_paper_from_markdown(
+        markdown_path="papers/downloaded.md",
+        output_dir="papers/figures",
+        base_url="https://example.com/papers/images/"
+    )
+
+Supported image formats: {}
+Preferred for vision models: {}
+""".format(
+        ', '.join(sorted(SUPPORTED_IMAGE_FORMATS.keys())),
+        ', '.join(sorted(VISION_MODEL_PREFERRED_FORMATS))
+    ))
 
 
 
