@@ -805,6 +805,50 @@ Instead of fixed resolution estimates, future versions could:
 - Automatically refine based on convergence
 - Stop when results stabilize
 
+### Cross-Stage Backtracking
+
+When a significant error is discovered in a later stage that invalidates earlier work, the system can backtrack to re-run earlier stages with corrected information.
+
+**Architecture:**
+```
+Any Agent (suggests backtrack) → SupervisorAgent (decides) → HANDLE_BACKTRACK → SELECT_STAGE
+```
+
+**Agents That Can Suggest Backtracking:**
+- `ResultsAnalyzerAgent`: Discovers paper uses different geometry/material than assumed
+- `PhysicsSanityAgent`: Physics evidence suggests fundamental setup error
+- `CodeReviewerAgent`: Code review reveals design was based on wrong assumptions
+
+**SupervisorAgent Makes Final Decision:**
+- Evaluates the suggestion's validity
+- Determines which stages need invalidation
+- Can accept, reject, or modify the suggestion
+- Enforces `MAX_BACKTRACKS` limit (default: 2)
+
+**When to Backtrack (Critical/Significant Issues):**
+| Issue Type | Example | Backtrack To |
+|------------|---------|--------------|
+| Wrong geometry type | Assumed spheres, paper uses rods | Stage 1 (single structure) |
+| Wrong material | Used silver, paper uses gold | Stage 0 (material validation) |
+| Wrong wavelength range | Simulated visible, paper is near-IR | Stage 1 |
+| Wrong physics model | Used 2D, paper requires 3D | Stage 1 |
+
+**When NOT to Backtrack (Handle Locally):**
+- Minor parameter adjustments (5nm diameter difference)
+- Expected discrepancies from approximations
+- Numerical issues fixable in current stage
+- Small optimization tweaks
+
+**Stage Status Values for Backtracking:**
+- `needs_rerun`: Backtrack target stage, will re-execute
+- `invalidated`: Results invalid, will re-run after dependencies
+
+**Limits:**
+- `MAX_BACKTRACKS = 2`: Prevents infinite loops
+- If limit reached + backtrack needed → escalate to user
+
+**Status:** Implemented in v1.
+
 ### Stage Parallelization
 
 Currently, stages execute sequentially. Future versions could:

@@ -84,11 +84,30 @@ The system uses a state graph where each node represents an agent action or syst
 
 ### 3. SELECT_STAGE Node
 
-**Purpose**: Choose next stage to execute based on dependencies, status, validation hierarchy, and budget
+**Purpose**: Choose next stage to execute based on dependencies, status, validation hierarchy, budget, and backtracking state
 
 **Logic**:
 ```python
 def select_next_stage(state):
+    # ─── PRIORITY 1: Handle backtracked stages ───────────────────────────
+    # Stages marked "needs_rerun" from backtracking take priority
+    for stage in state["plan"]["stages"]:
+        if stage["status"] == "needs_rerun":
+            return stage["stage_id"]
+    
+    # ─── PRIORITY 2: Check for invalidated stages ready to re-run ────────
+    # Invalidated stages can run once their dependencies are satisfied
+    for stage in state["plan"]["stages"]:
+        if stage["status"] == "invalidated":
+            deps_ok = all(
+                get_stage_status(dep) in ["completed_success", "completed_partial"]
+                for dep in stage["dependencies"]
+            )
+            if deps_ok:
+                stage["status"] = "needs_rerun"
+                return stage["stage_id"]
+    
+    # ─── PRIORITY 3: Normal stage selection ──────────────────────────────
     # Check validation hierarchy first
     hierarchy = state["validation_hierarchy"]
     if not hierarchy["material_validated"]:
@@ -99,8 +118,8 @@ def select_next_stage(state):
     budget_remaining = state.get("runtime_budget_remaining_seconds", float("inf"))
     
     for stage in state["plan"]["stages"]:
-        # Skip completed or blocked stages
-        if stage["status"] in ["completed_success", "completed_partial", "blocked"]:
+        # Skip completed, blocked, or invalidated stages
+        if stage["status"] in ["completed_success", "completed_partial", "blocked", "invalidated"]:
             continue
         
         # Check dependencies
@@ -134,6 +153,18 @@ def select_next_stage(state):
     
     return None  # All stages done
 ```
+
+**Stage Status Values**:
+| Status | Meaning |
+|--------|---------|
+| not_started | Stage hasn't been attempted |
+| in_progress | Stage is currently executing |
+| completed_success | Stage completed with good results |
+| completed_partial | Stage completed with partial match |
+| completed_failed | Stage completed but failed validation |
+| blocked | Stage skipped due to budget/dependencies |
+| needs_rerun | Stage needs to be re-executed (backtrack target) |
+| invalidated | Stage results invalid, will re-run when deps ready |
 
 **Transitions**:
 - → DESIGN (has next stage)
@@ -425,12 +456,67 @@ This is the highest-leverage checkpoint in the system. If material data is wrong
 | change_priority | SELECT_STAGE (reordered) | |
 | replan_needed | PLAN (if count < 2) | |
 | replan_needed | ASK_USER (if count >= 2) | |
+| backtrack_to_stage | HANDLE_BACKTRACK | Cross-stage backtracking |
 | ask_user | ASK_USER | (MANDATORY after Stage 0) |
 | all_complete | GENERATE_REPORT | |
 
 ---
 
-### 13. ASK_USER Node
+### 13. HANDLE_BACKTRACK Node
+
+**Purpose**: Process cross-stage backtracking when Supervisor accepts a backtrack suggestion
+
+**Triggers**:
+- `supervisor_verdict = "backtrack_to_stage"`
+- Supervisor accepted a backtrack suggestion from another agent
+
+**Inputs**:
+- `backtrack_decision` from SupervisorAgent containing:
+  - `target_stage_id`: Stage to go back to
+  - `stages_to_invalidate`: List of stages to mark as needing re-run
+  - `reason`: Why backtracking is needed
+
+**Logic**:
+```python
+def handle_backtrack(state):
+    decision = state["backtrack_decision"]
+    target_stage = decision["target_stage_id"]
+    
+    # Mark stages as invalidated (need to re-run after target completes)
+    for stage_id in decision["stages_to_invalidate"]:
+        state["progress"]["stages"][stage_id]["status"] = "invalidated"
+        state["progress"]["stages"][stage_id]["invalidation_reason"] = decision["reason"]
+    
+    # Reset target stage to allow re-design
+    state["progress"]["stages"][target_stage]["status"] = "needs_rerun"
+    state["progress"]["stages"][target_stage]["revision_count"] += 1
+    
+    # Increment backtrack counter
+    state["backtrack_count"] += 1
+    
+    # Clear working data to start fresh
+    state["current_stage_id"] = None
+    state["code"] = None
+    state["design_description"] = None
+    state["backtrack_suggestion"] = None  # Clear the suggestion
+    
+    # Log the backtrack event
+    log_backtrack_event(state, decision)
+    
+    return state
+```
+
+**Outputs**:
+- Updated `progress` with invalidated stages
+- Incremented `backtrack_count`
+- Cleared working data
+
+**Transitions**:
+- → SELECT_STAGE (always)
+
+---
+
+### 14. ASK_USER Node
 
 **Purpose**: Pause for user input
 

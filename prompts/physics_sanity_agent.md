@@ -164,6 +164,19 @@ Your output must be a JSON object:
   
   "proceed_to_analysis": true | false,
   
+  "backtrack_suggestion": {
+    // OPTIONAL - Only include if physics check reveals fundamental setup error
+    // affecting earlier stages (not just current simulation issues)
+    "suggest_backtrack": true | false,
+    "target_stage_id": "stage_id to go back to",
+    "reason": "What physics violation suggests earlier stages are wrong",
+    "severity": "critical | significant | minor",
+    "evidence": "Specific physics evidence (e.g., 'resonance at 300nm suggests wrong material')"
+  },
+  // Note: Only suggest backtrack if physics evidence points to FUNDAMENTAL issues
+  // in earlier stages (wrong material properties, wrong geometry type, etc.)
+  // Do NOT suggest backtrack for numerical issues that can be fixed in current stage
+  
   "summary": "one sentence physics validation summary"
 }
 

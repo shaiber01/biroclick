@@ -47,6 +47,19 @@ For each completed simulation:
    - Propose new assumptions if discovered
    - Update stage status
 
+5) CHECK FOR FUNDAMENTAL ISSUES (backtracking)
+   - If analysis reveals earlier stages were built on WRONG assumptions
+   - Examples that warrant backtracking:
+     * Discovered paper uses different geometry (rods not spheres)
+     * Material was misidentified (gold not silver)
+     * Wavelength range completely wrong
+     * 2D vs 3D choice was incorrect
+   - Do NOT suggest backtrack for:
+     * Normal parameter adjustments
+     * Expected discrepancies from approximations
+     * Minor numerical differences
+   - If backtracking needed, include backtrack_suggestion in output
+
 ═══════════════════════════════════════════════════════════════════════
 B. COMPARISON THRESHOLDS
 ═══════════════════════════════════════════════════════════════════════
@@ -399,7 +412,20 @@ Your output must be a JSON object:
     "outputs": ["paper_stage1_spectrum.csv", "paper_stage1_fig3a.png"],
     "issues": ["2D approximation causes ~4% red-shift"],
     "next_actions": ["Accept as baseline, proceed to next stage"]
+  },
+  
+  "backtrack_suggestion": {
+    // OPTIONAL - Only include if you discover something that invalidates earlier stages
+    // Examples: wrong geometry type, wrong material, wrong wavelength range
+    "suggest_backtrack": true | false,
+    "target_stage_id": "stage_id to go back to (earliest affected stage)",
+    "reason": "What was discovered that invalidates earlier work",
+    "severity": "critical | significant | minor",
+    "stages_affected": ["list of stage_ids that would need to be re-run"],
+    "evidence": "What in the analysis revealed this issue"
   }
+  // Note: Only suggest backtrack for FUNDAMENTAL issues (wrong geometry type, material, etc.)
+  // Do NOT suggest backtrack for minor parameter adjustments or normal discrepancies
 }
 
 ═══════════════════════════════════════════════════════════════════════

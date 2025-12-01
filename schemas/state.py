@@ -266,10 +266,18 @@ class ReproState(TypedDict, total=False):
     analysis_revision_count: int
     replan_count: int
     
+    # ─── Backtracking Support ─────────────────────────────────────────────
+    # When an agent detects a significant issue that invalidates earlier work,
+    # it can suggest backtracking. SupervisorAgent decides whether to accept.
+    backtrack_suggestion: Optional[Dict[str, Any]]  # {suggesting_agent, target_stage_id, reason, severity}
+    invalidated_stages: List[str]  # Stage IDs marked as needing re-run
+    backtrack_count: int  # Track number of backtracks (for limits)
+    
     # ─── Verdicts ───────────────────────────────────────────────────────
     last_reviewer_verdict: Optional[str]  # approve_to_run | approve_results | needs_revision
     reviewer_issues: List[ReviewerIssue]
-    supervisor_verdict: Optional[str]  # ok_continue | replan_needed | change_priority | ask_user
+    supervisor_verdict: Optional[str]  # ok_continue | replan_needed | change_priority | ask_user | backtrack_to_stage
+    backtrack_decision: Optional[Dict[str, Any]]  # {accepted, target_stage_id, stages_to_invalidate, reason}
     
     # ─── Stage Working Data ─────────────────────────────────────────────
     code: Optional[str]  # Current Python+Meep code
@@ -366,10 +374,16 @@ def create_initial_state(
         analysis_revision_count=0,
         replan_count=0,
         
+        # Backtracking support
+        backtrack_suggestion=None,
+        invalidated_stages=[],
+        backtrack_count=0,
+        
         # Verdicts
         last_reviewer_verdict=None,
         reviewer_issues=[],
         supervisor_verdict=None,
+        backtrack_decision=None,
         
         # Stage working data
         code=None,
@@ -491,6 +505,7 @@ DEFAULT_RUNTIME_CONFIG = RuntimeConfig(
 MAX_DESIGN_REVISIONS = 3
 MAX_ANALYSIS_REVISIONS = 2
 MAX_REPLANS = 2
+MAX_BACKTRACKS = 2  # Limit total backtracks to prevent infinite loops
 
 # Default runtime budgets (in minutes)
 DEFAULT_STAGE_BUDGETS = {

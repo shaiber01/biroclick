@@ -282,6 +282,19 @@ Your output must be a JSON object:
   
   "escalate_to_user": false,  // or specific question string
   
+  "backtrack_suggestion": {
+    // OPTIONAL - Only include if code review reveals the DESIGN was based on wrong assumptions
+    // that were established in earlier stages
+    "suggest_backtrack": true | false,
+    "target_stage_id": "stage_id to go back to",
+    "reason": "What in the code/design reveals earlier stages are wrong",
+    "severity": "critical | significant | minor",
+    "evidence": "Specific evidence from code review"
+  },
+  // Note: Only suggest backtrack if design/code reveals FUNDAMENTAL issues
+  // from earlier stages (wrong geometry type assumed, wrong material chosen, etc.)
+  // Do NOT suggest backtrack for code bugs that can be fixed in current revision
+  
   "summary": "one paragraph summary of review"
 }
 

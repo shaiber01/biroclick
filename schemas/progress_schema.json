@@ -59,8 +59,12 @@
         },
         "status": {
           "type": "string",
-          "enum": ["not_started", "in_progress", "completed_success", "completed_partial", "completed_failed", "blocked"],
-          "description": "Current status of the stage"
+          "enum": ["not_started", "in_progress", "completed_success", "completed_partial", "completed_failed", "blocked", "needs_rerun", "invalidated"],
+          "description": "Current status of the stage. 'needs_rerun' = backtrack target, 'invalidated' = results invalid due to backtrack"
+        },
+        "invalidation_reason": {
+          "type": ["string", "null"],
+          "description": "Why this stage was invalidated (if status is 'invalidated' or 'needs_rerun')"
         },
         "last_updated": {
           "type": "string",

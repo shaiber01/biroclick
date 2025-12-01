@@ -91,6 +91,22 @@ ASK USER ("ask_user") if:
 - Need domain expertise beyond simulation
 - Revision/replan limits exceeded
 
+BACKTRACK ("backtrack_to_stage") if:
+- Another agent suggested backtracking with valid reasoning
+- A significant correction was made that invalidates earlier stage assumptions
+- The stage to backtrack to is earlier than current stage
+- Backtrack count < MAX_BACKTRACKS (currently 2)
+- Examples of when to backtrack:
+  * Discovered paper uses different geometry (e.g., nanorods not nanospheres)
+  * Material was fundamentally misidentified
+  * Wavelength range was completely wrong
+  * 2D vs 3D simulation choice was incorrect
+
+DO NOT backtrack for:
+- Minor parameter tweaks (handle locally)
+- Small numerical differences
+- Issues that can be fixed in current stage
+
 STOP (recommend ending via "ok_continue" + should_stop=true) if:
 - All reproducible figures done to acceptable level
 - Blocked by missing information that user can't provide
@@ -124,7 +140,7 @@ D. OUTPUT FORMAT
 ═══════════════════════════════════════════════════════════════════════
 
 {
-  "supervisor_verdict": "ok_continue | replan_needed | change_priority | ask_user",
+  "supervisor_verdict": "ok_continue | replan_needed | change_priority | ask_user | backtrack_to_stage",
   
   "validation_hierarchy_status": {
     "material_validation": {
@@ -193,6 +209,20 @@ D. OUTPUT FORMAT
     }
   ],
   
+  "backtrack_decision": {
+    // Only if verdict is backtrack_to_stage
+    // Or if rejecting a backtrack suggestion, explain why
+    "accepted": true | false,
+    "target_stage_id": "stage_1",
+    "stages_to_invalidate": ["stage_2", "stage_3"],
+    "reason": "Material was incorrectly identified; stage 1 geometry was optimized for wrong material",
+    "original_suggestion": {
+      "from_agent": "ResultsAnalyzerAgent",
+      "suggested_target": "stage_1",
+      "severity": "critical"
+    }
+  },
+  
   "should_stop": false,
   "stop_reason": null  // or explanation if should_stop is true
 }
@@ -224,6 +254,26 @@ SCENARIO: Paper says "spacing = 20nm" but unclear if gap or period
 SCENARIO: All figures reproduced to partial/success level
 → VERDICT: ok_continue + should_stop=true
 → REASONING: Main claims reproduced; further optimization has diminishing returns
+
+SCENARIO: Stage 4 analysis discovers paper uses nanorods, not nanospheres (we assumed spheres since Stage 1)
+→ VERDICT: backtrack_to_stage
+→ TARGET: stage_1 (single structure design)
+→ INVALIDATE: stage_2, stage_3, stage_4
+→ REASONING: Fundamental geometry error; all stages built on wrong assumption
+
+SCENARIO: Stage 3 realizes material should be gold not silver (misread paper)
+→ VERDICT: backtrack_to_stage  
+→ TARGET: stage_0 (material validation)
+→ INVALIDATE: stage_1, stage_2, stage_3
+→ REASONING: All optical properties and geometries were optimized for wrong material
+
+SCENARIO: Agent suggests backtrack but it's a minor tweak (5nm diameter difference)
+→ VERDICT: ok_continue (reject backtrack)
+→ REASONING: Minor parameter differences can be handled locally; doesn't invalidate earlier work
+
+SCENARIO: Backtrack suggested but backtrack_count already at MAX_BACKTRACKS (2)
+→ VERDICT: ask_user
+→ REASONING: Already backtracked twice; need user guidance on whether to continue or stop
 
 ═══════════════════════════════════════════════════════════════════════
 F. MANDATORY MATERIAL VALIDATION CHECKPOINT
