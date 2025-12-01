@@ -523,6 +523,54 @@ def handle_backtrack(state):
 **Transitions**:
 - → SELECT_STAGE (always)
 
+#### Backtracking Semantics Reference
+
+This table summarizes when each agent can propose backtracking and what typically gets invalidated.
+
+**Which Agents Can Propose Backtracking?**
+
+| Agent | Can Propose? | In Output Field | Authority Level |
+|-------|-------------|-----------------|-----------------|
+| **ResultsAnalyzerAgent** | ✅ Yes | `backtrack_suggestion` | Suggests only |
+| **PhysicsSanityAgent** | ✅ Yes | `backtrack_suggestion` | Suggests only |
+| **CodeReviewerAgent** | ✅ Yes | `backtrack_suggestion` | Suggests only |
+| **SupervisorAgent** | ✅ Yes (decides) | `backtrack_decision` | **Final authority** |
+| All other agents | ❌ No | N/A | N/A |
+
+**When to Propose Backtracking (by Agent)**
+
+| Agent | Propose Backtrack When... | Do NOT Backtrack For... |
+|-------|---------------------------|------------------------|
+| **ResultsAnalyzerAgent** | Wrong geometry type discovered (spheres vs rods), wrong material identified, wrong wavelength range | Minor quantitative discrepancies, expected approximation errors |
+| **PhysicsSanityAgent** | Physics evidence of fundamental setup error (wrong mode type, impossible results) | Numerical noise, minor conservation law deviations |
+| **CodeReviewerAgent** | Design was based on wrong assumptions from earlier stages | Code bugs fixable in current stage, style issues |
+
+**Typical `invalidated_stages` by Error Type**
+
+| Error Discovered | Backtrack To | Invalidated Stages | Example |
+|-----------------|--------------|-------------------|---------|
+| Wrong material data | Stage 0 | All stages 1+ | Used silver instead of gold |
+| Wrong geometry type | Stage 1 | All stages 2+ | Assumed spheres, paper uses rods |
+| Wrong periodicity/coupling | Stage 2 | All stages 3+ | Missed inter-particle coupling |
+| Wrong parameter range | Sweep stage | Later sweeps | Simulated 400-600nm, paper is 600-900nm |
+
+**SupervisorAgent Decision Matrix**
+
+| Suggestion Severity | Confidence | Backtrack Count | Decision |
+|--------------------|------------|-----------------|----------|
+| Critical | High | < MAX_BACKTRACKS | Accept backtrack |
+| Critical | Low | Any | Ask user for confirmation |
+| Significant | High | < MAX_BACKTRACKS | Accept backtrack |
+| Significant | Low | Any | Ask user |
+| Minor | Any | Any | Reject, handle locally |
+| Any | Any | ≥ MAX_BACKTRACKS | Ask user (limit reached) |
+
+**Backtrack Limits**
+
+- `MAX_BACKTRACKS = 2` per reproduction
+- If limit reached and another backtrack is needed → escalate to user
+- Prevents infinite backtrack loops
+
 ---
 
 ### 14. ASK_USER Node
