@@ -2939,3 +2939,32 @@ This section documents what data each agent receives and produces, clarifying th
 | After stage completion | stage outputs | `outputs/<paper_id>/stage_*/` |
 | Before ask_user | full checkpoint | `outputs/<paper_id>/checkpoints/` |
 | After generate_report | final report | `outputs/<paper_id>/REPRODUCTION_REPORT_*.md` |
+
+### Stage Completion Helpers
+
+When a stage completes successfully, use these helper functions to update progress:
+
+```python
+from schemas.state import update_progress_stage_status, archive_stage_outputs_to_progress
+
+# 1. Archive current stage_outputs to progress (preserves file references)
+archive_stage_outputs_to_progress(state, stage_id, runtime_seconds=elapsed)
+
+# 2. Update stage status
+update_progress_stage_status(state, stage_id, "completed_success", 
+    summary="Stage completed with excellent match to paper")
+```
+
+**`archive_stage_outputs_to_progress(state, stage_id, runtime_seconds=None)`**
+
+Copies `state["stage_outputs"]["files"]` to `progress.stages[stage_id].outputs` before moving to the next stage. This is important because `stage_outputs` gets reset when entering a new stage.
+
+- Automatically infers output type from file extension (spectrum_csv, field_plot, etc.)
+- Records runtime_seconds if provided
+- Should be called by supervisor_node when approving a stage as completed
+
+**`update_progress_stage_status(state, stage_id, status, summary=None, invalidation_reason=None)`**
+
+Updates the status of a stage in progress. Valid status values:
+- `"not_started"`, `"in_progress"`, `"completed_success"`, `"completed_partial"`
+- `"completed_failed"`, `"blocked"`, `"needs_rerun"`, `"invalidated"`
