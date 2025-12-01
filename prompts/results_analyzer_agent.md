@@ -82,6 +82,71 @@ For each figure, verify:
 □ For dispersion: same mode structure?
 
 ═══════════════════════════════════════════════════════════════════════
+C2. VISION MODEL COMPARISON PROTOCOL
+═══════════════════════════════════════════════════════════════════════
+
+This system uses multimodal LLMs (GPT-4o, Claude) for visual figure comparison.
+Follow this protocol to get reliable results from vision analysis.
+
+1. PREPARE IMAGES FOR COMPARISON
+   - Ensure both images are loaded: paper_image_path and reproduction_image_path
+   - Both should be similar scale/resolution if possible
+   - Crop to the relevant figure area (remove surrounding text/captions)
+
+2. ASK SPECIFIC COMPARISON QUESTIONS
+   When prompting the vision model, ask focused questions:
+   
+   ✓ "Do both plots show the same general shape/trend?"
+   ✓ "Are the number of peaks/dips the same?"
+   ✓ "Do the peak positions appear at similar x-axis locations?"
+   ✓ "Is the overall shape (dip vs peak, symmetric vs asymmetric) the same?"
+   ✓ "Are the relative amplitudes between features similar?"
+   ✓ "For field maps: are hot spots in the same locations?"
+   
+3. WHAT VISION MODELS ARE GOOD AT
+   ✓ Qualitative shape comparison (trends, features)
+   ✓ Counting discrete features (number of peaks)
+   ✓ Spatial relationships (where hot spots are located)
+   ✓ Symmetric vs asymmetric shapes
+   ✓ Color gradients and patterns in field maps
+   ✓ Overall visual similarity assessment
+   
+4. WHAT VISION MODELS STRUGGLE WITH
+   ✗ Reading exact numerical values from axes
+   ✗ Precise quantitative measurements
+   ✗ Small text in legends (may misread)
+   ✗ Subtle differences in line widths/amplitudes
+   ✗ Differentiating similar colors in dense plots
+   
+   → Use DIGITIZED DATA for quantitative comparison (Section E)
+   
+5. COMBINE VISUAL AND QUANTITATIVE
+   - Vision assessment → qualitative match (shape, trend, features)
+   - Digitized data → quantitative match (exact values, statistics)
+   - Both contribute to final classification
+   
+6. REPORT VISUAL FINDINGS
+   Include in FigureComparison output:
+   
+   {
+     "visual_similarity": "high" | "medium" | "low",
+     "features_matched": [
+       "Same number of peaks (2)",
+       "Similar overall shape (asymmetric dip)",
+       "Hot spots at same locations"
+     ],
+     "features_mismatched": [
+       "Paper shows sharper features",
+       "Background slope differs"
+     ]
+   }
+
+7. CONFIDENCE SCORING FOR VISUAL COMPARISON
+   - HIGH confidence (0.8-1.0): Clear match/mismatch, good image quality
+   - MEDIUM confidence (0.5-0.8): Some ambiguity, possible image artifacts
+   - LOW confidence (0.0-0.5): Poor image quality, unusual plot type
+
+═══════════════════════════════════════════════════════════════════════
 D. QUANTITATIVE COMPARISON PROCESS
 ═══════════════════════════════════════════════════════════════════════
 

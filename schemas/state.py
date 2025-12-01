@@ -91,14 +91,33 @@ class ShapeComparisonRow(TypedDict):
 
 
 class FigureComparison(TypedDict):
-    """Structured comparison of a reproduced figure to paper."""
+    """
+    Structured comparison of a reproduced figure to paper.
+    
+    This captures both the paths to images (for visual comparison by vision models)
+    and structured data about the comparison results.
+    """
     figure_id: str
     stage_id: str  # Which stage produced this comparison
     title: str
-    reproduction_image_path: NotRequired[str]
-    comparison_table: List[FigureComparisonRow]
-    shape_comparison: List[ShapeComparisonRow]
-    reason_for_difference: str
+    
+    # Image paths for comparison
+    paper_image_path: str  # Path to original figure from paper (from PaperInput)
+    reproduction_image_path: NotRequired[str]  # Path to simulation output image
+    
+    # Structured comparison data
+    comparison_table: List[FigureComparisonRow]  # Quantitative comparison table
+    shape_comparison: List[ShapeComparisonRow]  # Shape/feature comparison
+    reason_for_difference: str  # Explanation of observed differences
+    
+    # Classification (from ResultsAnalyzerAgent)
+    classification: str  # "success" | "partial" | "failure"
+    
+    # Vision model assessment (qualitative)
+    visual_similarity: NotRequired[str]  # "high" | "medium" | "low"
+    features_matched: NotRequired[List[str]]  # List of matched features
+    features_mismatched: NotRequired[List[str]]  # List of mismatched features
+    
     # Confidence fields
     confidence: float  # 0.0 to 1.0
     confidence_reason: str  # Explanation of confidence level

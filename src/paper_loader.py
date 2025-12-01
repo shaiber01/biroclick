@@ -158,6 +158,201 @@ def validate_domain(domain: str) -> bool:
     return domain in valid_domains
 
 
+def validate_figure_image(image_path: str) -> List[str]:
+    """
+    Check if a figure image is suitable for vision models.
+    
+    Vision models (GPT-4o, Claude) work best with certain image characteristics.
+    This function checks for common issues that may affect comparison quality.
+    
+    Args:
+        image_path: Path to the figure image file
+        
+    Returns:
+        List of warnings (empty if image is suitable)
+    """
+    warnings = []
+    path = Path(image_path)
+    
+    if not path.exists():
+        warnings.append(f"Image file not found: {image_path}")
+        return warnings
+    
+    # Check file size
+    size_mb = path.stat().st_size / (1024 * 1024)
+    if size_mb > 5:
+        warnings.append(f"Large file size ({size_mb:.1f}MB) - consider compressing to save tokens")
+    
+    # Try to check image dimensions using PIL if available
+    try:
+        from PIL import Image
+        
+        img = Image.open(path)
+        width, height = img.size
+        
+        if width < 512 or height < 512:
+            warnings.append(
+                f"Low resolution ({width}x{height}) - vision models work best with ≥512px on each side"
+            )
+        
+        if width > 4096 or height > 4096:
+            warnings.append(
+                f"Very high resolution ({width}x{height}) - consider resizing to ≤4096px to save tokens"
+            )
+        
+        # Check for very unusual aspect ratios
+        aspect_ratio = max(width, height) / min(width, height)
+        if aspect_ratio > 5:
+            warnings.append(
+                f"Extreme aspect ratio ({aspect_ratio:.1f}:1) - may be cropped by vision models"
+            )
+        
+        img.close()
+        
+    except ImportError:
+        # PIL not available - skip dimension checks
+        warnings.append(
+            "PIL/Pillow not installed - cannot check image dimensions. "
+            "Install with: pip install Pillow"
+        )
+    except Exception as e:
+        warnings.append(f"Could not analyze image: {e}")
+    
+    return warnings
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Token Cost Estimation
+# ═══════════════════════════════════════════════════════════════════════
+
+def estimate_token_cost(paper_input: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Estimate token usage and cost for reproducing a paper.
+    
+    This provides a rough estimate based on:
+    - Paper text length
+    - Number of figures (vision models charge per image)
+    - Expected number of agent calls
+    
+    NOTE: This is a ROUGH estimate. Actual costs depend on:
+    - Number of revisions needed
+    - Model used (GPT-4o, Claude, etc.)
+    - Complexity of the reproduction
+    
+    Args:
+        paper_input: Paper input dictionary
+        
+    Returns:
+        Dictionary with token and cost estimates
+    """
+    # Text tokens (rough estimate: ~4 chars per token)
+    text_tokens = len(paper_input.get("paper_text", "")) / 4
+    
+    # Supplementary text if present
+    supplementary = paper_input.get("supplementary", {})
+    if supplementary.get("supplementary_text"):
+        text_tokens += len(supplementary["supplementary_text"]) / 4
+    
+    # Image tokens (OpenAI GPT-4o pricing as reference)
+    # ~170 tokens per 512x512 tile, typical figure = ~4 tiles = 680 tokens
+    TOKENS_PER_FIGURE = 680
+    
+    figures = paper_input.get("figures", [])
+    supp_figures = supplementary.get("supplementary_figures", [])
+    total_figures = len(figures) + len(supp_figures)
+    image_tokens = total_figures * TOKENS_PER_FIGURE
+    
+    # Estimate agent calls by workflow phase
+    # Planning phase: 2 calls with full paper text
+    planner_input_tokens = 2 * text_tokens
+    
+    # Per stage estimates (assume 4 stages average)
+    num_stages = max(4, len(figures))  # At least one stage per key figure
+    
+    # Each stage involves:
+    # - Design: 1 call with ~30% of paper context
+    # - CodeGen: 2 calls (initial + 1 revision average)
+    # - Review: 2 calls
+    # - Analysis: 1 call with images
+    stage_text_fraction = 0.3  # Only relevant parts of paper needed
+    per_stage_text = text_tokens * stage_text_fraction
+    per_stage_input = (
+        per_stage_text +  # Design
+        per_stage_text * 2 +  # CodeGen (2 calls)
+        per_stage_text * 2 +  # Review (2 calls)
+        per_stage_text + image_tokens / num_stages  # Analysis with figure
+    )
+    
+    total_stages_input = per_stage_input * num_stages
+    
+    # Supervisor: 1 call per stage decision
+    supervisor_input = num_stages * (per_stage_text * 0.5)
+    
+    # Report generation: 1 call with summaries
+    report_input = text_tokens * 0.2 + image_tokens
+    
+    # Total input tokens
+    total_input_estimate = (
+        planner_input_tokens +
+        total_stages_input +
+        supervisor_input +
+        report_input
+    )
+    
+    # Output tokens (typically 20-30% of input for this use case)
+    total_output_estimate = total_input_estimate * 0.25
+    
+    # Cost calculation (GPT-4o pricing as of late 2024)
+    # Input: $2.50 per 1M tokens
+    # Output: $10.00 per 1M tokens
+    INPUT_COST_PER_MILLION = 2.50
+    OUTPUT_COST_PER_MILLION = 10.00
+    
+    input_cost = total_input_estimate * INPUT_COST_PER_MILLION / 1_000_000
+    output_cost = total_output_estimate * OUTPUT_COST_PER_MILLION / 1_000_000
+    total_cost = input_cost + output_cost
+    
+    return {
+        "estimated_input_tokens": int(total_input_estimate),
+        "estimated_output_tokens": int(total_output_estimate),
+        "estimated_total_tokens": int(total_input_estimate + total_output_estimate),
+        "estimated_cost_usd": round(total_cost, 2),
+        "cost_breakdown": {
+            "input_cost_usd": round(input_cost, 2),
+            "output_cost_usd": round(output_cost, 2),
+        },
+        "assumptions": {
+            "num_figures": total_figures,
+            "num_stages_estimated": num_stages,
+            "text_chars": len(paper_input.get("paper_text", "")),
+            "model_pricing": "GPT-4o (late 2024)",
+        },
+        "warning": (
+            "This is a rough estimate. Actual costs depend on number of revisions, "
+            "model selection, and reproduction complexity. "
+            "Budget 2-3x this estimate for complex papers."
+        )
+    }
+
+
+def load_paper_text(text_path: str) -> str:
+    """
+    Load paper text from a file (markdown, txt, etc.)
+    
+    Args:
+        text_path: Path to text file
+        
+    Returns:
+        Paper text as string
+    """
+    path = Path(text_path)
+    if not path.exists():
+        raise FileNotFoundError(f"Text file not found: {text_path}")
+    
+    with open(path, 'r', encoding='utf-8') as f:
+        return f.read()
+
+
 # ═══════════════════════════════════════════════════════════════════════
 # Loading Functions
 # ═══════════════════════════════════════════════════════════════════════

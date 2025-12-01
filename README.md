@@ -148,6 +148,8 @@ paper_input = create_paper_input(
 
 See `src/paper_loader.py` for the full `PaperInput` schema and validation.
 
+For detailed instructions on preparing papers (text extraction, figure extraction, digitization), see **[docs/preparing_papers.md](docs/preparing_papers.md)**.
+
 ## Data Models
 
 ### Plan (`plan_<paper_id>.json`)
