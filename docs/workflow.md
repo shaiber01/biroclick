@@ -371,7 +371,7 @@ See `docs/guidelines.md` Section 14 for sandboxing details and future Docker sup
 
 **Purpose**: Compare results to paper and classify reproduction quality
 
-**Multimodal Capability**: This node uses vision-capable LLMs (GPT-4o, Claude) to visually compare simulation output images against paper figure images. Both images are provided directly to the LLM.
+**Multimodal Capability**: This node uses Claude Opus 4.5 (vision-capable) to visually compare simulation output images against paper figure images. Both images are provided directly to the LLM.
 
 **Inputs**:
 - `stage_outputs`: Files and data from simulation (including generated plot images)
@@ -958,8 +958,7 @@ def handle_timeout(state, config):
 
 ```bash
 # LLM Configuration
-OPENAI_API_KEY=your-key
-OPENAI_MODEL=gpt-4o-mini
+ANTHROPIC_API_KEY=your-key
 
 # Runtime Limits
 MAX_STAGE_RUNTIME_MINUTES=60
@@ -974,25 +973,39 @@ MAX_REPLANS=2
 
 ### Model Selection
 
-Different agents can use different models:
+**v1 Configuration: Claude Opus 4.5 for all agents**
+
+For the initial version, we use Claude Opus 4.5 (`claude-opus-4-20250514`) consistently across all agents. This provides:
+- Best-in-class reasoning for complex physics
+- Excellent code generation quality
+- Strong vision capabilities for figure comparison
+- Consistent behavior across all agents
 
 ```python
-from langchain_openai import ChatOpenAI
+from langchain_anthropic import ChatAnthropic
 
-# Cost-effective for validation (focused checks)
-execution_validator_llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
-physics_sanity_llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
-comparison_validator_llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
-reviewer_llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+# v1: Single model for all agents (Claude Opus 4.5)
+MODEL = "claude-opus-4-20250514"
 
-# More capable for design and analysis
-designer_llm = ChatOpenAI(model="gpt-4o", temperature=0)
-code_generator_llm = ChatOpenAI(model="gpt-4o", temperature=0)
-analyzer_llm = ChatOpenAI(model="gpt-4o", temperature=0)
-
-# Strategic decisions
-supervisor_llm = ChatOpenAI(model="gpt-4o", temperature=0)
+# All agents use the same model
+prompt_adaptor_llm = ChatAnthropic(model=MODEL, temperature=0)
+planner_llm = ChatAnthropic(model=MODEL, temperature=0)
+designer_llm = ChatAnthropic(model=MODEL, temperature=0)
+code_generator_llm = ChatAnthropic(model=MODEL, temperature=0)
+reviewer_llm = ChatAnthropic(model=MODEL, temperature=0)
+execution_validator_llm = ChatAnthropic(model=MODEL, temperature=0)
+physics_sanity_llm = ChatAnthropic(model=MODEL, temperature=0)
+analyzer_llm = ChatAnthropic(model=MODEL, temperature=0)
+comparison_validator_llm = ChatAnthropic(model=MODEL, temperature=0)
+supervisor_llm = ChatAnthropic(model=MODEL, temperature=0)
 ```
+
+**Future: Per-agent model selection (v2)**
+
+Once the base system is validated, we can optimize costs by using different models:
+- Cheaper models (Claude Sonnet, GPT-4o-mini) for focused validation tasks
+- Premium models (Opus, GPT-4o) for complex reasoning (planning, design, analysis)
+- Multi-model consensus for critical decisions
 
 ## Context Management
 

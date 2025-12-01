@@ -92,7 +92,7 @@ For each figure, verify:
 C2. VISION MODEL COMPARISON PROTOCOL
 ═══════════════════════════════════════════════════════════════════════
 
-This system uses multimodal LLMs (GPT-4o, Claude) for visual figure comparison.
+This system uses Claude Opus 4.5 (multimodal) for visual figure comparison.
 Follow this protocol to get reliable results from vision analysis.
 
 1. PREPARE IMAGES FOR COMPARISON

@@ -13,7 +13,7 @@ ReproLab reads scientific papers, plans staged reproductions, generates and runs
 - **Performance-aware**: Designed for laptop execution with runtime budgets
 - **Quantitative tracking**: Structured discrepancy logging with acceptance thresholds
 - **Scientific rigor**: Multi-agent review system with specialized validators
-- **Multimodal AI**: Uses vision-capable LLMs (GPT-4o, Claude) for figure comparison
+- **Multimodal AI**: Uses Claude Opus 4.5 for all agents (vision-capable for figure comparison)
 
 ## Architecture
 
@@ -128,7 +128,7 @@ reprolab/
 
 ## Paper Input
 
-The system uses **multimodal LLMs** (GPT-4o, Claude) that can analyze both text and images. Paper inputs are provided via a structured format:
+The system uses **Claude Opus 4.5** (multimodal) to analyze both text and images. Paper inputs are provided via a structured format:
 
 ```python
 from src.paper_loader import create_paper_input
@@ -237,7 +237,7 @@ source venv/bin/activate  # or `venv\Scripts\activate` on Windows
 pip install -r requirements.txt
 
 # Set up environment variables
-export OPENAI_API_KEY="your-api-key"
+export ANTHROPIC_API_KEY="your-api-key"
 ```
 
 ## Usage
@@ -287,7 +287,7 @@ See `docs/guidelines.md` Section 14 for future improvement roadmap.
 ## Dependencies
 
 - **langgraph**: Multi-agent orchestration
-- **langchain-openai**: LLM integration
+- **langchain-anthropic**: Claude Opus 4.5 integration (primary LLM)
 - **meep**: FDTD simulations
 - **numpy**: Numerical computing
 - **matplotlib**: Plotting

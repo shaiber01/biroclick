@@ -6,8 +6,8 @@
 # ═══════════════════════════════════════════════════════════════════════
 langgraph>=0.2.0
 langchain>=0.3.0
-langchain-openai>=0.2.0
-langchain-anthropic>=0.2.0  # Optional: for Claude models
+langchain-anthropic>=0.3.0  # Primary: Claude Opus 4.5 for all agents (v1)
+langchain-openai>=0.2.0     # Optional: for future multi-model support
 
 # ═══════════════════════════════════════════════════════════════════════
 # FDTD Simulation
