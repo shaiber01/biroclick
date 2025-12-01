@@ -166,7 +166,8 @@
           },
           "digitized_data_path": {
             "type": ["string", "null"],
-            "description": "Path to CSV/JSON of digitized (x,y) points extracted from paper figure. REQUIRED if precision_requirement is 'excellent'."
+            "default": null,
+            "description": "[DEFERRED TO V2] Path to CSV/JSON of digitized (x,y) points. Auto-digitization not yet implemented. Can be provided manually if available."
           }
         }
       }
@@ -273,7 +274,8 @@
           },
           "reference_data_path": {
             "type": ["string", "null"],
-            "description": "Optional path to digitized reference data"
+            "default": null,
+            "description": "[DEFERRED TO V2] Optional path to digitized reference data. Can be provided manually if available."
           }
         }
       }

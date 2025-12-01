@@ -89,6 +89,19 @@ This report compares our computational reproduction (Python + Meep FDTD) to the 
 
 **Reason for difference:** [Explanation of any discrepancies]
 
+### Comparison Method
+
+<!-- Record how this comparison was performed -->
+| Method | Status |
+|--------|--------|
+| Vision comparison | ✅ Available / ⚠️ Fallback to text |
+| Numerical data | ✅ Available / ❌ Not available |
+| Digitized data | ❌ Not used (v2 feature) |
+
+**Vision fallback reason** (if applicable): [image_missing | low_quality | api_error | N/A]
+
+**Confidence modifier**: [1.0x | 0.9x | 0.7x | 0.5x] (see results_analyzer_agent.md C3)
+
 ---
 
 [REPEAT FOR EACH FIGURE]

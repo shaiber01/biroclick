@@ -6,13 +6,21 @@ This module handles loading prompt templates and injecting:
 2. Dynamic state (paper text, figures, current stage, etc.)
 3. Cross-agent context (feedback, assumptions, etc.)
 
+Also provides utilities for:
+- Image encoding for Claude's vision API
+- Comparison image generation for reports
+
 The goal is to maintain a single source of truth for constants in code
 while making them available to LLM prompts at runtime.
 """
 
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 import json
+import base64
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Import canonical constants from state
 from schemas.state import (
@@ -67,6 +75,219 @@ AGENT_OUTPUT_SCHEMAS = {
 
 # Global rules file (prepended to all agent prompts)
 GLOBAL_RULES_FILE = "global_rules.md"
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Image Encoding for Vision API
+# ═══════════════════════════════════════════════════════════════════════
+
+def encode_image_for_claude(image_path: str) -> Optional[Dict[str, Any]]:
+    """
+    Encode an image file for Claude's vision API.
+    
+    Args:
+        image_path: Path to the image file
+        
+    Returns:
+        Dict with type, source (base64) for Claude message content,
+        or None if image cannot be loaded.
+        
+    Example:
+        image_content = encode_image_for_claude("papers/fig3a.png")
+        if image_content:
+            messages = [{
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Compare these figures..."},
+                    image_content,
+                ]
+            }]
+    """
+    path = Path(image_path)
+    if not path.exists():
+        logger.warning(f"Image not found: {image_path}")
+        return None
+    
+    # Determine media type from extension
+    suffix = path.suffix.lower()
+    media_types = {
+        '.png': 'image/png',
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.gif': 'image/gif',
+        '.webp': 'image/webp',
+    }
+    media_type = media_types.get(suffix)
+    if not media_type:
+        logger.warning(f"Unsupported image format: {suffix}")
+        return None
+    
+    try:
+        with open(path, 'rb') as f:
+            data = base64.standard_b64encode(f.read()).decode('utf-8')
+        
+        return {
+            "type": "image",
+            "source": {
+                "type": "base64",
+                "media_type": media_type,
+                "data": data,
+            }
+        }
+    except Exception as e:
+        logger.error(f"Failed to encode image {image_path}: {e}")
+        return None
+
+
+def create_comparison_image(
+    paper_image_path: str,
+    reproduction_image_path: str,
+    output_path: str,
+    title: str = "Comparison"
+) -> bool:
+    """
+    Create a side-by-side comparison image for reports.
+    
+    Args:
+        paper_image_path: Path to the paper's figure image
+        reproduction_image_path: Path to the reproduction image
+        output_path: Where to save the comparison image
+        title: Title for the comparison (used in figure suptitle)
+        
+    Returns:
+        True if successful, False otherwise.
+        
+    Example:
+        success = create_comparison_image(
+            "papers/fig3a.png",
+            "outputs/paper_id/stage1_spectrum.png",
+            "outputs/paper_id/stage1_comparison.png",
+            "Stage 1 - Transmission Spectrum"
+        )
+    """
+    try:
+        import matplotlib.pyplot as plt
+        import matplotlib.image as mpimg
+    except ImportError:
+        logger.error("matplotlib required for comparison images")
+        return False
+    
+    try:
+        paper_img = mpimg.imread(paper_image_path)
+        repro_img = mpimg.imread(reproduction_image_path)
+        
+        fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+        
+        axes[0].imshow(paper_img)
+        axes[0].set_title("Paper Figure", fontsize=12)
+        axes[0].axis('off')
+        
+        axes[1].imshow(repro_img)
+        axes[1].set_title("Reproduction", fontsize=12)
+        axes[1].axis('off')
+        
+        fig.suptitle(title, fontsize=14, fontweight='bold')
+        plt.tight_layout()
+        plt.savefig(output_path, dpi=150, bbox_inches='tight', 
+                    facecolor='white', edgecolor='none')
+        plt.close()
+        
+        logger.info(f"Created comparison image: {output_path}")
+        return True
+        
+    except FileNotFoundError as e:
+        logger.warning(f"Image file not found: {e}")
+        return False
+    except Exception as e:
+        logger.error(f"Failed to create comparison image: {e}")
+        return False
+
+
+def prepare_vision_comparison_content(
+    paper_figure_path: str,
+    reproduction_path: str,
+    figure_id: str,
+    comparison_question: Optional[str] = None
+) -> Tuple[List[Dict[str, Any]], bool]:
+    """
+    Prepare content list for a vision-based figure comparison.
+    
+    Encodes both images and creates appropriate text prompt.
+    Returns content list for Claude message and success flag.
+    
+    Args:
+        paper_figure_path: Path to the original paper figure
+        reproduction_path: Path to the simulation output figure
+        figure_id: Figure ID for reference (e.g., "Fig3a")
+        comparison_question: Custom comparison question (optional)
+        
+    Returns:
+        Tuple of (content_list, success_flag)
+        - content_list: List of content items for Claude message
+        - success_flag: True if both images loaded, False if fallback to text
+        
+    Example:
+        content, vision_ok = prepare_vision_comparison_content(
+            "papers/fig3a.png",
+            "outputs/stage1_spectrum.png",
+            "Fig3a"
+        )
+        if vision_ok:
+            # Use vision comparison
+            response = llm.invoke(messages=[{"role": "user", "content": content}])
+        else:
+            # Fallback to text-only comparison
+            ...
+    """
+    content = []
+    
+    # Default comparison question
+    if not comparison_question:
+        comparison_question = f"""Compare the paper figure ({figure_id}) with the reproduction.
+
+Please analyze:
+1. Do both plots show the same general shape/trend?
+2. Are the number of peaks/dips the same?
+3. Do the peak positions appear at similar x-axis locations?
+4. Are the relative amplitudes between features similar?
+5. Is the overall shape (dip vs peak, symmetric vs asymmetric) the same?
+
+Based on your analysis, classify the comparison as:
+- SUCCESS: Main features match well
+- PARTIAL: Some features match, some differences
+- FAILURE: Major mismatch in key features"""
+    
+    # Try to encode paper figure
+    paper_img = encode_image_for_claude(paper_figure_path)
+    repro_img = encode_image_for_claude(reproduction_path)
+    
+    vision_available = bool(paper_img and repro_img)
+    
+    if vision_available:
+        # Full vision comparison
+        content.append({"type": "text", "text": f"**Paper Figure ({figure_id}):**"})
+        content.append(paper_img)
+        content.append({"type": "text", "text": "**Reproduction:**"})
+        content.append(repro_img)
+        content.append({"type": "text", "text": comparison_question})
+    else:
+        # Text-only fallback
+        missing = []
+        if not paper_img:
+            missing.append(f"paper figure ({paper_figure_path})")
+        if not repro_img:
+            missing.append(f"reproduction ({reproduction_path})")
+        
+        fallback_text = f"""**Vision comparison unavailable** - Could not load: {', '.join(missing)}
+
+Falling back to text-only comparison for {figure_id}.
+
+Please compare based on available numerical data and descriptions only.
+Mark this comparison as having lower confidence due to missing visual verification."""
+        
+        content.append({"type": "text", "text": fallback_text})
+    
+    return content, vision_available
 
 
 # ═══════════════════════════════════════════════════════════════════════

@@ -564,11 +564,19 @@ End with statement on whether discrepancies affect conclusions.
 - [ ] Geometry: spacing vs period clarified
 - [ ] Resolution: adequate for physics being simulated
 - [ ] Runtime: within budget
-- [ ] **Key figures digitized** (strongly recommended for quantitative comparison)
+- [ ] Figure images extracted for vision comparison
 
-### Figure Digitization (Recommended)
+### Figure Digitization (Deferred to V2)
 
-For quantitative validation, digitize key figures BEFORE starting reproduction:
+> **Note**: Automatic figure digitization is planned for v2. For v1, use vision-based 
+> comparison as the primary method. Digitized data can be provided manually if available.
+
+For v1, the primary comparison method is **vision-based** (Claude's native image understanding):
+- Paper figures are compared visually with simulation outputs
+- Works well for qualitative shape matching, peak counting, trend detection
+- Fallback to text/numerical comparison when vision is unavailable
+
+**Optional manual digitization** (if you want quantitative metrics):
 
 **Tool**: [WebPlotDigitizer](https://automeris.io/WebPlotDigitizer/) (free, web-based)
 
@@ -580,7 +588,7 @@ For quantitative validation, digitize key figures BEFORE starting reproduction:
 
 **Naming**: `<paper_id>_<figure_id>_digitized.csv`
 
-**Benefits**:
+**Benefits of manual digitization** (optional):
 - ResultsAnalyzerAgent computes MSE, correlation, R² automatically
 - Removes subjective visual judgment
 - Reproducible validation
@@ -1426,9 +1434,10 @@ Understanding token usage helps estimate costs before running reproductions.
    - Remove acknowledgments, author contributions
    - Keep Methods and Results sections intact
    
-2. **Digitize Key Figures**
-   - Digitized CSV data is cheaper to process than images
-   - Vision model calls for image comparison are expensive
+2. **Manual Figure Digitization (Optional)**
+   - Digitized CSV data enables quantitative metrics (MSE, R²)
+   - Vision comparison is primary method for v1
+   - Auto-digitization planned for v2
    
 3. **Use Debug Mode First**
    - Quick validation run catches obvious issues

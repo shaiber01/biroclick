@@ -11,7 +11,54 @@ These are currently stubs showing expected state mutations.
 See prompts/*.md for the corresponding agent system prompts.
 """
 
-from schemas.state import ReproState
+import os
+import signal
+from typing import Dict, Any, Optional
+
+from schemas.state import ReproState, save_checkpoint, check_context_before_node
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Context Window Management
+# ═══════════════════════════════════════════════════════════════════════
+
+def _check_context_or_escalate(state: ReproState, node_name: str) -> Optional[Dict[str, Any]]:
+    """
+    Check context before LLM call. Returns state updates if escalation needed, None otherwise.
+    
+    This is called explicitly at the start of each agent node that makes LLM calls.
+    If context is critical and cannot be auto-recovered, prepares escalation to user.
+    
+    Args:
+        state: Current ReproState
+        node_name: Name of the node about to make LLM call
+        
+    Returns:
+        None if safe to proceed (or with minor auto-recovery applied)
+        Dict with state updates if escalation to user is needed
+    """
+    check = check_context_before_node(state, node_name, auto_recover=True)
+    
+    if check["ok"]:
+        # Safe to proceed, possibly with state updates from auto-recovery
+        return check.get("state_updates") if check.get("state_updates") else None
+    
+    if check["escalate"]:
+        # Must ask user - return state updates to trigger ask_user
+        return {
+            "pending_user_questions": [check["user_question"]],
+            "awaiting_user_input": True,
+            "ask_user_trigger": "context_overflow",
+            "last_node_before_ask_user": node_name,
+        }
+    
+    # Shouldn't reach here, but fallback to escalation
+    return {
+        "pending_user_questions": [f"Context overflow in {node_name}. How should we proceed?"],
+        "awaiting_user_input": True,
+        "ask_user_trigger": "context_overflow",
+        "last_node_before_ask_user": node_name,
+    }
 
 
 def adapt_prompts_node(state: ReproState) -> ReproState:
@@ -259,15 +306,132 @@ def supervisor_node(state: ReproState) -> ReproState:
     return state
 
 
-def ask_user_node(state: ReproState) -> ReproState:
-    """Pause for user input."""
-    state["workflow_phase"] = "awaiting_user"
-    state["awaiting_user_input"] = True
-    # TODO: Implement user interaction logic
-    # - Present pending questions
-    # - Wait for responses
-    # - Log interaction
-    return state
+def ask_user_node(state: ReproState) -> Dict[str, Any]:
+    """
+    CLI-based user interaction node.
+    
+    Prompts user in terminal for input. If user doesn't respond within timeout
+    (Ctrl+C or timeout), saves checkpoint and exits gracefully.
+    
+    Environment variables:
+        REPROLAB_USER_TIMEOUT_SECONDS: Override default timeout (default: 86400 = 24h)
+        REPROLAB_NON_INTERACTIVE: If "1", immediately save checkpoint and exit
+        
+    Returns:
+        Dict with state updates (user_responses, cleared pending questions)
+    """
+    timeout_seconds = int(os.environ.get("REPROLAB_USER_TIMEOUT_SECONDS", "86400"))
+    non_interactive = os.environ.get("REPROLAB_NON_INTERACTIVE", "0") == "1"
+    
+    questions = state.get("pending_user_questions", [])
+    trigger = state.get("ask_user_trigger", "unknown")
+    paper_id = state.get("paper_id", "unknown")
+    
+    if not questions:
+        return {
+            "awaiting_user_input": False,
+            "workflow_phase": "awaiting_user",
+        }
+    
+    # Non-interactive mode: save and exit immediately
+    if non_interactive:
+        print("\n" + "=" * 60)
+        print("USER INPUT REQUIRED (non-interactive mode)")
+        print("=" * 60)
+        print(f"\nPaper: {paper_id}")
+        print(f"Trigger: {trigger}")
+        for i, q in enumerate(questions, 1):
+            print(f"\nQuestion {i}:\n{q}")
+        
+        checkpoint_path = save_checkpoint(state, f"awaiting_user_{trigger}")
+        print(f"\n✓ Checkpoint saved: {checkpoint_path}")
+        print("\nResume with:")
+        print(f"  python -m src.graph --resume {checkpoint_path}")
+        raise SystemExit(0)
+    
+    # Interactive mode: prompt user
+    print("\n" + "=" * 60)
+    print("USER INPUT REQUIRED")
+    print("=" * 60)
+    print(f"Paper: {paper_id}")
+    print(f"Trigger: {trigger}")
+    print("(Press Ctrl+C to save checkpoint and exit)")
+    print("=" * 60)
+    
+    responses = {}
+    
+    def timeout_handler(signum, frame):
+        raise TimeoutError("User response timeout")
+    
+    try:
+        # Set timeout (Unix only - SIGALRM not available on Windows)
+        if hasattr(signal, 'SIGALRM'):
+            old_handler = signal.signal(signal.SIGALRM, timeout_handler)
+            signal.alarm(timeout_seconds)
+        
+        for i, question in enumerate(questions, 1):
+            print(f"\n--- Question {i}/{len(questions)} ---")
+            print(f"\n{question}")
+            print("-" * 40)
+            
+            # Multi-line input support: empty line ends input
+            print("(Enter your response, then press Enter twice to submit)")
+            lines = []
+            while True:
+                try:
+                    line = input()
+                    if line == "" and lines:
+                        break
+                    lines.append(line)
+                except EOFError:
+                    break
+            
+            response = "\n".join(lines).strip()
+            if not response:
+                response = input("Your response (single line): ").strip()
+            
+            responses[question] = response
+            print(f"✓ Response recorded")
+        
+        # Cancel timeout
+        if hasattr(signal, 'SIGALRM'):
+            signal.alarm(0)
+            signal.signal(signal.SIGALRM, old_handler)
+        
+        print("\n" + "=" * 60)
+        print("✓ All responses collected")
+        print("=" * 60)
+            
+    except KeyboardInterrupt:
+        print(f"\n\n⚠ Interrupted by user (Ctrl+C)")
+        checkpoint_path = save_checkpoint(state, f"interrupted_{trigger}")
+        print(f"✓ Checkpoint saved: {checkpoint_path}")
+        print("\nResume later with:")
+        print(f"  python -m src.graph --resume {checkpoint_path}")
+        raise SystemExit(0)
+        
+    except TimeoutError:
+        print(f"\n\n⚠ User response timeout ({timeout_seconds}s)")
+        checkpoint_path = save_checkpoint(state, f"timeout_{trigger}")
+        print(f"✓ Checkpoint saved: {checkpoint_path}")
+        print("\nResume later with:")
+        print(f"  python -m src.graph --resume {checkpoint_path}")
+        raise SystemExit(0)
+        
+    except EOFError:
+        print(f"\n\n⚠ End of input (EOF)")
+        checkpoint_path = save_checkpoint(state, f"eof_{trigger}")
+        print(f"✓ Checkpoint saved: {checkpoint_path}")
+        print("\nResume later with:")
+        print(f"  python -m src.graph --resume {checkpoint_path}")
+        raise SystemExit(0)
+    
+    return {
+        "user_responses": {**state.get("user_responses", {}), **responses},
+        "pending_user_questions": [],
+        "awaiting_user_input": False,
+        "workflow_phase": "awaiting_user",
+    }
 
 
 def material_checkpoint_node(state: ReproState) -> dict:

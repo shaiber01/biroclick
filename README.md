@@ -373,12 +373,18 @@ python -c "import meep; print(f'Meep {meep.__version__} installed successfully')
 # After the quick start above, also install dev dependencies
 pip install -r requirements-dev.txt
 
+# Generate Python types from JSON schemas (one-time setup)
+python scripts/generate_types.py
+
 # Run tests
 pytest tests/
 
 # Type checking
 mypy src/
 ```
+
+> **Note:** Re-run `python scripts/generate_types.py` whenever JSON schemas in `schemas/` are modified.
+> This generates `schemas/generated_types.py` which provides TypedDict types matching the schemas.
 
 ## Usage
 

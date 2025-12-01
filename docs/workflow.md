@@ -866,7 +866,43 @@ def log_user_interaction(state, question, response, interaction_type):
 | `parameter_confirmation` | Key parameter values |
 | `stop_decision` | Whether to stop reproduction |
 | `backtrack_approval` | Approving suggested backtrack |
+| `context_overflow` | Context window exceeded, user decides recovery |
 | `general_feedback` | Other user input |
+
+#### CLI Interaction Model
+
+ReproLab uses CLI-based prompts for user interaction. The `ask_user` node implementation:
+
+**Interactive mode** (default):
+- Prompts user in terminal with formatted questions
+- Supports multi-line responses (press Enter twice to submit)
+- Handles Ctrl+C gracefully with checkpoint save
+
+**Non-interactive mode** (`REPROLAB_NON_INTERACTIVE=1`):
+- Saves checkpoint immediately and exits
+- Useful for batch/CI environments
+
+**Timeout handling**:
+- Configurable timeout (default: 24 hours)
+- On timeout: saves checkpoint and exits (doesn't hang)
+
+**Environment Variables**:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `REPROLAB_USER_TIMEOUT_SECONDS` | 86400 (24h) | Timeout waiting for user response |
+| `REPROLAB_NON_INTERACTIVE` | 0 | If "1", save checkpoint and exit instead of prompting |
+
+**Resuming After Interruption**:
+
+When the user is interrupted (Ctrl+C, timeout, or non-interactive mode), a checkpoint is saved:
+
+```bash
+# Resume from checkpoint
+python -m src.graph --resume outputs/<paper_id>/checkpoints/checkpoint_<name>_latest.json
+```
+
+The checkpoint contains full state, so resumption continues exactly where paused.
 
 ---
 

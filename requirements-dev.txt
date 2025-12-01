@@ -35,6 +35,11 @@ pandas-stubs==2.2.3.241126
 # mkdocs-material==9.5.0   # Material theme (optional)
 
 # ═══════════════════════════════════════════════════════════════════════
+# Schema Type Generation
+# ═══════════════════════════════════════════════════════════════════════
+datamodel-code-generator>=0.25.0  # Generate TypedDicts from JSON schemas
+
+# ═══════════════════════════════════════════════════════════════════════
 # Debugging
 # ═══════════════════════════════════════════════════════════════════════
 ipython==8.30.0            # Interactive Python shell

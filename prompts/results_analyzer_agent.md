@@ -166,6 +166,86 @@ Follow this protocol to get reliable results from vision analysis.
    - LOW confidence (0.0-0.5): Poor image quality, unusual plot type
 
 ═══════════════════════════════════════════════════════════════════════
+C3. VISION WITH TEXT FALLBACK
+═══════════════════════════════════════════════════════════════════════
+
+**COMPARISON APPROACH (in order of preference)**:
+
+1. **Try vision comparison first**
+   - Request paper figure and reproduction image in message
+   - Use visual analysis protocol from Section C2
+   - Generate both side-by-side composite AND keep separate images
+
+2. **Generate comparison artifacts**
+   For the final report, create:
+   - Side-by-side composite image (quick visual check)
+   - Keep original separate images (for detailed inspection)
+   
+   Composite format:
+   ```
+   ┌─────────────────────┬─────────────────────┐
+   │   Paper Figure      │   Reproduction      │
+   │                     │                     │
+   └─────────────────────┴─────────────────────┘
+   ```
+
+3. **Fallback to text-only if vision fails**
+   Vision comparison is skipped when:
+   - Image file is missing or corrupt
+   - Image quality too low for reliable comparison
+   - Vision API returns low confidence (<0.3)
+   - Vision API error/timeout
+   
+   Text-only comparison uses:
+   - Numerical data from CSV outputs
+   - Peak positions, amplitudes, Q-factors from code outputs
+   - Trend analysis from parameter sweeps
+   - REPROLAB_RESULT_JSON key_results section
+
+**FALLBACK INDICATORS IN OUTPUT**:
+
+When vision is unavailable, set these fields:
+
+```json
+{
+  "comparison_method": "text_only",
+  "vision_available": false,
+  "vision_fallback_reason": "image_missing" | "low_quality" | "api_error",
+  
+  "text_only_comparison": {
+    "data_sources": ["spectrum.csv", "REPROLAB_RESULT_JSON"],
+    "metrics_compared": ["peak_position", "peak_height", "FWHM"],
+    "limitation_notes": "Visual shape comparison not possible"
+  }
+}
+```
+
+When vision succeeds:
+
+```json
+{
+  "comparison_method": "vision",
+  "vision_available": true,
+  "vision_fallback_reason": null,
+  
+  "images_generated": {
+    "comparison_composite": "outputs/<paper_id>/<stage_id>_comparison.png",
+    "paper_figure": "papers/<figure_id>.png",
+    "reproduction": "outputs/<paper_id>/<stage_id>_result.png"
+  }
+}
+```
+
+**CONFIDENCE IMPACT**:
+
+| Comparison Method | Confidence Modifier |
+|-------------------|---------------------|
+| Vision + numerical data | Baseline (1.0x) |
+| Vision only | 0.9x (missing quantitative backup) |
+| Text-only (numerical) | 0.7x (missing visual verification) |
+| Text-only (minimal data) | 0.5x (low reliability) |
+
+═══════════════════════════════════════════════════════════════════════
 D. QUANTITATIVE COMPARISON PROCESS
 ═══════════════════════════════════════════════════════════════════════
 
@@ -189,8 +269,18 @@ For each key quantity:
    - Document classification
 
 ═══════════════════════════════════════════════════════════════════════
-E. QUANTITATIVE COMPARISON WITH DIGITIZED DATA (PREFERRED)
+E. QUANTITATIVE COMPARISON WITH DIGITIZED DATA (DEFERRED TO V2)
 ═══════════════════════════════════════════════════════════════════════
+
+┌──────────────────────────────────────────────────────────────────────┐
+│ NOTE: Automatic figure digitization is deferred to v2.               │
+│                                                                       │
+│ For v1, use vision-based comparison (Section C2/C3) as primary       │
+│ method. Digitized data can be provided manually if available.        │
+│                                                                       │
+│ This section remains as documentation for when digitized data IS     │
+│ available (either manually prepared or via future v2 tooling).       │
+└──────────────────────────────────────────────────────────────────────┘
 
 If `digitized_data_path` is provided for a target figure, use QUANTITATIVE
 comparison instead of (or in addition to) visual comparison.
