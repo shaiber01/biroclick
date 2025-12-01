@@ -474,6 +474,23 @@ These are implementation quality limitations, not missing features. All features
 
 See `docs/guidelines.md` Section 14 for future improvement roadmap.
 
+## Testing
+
+### Schema-Type Sync Tests
+
+To verify JSON schemas stay synchronized with Python types in `state.py`:
+
+```bash
+python tests/test_schema_type_sync.py
+```
+
+These tests catch drift between:
+- JSON schemas (source of truth for data structures)
+- Python TypedDicts in `state.py` (used at runtime)
+- Agent output schema required fields
+
+If tests fail, it indicates `state.py` or schemas need to be updated to match.
+
 ## Dependencies
 
 - **langgraph**: Multi-agent orchestration
