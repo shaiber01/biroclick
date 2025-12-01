@@ -290,6 +290,7 @@ class ReproState(TypedDict, total=False):
     
     # ─── Revision Tracking ──────────────────────────────────────────────
     design_revision_count: int
+    code_revision_count: int  # Tracks code generation revisions
     analysis_revision_count: int
     replan_count: int
     
@@ -342,6 +343,10 @@ class ReproState(TypedDict, total=False):
     
     # ─── Paper Figures (for multimodal comparison) ────────────────────────
     paper_figures: List[Dict[str, str]]  # [{id, description, image_path}, ...]
+    
+    # ─── Prompt Adaptations (from PromptAdaptorAgent) ───────────────────────
+    # Stores the modifications made by PromptAdaptorAgent for this paper
+    prompt_adaptations: List[Dict[str, Any]]  # List of {target_agent, modification_type, content, ...}
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -399,6 +404,7 @@ def create_initial_state(
         
         # Revision tracking
         design_revision_count=0,
+        code_revision_count=0,
         analysis_revision_count=0,
         replan_count=0,
         
@@ -458,7 +464,10 @@ def create_initial_state(
         },
         
         # Paper figures (populated from PaperInput)
-        paper_figures=[]
+        paper_figures=[],
+        
+        # Prompt adaptations (populated by PromptAdaptorAgent)
+        prompt_adaptations=[]
     )
 
 
@@ -532,6 +541,7 @@ DEFAULT_RUNTIME_CONFIG = RuntimeConfig(
 
 # Revision limits
 MAX_DESIGN_REVISIONS = 3
+MAX_CODE_REVISIONS = 3  # Code generation revisions per stage
 MAX_ANALYSIS_REVISIONS = 2
 MAX_REPLANS = 2
 MAX_BACKTRACKS = 2  # Limit total backtracks to prevent infinite loops

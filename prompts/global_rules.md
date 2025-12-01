@@ -107,32 +107,34 @@ Figures show actual data; text may have typos or copy-paste errors.
 If discrepancy >20%, flag for user clarification before proceeding.
 
 ═══════════════════════════════════════════════════════════════════════
-RULE 2: STAGE-BASED WORKFLOW (MANDATORY ORDER)
+RULE 2: STAGE-BASED WORKFLOW (ADAPTIVE TO PAPER CONTENT)
 ═══════════════════════════════════════════════════════════════════════
-EVERY reproduction MUST follow this staging order:
+Material validation (Stage 0) is ALWAYS required first.
+Subsequent stages ADAPT to the paper's content - not all papers need all stages.
 
-1. MATERIAL VALIDATION (Stage 0)
+STAGE 0 - MATERIAL VALIDATION (ALWAYS REQUIRED):
    - Compute ε(ω), n(ω), k(ω) for all materials
    - Compare to any spectra/data shown in paper
    - Validate absorption/emission peaks match
-   - THIS CATCHES MATERIAL MODEL ERRORS EARLY
+   - Requires user confirmation before proceeding
 
-2. SINGLE STRUCTURE VALIDATION (Stage 1)
-   - One isolated structure (no arrays/periodicity)
-   - Validate resonance position, Q-factor, mode profile
-   - Catches geometry interpretation errors
+SUBSEQUENT STAGES (paper-dependent, include only what applies):
 
-3. ARRAY/SYSTEM VALIDATION (Stage 2+)
-   - Add periodicity, coupling, multiple components
-   - Validate collective effects
+| Stage Type | When to Include | When to Skip | Budget |
+|------------|-----------------|--------------|--------|
+| SINGLE_STRUCTURE | Paper shows isolated structures | Photonic crystals, periodic-only papers | ~15 min |
+| ARRAY_SYSTEM | Paper shows periodic/coupled structures | Single particle papers | ~30 min |
+| PARAMETER_SWEEP | Paper shows multi-parameter data | Single data points only | ~60 min |
+| COMPLEX_PHYSICS | Nonlinear, transient, emission effects | Linear steady-state only | ~120 min |
 
-4. PARAMETER SWEEPS
-   - Vary key parameter (size, spacing, wavelength)
-   - Validate trends and dispersion
+TYPICAL PROGRESSIONS:
+- Single nanoparticle: Stage 0 → Single structure (done)
+- Nanoparticle array: Stage 0 → Single → Array → Sweeps
+- Photonic crystal: Stage 0 → Periodic structure (skip "single")
+- Material study: Stage 0 → Property analysis (no geometry stages)
 
-5. COMPLEX PHYSICS (if needed)
-   - Nonlinear, time-domain, emission, Purcell, thermal
-   - Only after linear steady-state is validated
+THE PRINCIPLE: Always validate simpler/foundational before more complex/dependent.
+The planner determines which stages apply based on paper content.
 
 ═══════════════════════════════════════════════════════════════════════
 RULE 3: EXPLICIT ASSUMPTIONS, NEVER HIDDEN GUESSES
@@ -242,6 +244,7 @@ is MORE VALUABLE than an undocumented "perfect" match.
 RULE 9: REVISION LIMITS
 ═══════════════════════════════════════════════════════════════════════
 MAX_DESIGN_REVISIONS = 3 per stage
+MAX_CODE_REVISIONS = 3 per stage
 MAX_ANALYSIS_REVISIONS = 2 per stage  
 MAX_REPLANS = 2 total
 

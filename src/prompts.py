@@ -19,6 +19,7 @@ from schemas.state import (
     DISCREPANCY_THRESHOLDS,
     format_thresholds_table,
     MAX_DESIGN_REVISIONS,
+    MAX_CODE_REVISIONS,
     MAX_ANALYSIS_REVISIONS,
     MAX_REPLANS,
     DEFAULT_STAGE_BUDGETS,
