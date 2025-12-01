@@ -744,6 +744,60 @@ def check_validation_hierarchy(state):
     return True, None
 ```
 
+### Error Recovery Matrix
+
+This matrix defines the system behavior for various error scenarios and edge cases:
+
+| Scenario | Behavior | Limit | Escalation |
+|----------|----------|-------|------------|
+| **PHYSICS_CHECK fails repeatedly** | After 2 failures at same stage, escalate to SUPERVISOR with `physics_stuck` flag. Supervisor can try alternative approach or ask user. | 2 per stage | SUPERVISOR → ASK_USER |
+| **User doesn't respond to ASK_USER** | Timeout after configurable period (default: 24 hours). Auto-save checkpoint, pause workflow. Can be resumed later. | 24 hours (default) | Checkpoint + Pause |
+| **Total runtime exceeded** | Hard abort after `max_total_runtime_hours`. Save checkpoint, generate partial report with whatever results are available. | 8 hours (default) | Partial report |
+| **Consecutive stage failures** | After 2 consecutive stage failures (different stages), trigger replanning via SUPERVISOR | 2 consecutive | SUPERVISOR → PLAN |
+| **Memory exhaustion during simulation** | Capture error, suggest resolution reduction or cell size adjustment. Return to CODE_REVIEW with memory_error flag. | N/A | CODE_REVIEW |
+| **LLM rate limit or timeout** | Retry with exponential backoff (1s, 2s, 4s, 8s, 16s). After 5 retries, save checkpoint and pause. | 5 retries | Checkpoint + Pause |
+| **Invalid JSON from LLM** | Retry same call up to 3 times. If still failing, escalate to user with raw output for debugging. | 3 retries | ASK_USER |
+| **File I/O errors** | Log error, attempt alternate paths. If critical file (checkpoint, output), escalate immediately. | N/A | ASK_USER |
+
+### Recovery Implementation
+
+```python
+def handle_physics_stuck(state):
+    """Handle repeated physics validation failures."""
+    physics_failures = state.get("physics_failure_count", 0)
+    
+    if physics_failures >= 2:
+        # Escalate to supervisor with flag
+        state["physics_stuck"] = True
+        state["supervisor_hint"] = (
+            f"Physics validation has failed {physics_failures} times for stage "
+            f"{state['current_stage_id']}. Consider: (1) simplifying geometry, "
+            f"(2) checking material models, (3) asking user for guidance."
+        )
+        return "supervisor"
+    
+    # Otherwise, increment and retry
+    state["physics_failure_count"] = physics_failures + 1
+    return "generate_code"
+
+
+def handle_timeout(state, config):
+    """Handle various timeout scenarios."""
+    total_runtime = state.get("total_runtime_seconds", 0)
+    max_runtime = config.max_total_runtime_hours * 3600
+    
+    if total_runtime >= max_runtime:
+        # Save final checkpoint
+        save_checkpoint(state, "timeout_abort")
+        
+        # Generate partial report
+        state["should_stop"] = True
+        state["stop_reason"] = f"Total runtime budget exceeded ({config.max_total_runtime_hours}h)"
+        return "generate_report"
+    
+    return None  # Continue normally
+```
+
 ## Configuration
 
 ### Environment Variables
@@ -801,7 +855,7 @@ Each agent call is an **independent LLM invocation** with its own context window
 - If an agent loops (e.g., CodeReviewerAgent says "revise" → back to CodeGeneratorAgent → back to CodeReviewerAgent)
 - The second call gets **fresh context** with updated state
 - Previous conversation turns are NOT carried over
-- Feedback is passed via state fields (e.g., `reviewer_feedback`, `critic_issues`)
+- Feedback is passed via state fields (e.g., `reviewer_feedback`, `reviewer_issues`)
 
 ### What Each Agent Receives
 
@@ -850,11 +904,105 @@ CodeGeneratorAgent (attempt 1)
     ↓ generates code
 CodeReviewerAgent
     ↓ finds issues, sets reviewer_feedback="Missing progress prints"
-    ↓ sets last_critic_verdict="needs_revision"
+    ↓ sets last_reviewer_verdict="needs_revision"
 CodeGeneratorAgent (attempt 2)
     ↓ receives: fresh prompt + state including reviewer_feedback
     ↓ uses feedback to improve code
 CodeReviewerAgent
     ↓ reviews improved code
-    ↓ sets last_critic_verdict="approve_to_run"
+    ↓ sets last_reviewer_verdict="approve_to_run"
 ```
+
+## Agent Data Flow
+
+This section documents what data each agent receives and produces, clarifying the boundaries between agents.
+
+### Data Flow Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           DATA FLOW BETWEEN AGENTS                          │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  PromptAdaptorAgent                                                         │
+│  ├─ IN:  paper_text (quick scan), paper_domain                              │
+│  └─ OUT: prompt_modifications[], adaptation_log, domain_analysis            │
+│                    ↓                                                        │
+│  PlannerAgent                                                               │
+│  ├─ IN:  paper_text, paper_figures[], adapted_prompts                       │
+│  └─ OUT: plan, assumptions, extracted_parameters[], progress (initialized)  │
+│                    ↓                                                        │
+│  SimulationDesignerAgent                                                    │
+│  ├─ IN:  plan.stages[current], assumptions, extracted_parameters            │
+│  │       reviewer_feedback (if revision)                                    │
+│  └─ OUT: design_spec (geometry, materials, sources, BCs, monitors)          │
+│          performance_estimate, new_assumptions                              │
+│                    ↓                                                        │
+│  CodeReviewerAgent (design review)                                          │
+│  ├─ IN:  design_spec, plan.stages[current], assumptions                     │
+│  └─ OUT: reviewer_verdict, reviewer_issues[], reviewer_feedback             │
+│                    ↓ (if approved)                                          │
+│  CodeGeneratorAgent                                                         │
+│  ├─ IN:  design_spec, reviewer_feedback (if revision)                       │
+│  └─ OUT: simulation_code, expected_outputs[]                                │
+│                    ↓                                                        │
+│  CodeReviewerAgent (code review)                                            │
+│  ├─ IN:  simulation_code, design_spec, expected_outputs[]                   │
+│  └─ OUT: reviewer_verdict, reviewer_issues[], reviewer_feedback             │
+│                    ↓ (if approved)                                          │
+│  RUN_CODE (not an agent - system execution)                                 │
+│  ├─ IN:  simulation_code                                                    │
+│  └─ OUT: stdout, stderr, output_files[], exit_code                          │
+│                    ↓                                                        │
+│  ExecutionValidatorAgent                                                    │
+│  ├─ IN:  stdout, stderr, output_files[], expected_outputs[], exit_code      │
+│  └─ OUT: execution_valid (bool), execution_issues[]                         │
+│                    ↓ (if valid)                                             │
+│  PhysicsSanityAgent                                                         │
+│  ├─ IN:  output_files[] (data files), simulation_code                       │
+│  └─ OUT: physics_valid (bool), physics_issues[], physics_validation         │
+│                    ↓ (if valid)                                             │
+│  ResultsAnalyzerAgent                                                       │
+│  ├─ IN:  output_files[] (plots & data), paper_figures[target]               │
+│  │       digitized_data (optional CSV), plan.validation_criteria            │
+│  └─ OUT: figure_comparisons[], classification, discrepancies[]              │
+│          analysis_summary                                                   │
+│                    ↓                                                        │
+│  ComparisonValidatorAgent                                                   │
+│  ├─ IN:  figure_comparisons[], discrepancies[], analysis_summary            │
+│  └─ OUT: comparison_valid (bool), comparison_issues[]                       │
+│                    ↓ (if approved)                                          │
+│  SupervisorAgent                                                            │
+│  ├─ IN:  full state (plan, assumptions, progress, figure_comparisons,       │
+│  │       validation_hierarchy, all verdicts)                                │
+│  └─ OUT: supervisor_verdict, supervisor_feedback, progress updates          │
+│          stage status updates, validation_hierarchy updates                 │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Shared vs Isolated Data
+
+| Data Category | Scope | Agents with Access | Notes |
+|---------------|-------|-------------------|-------|
+| **paper_text** | Global (read-only) | All agents | Original paper content, never modified |
+| **paper_figures** | Global (read-only) | Planner, ResultsAnalyzer, ComparisonValidator | Image paths for multimodal comparison |
+| **plan** | Shared artifact | PlannerAgent (write), all others (read) | Persisted to plan_<paper_id>.json |
+| **assumptions** | Shared artifact | Planner, Designer (write), all others (read) | Persisted to assumptions_<paper_id>.json |
+| **progress** | Shared artifact | Supervisor (write), others (read) | Persisted to progress_<paper_id>.json |
+| **design_spec** | Stage-local | Designer → Reviewer → Generator | Reset each stage |
+| **simulation_code** | Stage-local | Generator → Reviewer → RUN_CODE | Reset each stage |
+| **stage_outputs** | Stage-local | RUN_CODE → Validators → Analyzer | Reset each stage |
+| **reviewer_feedback** | Loop-local | Reviewer → Designer/Generator | Used for revisions within a loop |
+| **figure_comparisons** | Accumulated | Analyzer (write), Supervisor (read) | Persisted across stages |
+| **validation_hierarchy** | Global (mutable) | Supervisor (write), SELECT_STAGE (read) | Gates stage progression |
+
+### Data Persistence Points
+
+| Event | What Gets Saved | Location |
+|-------|-----------------|----------|
+| After PLAN | plan, assumptions, progress | `outputs/<paper_id>/*.json` |
+| After each SUPERVISOR approval | progress, figure_comparisons | `outputs/<paper_id>/progress_*.json` |
+| After stage completion | stage outputs | `outputs/<paper_id>/stage_*/` |
+| Before ASK_USER | full checkpoint | `outputs/<paper_id>/checkpoints/` |
+| After GENERATE_REPORT | final report | `outputs/<paper_id>/REPRODUCTION_REPORT_*.md` |

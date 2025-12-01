@@ -153,6 +153,83 @@ if abs(peak_wavelength_1 - peak_wavelength_2) / peak_wavelength_1 > 0.05:
 
 ---
 
+## 4b. Hardware Configuration
+
+### Default Hardware Assumptions
+
+The system assumes a **power laptop** by default:
+
+| Resource | Default | Notes |
+|----------|---------|-------|
+| CPU cores | 8 | Used for Meep parallelization |
+| RAM | 32 GB | Limits cell size × resolution |
+| GPU | No | Future: CUDA acceleration |
+
+### How Agents Use Hardware Config
+
+**SimulationDesignerAgent:**
+- Estimates runtime based on cell size, resolution, and cores
+- Warns if memory estimate exceeds available RAM
+- Suggests resolution/cell size tradeoffs
+
+**CodeGeneratorAgent:**
+- Sets appropriate number of threads for Meep
+- Configures memory-efficient sweeps if needed
+
+### Runtime Estimation Formula
+
+```python
+# Approximate runtime for 3D FDTD
+cells = (cell_x * cell_y * cell_z) * resolution**3
+timesteps = total_time * resolution
+operations = cells * timesteps
+
+# Empirical factor: ~1e9 operations/second/core (very rough)
+runtime_seconds = operations / (1e9 * cpu_cores)
+```
+
+### Memory Estimation Formula
+
+```python
+# Meep memory usage (approximate)
+bytes_per_cell = 200  # Multiple field components, double precision
+total_cells = (cell_x * cell_y * cell_z) * resolution**3
+memory_gb = (total_cells * bytes_per_cell) / 1e9
+
+# Add 50% overhead for Python/numpy
+memory_gb *= 1.5
+```
+
+### Overriding Default Hardware
+
+Users can specify their hardware in the `PaperInput`:
+
+```python
+from schemas.state import HardwareConfig
+
+custom_hardware = HardwareConfig(
+    cpu_cores=16,
+    ram_gb=64,
+    gpu_available=False
+)
+
+paper_input = create_paper_input(
+    paper_id="...",
+    paper_text="...",
+    hardware_config=custom_hardware
+)
+```
+
+### Performance Optimization Tips
+
+1. **Use symmetry** when possible (cuts cell size by 2×, 4×, or 8×)
+2. **Start with 2D** for validation (much faster than 3D)
+3. **Use subpixel smoothing** for curved geometries (more accurate at lower resolution)
+4. **Reduce frequency resolution** if only peak position matters
+5. **Save intermediate results** for long parameter sweeps
+
+---
+
 ## 5. Quantitative Thresholds
 
 ### Discrepancy Classification
@@ -254,6 +331,93 @@ Numerical Error ─► Usually smaller effect
 
 **Problem**: 2D simulations are faster but may miss 3D effects
 **Solution**: Use 2D for validation, note systematic differences, run 3D for final results if needed
+
+---
+
+## 7b. Materials Database
+
+The system includes a materials database in `materials/` with optical constants for common materials.
+
+### Database Structure
+
+```
+materials/
+├── material_schema.json   # Schema definition for material entries
+├── index.json             # Index of all available materials
+├── palik_silver.csv       # Tabulated n,k data for silver
+├── palik_gold.csv         # Tabulated n,k data for gold
+└── rakic_aluminum.csv     # Tabulated n,k data for aluminum
+```
+
+### Using the Materials Database
+
+**1. Finding a Material:**
+```python
+import json
+
+with open('materials/index.json') as f:
+    materials = json.load(f)['materials']
+
+# Find by ID
+silver = next(m for m in materials if m['material_id'] == 'palik_silver')
+```
+
+**2. Loading Tabulated Data:**
+```python
+import numpy as np
+
+if silver['data_file']:
+    data = np.loadtxt(f"materials/{silver['data_file']}", 
+                      delimiter=',', skiprows=9)  # Skip header
+    wavelength_nm, n, k = data[:, 0], data[:, 1], data[:, 2]
+```
+
+**3. Using Pre-fitted Drude-Lorentz Parameters in Meep:**
+```python
+import meep as mp
+
+fit = silver['drude_lorentz_fit']
+eV_to_meep = 1.0 / 1.23984  # Convert eV to Meep frequency units
+
+susceptibilities = []
+
+# Add Drude terms
+for drude in fit['drude_terms']:
+    susceptibilities.append(mp.DrudeSusceptibility(
+        frequency=drude['omega_p_eV'] * eV_to_meep,
+        gamma=drude['gamma_eV'] * eV_to_meep,
+        sigma=1.0
+    ))
+
+# Add Lorentz terms
+for lorentz in fit['lorentz_terms']:
+    susceptibilities.append(mp.LorentzianSusceptibility(
+        frequency=lorentz['omega_0_eV'] * eV_to_meep,
+        gamma=lorentz['gamma_eV'] * eV_to_meep,
+        sigma=lorentz['sigma']
+    ))
+
+material = mp.Medium(epsilon=fit['eps_inf'], E_susceptibilities=susceptibilities)
+```
+
+### Material Validation (Stage 0)
+
+The first stage of every reproduction validates material models:
+
+1. **Compute ε(λ)** from the Drude-Lorentz fit
+2. **Compare to tabulated data** (if available)
+3. **Compare to paper's material data** (if shown)
+4. **User checkpoint** - confirm materials before proceeding
+
+### Adding New Materials
+
+To add a new material to the database:
+
+1. Create CSV file with `wavelength_nm,n,k` columns
+2. Fit Drude-Lorentz model using optimization (see `code_generator_agent.md` examples)
+3. Add entry to `index.json` following `material_schema.json`
+4. Document source and valid wavelength range
+5. Note fit quality and any limitations
 
 ---
 

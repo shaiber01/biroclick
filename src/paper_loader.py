@@ -23,6 +23,29 @@ class FigureInput(TypedDict):
     digitized_data_path: NotRequired[str]  # Optional path to digitized CSV data
 
 
+class DataFileInput(TypedDict):
+    """A data file from the supplementary materials."""
+    id: str  # e.g., "S1_spectrum", "geometry_params"
+    description: str  # What the data file contains
+    file_path: str  # Path to the data file (CSV, Excel, JSON, etc.)
+    data_type: str  # Type hint: "spectrum", "geometry", "parameters", "time_series", "other"
+
+
+class SupplementaryInput(TypedDict, total=False):
+    """
+    Structured supplementary materials from the paper.
+    
+    Scientific papers often have critical information in supplementary materials:
+    - Additional methods details
+    - Extended data tables
+    - Supplementary figures
+    - Raw data files
+    """
+    supplementary_text: str  # Extracted text from supplementary PDF
+    supplementary_figures: List[FigureInput]  # Supplementary figure images
+    supplementary_data_files: List[DataFileInput]  # CSV, Excel, etc. data files
+
+
 class PaperInput(TypedDict):
     """
     Complete input specification for a paper reproduction.
@@ -36,7 +59,7 @@ class PaperInput(TypedDict):
     paper_text: str  # Extracted text from PDF (main text + methods + captions)
     paper_domain: NotRequired[str]  # Optional: plasmonics | photonic_crystal | etc.
     figures: List[FigureInput]  # Figures to reproduce with image paths
-    supplementary_text: NotRequired[str]  # Optional supplementary material text
+    supplementary: NotRequired[SupplementaryInput]  # Structured supplementary materials
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -177,7 +200,9 @@ def create_paper_input(
     paper_text: str,
     figures: List[Dict[str, str]],
     paper_domain: str = "other",
-    supplementary_text: Optional[str] = None
+    supplementary_text: Optional[str] = None,
+    supplementary_figures: Optional[List[Dict[str, str]]] = None,
+    supplementary_data_files: Optional[List[Dict[str, str]]] = None
 ) -> PaperInput:
     """
     Create a PaperInput programmatically.
@@ -189,9 +214,29 @@ def create_paper_input(
         figures: List of figure dicts with id, description, image_path
         paper_domain: Domain classification (default: "other")
         supplementary_text: Optional supplementary material text
+        supplementary_figures: Optional list of supplementary figure dicts
+        supplementary_data_files: Optional list of data file dicts with id, description, file_path, data_type
         
     Returns:
         Validated PaperInput dictionary
+        
+    Example:
+        paper_input = create_paper_input(
+            paper_id="aluminum_nanoantenna_2013",
+            paper_title="Aluminum nanoantenna complexes...",
+            paper_text="... extracted text ...",
+            figures=[
+                {"id": "Fig3a", "description": "Transmission spectra", "image_path": "papers/fig3a.png"},
+            ],
+            paper_domain="plasmonics",
+            supplementary_text="... supplementary methods ...",
+            supplementary_figures=[
+                {"id": "S1", "description": "Extended data", "image_path": "papers/figS1.png"},
+            ],
+            supplementary_data_files=[
+                {"id": "S_data1", "description": "Optical constants", "file_path": "papers/optical_data.csv", "data_type": "spectrum"},
+            ]
+        )
     """
     paper_input = {
         "paper_id": paper_id,
@@ -201,8 +246,18 @@ def create_paper_input(
         "figures": figures,
     }
     
-    if supplementary_text:
-        paper_input["supplementary_text"] = supplementary_text
+    # Build supplementary section if any supplementary content provided
+    if supplementary_text or supplementary_figures or supplementary_data_files:
+        supplementary: Dict[str, Any] = {}
+        
+        if supplementary_text:
+            supplementary["supplementary_text"] = supplementary_text
+        if supplementary_figures:
+            supplementary["supplementary_figures"] = supplementary_figures
+        if supplementary_data_files:
+            supplementary["supplementary_data_files"] = supplementary_data_files
+        
+        paper_input["supplementary"] = supplementary
     
     validate_paper_input(paper_input)
     
@@ -229,6 +284,51 @@ def get_figure_by_id(paper_input: PaperInput, figure_id: str) -> Optional[Figure
 def list_figure_ids(paper_input: PaperInput) -> List[str]:
     """Get list of all figure IDs in paper input."""
     return [fig.get("id", f"unknown_{i}") for i, fig in enumerate(paper_input.get("figures", []))]
+
+
+def get_supplementary_text(paper_input: PaperInput) -> Optional[str]:
+    """Get supplementary text if available."""
+    supplementary = paper_input.get("supplementary", {})
+    return supplementary.get("supplementary_text")
+
+
+def get_supplementary_figures(paper_input: PaperInput) -> List[FigureInput]:
+    """Get list of supplementary figures."""
+    supplementary = paper_input.get("supplementary", {})
+    return supplementary.get("supplementary_figures", [])
+
+
+def get_supplementary_data_files(paper_input: PaperInput) -> List[DataFileInput]:
+    """Get list of supplementary data files."""
+    supplementary = paper_input.get("supplementary", {})
+    return supplementary.get("supplementary_data_files", [])
+
+
+def get_data_file_by_type(paper_input: PaperInput, data_type: str) -> List[DataFileInput]:
+    """
+    Get supplementary data files by type.
+    
+    Args:
+        paper_input: The paper input dictionary
+        data_type: Type to filter by ("spectrum", "geometry", "parameters", etc.)
+        
+    Returns:
+        List of DataFileInput dicts matching the type
+    """
+    data_files = get_supplementary_data_files(paper_input)
+    return [f for f in data_files if f.get("data_type") == data_type]
+
+
+def get_all_figures(paper_input: PaperInput) -> List[FigureInput]:
+    """
+    Get all figures including both main and supplementary figures.
+    
+    Returns:
+        Combined list of main figures and supplementary figures
+    """
+    main_figures = paper_input.get("figures", [])
+    supplementary_figures = get_supplementary_figures(paper_input)
+    return main_figures + supplementary_figures
 
 
 # ═══════════════════════════════════════════════════════════════════════

@@ -1,0 +1,131 @@
+{
+  "$schema": "./material_schema.json",
+  "title": "Materials Index",
+  "description": "Index of available optical material data for Meep simulations",
+  "version": "0.1.0",
+  "last_updated": "2024-01-01",
+  
+  "materials": [
+    {
+      "material_id": "palik_silver",
+      "name": "Silver (Palik)",
+      "source": "Palik, Handbook of Optical Constants of Solids, 1998",
+      "wavelength_range_nm": [200, 2000],
+      "data_format": "wavelength_nm_n_k",
+      "data_file": "palik_silver.csv",
+      "material_type": "metal",
+      "common_applications": ["plasmonics", "nanoantennas", "SERS"],
+      "drude_lorentz_fit": {
+        "eps_inf": 1.0,
+        "drude_terms": [
+          {"omega_p_eV": 9.01, "gamma_eV": 0.048}
+        ],
+        "lorentz_terms": [
+          {"omega_0_eV": 4.05, "gamma_eV": 0.5, "sigma": 0.5},
+          {"omega_0_eV": 5.15, "gamma_eV": 1.5, "sigma": 0.3}
+        ],
+        "fit_quality": "good",
+        "fit_wavelength_range_nm": [300, 1200]
+      },
+      "notes": "Standard silver data for visible-NIR plasmonics"
+    },
+    
+    {
+      "material_id": "palik_gold",
+      "name": "Gold (Palik)",
+      "source": "Palik, Handbook of Optical Constants of Solids, 1998",
+      "wavelength_range_nm": [200, 2000],
+      "data_format": "wavelength_nm_n_k",
+      "data_file": "palik_gold.csv",
+      "material_type": "metal",
+      "common_applications": ["plasmonics", "biosensors", "nanomedicine"],
+      "drude_lorentz_fit": {
+        "eps_inf": 1.0,
+        "drude_terms": [
+          {"omega_p_eV": 9.03, "gamma_eV": 0.053}
+        ],
+        "lorentz_terms": [
+          {"omega_0_eV": 2.64, "gamma_eV": 0.75, "sigma": 1.0}
+        ],
+        "fit_quality": "good",
+        "fit_wavelength_range_nm": [400, 1200]
+      },
+      "notes": "Standard gold data; interband transitions important below 500nm"
+    },
+    
+    {
+      "material_id": "rakic_aluminum",
+      "name": "Aluminum (Rakic)",
+      "source": "Rakic et al., Applied Optics 37, 5271-5283, 1998",
+      "source_doi": "10.1364/AO.37.005271",
+      "wavelength_range_nm": [200, 1200],
+      "data_format": "wavelength_nm_n_k",
+      "data_file": "rakic_aluminum.csv",
+      "material_type": "metal",
+      "common_applications": ["UV plasmonics", "nanoantennas", "strong coupling"],
+      "drude_lorentz_fit": {
+        "eps_inf": 1.0,
+        "drude_terms": [
+          {"omega_p_eV": 14.98, "gamma_eV": 0.047}
+        ],
+        "lorentz_terms": [
+          {"omega_0_eV": 0.62, "gamma_eV": 0.27, "sigma": 0.07},
+          {"omega_0_eV": 1.54, "gamma_eV": 0.5, "sigma": 0.24}
+        ],
+        "fit_quality": "excellent",
+        "fit_wavelength_range_nm": [200, 1000]
+      },
+      "notes": "Preferred for UV plasmonics; native oxide layer not included"
+    },
+    
+    {
+      "material_id": "palik_silicon",
+      "name": "Silicon (Palik)",
+      "source": "Palik, Handbook of Optical Constants of Solids, 1998",
+      "wavelength_range_nm": [300, 2000],
+      "data_format": "wavelength_nm_n_k",
+      "data_file": "palik_silicon.csv",
+      "material_type": "semiconductor",
+      "common_applications": ["Mie resonators", "metasurfaces", "waveguides"],
+      "notes": "High-index dielectric; absorption above bandgap (~1100nm)"
+    },
+    
+    {
+      "material_id": "constant_sio2",
+      "name": "Silicon Dioxide (SiO2)",
+      "source": "Approximate constant index",
+      "wavelength_range_nm": [300, 2000],
+      "data_format": "wavelength_nm_n_k",
+      "data_file": null,
+      "material_type": "dielectric",
+      "common_applications": ["substrates", "spacer layers", "waveguides"],
+      "drude_lorentz_fit": {
+        "eps_inf": 2.105,
+        "drude_terms": [],
+        "lorentz_terms": [],
+        "fit_quality": "excellent",
+        "fit_wavelength_range_nm": [300, 2000]
+      },
+      "notes": "Constant n=1.45 approximation; use for transparent substrates"
+    }
+  ],
+  
+  "usage": {
+    "description": "How agents should use this material database",
+    "lookup_by_id": "Load materials/index.json, find material by material_id",
+    "tabulated_data": "If data_file is not null, load the CSV for tabulated n,k values",
+    "meep_model": "Use drude_lorentz_fit parameters to construct mp.Medium with E_susceptibilities",
+    "validation": "Compare computed ε(λ) from fit to tabulated data in Stage 0 (Material Validation)"
+  },
+  
+  "adding_materials": {
+    "description": "How to add new materials to this database",
+    "steps": [
+      "1. Create CSV file with wavelength_nm, n, k columns",
+      "2. Fit Drude-Lorentz model (use e.g., scipy.optimize)",
+      "3. Add entry to index.json following material_schema.json",
+      "4. Document source and valid wavelength range"
+    ]
+  }
+}
+

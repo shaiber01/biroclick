@@ -61,6 +61,9 @@ class StageProgress(TypedDict):
     discrepancies: List[Discrepancy]
     issues: List[str]
     next_actions: List[str]
+    # Confidence fields
+    classification_confidence: NotRequired[float]  # 0.0 to 1.0
+    confidence_factors: NotRequired[List[str]]  # What affected confidence
 
 
 class ReviewerIssue(TypedDict):
@@ -96,6 +99,9 @@ class FigureComparison(TypedDict):
     comparison_table: List[FigureComparisonRow]
     shape_comparison: List[ShapeComparisonRow]
     reason_for_difference: str
+    # Confidence fields
+    confidence: float  # 0.0 to 1.0
+    confidence_reason: str  # Explanation of confidence level
 
 
 class OverallAssessmentItem(TypedDict):
@@ -160,8 +166,25 @@ class StageMetric(TypedDict):
 
 class MetricsLog(TypedDict):
     """
-    Comprehensive metrics tracking for the reproduction.
+    Minimal live metrics tracked during execution.
+    
     Used for monitoring and future PromptEvolutionAgent learning.
+    
+    NOTE: This is intentionally simpler than metrics_schema.json.
+    The full schema (with revision_summary, token_summary, reproduction_quality,
+    etc.) is used for the final exported metrics file. That richer structure
+    is computed from this live log at GENERATE_REPORT time.
+    
+    Live tracking (this TypedDict):
+    - Basic counters and timestamps
+    - Raw agent call metrics
+    - Stage-level metrics
+    
+    Exported format (metrics_schema.json):
+    - All of the above, plus
+    - revision_summary (aggregated counts)
+    - token_summary (cost analysis)
+    - reproduction_quality (final assessment)
     """
     paper_id: str
     started_at: str  # ISO 8601
@@ -238,7 +261,7 @@ class ReproState(TypedDict, total=False):
     analysis_summary: Optional[str]  # Per-result report JSON
     
     # ─── Agent Feedback ─────────────────────────────────────────────────
-    critic_feedback: Optional[str]  # Last critic feedback for revision
+    reviewer_feedback: Optional[str]  # Last reviewer feedback for revision
     supervisor_feedback: Optional[str]  # Last supervisor feedback
     planner_feedback: Optional[str]  # Feedback for replanning
     
@@ -325,8 +348,8 @@ def create_initial_state(
         replan_count=0,
         
         # Verdicts
-        last_critic_verdict=None,
-        critic_issues=[],
+        last_reviewer_verdict=None,
+        reviewer_issues=[],
         supervisor_verdict=None,
         
         # Stage working data
@@ -338,7 +361,7 @@ def create_initial_state(
         analysis_summary=None,
         
         # Agent feedback
-        critic_feedback=None,
+        reviewer_feedback=None,
         supervisor_feedback=None,
         planner_feedback=None,
         
@@ -375,6 +398,70 @@ def create_initial_state(
         # Paper figures (populated from PaperInput)
         paper_figures=[]
     )
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Hardware Configuration
+# ═══════════════════════════════════════════════════════════════════════
+
+class HardwareConfig(TypedDict):
+    """
+    Hardware configuration for simulation execution.
+    Used by SimulationDesignerAgent for runtime estimates and
+    by CodeGeneratorAgent for parallelization decisions.
+    """
+    cpu_cores: int  # Number of CPU cores available
+    ram_gb: int  # RAM in gigabytes
+    gpu_available: bool  # Whether GPU acceleration is available (for future use)
+
+
+# Default hardware configuration (power laptop)
+DEFAULT_HARDWARE_CONFIG = HardwareConfig(
+    cpu_cores=8,
+    ram_gb=32,
+    gpu_available=False
+)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Runtime Configuration
+# ═══════════════════════════════════════════════════════════════════════
+
+class RuntimeConfig(TypedDict):
+    """
+    Runtime configuration for the reproduction workflow.
+    These values control timeouts, limits, and error recovery behavior.
+    """
+    # Total time budget
+    max_total_runtime_hours: float  # Default: 8.0
+    max_stage_runtime_minutes: float  # Default: 60.0
+    
+    # User interaction
+    user_response_timeout_hours: float  # Default: 24.0
+    
+    # Error recovery limits
+    physics_retry_limit: int  # Default: 2
+    llm_retry_limit: int  # Default: 5
+    json_parse_retry_limit: int  # Default: 3
+    consecutive_failure_limit: int  # Default: 2
+    
+    # LLM retry backoff (exponential: 1s, 2s, 4s, 8s, 16s)
+    llm_retry_base_seconds: float  # Default: 1.0
+    llm_retry_max_seconds: float  # Default: 16.0
+
+
+# Default runtime configuration
+DEFAULT_RUNTIME_CONFIG = RuntimeConfig(
+    max_total_runtime_hours=8.0,
+    max_stage_runtime_minutes=60.0,
+    user_response_timeout_hours=24.0,
+    physics_retry_limit=2,
+    llm_retry_limit=5,
+    json_parse_retry_limit=3,
+    consecutive_failure_limit=2,
+    llm_retry_base_seconds=1.0,
+    llm_retry_max_seconds=16.0
+)
 
 
 # ═══════════════════════════════════════════════════════════════════════

@@ -351,6 +351,76 @@ REPORT SECTIONS TO GENERATE:
    - List key findings (numbered, bold key phrases)
    - End with statement on whether discrepancies affect conclusions
 
+═══════════════════════════════════════════════════════════════════════
+G. USING CONFIDENCE IN DECISIONS
+═══════════════════════════════════════════════════════════════════════
+
+ResultsAnalyzerAgent provides confidence scores (0.0-1.0) for each comparison.
+Use these to make better routing decisions:
+
+CONFIDENCE THRESHOLDS FOR DECISIONS:
+
+| Confidence | Classification | Recommended Action |
+|------------|----------------|---------------------|
+| ≥0.7 | SUCCESS | Proceed to next stage (ok_continue) |
+| ≥0.7 | PARTIAL | Proceed, document limitation |
+| ≥0.7 | FAILURE | Investigate, may need replan |
+| 0.4-0.7 | Any | Consider asking for user input or revision |
+| <0.4 | Any | Request analysis revision or user guidance |
+
+WHEN TO TRUST LOW CONFIDENCE:
+- Low confidence + SUCCESS is suspicious → request revision
+- Low confidence + FAILURE might be false negative → investigate
+
+WHEN TO OVERRIDE HIGH CONFIDENCE:
+- High confidence on minor figure, low on main physics → prioritize main
+- High confidence mismatch with previous stages → consistency check
+
+DECISION MATRIX WITH CONFIDENCE:
+
+```python
+def make_decision(stage_result):
+    classification = stage_result["classification"]
+    confidence = stage_result["confidence"]
+    
+    if confidence < 0.4:
+        # Low confidence - need more information
+        if stage_result["analysis_revisions"] < 2:
+            return "request_analysis_revision"
+        else:
+            return "ask_user", "Low confidence in comparison - please review"
+    
+    if classification == "SUCCESS":
+        if confidence >= 0.7:
+            return "ok_continue"
+        else:
+            # Medium confidence success - proceed but note
+            return "ok_continue_with_caveat"
+    
+    if classification == "PARTIAL":
+        if confidence >= 0.7:
+            # Confident in partial result - accept and move on
+            return "ok_continue"
+        else:
+            # Uncertain partial - worth investigating
+            return "investigate_or_ask_user"
+    
+    if classification == "FAILURE":
+        if confidence >= 0.7:
+            # Confident failure - need to address
+            return "investigate_cause"
+        else:
+            # Uncertain failure - might be comparison error
+            return "request_analysis_revision"
+```
+
+CONFIDENCE IN FINAL REPORT:
+
+Include average confidence across all comparisons in the executive summary:
+- Average confidence ≥0.7: Strong conclusions
+- Average confidence 0.5-0.7: Moderate conclusions, note uncertainties
+- Average confidence <0.5: Preliminary conclusions, recommend further work
+
 OUTPUT FORMAT:
 
 When generating the final report, output:

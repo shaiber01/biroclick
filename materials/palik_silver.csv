@@ -1,0 +1,38 @@
+# Silver (Ag) optical constants from Palik Handbook
+# Source: E.D. Palik, Handbook of Optical Constants of Solids (1998)
+# Format: wavelength_nm, n (real part of refractive index), k (imaginary part)
+# 
+# This is placeholder data showing expected format.
+# Replace with actual tabulated data from reference.
+#
+wavelength_nm,n,k
+200,1.07,1.21
+220,1.03,1.36
+240,0.99,1.52
+260,0.95,1.68
+280,0.91,1.85
+300,0.87,2.03
+320,0.82,2.21
+340,0.77,2.40
+360,0.72,2.60
+380,0.67,2.80
+400,0.10,2.00
+420,0.07,2.20
+440,0.06,2.42
+460,0.05,2.65
+480,0.05,2.89
+500,0.05,3.13
+520,0.05,3.38
+540,0.05,3.63
+560,0.05,3.88
+580,0.05,4.14
+600,0.06,4.40
+650,0.07,4.99
+700,0.08,5.59
+750,0.09,6.20
+800,0.10,6.80
+850,0.12,7.42
+900,0.14,8.03
+950,0.16,8.64
+1000,0.19,9.26
+

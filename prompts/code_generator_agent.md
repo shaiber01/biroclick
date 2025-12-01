@@ -336,6 +336,384 @@ J. MEEP-SPECIFIC BEST PRACTICES
        ]
    )
    ```
+
+═══════════════════════════════════════════════════════════════════════
+K. MEEP CODE PATTERNS (DETAILED EXAMPLES)
+═══════════════════════════════════════════════════════════════════════
+
+The following are complete, working code patterns for common Meep operations.
+Use these as templates when generating simulation code.
+
+---
+
+### K1. DISPERSIVE MATERIALS (DRUDE-LORENTZ)
+
+Metals in the optical range require dispersive models. Always cite the source.
+
+```python
+# ═══════════════════════════════════════════════════════════════════════
+# ALUMINUM - Drude-Lorentz model fit to Rakic et al. (1998) data
+# Valid range: 200-1200 nm
+# ═══════════════════════════════════════════════════════════════════════
+
+# Meep uses angular frequency units where c=1
+# Conversion: omega_meep = omega_SI / (2*pi*c/a_unit)
+# For a_unit = 1e-6 m (1 micron): omega_meep = omega_rad/s * 1e-6 / (2*pi*3e8)
+
+a_unit = 1e-6  # 1 micron characteristic length (MANDATORY - see global rules)
+
+# Aluminum Drude parameters (from fit to Rakic 1998)
+Al_eps_inf = 1.0  # High-frequency permittivity
+Al_plasma_freq = 14.98  # Plasma frequency in eV
+Al_gamma = 0.047  # Damping rate in eV
+
+# Convert eV to Meep frequency units
+eV_to_meep = 1.0 / 1.23984  # λ(μm) = 1.23984 / E(eV) → f(meep) = E(eV)/1.23984
+
+Al_freq_d = Al_plasma_freq * eV_to_meep  # Drude frequency
+Al_gamma_d = Al_gamma * eV_to_meep  # Drude damping
+
+# Drude susceptibility: ε(ω) = ε_inf - σ * ω_d^2 / (ω^2 + i*ω*γ)
+# In Meep: σ = 1 for Drude term
+aluminum = mp.Medium(
+    epsilon=Al_eps_inf,
+    E_susceptibilities=[
+        mp.DrudeSusceptibility(
+            frequency=Al_freq_d,
+            gamma=Al_gamma_d,
+            sigma=1.0
+        )
+    ]
+)
+
+# ═══════════════════════════════════════════════════════════════════════
+# SILVER - Multi-pole Drude-Lorentz fit (Johnson & Christy 1972)
+# ═══════════════════════════════════════════════════════════════════════
+
+Ag_eps_inf = 1.0
+Ag_susceptibilities = [
+    # Drude term
+    mp.DrudeSusceptibility(frequency=9.01 * eV_to_meep, gamma=0.048 * eV_to_meep, sigma=1.0),
+    # Lorentz oscillators for interband transitions
+    mp.LorentzianSusceptibility(frequency=4.05 * eV_to_meep, gamma=0.5 * eV_to_meep, sigma=0.5),
+    mp.LorentzianSusceptibility(frequency=5.15 * eV_to_meep, gamma=1.5 * eV_to_meep, sigma=0.3)
+]
+
+silver = mp.Medium(epsilon=Ag_eps_inf, E_susceptibilities=Ag_susceptibilities)
+
+# ═══════════════════════════════════════════════════════════════════════
+# GOLD - Multi-pole fit (Johnson & Christy 1972)
+# ═══════════════════════════════════════════════════════════════════════
+
+gold = mp.Medium(
+    epsilon=1.0,
+    E_susceptibilities=[
+        mp.DrudeSusceptibility(frequency=9.03 * eV_to_meep, gamma=0.053 * eV_to_meep, sigma=1.0),
+        mp.LorentzianSusceptibility(frequency=2.64 * eV_to_meep, gamma=0.75 * eV_to_meep, sigma=1.0)
+    ]
+)
+
+# ═══════════════════════════════════════════════════════════════════════
+# DIELECTRICS - Non-dispersive (constant n)
+# ═══════════════════════════════════════════════════════════════════════
+
+# Glass (n = 1.52)
+glass = mp.Medium(epsilon=1.52**2)
+
+# TDBC J-aggregate (n ≈ 1.7, with resonance at ~590 nm for strong coupling studies)
+# For strong coupling: add Lorentzian for molecular resonance
+tdbc_resonance_nm = 590
+tdbc_freq = 1.0 / (tdbc_resonance_nm * 1e-3)  # Convert to Meep units (a_unit = 1 μm)
+tdbc_gamma = 0.05  # ~30 nm linewidth
+tdbc_sigma = 0.5   # Oscillator strength
+
+tdbc = mp.Medium(
+    epsilon=1.7**2,
+    E_susceptibilities=[
+        mp.LorentzianSusceptibility(frequency=tdbc_freq, gamma=tdbc_gamma, sigma=tdbc_sigma)
+    ]
+)
+```
+
+---
+
+### K2. FLUX MONITORS (TRANSMISSION/REFLECTION)
+
+Proper flux monitoring with normalization.
+
+```python
+# ═══════════════════════════════════════════════════════════════════════
+# FLUX MONITOR SETUP FOR TRANSMISSION/REFLECTION
+# ═══════════════════════════════════════════════════════════════════════
+
+# Cell geometry
+sx, sy, sz = 4, 4, 8  # Cell size in a_unit (microns)
+pml_thickness = 1.0
+
+# Frequency range (convert from wavelength in nm)
+wl_min, wl_max = 400, 800  # wavelength range in nm
+fmin = 1.0 / (wl_max * 1e-3)  # Meep frequency (a_unit = 1 μm)
+fmax = 1.0 / (wl_min * 1e-3)
+fcen = 0.5 * (fmin + fmax)
+df = fmax - fmin
+nfreq = 100  # Number of frequency points
+
+# Source position (above structure)
+src_z = sz/2 - pml_thickness - 0.5
+
+# Monitor positions
+trans_z = -sz/2 + pml_thickness + 0.5  # Below structure (transmission)
+refl_z = src_z + 0.2  # Just after source (reflection)
+
+# Source
+sources = [
+    mp.Source(
+        mp.GaussianSource(fcen, fwidth=df),
+        component=mp.Ex,
+        center=mp.Vector3(0, 0, src_z),
+        size=mp.Vector3(sx - 2*pml_thickness, sy - 2*pml_thickness, 0)
+    )
+]
+
+# Create simulation WITHOUT structure first (for normalization)
+sim_empty = mp.Simulation(
+    cell_size=mp.Vector3(sx, sy, sz),
+    resolution=resolution,
+    boundary_layers=[mp.PML(pml_thickness)],
+    sources=sources,
+    # NO geometry here for empty run
+)
+
+# Add flux monitors
+trans_region = mp.FluxRegion(center=mp.Vector3(0, 0, trans_z), size=mp.Vector3(sx, sy, 0))
+refl_region = mp.FluxRegion(center=mp.Vector3(0, 0, refl_z), size=mp.Vector3(sx, sy, 0), weight=-1)
+
+flux_trans = sim_empty.add_flux(fcen, df, nfreq, trans_region)
+flux_refl = sim_empty.add_flux(fcen, df, nfreq, refl_region)
+
+# Run empty simulation
+decay_point = mp.Vector3(0, 0, trans_z)
+sim_empty.run(until_after_sources=mp.stop_when_fields_decayed(50, mp.Ex, decay_point, 1e-4))
+
+# Save empty (normalization) flux
+empty_trans_data = sim_empty.get_flux_data(flux_trans)
+empty_refl_data = sim_empty.get_flux_data(flux_refl)
+freqs = np.array(mp.get_flux_freqs(flux_trans))
+
+# Get empty flux values
+empty_trans = np.array(mp.get_fluxes(flux_trans))
+
+# ═══════════════════════════════════════════════════════════════════════
+# NOW RUN WITH STRUCTURE
+# ═══════════════════════════════════════════════════════════════════════
+
+sim_struct = mp.Simulation(
+    cell_size=mp.Vector3(sx, sy, sz),
+    resolution=resolution,
+    boundary_layers=[mp.PML(pml_thickness)],
+    sources=sources,
+    geometry=geometry  # Your structure geometry
+)
+
+# Add flux monitors
+flux_trans = sim_struct.add_flux(fcen, df, nfreq, trans_region)
+flux_refl = sim_struct.add_flux(fcen, df, nfreq, refl_region)
+
+# IMPORTANT: Load empty flux data for reflection calculation
+sim_struct.load_minus_flux_data(flux_refl, empty_refl_data)
+
+# Run with structure
+sim_struct.run(until_after_sources=mp.stop_when_fields_decayed(50, mp.Ex, decay_point, 1e-4))
+
+# Get flux values
+struct_trans = np.array(mp.get_fluxes(flux_trans))
+struct_refl = np.array(mp.get_fluxes(flux_refl))
+
+# Calculate normalized T and R
+T = struct_trans / empty_trans
+R = -struct_refl / empty_trans  # Negative because of weight=-1
+A = 1 - T - R  # Absorption (if any)
+
+# Convert frequency to wavelength in nm
+wavelengths_nm = 1000 / freqs  # nm (since a_unit = 1 μm)
+
+# Save data
+data = np.column_stack([wavelengths_nm, T, R, A])
+header = """# Transmission, Reflection, Absorption spectrum
+# wavelength_nm, T, R, A
+"""
+np.savetxt(f'{paper_id}_{stage_id}_spectrum.csv', data, header=header, delimiter=',', fmt='%.6f')
+```
+
+---
+
+### K3. FIELD EXTRACTION AND VISUALIZATION
+
+Extracting and saving field data.
+
+```python
+# ═══════════════════════════════════════════════════════════════════════
+# FIELD EXTRACTION DURING SIMULATION
+# ═══════════════════════════════════════════════════════════════════════
+
+# Run with step functions to capture fields
+step_fields = []
+def capture_field(sim):
+    ez = sim.get_array(center=mp.Vector3(), size=mp.Vector3(sx, sy, 0), component=mp.Ez)
+    step_fields.append(ez.copy())
+
+sim.run(
+    mp.at_every(0.5, capture_field),  # Capture every 0.5 time units
+    until=200
+)
+
+# ═══════════════════════════════════════════════════════════════════════
+# DFT FIELD MONITORS (STEADY-STATE AT SPECIFIC FREQUENCIES)
+# ═══════════════════════════════════════════════════════════════════════
+
+# Monitor plane in XY at z=0
+dft_region = mp.Volume(center=mp.Vector3(0, 0, 0), size=mp.Vector3(sx, sy, 0))
+
+# Add DFT monitor at specific frequencies
+dft_freqs = [1.0/0.5, 1.0/0.6, 1.0/0.7]  # Monitor at 500, 600, 700 nm
+dft_obj = sim.add_dft_fields([mp.Ex, mp.Ey, mp.Ez], dft_freqs, where=dft_region)
+
+# Run simulation
+sim.run(until_after_sources=mp.stop_when_fields_decayed(50, mp.Ez, mp.Vector3(), 1e-5))
+
+# Extract DFT fields
+for i, freq in enumerate(dft_freqs):
+    wl_nm = 1000 / freq
+    ez_dft = sim.get_dft_array(dft_obj, mp.Ez, i)
+    
+    # Calculate field intensity
+    intensity = np.abs(ez_dft)**2
+    
+    # Plot field map
+    plt.figure(figsize=(8, 8))
+    plt.imshow(intensity.T, origin='lower', cmap='hot',
+               extent=[-sx/2, sx/2, -sy/2, sy/2])
+    plt.colorbar(label='|Ez|²')
+    plt.xlabel('x (μm)')
+    plt.ylabel('y (μm)')
+    plt.title(f'{stage_id} – Ez intensity at λ={wl_nm:.0f} nm')
+    plt.savefig(f'{paper_id}_{stage_id}_field_{wl_nm:.0f}nm.png', dpi=200, bbox_inches='tight')
+    plt.close()
+
+# ═══════════════════════════════════════════════════════════════════════
+# NEAR-TO-FAR FIELD TRANSFORMATION (FOR FAR-FIELD PATTERNS)
+# ═══════════════════════════════════════════════════════════════════════
+
+# Near field box around structure
+nearfield = sim.add_near2far(
+    fcen, df, nfreq,
+    mp.Near2FarRegion(center=mp.Vector3(0, 0, 1), size=mp.Vector3(sx, sy, 0)),
+    mp.Near2FarRegion(center=mp.Vector3(0, 0, -1), size=mp.Vector3(sx, sy, 0), weight=-1)
+)
+
+sim.run(until_after_sources=mp.stop_when_fields_decayed(50, mp.Ez, mp.Vector3(), 1e-5))
+
+# Calculate far-field at specific angles
+theta_range = np.linspace(-np.pi/2, np.pi/2, 181)
+ff_data = []
+
+for theta in theta_range:
+    x = 10 * np.sin(theta)  # Far-field distance
+    z = 10 * np.cos(theta)
+    ff = sim.get_farfield(nearfield, mp.Vector3(x, 0, z))
+    ff_data.append(np.abs(ff)**2)
+
+ff_data = np.array(ff_data)
+
+# Plot far-field pattern
+plt.figure(figsize=(8, 6))
+plt.plot(np.degrees(theta_range), ff_data[:, 0] / ff_data[:, 0].max())  # First frequency
+plt.xlabel('Angle (degrees)')
+plt.ylabel('Normalized intensity')
+plt.title(f'{stage_id} – Far-field pattern')
+plt.savefig(f'{paper_id}_{stage_id}_farfield.png', dpi=200, bbox_inches='tight')
+plt.close()
+```
+
+---
+
+### K4. PERIODIC STRUCTURES (ARRAYS)
+
+Simulating infinite periodic arrays.
+
+```python
+# ═══════════════════════════════════════════════════════════════════════
+# PERIODIC BOUNDARY CONDITIONS FOR ARRAYS
+# ═══════════════════════════════════════════════════════════════════════
+
+# Period (center-to-center spacing)
+period_x = 0.4  # 400 nm period in x
+period_y = 0.4  # 400 nm period in y
+
+# Cell size = one period
+sx = period_x
+sy = period_y
+sz = 4.0  # Height for PML + structure + monitors
+
+# Single structure in the cell (will be periodic)
+disk_radius = 0.1  # 100 nm
+disk_height = 0.05  # 50 nm
+
+geometry = [
+    mp.Cylinder(
+        radius=disk_radius,
+        height=disk_height,
+        center=mp.Vector3(0, 0, 0),
+        material=aluminum
+    )
+]
+
+# Periodic BCs in x and y, PML in z
+boundary_layers = [mp.PML(thickness=1.0, direction=mp.Z)]
+
+# Normal incidence plane wave source
+sources = [
+    mp.Source(
+        mp.GaussianSource(fcen, fwidth=df),
+        component=mp.Ex,
+        center=mp.Vector3(0, 0, sz/2 - 1.5),
+        size=mp.Vector3(sx, sy, 0)  # Fills entire period
+    )
+]
+
+# Simulation with periodic BCs (automatic from cell size)
+sim = mp.Simulation(
+    cell_size=mp.Vector3(sx, sy, sz),
+    geometry=geometry,
+    sources=sources,
+    resolution=resolution,
+    boundary_layers=boundary_layers,
+    k_point=mp.Vector3()  # k=0 for normal incidence
+)
+
+# ═══════════════════════════════════════════════════════════════════════
+# OBLIQUE INCIDENCE (BLOCH PERIODIC)
+# ═══════════════════════════════════════════════════════════════════════
+
+# Angle of incidence
+theta_deg = 30
+theta_rad = np.radians(theta_deg)
+
+# k-vector components (in-plane)
+# k_parallel = (omega/c) * sin(theta) = (2*pi*f) * sin(theta)
+# In Meep units with a=1: k_meep = k * a = 2*pi*f*sin(theta)
+k_x = fcen * np.sin(theta_rad)
+k_y = 0
+
+sim_oblique = mp.Simulation(
+    cell_size=mp.Vector3(sx, sy, sz),
+    geometry=geometry,
+    sources=sources,
+    resolution=resolution,
+    boundary_layers=boundary_layers,
+    k_point=mp.Vector3(k_x, k_y, 0)  # Bloch periodic
+)
+```
 ```
 
 

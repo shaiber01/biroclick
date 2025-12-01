@@ -15,7 +15,7 @@
     
     "paper_domain": {
       "type": "string",
-      "enum": ["plasmonics", "photonic_crystal", "metamaterial", "thin_film", "waveguide", "other"],
+      "enum": ["plasmonics", "photonic_crystal", "metamaterial", "thin_film", "waveguide", "strong_coupling", "nonlinear", "other"],
       "description": "Primary domain of the paper"
     },
     
@@ -27,6 +27,46 @@
     "summary": {
       "type": "string",
       "description": "Brief summary of the physical system and main claims"
+    },
+    
+    "reproduction_scope": {
+      "type": "object",
+      "description": "Overview of which figures are being reproduced and which are skipped",
+      "properties": {
+        "total_figures": {
+          "type": "integer",
+          "description": "Total number of figures in the paper"
+        },
+        "reproducible_figures": {
+          "type": "integer",
+          "description": "Number of figures that could be reproduced with Meep FDTD"
+        },
+        "attempted_figures": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Figure IDs that will be attempted"
+        },
+        "skipped_figures": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "figure_id": {"type": "string"},
+              "reason": {"type": "string"},
+              "classification": {
+                "type": "string",
+                "enum": ["not_reproducible", "reproducible_other", "out_of_scope", "low_priority"]
+              }
+            },
+            "required": ["figure_id", "reason", "classification"]
+          },
+          "description": "Figures not being attempted with reasons"
+        },
+        "coverage_percent": {
+          "type": "number",
+          "description": "Percentage of reproducible figures being attempted"
+        }
+      }
     },
     
     "extracted_parameters": {

@@ -1,0 +1,148 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MaterialSchema",
+  "description": "Schema for optical material data used in Meep FDTD simulations",
+  
+  "type": "object",
+  "required": ["material_id", "name", "source", "wavelength_range_nm", "data_format"],
+  
+  "properties": {
+    "material_id": {
+      "type": "string",
+      "description": "Unique identifier (e.g., 'palik_silver', 'jc_gold')",
+      "pattern": "^[a-z0-9_]+$"
+    },
+    
+    "name": {
+      "type": "string",
+      "description": "Human-readable name (e.g., 'Silver (Palik Handbook)')"
+    },
+    
+    "source": {
+      "type": "string",
+      "description": "Data source citation (e.g., 'Palik, Handbook of Optical Constants of Solids, 1998')"
+    },
+    
+    "source_doi": {
+      "type": "string",
+      "description": "DOI of source publication if available"
+    },
+    
+    "wavelength_range_nm": {
+      "type": "array",
+      "items": { "type": "number" },
+      "minItems": 2,
+      "maxItems": 2,
+      "description": "Valid wavelength range [min_nm, max_nm]"
+    },
+    
+    "data_format": {
+      "type": "string",
+      "enum": ["wavelength_nm_n_k", "energy_eV_eps1_eps2", "frequency_meep_eps1_eps2"],
+      "description": "Format of tabulated data"
+    },
+    
+    "data_file": {
+      "type": "string",
+      "description": "Path to CSV data file relative to materials/ directory"
+    },
+    
+    "drude_lorentz_fit": {
+      "type": "object",
+      "description": "Pre-fitted Drude-Lorentz parameters for Meep",
+      "properties": {
+        "eps_inf": {
+          "type": "number",
+          "description": "High-frequency permittivity"
+        },
+        "drude_terms": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "omega_p_eV": { "type": "number", "description": "Plasma frequency in eV" },
+              "gamma_eV": { "type": "number", "description": "Damping rate in eV" }
+            },
+            "required": ["omega_p_eV", "gamma_eV"]
+          },
+          "description": "Drude free-electron terms"
+        },
+        "lorentz_terms": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "omega_0_eV": { "type": "number", "description": "Resonance frequency in eV" },
+              "gamma_eV": { "type": "number", "description": "Damping rate in eV" },
+              "sigma": { "type": "number", "description": "Oscillator strength" }
+            },
+            "required": ["omega_0_eV", "gamma_eV", "sigma"]
+          },
+          "description": "Lorentz oscillator terms for interband transitions"
+        },
+        "fit_quality": {
+          "type": "string",
+          "enum": ["excellent", "good", "moderate", "approximate"],
+          "description": "Quality of fit to tabulated data"
+        },
+        "fit_wavelength_range_nm": {
+          "type": "array",
+          "items": { "type": "number" },
+          "minItems": 2,
+          "maxItems": 2,
+          "description": "Wavelength range where fit is valid"
+        }
+      }
+    },
+    
+    "material_type": {
+      "type": "string",
+      "enum": ["metal", "dielectric", "semiconductor", "2d_material", "organic", "other"],
+      "description": "Material category"
+    },
+    
+    "common_applications": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Common applications (e.g., ['plasmonics', 'nanoantennas'])"
+    },
+    
+    "notes": {
+      "type": "string",
+      "description": "Additional notes about data or usage"
+    },
+    
+    "last_updated": {
+      "type": "string",
+      "format": "date",
+      "description": "Date of last update"
+    }
+  },
+  
+  "examples": [
+    {
+      "material_id": "palik_silver",
+      "name": "Silver (Palik)",
+      "source": "Palik, Handbook of Optical Constants of Solids, 1998",
+      "wavelength_range_nm": [200, 2000],
+      "data_format": "wavelength_nm_n_k",
+      "data_file": "palik_silver.csv",
+      "material_type": "metal",
+      "common_applications": ["plasmonics", "nanoantennas", "SERS"],
+      "drude_lorentz_fit": {
+        "eps_inf": 1.0,
+        "drude_terms": [
+          {"omega_p_eV": 9.01, "gamma_eV": 0.048}
+        ],
+        "lorentz_terms": [
+          {"omega_0_eV": 4.05, "gamma_eV": 0.5, "sigma": 0.5},
+          {"omega_0_eV": 5.15, "gamma_eV": 1.5, "sigma": 0.3}
+        ],
+        "fit_quality": "good",
+        "fit_wavelength_range_nm": [300, 1200]
+      },
+      "notes": "Standard silver data for visible-NIR plasmonics"
+    }
+  ]
+}
+

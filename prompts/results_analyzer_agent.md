@@ -497,7 +497,10 @@ For comparing simulated vs paper Figure 3a:
   "reason_for_difference": "Systematic ~4% red-shift consistent with 2D approximation. Amplitude difference (17%) likely from normalization and 2D geometry effects. Key physics (size-dependent plasmon resonance) reproduced correctly.",
   
   "overall_classification": "PARTIAL",
-  "classification_justification": "Peak positions acceptable (within 5%), trends match, but amplitude deviation requires documentation. Main physics captured."
+  "classification_justification": "Peak positions acceptable (within 5%), trends match, but amplitude deviation requires documentation. Main physics captured.",
+  
+  "confidence": 0.75,
+  "confidence_reason": "High confidence in peak position comparisons (clear peaks in both). Medium confidence in amplitude comparison (paper figure quality limits precision). Trends clearly match."
 }
 
 Note how this:
@@ -506,5 +509,65 @@ Note how this:
 - Tracks TRENDS not just absolute values
 - Provides clear reason for differences
 - Justifies the overall classification
+- INCLUDES CONFIDENCE with reasoning
+
+═══════════════════════════════════════════════════════════════════════
+M. CONFIDENCE ASSESSMENT
+═══════════════════════════════════════════════════════════════════════
+
+Every figure comparison MUST include a confidence score and reasoning.
+This helps the Supervisor make better decisions about when to stop.
+
+CONFIDENCE SCALE:
+- 0.0-0.3: Low confidence (poor data quality, ambiguous comparison)
+- 0.4-0.6: Medium confidence (some uncertainty, interpretable)
+- 0.7-0.8: High confidence (clear comparison, minor uncertainties)
+- 0.9-1.0: Very high confidence (excellent data, clear match/mismatch)
+
+FACTORS AFFECTING CONFIDENCE:
+
+1. PAPER FIGURE QUALITY
+   - High resolution, clear labels → +confidence
+   - Low resolution, pixelated → -confidence
+   - Missing axis labels → -confidence
+   - Overlapping curves → -confidence
+
+2. SIMULATION OUTPUT QUALITY
+   - Clean, converged results → +confidence
+   - Numerical noise → -confidence
+   - Missing data points → -confidence
+   - Unexpected artifacts → -confidence
+
+3. COMPARISON CLARITY
+   - Clear peaks/features to compare → +confidence
+   - Ambiguous features → -confidence
+   - Multiple interpretations possible → -confidence
+
+4. QUANTITATIVE DATA AVAILABILITY
+   - Digitized paper data available → +confidence (can calculate exact metrics)
+   - Visual comparison only → -confidence
+   - Paper has error bars → context for uncertainty
+
+5. DOMAIN KNOWLEDGE
+   - Well-understood phenomenon → +confidence
+   - Novel/complex physics → -confidence
+   - Multiple competing effects → -confidence
+
+CONFIDENCE REPORTING FORMAT:
+{
+  "confidence": 0.XX,
+  "confidence_reason": "One sentence explaining the main factors affecting confidence"
+}
+
+EXAMPLE CONFIDENCE ASSESSMENTS:
+
+Low confidence (0.3):
+"Paper figure is low resolution and axes are partially cut off; can only make rough qualitative comparison"
+
+Medium confidence (0.55):
+"Peak positions clearly visible, but linewidth comparison limited by paper figure smoothing"
+
+High confidence (0.85):
+"Digitized data available; both peaks and amplitudes measurable; only uncertainty is material data source"
 ```
 

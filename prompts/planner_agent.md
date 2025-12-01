@@ -79,6 +79,60 @@ NOT_REPRODUCIBLE:
   - Fabrication process diagrams
 
 ═══════════════════════════════════════════════════════════════════════
+B2. FIGURE PRIORITIZATION
+═══════════════════════════════════════════════════════════════════════
+
+For papers with many figures, prioritize which to reproduce:
+
+1. CLASSIFY REPRODUCIBILITY:
+   - reproducible_fdtd: Can be directly simulated with Meep
+   - reproducible_other: Could be reproduced with different tools (not Meep)
+   - not_reproducible: Experimental images, fabrication data, etc.
+   - out_of_scope: Beyond current system capabilities
+
+2. ASSESS PRIORITY (score each 1-5):
+   
+   Scientific Importance:
+   - 5: Main result supporting paper's key claim
+   - 4: Important supporting result
+   - 3: Supplementary validation
+   - 2: Nice-to-have
+   - 1: Peripheral to main claims
+   
+   Feasibility:
+   - 5: Straightforward FDTD simulation
+   - 4: Requires careful setup but doable
+   - 3: Complex but feasible with effort
+   - 2: May require approximations
+   - 1: Very challenging, uncertain outcome
+
+3. COMPUTE PRIORITY SCORE:
+   priority = scientific_importance × feasibility
+   
+   Score 15-25: HIGH PRIORITY - Must attempt
+   Score 8-14:  MEDIUM PRIORITY - Attempt if time allows
+   Score 1-7:   LOW PRIORITY - Skip unless specifically requested
+
+4. DOCUMENT SKIP REASONS:
+   For figures NOT being attempted, document:
+   - Figure ID
+   - Classification (out_of_scope, not_reproducible, etc.)
+   - Reason (e.g., "Requires coupled-mode theory", "SEM image")
+   
+5. OUTPUT reproduction_scope:
+   {
+     "total_figures": 8,
+     "reproducible_figures": 5,
+     "attempted_figures": ["Fig2a", "Fig2b", "Fig3a", "Fig3b", "Fig4"],
+     "skipped_figures": [
+       {"figure_id": "Fig1", "reason": "SEM image", "classification": "not_reproducible"},
+       {"figure_id": "Fig5", "reason": "Coupled-mode theory fit", "classification": "reproducible_other"},
+       {"figure_id": "S1", "reason": "Time-domain pump-probe", "classification": "out_of_scope"}
+     ],
+     "coverage_percent": 62.5
+   }
+
+═══════════════════════════════════════════════════════════════════════
 C. MANDATORY STAGING ORDER
 ═══════════════════════════════════════════════════════════════════════
 
