@@ -97,6 +97,52 @@ prompt = inject_state_context(template, "planner", state)
 # Appends paper_text, paper_figures, etc. for PlannerAgent
 ```
 
+## Runtime & Hardware Configuration
+
+Agents that need runtime or hardware information access it from state:
+
+```python
+# In src/prompts.py context builders
+
+def _build_designer_context(state: Dict[str, Any]) -> str:
+    """Build context for SimulationDesignerAgent."""
+    runtime_config = state.get("runtime_config", DEFAULT_RUNTIME_CONFIG)
+    hardware_config = state.get("hardware_config", DEFAULT_HARDWARE_CONFIG)
+    
+    debug_mode = runtime_config.get("debug_mode", False)
+    
+    context = f"""
+### Runtime Configuration:
+- **Debug Mode**: {"ENABLED ⚡" if debug_mode else "DISABLED"}
+- **Resolution Factor**: {runtime_config.get('debug_resolution_factor', 1.0) if debug_mode else "1.0 (normal)"}
+- **Stage Runtime Budget**: {runtime_config.get('max_stage_runtime_minutes', 60)} minutes
+
+### Hardware Configuration:
+- **CPU Cores**: {hardware_config.get('cpu_cores', 8)}
+- **RAM**: {hardware_config.get('ram_gb', 32)} GB
+- **GPU Available**: {"Yes" if hardware_config.get('gpu_available', False) else "No"}
+"""
+    
+    if debug_mode:
+        context += """
+⚠️ **DEBUG MODE ACTIVE**:
+- Use reduced resolution (multiply base resolution by resolution factor)
+- Minimize simulation complexity
+- Focus on quick validation (~5 min), not accuracy
+"""
+    
+    return context
+```
+
+**Which agents receive config?**
+
+| Agent | `runtime_config` | `hardware_config` | Why |
+|-------|------------------|-------------------|-----|
+| SimulationDesignerAgent | ✓ | ✓ | Needs debug mode, hardware for runtime estimates |
+| CodeGeneratorAgent | ✓ | ✓ | Parallelization decisions, memory limits |
+| PlannerAgent | ✗ | ✗ | Plans based on paper, not machine |
+| ResultsAnalyzerAgent | ✗ | ✗ | Analyzes outputs, doesn't need runtime info |
+
 ## Agent Context Details
 
 ### PlannerAgent
@@ -126,12 +172,22 @@ CURRENT PAPER (injected at runtime)
 
 ### SimulationDesignerAgent
 
-**Receives**: Current stage requirements, assumptions, previous feedback.
+**Receives**: Current stage requirements, assumptions, previous feedback, **runtime and hardware configuration**.
 
 ```
 ═══════════════════════════════════════════════════════════════════════
 CURRENT TASK (injected at runtime)
 ═══════════════════════════════════════════════════════════════════════
+
+### Runtime Configuration:
+- **Debug Mode**: DISABLED (or ENABLED ⚡)
+- **Resolution Factor**: 1.0 (or 0.5x in debug mode)
+- **Stage Runtime Budget**: 15 minutes
+
+### Hardware Configuration:
+- **CPU Cores**: 8
+- **RAM**: 32 GB
+- **GPU Available**: No
 
 ### Stage Information:
 - **Stage ID**: stage1_single_disk
@@ -150,6 +206,11 @@ CURRENT TASK (injected at runtime)
 ### Previous Feedback (if revising):
 N/A - first design attempt
 ```
+
+**Debug Mode Behavior**: When debug mode is enabled, SimulationDesignerAgent should:
+- Use reduced resolution (multiply by `debug_resolution_factor`)
+- Minimize simulation complexity
+- Target quick validation (~5 min) over accuracy
 
 **Does NOT receive**: Full paper text, other stages, code.
 

@@ -254,14 +254,13 @@ F. OUTPUT FORMAT
 You must output a JSON object with these sections:
 
 {
-  "summary": {
-    "paper_id": "string",
-    "paper_domain": "plasmonics | photonic_crystal | metamaterial | thin_film | other",
-    "title": "string",
-    "main_system": "description of physical system",
-    "main_claims": ["list of key claims to verify"],
-    "simulation_approach": "FDTD with Meep"
-  },
+  "paper_id": "string (e.g., 'aluminum_nanoantenna_2013')",
+  "paper_domain": "plasmonics | photonic_crystal | metamaterial | thin_film | waveguide | strong_coupling | nonlinear | other",
+  "title": "paper title",
+  "summary": "Brief 1-2 sentence summary of the system and main claims",
+  "main_system": "description of physical system",
+  "main_claims": ["list of key claims to verify"],
+  "simulation_approach": "FDTD with Meep",
   
   "extracted_parameters": [
     {

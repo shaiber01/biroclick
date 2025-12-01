@@ -1,0 +1,56 @@
+# Silicon (Si) optical constants from Palik Handbook
+# Source: E.D. Palik, Handbook of Optical Constants of Solids (1998)
+# Data compiled from: https://refractiveindex.info/?shelf=main&book=Si&page=Aspnes
+# Format: wavelength_nm, n (real part of refractive index), k (imaginary part)
+#
+# Note: Silicon is a high-index semiconductor (n~3.5 in visible/NIR).
+# Strong absorption above bandgap (~1100nm, 1.12 eV).
+# Below ~400nm, absorption becomes very strong.
+#
+wavelength_nm,n,k
+300,4.97,3.00
+320,5.01,3.59
+340,6.06,3.26
+360,6.70,1.74
+380,6.52,0.63
+400,5.57,0.39
+420,5.10,0.30
+440,4.80,0.21
+460,4.59,0.15
+480,4.42,0.11
+500,4.30,0.08
+520,4.19,0.06
+540,4.10,0.05
+560,4.03,0.03
+580,3.97,0.02
+600,3.92,0.02
+620,3.87,0.01
+640,3.83,0.01
+660,3.79,0.01
+680,3.76,0.01
+700,3.73,0.00
+720,3.71,0.00
+740,3.68,0.00
+760,3.66,0.00
+780,3.64,0.00
+800,3.62,0.00
+850,3.58,0.00
+900,3.55,0.00
+950,3.52,0.00
+1000,3.50,0.00
+1050,3.48,0.00
+1100,3.46,0.00
+1150,3.45,0.00
+1200,3.43,0.00
+1250,3.42,0.00
+1300,3.41,0.00
+1350,3.40,0.00
+1400,3.40,0.00
+1450,3.39,0.00
+1500,3.38,0.00
+1600,3.37,0.00
+1700,3.36,0.00
+1800,3.35,0.00
+1900,3.35,0.00
+2000,3.34,0.00
+

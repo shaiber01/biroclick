@@ -52,7 +52,16 @@ class Output(TypedDict):
 class StageProgress(TypedDict):
     """Progress tracking for a single stage."""
     stage_id: str
-    status: str  # not_started | in_progress | completed_success | completed_partial | completed_failed | blocked
+    # Status values (matches progress_schema.json):
+    # - not_started: Stage hasn't been attempted
+    # - in_progress: Stage is currently executing
+    # - completed_success: Stage completed with good results
+    # - completed_partial: Stage completed with partial match
+    # - completed_failed: Stage completed but failed validation
+    # - blocked: Stage skipped due to budget/dependencies
+    # - needs_rerun: Stage needs to be re-executed (backtrack target)
+    # - invalidated: Stage results invalid, will re-run when deps ready
+    status: str
     last_updated: str  # ISO 8601
     revision_count: int
     runtime_seconds: NotRequired[float]
@@ -61,6 +70,8 @@ class StageProgress(TypedDict):
     discrepancies: List[Discrepancy]
     issues: List[str]
     next_actions: List[str]
+    # Backtracking support (matches progress_schema.json)
+    invalidation_reason: NotRequired[str]  # Why this stage was invalidated (if status is invalidated/needs_rerun)
     # Confidence fields
     classification_confidence: NotRequired[float]  # 0.0 to 1.0
     confidence_factors: NotRequired[List[str]]  # What affected confidence
@@ -262,6 +273,12 @@ class ReproState(TypedDict, total=False):
     paper_text: str  # Full extracted text from PDF
     paper_title: str
     
+    # ─── Runtime & Hardware Configuration ────────────────────────────────
+    # These control execution behavior, timeouts, and resource limits.
+    # Passed in via create_initial_state() or use defaults.
+    runtime_config: "RuntimeConfig"  # Timeouts, debug mode, retry limits
+    hardware_config: "HardwareConfig"  # CPU cores, RAM, GPU availability
+    
     # ─── Shared Artifacts (mirrors of JSON files) ───────────────────────
     # These are kept in memory and periodically saved to disk
     plan: Dict[str, Any]  # Full plan structure
@@ -375,7 +392,9 @@ def create_initial_state(
     paper_id: str,
     paper_text: str,
     paper_domain: str = "other",
-    runtime_budget_minutes: float = 120.0
+    runtime_budget_minutes: float = 120.0,
+    hardware_config: Optional[HardwareConfig] = None,
+    runtime_config: Optional[RuntimeConfig] = None
 ) -> ReproState:
     """
     Create initial state for a new paper reproduction.
@@ -385,16 +404,46 @@ def create_initial_state(
         paper_text: Extracted text from the paper PDF
         paper_domain: Primary domain (plasmonics, photonic_crystal, etc.)
         runtime_budget_minutes: Total runtime budget in minutes
+        hardware_config: Optional hardware configuration (CPU cores, RAM, etc.)
+                        Defaults to DEFAULT_HARDWARE_CONFIG if not provided.
+        runtime_config: Optional runtime configuration (timeouts, debug mode, etc.)
+                       Defaults to DEFAULT_RUNTIME_CONFIG if not provided.
     
     Returns:
         Initialized ReproState ready for the planning phase
+    
+    Example:
+        # Basic usage with defaults
+        state = create_initial_state("paper_123", paper_text)
+        
+        # With custom hardware config
+        state = create_initial_state(
+            "paper_123", 
+            paper_text,
+            hardware_config=HardwareConfig(cpu_cores=16, ram_gb=64, gpu_available=True)
+        )
+        
+        # Debug mode
+        state = create_initial_state(
+            "paper_123",
+            paper_text, 
+            runtime_config=DEBUG_RUNTIME_CONFIG
+        )
     """
+    # Use defaults if not provided
+    hw_config = hardware_config if hardware_config is not None else DEFAULT_HARDWARE_CONFIG
+    rt_config = runtime_config if runtime_config is not None else DEFAULT_RUNTIME_CONFIG
+    
     return ReproState(
         # Paper identification
         paper_id=paper_id,
         paper_domain=paper_domain,
         paper_text=paper_text,
         paper_title="",
+        
+        # Runtime & hardware configuration
+        runtime_config=rt_config,
+        hardware_config=hw_config,
         
         # Shared artifacts (empty, to be filled by PlannerAgent)
         plan={},
@@ -634,6 +683,236 @@ PAPER_LENGTH_THRESHOLDS = {
     "long_max_chars": 150000,  # 50K-150K chars = long (consider trimming)
     "very_long_max_chars": 600000,  # > 150K chars = very long (likely needs trimming)
 }
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Context Window Loop Management
+# ═══════════════════════════════════════════════════════════════════════
+# 
+# During revision loops (design→review→revise, code→review→revise), context
+# can grow as feedback accumulates. These constants and functions help
+# prevent context overflow.
+
+LOOP_CONTEXT_LIMITS = {
+    # Estimated tokens per revision loop component
+    "design_description_avg_tokens": 2000,  # ~8K chars
+    "code_avg_tokens": 3000,  # ~12K chars
+    "reviewer_feedback_avg_tokens": 500,  # ~2K chars
+    "analysis_summary_avg_tokens": 1500,  # ~6K chars
+    
+    # Context growth multiplier per loop iteration
+    # Each iteration adds: previous feedback + new artifact
+    "growth_factor_per_iteration": 1.3,  # 30% growth per loop
+    
+    # Safety thresholds
+    "loop_context_warning_tokens": 15000,  # Warn if loop context exceeds this
+    "loop_context_critical_tokens": 25000,  # Force summarization if exceeded
+    
+    # Maximum context to carry between loops
+    "max_feedback_history_tokens": 3000,  # Truncate older feedback
+    "max_iterations_with_full_context": 2,  # After this, summarize history
+}
+
+
+def estimate_loop_context_tokens(
+    loop_type: str,
+    iteration: int,
+    current_artifact_chars: int = 0,
+    feedback_history_chars: int = 0
+) -> int:
+    """
+    Estimate total context tokens for a revision loop iteration.
+    
+    This helps detect when context is growing too large and summarization
+    or truncation may be needed.
+    
+    Args:
+        loop_type: "design", "code", or "analysis"
+        iteration: Current iteration number (1-based)
+        current_artifact_chars: Character count of current design/code/analysis
+        feedback_history_chars: Character count of accumulated feedback
+        
+    Returns:
+        Estimated total tokens for this loop iteration
+        
+    Example:
+        >>> tokens = estimate_loop_context_tokens("code", iteration=2, 
+        ...     current_artifact_chars=10000, feedback_history_chars=2000)
+        >>> if tokens > LOOP_CONTEXT_LIMITS["loop_context_warning_tokens"]:
+        ...     print("Consider summarizing feedback history")
+    """
+    limits = LOOP_CONTEXT_LIMITS
+    chars_per_token = CONTEXT_WINDOW_LIMITS["chars_per_token_estimate"]
+    
+    # Base tokens for the artifact type
+    base_tokens = {
+        "design": limits["design_description_avg_tokens"],
+        "code": limits["code_avg_tokens"],
+        "analysis": limits["analysis_summary_avg_tokens"],
+    }.get(loop_type, 2000)
+    
+    # Add actual artifact size if provided
+    if current_artifact_chars > 0:
+        artifact_tokens = current_artifact_chars // chars_per_token
+    else:
+        artifact_tokens = base_tokens
+    
+    # Feedback history tokens
+    feedback_tokens = feedback_history_chars // chars_per_token
+    
+    # Growth factor for accumulated context
+    growth = limits["growth_factor_per_iteration"] ** (iteration - 1)
+    
+    # Total estimate
+    total = int((artifact_tokens + feedback_tokens) * growth)
+    
+    # Add base overhead (system prompt, state context)
+    overhead = (
+        CONTEXT_WINDOW_LIMITS["system_prompt_reserve"] +
+        CONTEXT_WINDOW_LIMITS["state_context_reserve"]
+    )
+    
+    return total + overhead
+
+
+def check_loop_context_status(
+    loop_type: str,
+    iteration: int,
+    current_artifact_chars: int = 0,
+    feedback_history_chars: int = 0
+) -> Dict[str, Any]:
+    """
+    Check if loop context is within safe limits and provide recommendations.
+    
+    Args:
+        loop_type: "design", "code", or "analysis"
+        iteration: Current iteration number (1-based)
+        current_artifact_chars: Character count of current design/code/analysis
+        feedback_history_chars: Character count of accumulated feedback
+        
+    Returns:
+        Dict with:
+        - status: "ok", "warning", or "critical"
+        - estimated_tokens: Current estimated tokens
+        - recommendation: Action to take (if any)
+        - should_summarize: Whether to summarize feedback history
+        
+    Example:
+        >>> status = check_loop_context_status("code", iteration=3,
+        ...     current_artifact_chars=15000, feedback_history_chars=5000)
+        >>> if status["should_summarize"]:
+        ...     feedback = summarize_feedback_history(feedback_history)
+    """
+    limits = LOOP_CONTEXT_LIMITS
+    
+    estimated_tokens = estimate_loop_context_tokens(
+        loop_type, iteration, current_artifact_chars, feedback_history_chars
+    )
+    
+    result: Dict[str, Any] = {
+        "estimated_tokens": estimated_tokens,
+        "iteration": iteration,
+        "loop_type": loop_type,
+    }
+    
+    # Check against thresholds
+    if estimated_tokens >= limits["loop_context_critical_tokens"]:
+        result["status"] = "critical"
+        result["recommendation"] = (
+            f"Context critical ({estimated_tokens:,} tokens). "
+            "Summarize feedback history before continuing. "
+            "Consider keeping only most recent feedback."
+        )
+        result["should_summarize"] = True
+        
+    elif estimated_tokens >= limits["loop_context_warning_tokens"]:
+        result["status"] = "warning"
+        result["recommendation"] = (
+            f"Context high ({estimated_tokens:,} tokens). "
+            "Consider summarizing older feedback if more iterations needed."
+        )
+        result["should_summarize"] = iteration > limits["max_iterations_with_full_context"]
+        
+    else:
+        result["status"] = "ok"
+        result["recommendation"] = None
+        result["should_summarize"] = False
+    
+    return result
+
+
+def truncate_feedback_history(
+    feedback_items: List[str],
+    max_tokens: Optional[int] = None
+) -> List[str]:
+    """
+    Truncate feedback history to stay within token limits.
+    
+    Keeps most recent feedback items, dropping oldest ones first.
+    
+    Args:
+        feedback_items: List of feedback strings (oldest first)
+        max_tokens: Maximum tokens to keep (default from LOOP_CONTEXT_LIMITS)
+        
+    Returns:
+        Truncated list of feedback items (most recent preserved)
+        
+    Example:
+        >>> history = ["Feedback 1...", "Feedback 2...", "Feedback 3..."]
+        >>> truncated = truncate_feedback_history(history, max_tokens=1000)
+    """
+    if max_tokens is None:
+        max_tokens = LOOP_CONTEXT_LIMITS["max_feedback_history_tokens"]
+    
+    chars_per_token = CONTEXT_WINDOW_LIMITS["chars_per_token_estimate"]
+    max_chars = max_tokens * chars_per_token
+    
+    # Work backwards from most recent
+    result = []
+    total_chars = 0
+    
+    for feedback in reversed(feedback_items):
+        feedback_chars = len(feedback)
+        if total_chars + feedback_chars <= max_chars:
+            result.insert(0, feedback)
+            total_chars += feedback_chars
+        else:
+            # Can't fit any more
+            break
+    
+    return result
+
+
+def create_feedback_summary_prompt(feedback_items: List[str]) -> str:
+    """
+    Create a prompt for summarizing feedback history.
+    
+    When feedback history exceeds limits, this generates a prompt that can
+    be sent to an LLM to create a condensed summary.
+    
+    Args:
+        feedback_items: List of feedback strings to summarize
+        
+    Returns:
+        Prompt string for LLM to generate summary
+    """
+    combined = "\n\n---\n\n".join(feedback_items)
+    
+    return f"""Summarize the following revision feedback history into a concise summary.
+Keep only:
+1. Unresolved issues that still need attention
+2. Key constraints or requirements mentioned
+3. Patterns in the feedback (recurring issues)
+
+Drop:
+- Issues that were already addressed
+- Verbose explanations
+- Redundant points
+
+Feedback History:
+{combined}
+
+Provide a condensed summary (max 500 words):"""
 
 
 def format_thresholds_table() -> str:
@@ -1108,14 +1387,15 @@ def sync_extracted_parameters(state: ReproState) -> ReproState:
     for param in plan_params:
         if isinstance(param, dict):
             # Ensure required fields exist with defaults
+            # Fields match ExtractedParameter TypedDict and plan_schema.json
             typed_param: ExtractedParameter = {
                 "name": param.get("name", "unnamed"),
                 "value": param.get("value"),
-                "unit": param.get("unit"),
-                "source": param.get("source", "unknown"),
-                "confidence": param.get("confidence", "low"),
-                "alternatives": param.get("alternatives"),
-                "notes": param.get("notes"),
+                "unit": param.get("unit", ""),
+                "source": param.get("source", "inferred"),
+                "location": param.get("location", ""),
+                "cross_checked": param.get("cross_checked", False),
+                "discrepancy_notes": param.get("discrepancy_notes"),
             }
             typed_params.append(typed_param)
     
@@ -1156,44 +1436,46 @@ def get_extracted_parameter(
 
 def list_extracted_parameters(
     state: ReproState,
-    confidence_filter: Optional[str] = None
+    cross_checked_only: bool = False,
+    source_filter: Optional[str] = None
 ) -> List[Dict[str, Any]]:
     """
-    List all extracted parameters, optionally filtered by confidence.
+    List all extracted parameters, optionally filtered by cross-check status or source.
     
     Args:
         state: Current ReproState
-        confidence_filter: Only return params with this confidence level
-                          ("high", "medium", "low") or None for all
+        cross_checked_only: If True, only return parameters that were cross-checked
+        source_filter: Only return params from this source type
+                      ("text", "figure_caption", "figure_axis", "supplementary", "inferred")
                           
     Returns:
-        List of parameter dicts with name, value, unit, confidence
+        List of parameter dicts with name, value, unit, source, cross_checked
         
     Example:
-        # Get all high-confidence parameters
-        confirmed = list_extracted_parameters(state, confidence_filter="high")
+        # Get all cross-checked parameters
+        confirmed = list_extracted_parameters(state, cross_checked_only=True)
+        
+        # Get parameters extracted from figures
+        from_figures = list_extracted_parameters(state, source_filter="figure_axis")
     """
     params = state.get("extracted_parameters", [])
     
-    if confidence_filter is None:
-        return [
-            {
-                "name": p.get("name"),
-                "value": p.get("value"),
-                "unit": p.get("unit"),
-                "confidence": p.get("confidence"),
-            }
-            for p in params
-        ]
-    
-    return [
-        {
+    result = []
+    for p in params:
+        # Apply filters
+        if cross_checked_only and not p.get("cross_checked", False):
+            continue
+        if source_filter and p.get("source") != source_filter:
+            continue
+        
+        result.append({
             "name": p.get("name"),
             "value": p.get("value"),
             "unit": p.get("unit"),
-            "confidence": p.get("confidence"),
-        }
-        for p in params
-        if p.get("confidence") == confidence_filter
-    ]
+            "source": p.get("source"),
+            "cross_checked": p.get("cross_checked", False),
+            "location": p.get("location"),
+        })
+    
+    return result
 

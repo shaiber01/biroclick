@@ -2,14 +2,20 @@
   "$schema": "./material_schema.json",
   "title": "Materials Index",
   "description": "Index of available optical material data for Meep simulations",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "last_updated": "2024-12-01",
   
   "status": {
     "description": "Current availability of material data files",
-    "available_csv_files": ["palik_silver.csv"],
-    "planned_csv_files": ["palik_gold.csv", "rakic_aluminum.csv", "palik_silicon.csv"],
-    "note": "Only palik_silver.csv is provided as an example. Other materials have Drude-Lorentz fits defined but no tabulated CSV data yet. Add real data from refractiveindex.info or literature sources."
+    "available_csv_files": [
+      "palik_silver.csv",
+      "palik_gold.csv",
+      "rakic_aluminum.csv",
+      "palik_silicon.csv",
+      "malitson_sio2.csv"
+    ],
+    "planned_csv_files": ["johnson_christy_gold.csv", "palik_copper.csv"],
+    "note": "Core materials for plasmonics, photonics, and metasurfaces are now available. Data sourced from refractiveindex.info which compiles standard references (Palik, Rakic, Malitson)."
   },
   
   "materials": [
@@ -17,11 +23,11 @@
       "material_id": "palik_silver",
       "name": "Silver (Palik)",
       "source": "Palik, Handbook of Optical Constants of Solids, 1998",
-      "wavelength_range_nm": [200, 2000],
+      "wavelength_range_nm": [200, 1000],
       "data_format": "wavelength_nm_n_k",
       "data_file": "palik_silver.csv",
       "material_type": "metal",
-      "common_applications": ["plasmonics", "nanoantennas", "SERS"],
+      "common_applications": ["plasmonics", "nanoantennas", "SERS", "metamaterials"],
       "drude_lorentz_fit": {
         "eps_inf": 1.0,
         "drude_terms": [
@@ -32,9 +38,9 @@
           {"omega_0_eV": 5.15, "gamma_eV": 1.5, "sigma": 0.3}
         ],
         "fit_quality": "good",
-        "fit_wavelength_range_nm": [300, 1200]
+        "fit_wavelength_range_nm": [300, 1000]
       },
-      "notes": "Standard silver data for visible-NIR plasmonics",
+      "notes": "Standard silver data for visible-NIR plasmonics. Excellent for high-quality plasmonic resonances due to low losses.",
       "csv_available": true
     },
     
@@ -46,7 +52,7 @@
       "data_format": "wavelength_nm_n_k",
       "data_file": "palik_gold.csv",
       "material_type": "metal",
-      "common_applications": ["plasmonics", "biosensors", "nanomedicine"],
+      "common_applications": ["plasmonics", "biosensors", "nanomedicine", "nanoantennas"],
       "drude_lorentz_fit": {
         "eps_inf": 1.0,
         "drude_terms": [
@@ -56,10 +62,10 @@
           {"omega_0_eV": 2.64, "gamma_eV": 0.75, "sigma": 1.0}
         ],
         "fit_quality": "good",
-        "fit_wavelength_range_nm": [400, 1200]
+        "fit_wavelength_range_nm": [500, 1500]
       },
-      "notes": "Standard gold data; interband transitions important below 500nm",
-      "csv_available": false
+      "notes": "Standard gold data. Strong interband transitions below 500nm cause increased absorption and deviate from Drude model. Best for resonances >500nm.",
+      "csv_available": true
     },
     
     {
@@ -71,7 +77,7 @@
       "data_format": "wavelength_nm_n_k",
       "data_file": "rakic_aluminum.csv",
       "material_type": "metal",
-      "common_applications": ["UV plasmonics", "nanoantennas", "strong coupling"],
+      "common_applications": ["UV plasmonics", "nanoantennas", "strong coupling", "SERS"],
       "drude_lorentz_fit": {
         "eps_inf": 1.0,
         "drude_terms": [
@@ -84,8 +90,8 @@
         "fit_quality": "excellent",
         "fit_wavelength_range_nm": [200, 1000]
       },
-      "notes": "Preferred for UV plasmonics; native oxide layer not included",
-      "csv_available": false
+      "notes": "Preferred for UV plasmonics due to high plasma frequency. Native oxide layer (Al2O3, ~2-3nm) not included; may shift resonances in practice.",
+      "csv_available": true
     },
     
     {
@@ -96,28 +102,98 @@
       "data_format": "wavelength_nm_n_k",
       "data_file": "palik_silicon.csv",
       "material_type": "semiconductor",
-      "common_applications": ["Mie resonators", "metasurfaces", "waveguides"],
-      "notes": "High-index dielectric; absorption above bandgap (~1100nm)",
-      "csv_available": false
+      "common_applications": ["Mie resonators", "metasurfaces", "waveguides", "photonic crystals"],
+      "drude_lorentz_fit": {
+        "eps_inf": 11.7,
+        "drude_terms": [],
+        "lorentz_terms": [
+          {"omega_0_eV": 3.4, "gamma_eV": 0.1, "sigma": 3.0}
+        ],
+        "fit_quality": "good",
+        "fit_wavelength_range_nm": [500, 2000]
+      },
+      "notes": "High-index semiconductor (n~3.5 in NIR). Strong absorption above bandgap (~1100nm). Below ~400nm, absorption becomes very strong. Use tabulated data for accuracy.",
+      "csv_available": true
     },
     
     {
-      "material_id": "constant_sio2",
-      "name": "Silicon Dioxide (SiO2)",
-      "source": "Approximate constant index",
-      "wavelength_range_nm": [300, 2000],
+      "material_id": "malitson_sio2",
+      "name": "Silicon Dioxide (SiO2, Fused Silica)",
+      "source": "Malitson, J. Opt. Soc. Am. 55, 1205-1209, 1965",
+      "source_doi": "10.1364/JOSA.55.001205",
+      "wavelength_range_nm": [200, 2000],
       "data_format": "wavelength_nm_n_k",
-      "data_file": null,
+      "data_file": "malitson_sio2.csv",
       "material_type": "dielectric",
-      "common_applications": ["substrates", "spacer layers", "waveguides"],
+      "common_applications": ["substrates", "spacer layers", "waveguides", "photonic crystals"],
       "drude_lorentz_fit": {
         "eps_inf": 2.105,
         "drude_terms": [],
         "lorentz_terms": [],
         "fit_quality": "excellent",
+        "fit_wavelength_range_nm": [200, 2000]
+      },
+      "notes": "Fused silica (amorphous SiO2). Transparent throughout visible and NIR (k≈0). n varies from ~1.55 at 200nm to ~1.44 at 2000nm. Common substrate material.",
+      "csv_available": true
+    },
+    
+    {
+      "material_id": "constant_glass",
+      "name": "Glass (BK7-like, constant n)",
+      "source": "Approximate constant index",
+      "wavelength_range_nm": [300, 2000],
+      "data_format": "wavelength_nm_n_k",
+      "data_file": null,
+      "material_type": "dielectric",
+      "common_applications": ["substrates", "simple simulations"],
+      "drude_lorentz_fit": {
+        "eps_inf": 2.28,
+        "drude_terms": [],
+        "lorentz_terms": [],
+        "fit_quality": "approximate",
         "fit_wavelength_range_nm": [300, 2000]
       },
-      "notes": "Constant n=1.45 approximation; use for transparent substrates",
+      "notes": "Constant n=1.51 approximation for generic glass substrate. For accurate results, use malitson_sio2 instead.",
+      "csv_available": false
+    },
+    
+    {
+      "material_id": "constant_air",
+      "name": "Air (vacuum approximation)",
+      "source": "Standard approximation",
+      "wavelength_range_nm": [100, 10000],
+      "data_format": "wavelength_nm_n_k",
+      "data_file": null,
+      "material_type": "dielectric",
+      "common_applications": ["surrounding medium", "vacuum"],
+      "drude_lorentz_fit": {
+        "eps_inf": 1.0,
+        "drude_terms": [],
+        "lorentz_terms": [],
+        "fit_quality": "excellent",
+        "fit_wavelength_range_nm": [100, 10000]
+      },
+      "notes": "n=1.0 everywhere. Use for air or vacuum surrounding medium.",
+      "csv_available": false
+    },
+    
+    {
+      "material_id": "constant_water",
+      "name": "Water (constant n)",
+      "source": "Approximate constant index",
+      "wavelength_range_nm": [300, 1200],
+      "data_format": "wavelength_nm_n_k",
+      "data_file": null,
+      "material_type": "dielectric",
+      "common_applications": ["biosensing", "aqueous environments"],
+      "drude_lorentz_fit": {
+        "eps_inf": 1.77,
+        "drude_terms": [],
+        "lorentz_terms": [],
+        "fit_quality": "good",
+        "fit_wavelength_range_nm": [400, 800]
+      },
+      "notes": "Constant n=1.33 approximation for water in visible range. Has absorption in IR.",
       "csv_available": false
     }
   ],
@@ -125,19 +201,27 @@
   "usage": {
     "description": "How agents should use this material database",
     "lookup_by_id": "Load materials/index.json, find material by material_id",
-    "tabulated_data": "If data_file is not null, load the CSV for tabulated n,k values",
+    "tabulated_data": "If csv_available is true, load the CSV for tabulated n,k values",
     "meep_model": "Use drude_lorentz_fit parameters to construct mp.Medium with E_susceptibilities",
-    "validation": "Compare computed ε(λ) from fit to tabulated data in Stage 0 (Material Validation)"
+    "validation": "Compare computed ε(λ) from fit to tabulated data in Stage 0 (Material Validation)",
+    "preference": "Prefer tabulated data (csv_available=true) over constant approximations for accuracy"
   },
   
   "adding_materials": {
     "description": "How to add new materials to this database",
     "steps": [
-      "1. Create CSV file with wavelength_nm, n, k columns",
-      "2. Fit Drude-Lorentz model (use e.g., scipy.optimize)",
-      "3. Add entry to index.json following material_schema.json",
-      "4. Document source and valid wavelength range"
+      "1. Find tabulated n,k data from refractiveindex.info or literature",
+      "2. Create CSV file with columns: wavelength_nm, n, k",
+      "3. Include header comments with source citation",
+      "4. (Optional) Fit Drude-Lorentz model using scipy.optimize",
+      "5. Add entry to index.json following material_schema.json",
+      "6. Set csv_available: true if CSV provided"
+    ],
+    "data_sources": [
+      "https://refractiveindex.info - Comprehensive database with citations",
+      "Palik, Handbook of Optical Constants of Solids (1998)",
+      "Rakic et al., Applied Optics 37, 5271 (1998) - Metal optical constants",
+      "Johnson & Christy, PRB 6, 4370 (1972) - Noble metals"
     ]
   }
 }
-

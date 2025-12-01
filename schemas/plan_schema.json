@@ -26,7 +26,23 @@
     
     "summary": {
       "type": "string",
-      "description": "Brief summary of the physical system and main claims"
+      "description": "Brief 1-2 sentence summary of the physical system and main claims"
+    },
+    
+    "main_system": {
+      "type": "string",
+      "description": "Description of the physical system being studied"
+    },
+    
+    "main_claims": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "List of key claims to verify from the paper"
+    },
+    
+    "simulation_approach": {
+      "type": "string",
+      "description": "High-level simulation approach (e.g., 'FDTD with Meep')"
     },
     
     "reproduction_scope": {
@@ -227,6 +243,13 @@
     "paper_domain": "plasmonics",
     "title": "Aluminum nanoantenna complexes for strong coupling between J-aggregates and localized surface plasmons",
     "summary": "Study of strong coupling between Al nanodisk plasmons and J-aggregate excitons, demonstrating Rabi splitting of ~200 meV.",
+    "main_system": "Aluminum nanodisk arrays on glass substrate coated with J-aggregate dye layer",
+    "main_claims": [
+      "Strong coupling between localized surface plasmon resonance and J-aggregate exciton",
+      "Rabi splitting of approximately 200 meV",
+      "Anticrossing behavior in dispersion diagram"
+    ],
+    "simulation_approach": "FDTD with Meep",
     
     "extracted_parameters": [
       {

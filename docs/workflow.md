@@ -108,9 +108,9 @@ def select_next_stage(state):
                 return stage["stage_id"]
     
     # ─── PRIORITY 3: Normal stage selection ──────────────────────────────
-    # Check validation hierarchy first
+    # Check validation hierarchy first (uses canonical names from ValidationHierarchyStatus)
     hierarchy = state["validation_hierarchy"]
-    if not hierarchy["material_validated"]:
+    if hierarchy["material_validation"] != "passed":
         # Cannot proceed past Stage 0 without material validation
         return "stage0_material_validation"
     
@@ -131,13 +131,13 @@ def select_next_stage(state):
         if not deps_met:
             continue
         
-        # Check validation hierarchy requirements
+        # Check validation hierarchy requirements (canonical names from state.py)
         stage_type = stage.get("stage_type", "")
-        if stage_type == "ARRAY_SYSTEM" and not hierarchy["single_structure_validated"]:
+        if stage_type == "ARRAY_SYSTEM" and hierarchy["single_structure"] != "passed":
             continue  # Cannot do array without single structure
-        if stage_type == "PARAMETER_SWEEP" and not hierarchy["array_validated"]:
+        if stage_type == "PARAMETER_SWEEP" and hierarchy["arrays_systems"] != "passed":
             continue  # Cannot sweep without array validation
-        if stage_type == "COMPLEX_PHYSICS" and not hierarchy["sweep_validated"]:
+        if stage_type == "COMPLEX_PHYSICS" and hierarchy["parameter_sweeps"] != "passed":
             continue  # Cannot do complex physics without sweep validation
         
         # Check if budget allows this stage
@@ -264,6 +264,14 @@ from src.code_runner import run_code_node
 # 3. Captures stdout, stderr, and output files
 # 4. Returns structured result with error handling
 
+def get_current_stage(state):
+    """Helper to get the current stage config from state."""
+    current_id = state["current_stage_id"]
+    for stage in state["plan"]["stages"]:
+        if stage["stage_id"] == current_id:
+            return stage
+    raise ValueError(f"Stage {current_id} not found in plan")
+
 def run_code_node(state):
     """
     LangGraph node for RUN_CODE.
@@ -283,13 +291,16 @@ def run_code_node(state):
     if blocking:
         return {"run_error": f"Code validation failed: {blocking}"}
     
+    # Get current stage config
+    current_stage = get_current_stage(state)
+    
     # Execute with sandboxing
     result = run_simulation(
         code=state["code"],
         stage_id=state["current_stage_id"],
         output_dir=Path(f"outputs/{state['paper_id']}/{state['current_stage_id']}"),
         config={
-            "timeout_seconds": state["plan"]["stages"][idx]["runtime_budget_minutes"] * 60,
+            "timeout_seconds": current_stage["runtime_budget_minutes"] * 60,
             "max_memory_gb": state.get("runtime_config", {}).get("max_memory_gb", 8.0),
             "max_cpu_cores": state.get("runtime_config", {}).get("max_cpu_cores", 4),
         }

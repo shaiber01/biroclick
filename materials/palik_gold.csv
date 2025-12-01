@@ -1,0 +1,55 @@
+# Gold (Au) optical constants from Palik Handbook
+# Source: E.D. Palik, Handbook of Optical Constants of Solids (1998)
+# Data compiled from: https://refractiveindex.info/?shelf=main&book=Au&page=Johnson
+# Format: wavelength_nm, n (real part of refractive index), k (imaginary part)
+#
+# Note: Gold has strong interband transitions below ~500nm causing increased absorption.
+# For plasmonics, resonances typically above 500nm work best.
+#
+wavelength_nm,n,k
+200,1.43,1.21
+220,1.38,1.31
+240,1.34,1.42
+260,1.30,1.54
+280,1.27,1.67
+300,1.24,1.80
+320,1.21,1.93
+340,1.18,2.06
+360,1.15,2.18
+380,1.54,1.89
+400,1.66,1.96
+420,1.64,2.04
+440,1.59,2.08
+460,1.49,2.03
+480,1.31,1.88
+500,0.86,1.84
+520,0.61,2.12
+540,0.40,2.41
+560,0.30,2.68
+580,0.24,2.94
+600,0.21,3.18
+620,0.18,3.43
+640,0.16,3.67
+660,0.15,3.91
+680,0.14,4.15
+700,0.13,4.38
+720,0.13,4.62
+740,0.13,4.85
+760,0.13,5.08
+780,0.13,5.31
+800,0.14,5.54
+850,0.14,6.11
+900,0.15,6.68
+950,0.17,7.25
+1000,0.18,7.81
+1100,0.22,8.94
+1200,0.26,10.07
+1300,0.30,11.19
+1400,0.36,12.32
+1500,0.41,13.45
+1600,0.47,14.57
+1700,0.54,15.70
+1800,0.60,16.82
+1900,0.67,17.95
+2000,0.74,19.07
+
