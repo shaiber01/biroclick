@@ -29,21 +29,44 @@
     },
     "files_check": {
       "type": "object",
-      "description": "Verification of expected output files",
+      "description": "Verification of expected output files against stage's expected_outputs spec",
       "properties": {
         "expected_files": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": { "type": "string" },
+          "description": "Filenames expected from stage's expected_outputs spec"
         },
         "found_files": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": { "type": "string" },
+          "description": "Files actually found in output directory"
         },
         "missing_files": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": { "type": "string" },
+          "description": "Expected files that are missing"
         },
-        "all_present": { "type": "boolean" }
+        "all_present": { "type": "boolean" },
+        "spec_compliance": {
+          "type": "array",
+          "description": "Detailed compliance check for each expected_output",
+          "items": {
+            "type": "object",
+            "properties": {
+              "artifact_type": { "type": "string" },
+              "expected_filename": { "type": "string" },
+              "actual_filename": { "type": ["string", "null"] },
+              "exists": { "type": "boolean" },
+              "non_empty": { "type": "boolean" },
+              "valid_format": { "type": "boolean" },
+              "columns_match": { 
+                "type": "boolean",
+                "description": "For CSV: columns match expected_outputs.columns"
+              },
+              "issues": { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        }
       },
       "required": ["expected_files", "found_files", "missing_files", "all_present"]
     },

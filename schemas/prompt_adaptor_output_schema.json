@@ -1,0 +1,154 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "prompt_adaptor_output_schema.json",
+  "title": "PromptAdaptorAgentOutput",
+  "description": "Output schema for PromptAdaptorAgent - customizes system prompts for paper-specific needs",
+  "type": "object",
+  "required": ["paper_id", "analysis_summary", "prompt_modifications"],
+  "properties": {
+    "paper_id": {
+      "type": "string",
+      "description": "Paper identifier"
+    },
+    "analysis_summary": {
+      "type": "object",
+      "description": "Summary of paper analysis",
+      "required": ["domain", "key_materials", "key_phenomena"],
+      "properties": {
+        "domain": {
+          "type": "string",
+          "description": "Primary domain (e.g., 'plasmonics_strong_coupling')"
+        },
+        "sub_domain": {
+          "type": "string",
+          "description": "More specific categorization"
+        },
+        "key_materials": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Main materials used in the paper"
+        },
+        "key_phenomena": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Key physical phenomena (e.g., 'Rabi_splitting', 'localized_surface_plasmon')"
+        },
+        "simulation_techniques_mentioned": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Simulation methods mentioned in paper"
+        },
+        "simulation_challenges": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Anticipated challenges for simulation"
+        },
+        "identified_gaps": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Gaps in base prompts for this paper"
+        }
+      }
+    },
+    "prompt_modifications": {
+      "type": "array",
+      "description": "List of modifications to apply to agent prompts",
+      "items": {
+        "type": "object",
+        "required": ["id", "target_agent", "modification_type", "confidence", "new_content", "reasoning"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique identifier for this modification (e.g., 'MOD_001')"
+          },
+          "target_agent": {
+            "type": "string",
+            "enum": [
+              "PlannerAgent",
+              "SimulationDesignerAgent",
+              "CodeGeneratorAgent",
+              "CodeReviewerAgent",
+              "ExecutionValidatorAgent",
+              "PhysicsSanityAgent",
+              "ResultsAnalyzerAgent",
+              "ComparisonValidatorAgent",
+              "SupervisorAgent"
+            ],
+            "description": "Which agent's prompt to modify"
+          },
+          "target_file": {
+            "type": "string",
+            "description": "Prompt file name (e.g., 'simulation_designer_agent.md')"
+          },
+          "section": {
+            "type": "string",
+            "description": "Section header in the prompt to modify"
+          },
+          "modification_type": {
+            "type": "string",
+            "enum": ["append", "modify", "disable"],
+            "description": "Type of modification"
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Confidence level (0-1). append >0.6, modify >0.8, disable >0.9"
+          },
+          "original_content": {
+            "type": ["string", "null"],
+            "description": "Original content (only for modify/disable)"
+          },
+          "new_content": {
+            "type": "string",
+            "description": "New content to add/replace"
+          },
+          "reasoning": {
+            "type": "string",
+            "description": "Why this modification helps"
+          },
+          "impact": {
+            "type": "string",
+            "enum": ["high", "medium", "low"],
+            "description": "Expected impact on reproduction success"
+          }
+        }
+      }
+    },
+    "agents_not_modified": {
+      "type": "array",
+      "description": "Agents that don't need modification",
+      "items": {
+        "type": "object",
+        "properties": {
+          "agent": { "type": "string" },
+          "reason": { "type": "string" }
+        }
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "description": "Warnings about potential issues",
+      "items": { "type": "string" }
+    },
+    "escalation_needed": {
+      "type": "boolean",
+      "description": "Whether user input is needed"
+    },
+    "escalation_question": {
+      "type": ["string", "null"],
+      "description": "Question for user if escalation_needed is true"
+    },
+    "domain_confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Confidence in domain classification"
+    },
+    "adaptation_log_file": {
+      "type": "string",
+      "description": "Suggested filename for logging adaptations"
+    }
+  }
+}
+

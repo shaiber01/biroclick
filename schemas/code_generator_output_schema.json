@@ -1,0 +1,139 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "code_generator_output_schema.json",
+  "title": "CodeGeneratorAgentOutput",
+  "description": "Output schema for CodeGeneratorAgent - Python+Meep simulation code generation",
+  "type": "object",
+  "required": ["stage_id", "code", "expected_outputs", "estimated_runtime_minutes"],
+  "properties": {
+    "stage_id": {
+      "type": "string",
+      "description": "Stage ID this code implements (e.g., 'stage1_single_disk')"
+    },
+    "code": {
+      "type": "string",
+      "description": "Complete Python+Meep simulation code ready for execution"
+    },
+    "code_summary": {
+      "type": "string",
+      "description": "Brief summary of what the code does"
+    },
+    "unit_system_used": {
+      "type": "object",
+      "description": "Unit system used in the code (MUST match design)",
+      "properties": {
+        "characteristic_length_m": {
+          "type": "number",
+          "description": "Characteristic length used (from design)"
+        },
+        "verified_from_design": {
+          "type": "boolean",
+          "description": "Whether this was read from the design JSON"
+        }
+      }
+    },
+    "materials_used": {
+      "type": "array",
+      "description": "Materials used and their sources",
+      "items": {
+        "type": "object",
+        "properties": {
+          "material_name": { "type": "string" },
+          "source": { "type": "string" },
+          "data_file_path": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "expected_outputs": {
+      "type": "array",
+      "description": "Files that the code will produce",
+      "items": {
+        "type": "object",
+        "required": ["artifact_type", "filename", "description"],
+        "properties": {
+          "artifact_type": {
+            "type": "string",
+            "enum": ["spectrum_csv", "field_data_npz", "field_plot_png", "spectrum_plot_png", "dispersion_csv", "raw_h5", "result_json"],
+            "description": "Type of output artifact"
+          },
+          "filename": {
+            "type": "string",
+            "description": "Actual filename that will be created"
+          },
+          "description": {
+            "type": "string",
+            "description": "What this file contains"
+          },
+          "columns": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "For CSV files: column names"
+          },
+          "target_figure": {
+            "type": ["string", "null"],
+            "description": "Which paper figure this output corresponds to"
+          }
+        }
+      }
+    },
+    "estimated_runtime_minutes": {
+      "type": "number",
+      "description": "Estimated runtime in minutes"
+    },
+    "estimated_memory_gb": {
+      "type": "number",
+      "description": "Estimated memory usage in GB"
+    },
+    "dependencies_used": {
+      "type": "array",
+      "description": "Python packages imported by the code",
+      "items": { "type": "string" }
+    },
+    "progress_markers": {
+      "type": "array",
+      "description": "Progress print statements included in the code",
+      "items": { "type": "string" }
+    },
+    "safety_checks": {
+      "type": "object",
+      "description": "Confirmation of required safety patterns",
+      "properties": {
+        "no_plt_show": {
+          "type": "boolean",
+          "description": "Code does NOT contain plt.show()"
+        },
+        "no_input": {
+          "type": "boolean",
+          "description": "Code does NOT contain input()"
+        },
+        "uses_plt_savefig_close": {
+          "type": "boolean",
+          "description": "Code uses plt.savefig() followed by plt.close()"
+        },
+        "relative_paths_only": {
+          "type": "boolean",
+          "description": "Code uses only relative file paths"
+        },
+        "includes_result_json": {
+          "type": "boolean",
+          "description": "Code prints REPROLAB_RESULT_JSON at end"
+        }
+      }
+    },
+    "design_compliance": {
+      "type": "object",
+      "description": "Confirmation that code matches design",
+      "properties": {
+        "unit_system_matches_design": { "type": "boolean" },
+        "geometry_matches_design": { "type": "boolean" },
+        "materials_match_design": { "type": "boolean" },
+        "output_filenames_match_spec": { "type": "boolean" }
+      }
+    },
+    "revision_notes": {
+      "type": ["string", "null"],
+      "description": "If this is a revision, notes on what changed from previous version"
+    }
+  }
+}
+

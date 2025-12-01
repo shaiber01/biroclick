@@ -483,14 +483,69 @@ def comparison_validator_node(state: ReproState) -> dict:
     return result
 
 
-def supervisor_node(state: ReproState) -> ReproState:
-    """SupervisorAgent: Big-picture assessment and decisions."""
-    state["workflow_phase"] = "supervision"
-    # TODO: Implement supervision logic
+def supervisor_node(state: ReproState) -> dict:
+    """
+    SupervisorAgent: Big-picture assessment and decisions.
+    
+    Returns dict with state updates (LangGraph merges this into state).
+    
+    IMPORTANT implementation notes:
+    
+    1. CHECK ask_user_trigger:
+       When this node is called after ask_user, check state["ask_user_trigger"]
+       to understand what the user was responding to:
+       - "material_checkpoint": User validated/changed material data
+       - "code_review_limit": User provided guidance on stuck code review
+       - "context_overflow": User chose recovery option
+       
+    2. HANDLE material_checkpoint RESPONSE (CRITICAL):
+       If ask_user_trigger == "material_checkpoint", check user_responses:
+       - "APPROVE" → proceed to select_stage (verdict = "ok_continue")
+       - "CHANGE_DATABASE" → invalidate Stage 0, update assumptions, rerun
+       - "CHANGE_MATERIAL" → route to plan with supervisor_feedback
+       - "NEED_HELP" → ask_user again with more context
+       
+    3. RESET COUNTERS on user intervention:
+       When user provides guidance that resolves an issue (e.g., code fix hint),
+       reset relevant counters before routing back to the blocked node:
+       - code_revision_count = 0 if routing back to generate_code
+       - design_revision_count = 0 if routing back to design
+       This prevents limit exhaustion after user helps resolve the issue.
+       
+    4. USE get_validation_hierarchy():
+       Always use get_validation_hierarchy(state) to check hierarchy status.
+       Never store validation_hierarchy in state directly - it's computed.
+    """
+    from schemas.state import get_validation_hierarchy
+    
+    # TODO: Implement supervision logic using prompts/supervisor_agent.md
     # - Assess overall progress
-    # - Check validation hierarchy
+    # - Check validation hierarchy via get_validation_hierarchy(state)
+    # - Handle post-ask_user routing based on ask_user_trigger
     # - Decide: continue, replan, ask_user, backtrack
-    return state
+    # - Call LLM with supervisor_agent.md prompt
+    # - Parse agent output per supervisor_output_schema.json
+    
+    # STUB: Replace with actual LLM call
+    # Check if this is a post-ask_user call
+    ask_user_trigger = state.get("ask_user_trigger")
+    user_responses = state.get("user_responses", {})
+    
+    result = {
+        "workflow_phase": "supervision",
+    }
+    
+    # Handle post-material-checkpoint scenario
+    if ask_user_trigger == "material_checkpoint":
+        # TODO: Parse user response and decide verdict
+        # For stub, assume approval
+        result["supervisor_verdict"] = "ok_continue"
+        result["ask_user_trigger"] = None  # Clear trigger after handling
+    else:
+        # Default behavior
+        result["supervisor_verdict"] = "ok_continue"
+    
+    return result
 
 
 def ask_user_node(state: ReproState) -> Dict[str, Any]:

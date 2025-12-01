@@ -97,9 +97,32 @@
             "notes": { "type": "string" }
           },
           "required": ["status"]
+        },
+        "expected_outputs": {
+          "type": "object",
+          "description": "Verification that code produces files matching stage's expected_outputs spec",
+          "properties": {
+            "status": { "type": "string", "enum": ["pass", "fail", "warning"] },
+            "outputs_checked": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "artifact_type": { "type": "string" },
+                  "expected_filename": { "type": "string" },
+                  "code_produces_file": { "type": "boolean" },
+                  "columns_match": { "type": "boolean", "description": "For CSV files: columns match spec" },
+                  "issues": { "type": "string" }
+                }
+              }
+            },
+            "all_outputs_accounted": { "type": "boolean" },
+            "notes": { "type": "string" }
+          },
+          "required": ["status", "all_outputs_accounted"]
         }
       },
-      "required": ["unit_normalization", "numerics", "source", "domain", "monitors", "visualization", "code_quality", "runtime", "meep_api"]
+      "required": ["unit_normalization", "numerics", "source", "domain", "monitors", "visualization", "code_quality", "runtime", "meep_api", "expected_outputs"]
     },
     "strengths": {
       "type": "array",
@@ -113,7 +136,7 @@
         "type": "object",
         "properties": {
           "severity": { "type": "string", "enum": ["blocking", "major", "minor"] },
-          "category": { "type": "string", "enum": ["unit_normalization", "numerics", "source", "domain", "monitors", "visualization", "code_quality", "runtime", "meep_api"] },
+          "category": { "type": "string", "enum": ["unit_normalization", "numerics", "source", "domain", "monitors", "visualization", "code_quality", "runtime", "meep_api", "expected_outputs"] },
           "description": { "type": "string" },
           "suggested_fix": { "type": "string" },
           "code_location": { "type": "string", "description": "Line number or function name if applicable" }

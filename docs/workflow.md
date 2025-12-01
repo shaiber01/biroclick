@@ -647,63 +647,52 @@ elif user_response.verdict == "need_help":
 | ask_user | ask_user | (MANDATORY after Stage 0) |
 | all_complete | generate_report | |
 
-**CRITICAL: Validation Hierarchy Synchronization**
+**Validation Hierarchy (Computed On-Demand)**
 
-After each stage completes, SupervisorAgent MUST update both:
-1. `progress["stages"][stage_id]["status"]` - the stage's own status
-2. `validation_hierarchy[stage_type]` - the hierarchy gate for dependent stages
+The validation hierarchy is **computed from progress["stages"]** on demand using
+`get_validation_hierarchy(state)`. There is NO separate hierarchy state to sync.
 
-These use **different terminology** (see `schemas/state.py` for full mapping):
+**How It Works:**
 
-| Stage Status | Validation Hierarchy |
-|--------------|---------------------|
+1. Stage status is stored in `progress["stages"][idx]["status"]`
+2. When you need the validation hierarchy, call `get_validation_hierarchy(state)`
+3. The function computes hierarchy values from stage statuses automatically
+
+```python
+from schemas.state import get_validation_hierarchy
+
+# In select_stage or any agent that needs hierarchy:
+hierarchy = get_validation_hierarchy(state)
+
+if hierarchy["material_validation"] != "passed":
+    # Cannot proceed past Stage 0
+    pass
+
+if hierarchy["single_structure"] in ["passed", "partial"]:
+    # Can proceed to array/sweep stages
+    pass
+```
+
+**Terminology Mapping** (handled automatically by `get_validation_hierarchy()`):
+
+| Stage Status | Hierarchy Value |
+|--------------|-----------------|
 | `completed_success` | `passed` |
 | `completed_partial` | `partial` |
 | `completed_failed` | `failed` |
-| `needs_rerun` / `invalidated` | `not_done` |
+| `not_started`, `in_progress`, `blocked`, `needs_rerun`, `invalidated` | `not_done` |
 
-Use the helper function from `schemas/state.py`:
+**Why This Design:**
 
-```python
-from schemas.state import update_validation_hierarchy
+- **Single source of truth**: Stage status in `progress["stages"]` is the only data
+- **No sync bugs**: Hierarchy is derived, not stored, so can't get out of sync
+- **Simple updates**: Just update stage status; hierarchy reflects it automatically
 
-# In SupervisorAgent node after stage completion:
-stage["status"] = "completed_success"
-update_validation_hierarchy(state, stage["stage_id"], state["plan"]["stages"])
-```
+**What Agents Do:**
 
-**Why this matters**: `select_stage` uses `validation_hierarchy` to enforce dependencies. If it's out of sync with actual stage status, stages may be blocked incorrectly or allowed to run prematurely.
-
-#### Hierarchy Sync Verification
-
-To catch bugs where `update_validation_hierarchy()` was not called, use the verification functions:
-
-```python
-from schemas.state import (
-    verify_hierarchy_sync,
-    verify_hierarchy_sync_or_raise,
-    repair_hierarchy_sync,
-    HierarchySyncError
-)
-
-# Option 1: Check and log (non-blocking)
-issues = verify_hierarchy_sync(state)
-if issues:
-    logging.warning(f"Hierarchy sync issues detected: {issues}")
-
-# Option 2: Fail fast (recommended in select_stage)
-verify_hierarchy_sync_or_raise(state)  # Raises HierarchySyncError if issues
-
-# Option 3: Auto-repair (use with caution)
-issues = verify_hierarchy_sync(state)
-if issues:
-    repairs = repair_hierarchy_sync(state)
-    logging.warning(f"Auto-repaired hierarchy sync: {repairs}")
-```
-
-**Recommended Usage**: Call `verify_hierarchy_sync_or_raise(state)` at the start of 
-`select_stage` to fail fast if hierarchy is out of sync. This catches bugs early
-rather than allowing stages to run with incorrect dependencies.
+1. Update `progress["stages"][idx]["status"]` when stage completes
+2. Call `get_validation_hierarchy(state)` when checking if stages can run
+3. That's it - no manual sync needed
 
 ---
 
@@ -724,24 +713,29 @@ rather than allowing stages to run with incorrect dependencies.
 **Logic**:
 ```python
 def handle_backtrack(state):
-    from schemas.state import update_validation_hierarchy
+    """
+    Process backtrack decision. Updates stage statuses directly.
     
+    The validation hierarchy is computed on-demand from stage statuses,
+    so no manual hierarchy sync is needed. Just update the status fields
+    and get_validation_hierarchy() will reflect the changes automatically.
+    """
     decision = state["backtrack_decision"]
     target_stage = decision["target_stage_id"]
-    stages = state["plan"]["stages"]
+    progress = state["progress"]
     
-    # Mark stages as invalidated (need to re-run after target completes)
-    for stage_id in decision["stages_to_invalidate"]:
-        state["progress"]["stages"][stage_id]["status"] = "invalidated"
-        state["progress"]["stages"][stage_id]["invalidation_reason"] = decision["reason"]
-        # Sync validation hierarchy (invalidated → not_done)
-        update_validation_hierarchy(state, stage_id, stages)
-    
-    # Reset target stage to allow re-design
-    state["progress"]["stages"][target_stage]["status"] = "needs_rerun"
-    state["progress"]["stages"][target_stage]["revision_count"] += 1
-    # Sync validation hierarchy (needs_rerun → not_done)
-    update_validation_hierarchy(state, target_stage, stages)
+    # Find and update stage statuses
+    for stage in progress.get("stages", []):
+        stage_id = stage.get("stage_id")
+        if stage_id == target_stage:
+            # Target stage: mark for re-run
+            stage["status"] = "needs_rerun"
+            # Note: get_validation_hierarchy() will now return "not_done" for this stage
+        elif stage_id in decision["stages_to_invalidate"]:
+            # Dependent stages: mark as invalidated
+            stage["status"] = "invalidated"
+            stage["invalidation_reason"] = decision["reason"]
+            # Note: get_validation_hierarchy() will now return "not_done" for these stages
     
     # Increment backtrack counter
     state["backtrack_count"] += 1

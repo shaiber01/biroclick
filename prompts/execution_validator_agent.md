@@ -111,22 +111,53 @@ Check that runtime was reasonable:
      - Should future stages be adjusted?
 
 ═══════════════════════════════════════════════════════════════════════
-C. OUTPUT FILE VALIDATION
+C. OUTPUT FILE VALIDATION (AGAINST EXPECTED_OUTPUTS SPEC)
 ═══════════════════════════════════════════════════════════════════════
 
-Validate all output files:
+Validate all output files against the stage's `expected_outputs` specification.
+This spec is defined in the plan and passed through design → code → execution.
 
-1. FILE EXISTENCE
+1. EXPECTED_OUTPUTS CONTRACT
+   The stage's expected_outputs array specifies EXACTLY what files must be produced:
+   ```json
+   "expected_outputs": [
+     {
+       "artifact_type": "spectrum_csv",
+       "filename_pattern": "{paper_id}_stage1_spectrum.csv",
+       "columns": ["wavelength_nm", "transmission", "reflection", "absorption"],
+       "target_figure": "Fig3a"
+     }
+   ]
+   ```
+   
+   For EACH expected_output, verify:
+   □ File exists with correct filename
+   □ File is non-empty
+   □ For CSV files: column headers match `columns` exactly
+   □ Data is in expected format
+
+2. FILE EXISTENCE
    □ All expected data files exist?
    □ All expected plot files exist?
-   □ Check against CodeGeneratorAgent's expected_outputs list
+   □ Check against stage's expected_outputs list from plan
+   □ If file missing: FAIL with specific filename
 
-2. FILE SIZE
+3. CSV COLUMN VERIFICATION (CRITICAL)
+   For each CSV file in expected_outputs:
+   □ Read first row (header)
+   □ Compare column names to expected_outputs.columns
+   □ Order matters: ["wavelength_nm", "transmission"] ≠ ["transmission", "wavelength_nm"]
+   □ If mismatch: FAIL - "columns are [actual] but expected [spec]"
+   
+   WHY: ResultsAnalyzerAgent will read files using these column names.
+   Wrong columns → analysis fails silently or uses wrong data.
+
+4. FILE SIZE
    □ Files are non-empty (not zero bytes)?
    □ File sizes are reasonable?
    □ Suspiciously small files? → Check for truncation
 
-3. FILE FORMAT
+5. FILE FORMAT
    □ CSV files are readable?
    □ NPZ/NPY files load without error?
    □ PNG/image files are valid images (not corrupted)?

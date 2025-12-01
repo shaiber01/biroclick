@@ -1,0 +1,281 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "planner_output_schema.json",
+  "title": "PlannerAgentOutput",
+  "description": "Output schema for PlannerAgent - strategic planning and paper analysis",
+  "type": "object",
+  "required": ["paper_id", "paper_domain", "title", "summary", "extracted_parameters", "targets", "stages", "assumptions", "progress"],
+  "properties": {
+    "paper_id": {
+      "type": "string",
+      "description": "Unique identifier for the paper (e.g., 'aluminum_nanoantenna_2013')"
+    },
+    "paper_domain": {
+      "type": "string",
+      "enum": ["plasmonics", "photonic_crystal", "metamaterial", "thin_film", "waveguide", "strong_coupling", "nonlinear", "other"],
+      "description": "Primary domain of the paper"
+    },
+    "title": {
+      "type": "string",
+      "description": "Paper title"
+    },
+    "summary": {
+      "type": "string",
+      "description": "Brief 1-2 sentence summary of the physical system and main claims"
+    },
+    "main_system": {
+      "type": "string",
+      "description": "Description of the physical system being studied"
+    },
+    "main_claims": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "List of key claims to verify from the paper"
+    },
+    "simulation_approach": {
+      "type": "string",
+      "description": "High-level simulation approach (e.g., 'FDTD with Meep')"
+    },
+    "reproduction_scope": {
+      "type": "object",
+      "description": "Overview of which figures are being reproduced and which are skipped",
+      "properties": {
+        "total_figures": { "type": "integer" },
+        "reproducible_figures": { "type": "integer" },
+        "attempted_figures": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "skipped_figures": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "figure_id": { "type": "string" },
+              "reason": { "type": "string" },
+              "classification": {
+                "type": "string",
+                "enum": ["not_reproducible", "reproducible_other", "out_of_scope", "low_priority"]
+              }
+            },
+            "required": ["figure_id", "reason", "classification"]
+          }
+        },
+        "coverage_percent": { "type": "number" }
+      }
+    },
+    "extracted_parameters": {
+      "type": "array",
+      "description": "All parameters extracted from the paper with provenance",
+      "items": {
+        "type": "object",
+        "required": ["name", "value", "unit", "source"],
+        "properties": {
+          "name": { "type": "string" },
+          "value": {
+            "oneOf": [
+              { "type": "number" },
+              { "type": "string" },
+              { "type": "array", "items": { "type": "number" } }
+            ]
+          },
+          "unit": { "type": "string" },
+          "source": {
+            "type": "string",
+            "enum": ["text", "figure_caption", "figure_axis", "supplementary", "inferred", "user_correction"]
+          },
+          "location": { "type": "string" },
+          "cross_checked": { "type": "boolean" },
+          "discrepancy_notes": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "targets": {
+      "type": "array",
+      "description": "Figures/results to reproduce",
+      "items": {
+        "type": "object",
+        "required": ["figure_id", "description", "type", "simulation_class"],
+        "properties": {
+          "figure_id": { "type": "string" },
+          "description": { "type": "string" },
+          "type": {
+            "type": "string",
+            "enum": ["spectrum", "dispersion", "field_map", "parameter_sweep", "other"]
+          },
+          "simulation_class": {
+            "type": "string",
+            "enum": ["FDTD_DIRECT", "FDTD_DERIVED", "ANALYTICAL", "COMPLEX_PHYSICS", "NOT_REPRODUCIBLE"]
+          },
+          "complexity_notes": { "type": ["string", "null"] },
+          "precision_requirement": {
+            "type": "string",
+            "enum": ["excellent", "good", "acceptable", "qualitative"],
+            "default": "good"
+          },
+          "digitized_data_path": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "stages": {
+      "type": "array",
+      "description": "Ordered list of reproduction stages",
+      "items": {
+        "type": "object",
+        "required": ["stage_id", "stage_type", "name", "description", "targets", "dependencies"],
+        "properties": {
+          "stage_id": { "type": "string" },
+          "stage_type": {
+            "type": "string",
+            "enum": ["MATERIAL_VALIDATION", "SINGLE_STRUCTURE", "ARRAY_SYSTEM", "PARAMETER_SWEEP", "COMPLEX_PHYSICS"]
+          },
+          "name": { "type": "string" },
+          "description": { "type": "string" },
+          "targets": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "dependencies": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "is_mandatory_validation": { "type": "boolean", "default": false },
+          "complexity_class": {
+            "type": "string",
+            "enum": ["analytical", "2D_light", "2D_medium", "3D_light", "3D_medium", "3D_heavy"]
+          },
+          "runtime_estimate_minutes": { "type": "number" },
+          "runtime_budget_minutes": { "type": "number" },
+          "max_revisions": { "type": "integer", "default": 3 },
+          "fallback_strategy": {
+            "type": "string",
+            "enum": ["ask_user", "simplify", "skip_with_warning"]
+          },
+          "validation_criteria": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "expected_outputs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["artifact_type", "filename_pattern", "description"],
+              "properties": {
+                "artifact_type": {
+                  "type": "string",
+                  "enum": ["spectrum_csv", "field_data_npz", "field_plot_png", "spectrum_plot_png", "dispersion_csv", "raw_h5"]
+                },
+                "filename_pattern": { "type": "string" },
+                "description": { "type": "string" },
+                "columns": {
+                  "type": "array",
+                  "items": { "type": "string" }
+                },
+                "target_figure": { "type": "string" }
+              }
+            }
+          },
+          "reference_data_path": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "assumptions": {
+      "type": "object",
+      "description": "Initial assumptions with sources and reasoning",
+      "properties": {
+        "global_assumptions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "category", "description", "reason", "source"],
+            "properties": {
+              "id": { "type": "string" },
+              "category": {
+                "type": "string",
+                "enum": ["material", "geometry", "source", "boundary", "numerical"]
+              },
+              "description": { "type": "string" },
+              "reason": { "type": "string" },
+              "source": {
+                "type": "string",
+                "enum": ["paper_stated", "paper_inferred", "literature_default", "user_provided"]
+              },
+              "alternatives_considered": {
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "critical": { "type": "boolean" },
+              "validated": { "type": "boolean" },
+              "validation_stage": { "type": ["string", "null"] }
+            }
+          }
+        },
+        "geometry_interpretations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "term": { "type": "string" },
+              "interpretation": { "type": "string" },
+              "alternatives": {
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "confidence": { "type": "string", "enum": ["high", "medium", "low"] }
+            }
+          }
+        }
+      }
+    },
+    "progress": {
+      "type": "object",
+      "description": "Initial progress structure",
+      "properties": {
+        "stages": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "stage_id": { "type": "string" },
+              "status": {
+                "type": "string",
+                "enum": ["not_started", "in_progress", "completed_success", "completed_partial", "completed_failed", "blocked", "needs_rerun", "invalidated"]
+              },
+              "summary": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "staging_rationale": {
+      "type": "string",
+      "description": "Brief explanation of why these stages were chosen for this paper"
+    },
+    "blocking_issues": {
+      "type": "array",
+      "description": "Issues that require user input before proceeding",
+      "items": {
+        "type": "object",
+        "properties": {
+          "description": { "type": "string" },
+          "question_for_user": { "type": "string" }
+        },
+        "required": ["description", "question_for_user"]
+      }
+    },
+    "planned_materials": {
+      "type": "array",
+      "description": "Materials identified from paper analysis for Stage 0",
+      "items": {
+        "type": "object",
+        "properties": {
+          "material_id": { "type": "string" },
+          "name": { "type": "string" },
+          "suggested_source": { "type": "string" },
+          "path": { "type": ["string", "null"] }
+        }
+      }
+    }
+  }
+}
+

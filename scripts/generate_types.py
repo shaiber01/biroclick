@@ -27,12 +27,26 @@ OUTPUT_FILE = SCHEMA_DIR / "generated_types.py"
 # Schemas to include in generation
 # Order matters for dependency resolution
 SCHEMAS = [
+    # Core state artifacts
     "plan_schema.json",
     "progress_schema.json",
     "metrics_schema.json",
     "report_schema.json",
     "assumptions_schema.json",
     "prompt_adaptations_schema.json",
+    # Agent output schemas
+    "planner_output_schema.json",
+    "simulation_designer_output_schema.json",
+    "code_generator_output_schema.json",
+    "prompt_adaptor_output_schema.json",
+    "supervisor_output_schema.json",
+    "plan_reviewer_output_schema.json",
+    "design_reviewer_output_schema.json",
+    "code_reviewer_output_schema.json",
+    "execution_validator_output_schema.json",
+    "physics_sanity_output_schema.json",
+    "results_analyzer_output_schema.json",
+    "comparison_validator_output_schema.json",
 ]
 
 

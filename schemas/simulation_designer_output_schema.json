@@ -1,0 +1,311 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "simulation_designer_output_schema.json",
+  "title": "SimulationDesignerAgentOutput",
+  "description": "Output schema for SimulationDesignerAgent - detailed simulation design specification",
+  "type": "object",
+  "required": ["stage_id", "design_description", "unit_system", "geometry", "materials", "sources", "boundary_conditions", "monitors", "performance_estimate"],
+  "properties": {
+    "stage_id": {
+      "type": "string",
+      "description": "Stage ID this design is for (e.g., 'stage1_single_disk')"
+    },
+    "design_description": {
+      "type": "string",
+      "description": "Detailed natural language description of the simulation design"
+    },
+    "unit_system": {
+      "type": "object",
+      "description": "CRITICAL: Unit normalization for Meep. CodeGenerator MUST use these values.",
+      "required": ["characteristic_length_m", "length_unit"],
+      "properties": {
+        "characteristic_length_m": {
+          "type": "number",
+          "description": "Characteristic length in meters (e.g., 1e-6 for 1 µm)"
+        },
+        "length_unit": {
+          "type": "string",
+          "description": "Human-readable unit name (e.g., 'µm', 'nm')"
+        },
+        "example_conversions": {
+          "type": "object",
+          "description": "Example conversions for clarity",
+          "additionalProperties": { "type": "number" }
+        }
+      }
+    },
+    "geometry": {
+      "type": "object",
+      "description": "Geometry specification",
+      "properties": {
+        "dimensionality": {
+          "type": "string",
+          "enum": ["2D", "3D"],
+          "description": "2D or 3D simulation"
+        },
+        "cell_size": {
+          "type": "object",
+          "description": "Simulation cell dimensions in Meep units",
+          "properties": {
+            "x": { "type": "number" },
+            "y": { "type": "number" },
+            "z": { "type": "number" }
+          }
+        },
+        "resolution": {
+          "type": "number",
+          "description": "Meep resolution (grid points per unit length)"
+        },
+        "structures": {
+          "type": "array",
+          "description": "List of geometric structures",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "type": {
+                "type": "string",
+                "enum": ["cylinder", "sphere", "block", "ellipsoid", "cone", "prism", "custom"]
+              },
+              "material_ref": { "type": "string" },
+              "center": {
+                "type": "object",
+                "properties": {
+                  "x": { "type": "number" },
+                  "y": { "type": "number" },
+                  "z": { "type": "number" }
+                }
+              },
+              "dimensions": {
+                "type": "object",
+                "description": "Dimensions in Meep units (structure-type dependent)"
+              },
+              "real_dimensions": {
+                "type": "object",
+                "description": "Dimensions in real units (nm) for reference"
+              }
+            }
+          }
+        },
+        "symmetries": {
+          "type": "array",
+          "description": "Symmetry planes to exploit",
+          "items": {
+            "type": "object",
+            "properties": {
+              "direction": { "type": "string", "enum": ["x", "y", "z"] },
+              "phase": { "type": "number" }
+            }
+          }
+        }
+      }
+    },
+    "materials": {
+      "type": "array",
+      "description": "Material definitions for the simulation",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "model_type"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Reference ID used in geometry structures"
+          },
+          "name": {
+            "type": "string",
+            "description": "Human-readable material name"
+          },
+          "model_type": {
+            "type": "string",
+            "enum": ["constant", "tabulated", "drude", "lorentz", "drude_lorentz"],
+            "description": "Type of material model"
+          },
+          "source": {
+            "type": "string",
+            "description": "Data source (e.g., 'palik', 'johnson_christy')"
+          },
+          "data_file": {
+            "type": ["string", "null"],
+            "description": "Path to tabulated data file if applicable"
+          },
+          "parameters": {
+            "type": "object",
+            "description": "Model-specific parameters",
+            "properties": {
+              "epsilon": { "type": "number" },
+              "epsilon_inf": { "type": "number" },
+              "drude_terms": { "type": "array" },
+              "lorentz_terms": { "type": "array" }
+            }
+          },
+          "wavelength_range": {
+            "type": "object",
+            "properties": {
+              "min_nm": { "type": "number" },
+              "max_nm": { "type": "number" }
+            }
+          }
+        }
+      }
+    },
+    "sources": {
+      "type": "array",
+      "description": "Source configuration",
+      "items": {
+        "type": "object",
+        "required": ["type", "center", "size"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["gaussian", "continuous", "eigenmode"],
+            "description": "Source type"
+          },
+          "component": {
+            "type": "string",
+            "enum": ["Ex", "Ey", "Ez", "Hx", "Hy", "Hz"],
+            "description": "Field component to excite"
+          },
+          "center": {
+            "type": "object",
+            "properties": {
+              "x": { "type": "number" },
+              "y": { "type": "number" },
+              "z": { "type": "number" }
+            }
+          },
+          "size": {
+            "type": "object",
+            "properties": {
+              "x": { "type": "number" },
+              "y": { "type": "number" },
+              "z": { "type": "number" }
+            }
+          },
+          "wavelength_center_nm": { "type": "number" },
+          "wavelength_width_nm": { "type": "number" },
+          "frequency_center_meep": { "type": "number" },
+          "frequency_width_meep": { "type": "number" }
+        }
+      }
+    },
+    "boundary_conditions": {
+      "type": "object",
+      "description": "Boundary condition specification",
+      "properties": {
+        "x_min": { "type": "string", "enum": ["pml", "periodic", "mirror", "metallic"] },
+        "x_max": { "type": "string", "enum": ["pml", "periodic", "mirror", "metallic"] },
+        "y_min": { "type": "string", "enum": ["pml", "periodic", "mirror", "metallic"] },
+        "y_max": { "type": "string", "enum": ["pml", "periodic", "mirror", "metallic"] },
+        "z_min": { "type": "string", "enum": ["pml", "periodic", "mirror", "metallic"] },
+        "z_max": { "type": "string", "enum": ["pml", "periodic", "mirror", "metallic"] },
+        "pml_thickness": { "type": "number" },
+        "pml_layers": { "type": "integer" }
+      }
+    },
+    "monitors": {
+      "type": "array",
+      "description": "Monitor/flux region definitions",
+      "items": {
+        "type": "object",
+        "required": ["type", "name"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["flux", "field", "dft_fields", "near2far"],
+            "description": "Monitor type"
+          },
+          "name": { "type": "string" },
+          "purpose": { "type": "string" },
+          "center": {
+            "type": "object",
+            "properties": {
+              "x": { "type": "number" },
+              "y": { "type": "number" },
+              "z": { "type": "number" }
+            }
+          },
+          "size": {
+            "type": "object",
+            "properties": {
+              "x": { "type": "number" },
+              "y": { "type": "number" },
+              "z": { "type": "number" }
+            }
+          },
+          "frequency_points": { "type": "integer" }
+        }
+      }
+    },
+    "simulation_parameters": {
+      "type": "object",
+      "description": "Additional simulation parameters",
+      "properties": {
+        "run_until": {
+          "type": "object",
+          "properties": {
+            "type": { "type": "string", "enum": ["time", "decay"] },
+            "value": { "type": "number" },
+            "decay_by": { "type": "number" }
+          }
+        },
+        "subpixel_averaging": { "type": "boolean" },
+        "force_complex_fields": { "type": "boolean" }
+      }
+    },
+    "performance_estimate": {
+      "type": "object",
+      "description": "Runtime and resource estimates",
+      "required": ["runtime_estimate_minutes", "memory_estimate_gb"],
+      "properties": {
+        "runtime_estimate_minutes": { "type": "number" },
+        "memory_estimate_gb": { "type": "number" },
+        "total_cells": { "type": "integer" },
+        "timesteps_estimate": { "type": "integer" },
+        "notes": { "type": "string" }
+      }
+    },
+    "output_specifications": {
+      "type": "array",
+      "description": "Expected output files from this simulation",
+      "items": {
+        "type": "object",
+        "properties": {
+          "artifact_type": {
+            "type": "string",
+            "enum": ["spectrum_csv", "field_data_npz", "field_plot_png", "spectrum_plot_png", "dispersion_csv", "raw_h5"]
+          },
+          "filename_pattern": { "type": "string" },
+          "description": { "type": "string" },
+          "columns": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    },
+    "new_assumptions": {
+      "type": "array",
+      "description": "Any new assumptions introduced by this design",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "category": { "type": "string" },
+          "description": { "type": "string" },
+          "reason": { "type": "string" },
+          "critical": { "type": "boolean" }
+        }
+      }
+    },
+    "design_rationale": {
+      "type": "string",
+      "description": "Explanation of key design choices and trade-offs"
+    },
+    "potential_issues": {
+      "type": "array",
+      "description": "Potential issues or limitations with this design",
+      "items": { "type": "string" }
+    }
+  }
+}
+

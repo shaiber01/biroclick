@@ -72,6 +72,40 @@ Before approving code to run, verify EVERY item:
   - Normalization reference implemented correctly
   - All target figure outputs will be generated
 
+□ EXPECTED OUTPUTS CONTRACT (CRITICAL)
+  - The stage's `expected_outputs` array defines what files MUST be produced
+  - For EACH item in expected_outputs, verify:
+    - Filename matches the pattern (e.g., "{paper_id}_stage1_spectrum.csv")
+    - For CSV files: column names match the spec exactly
+    - For PNG files: plot is saved with correct filename
+  - BLOCKING if:
+    - Code doesn't produce a file listed in expected_outputs
+    - CSV columns don't match expected_outputs.columns
+    - Filename doesn't match expected_outputs.filename_pattern
+  
+  WHY BLOCKING: ResultsAnalyzerAgent will look for files matching these specs.
+  If files are named differently or columns mismatch, analysis will fail.
+  
+  Example expected_outputs from stage:
+  ```json
+  [
+    {
+      "artifact_type": "spectrum_csv",
+      "filename_pattern": "{paper_id}_stage1_spectrum.csv",
+      "columns": ["wavelength_nm", "transmission", "reflection", "absorption"]
+    }
+  ]
+  ```
+  
+  Code MUST have:
+  ```python
+  # Save with exact filename pattern and column names
+  np.savetxt('paper123_stage1_spectrum.csv', 
+             data,
+             header='wavelength_nm,transmission,reflection,absorption',
+             delimiter=',')
+  ```
+
 □ VISUALIZATION SETUP
   - All target figures from this stage will be generated
   - Plot format matches paper:
