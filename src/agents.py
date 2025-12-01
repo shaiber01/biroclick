@@ -82,17 +82,44 @@ def plan_node(state: ReproState) -> ReproState:
     return state
 
 
-def plan_reviewer_node(state: ReproState) -> ReproState:
-    """PlanReviewerAgent: Review reproduction plan before stage execution."""
-    state["workflow_phase"] = "plan_review"
+def plan_reviewer_node(state: ReproState) -> dict:
+    """
+    PlanReviewerAgent: Review reproduction plan before stage execution.
+    
+    Returns dict with state updates (LangGraph merges this into state).
+    
+    IMPORTANT:
+    - Sets `last_plan_review_verdict` state field.
+    - Increments `replan_count` when verdict is "needs_revision".
+    The routing function `route_after_plan_review` reads these fields.
+    """
     # TODO: Implement plan review logic using prompts/plan_reviewer_agent.md
     # - Check coverage of reproducible figures
     # - Verify Stage 0 and Stage 1 present
     # - Validate parameter extraction
     # - Check assumptions quality
     # - Verify runtime estimates
-    # - Set last_plan_review_verdict: "approve" | "needs_revision"
-    return state
+    # - Call LLM with plan_reviewer_agent.md prompt
+    # - Parse agent output per plan_reviewer_output_schema.json
+    
+    # STUB: Replace with actual LLM call
+    agent_output = {
+        "verdict": "approve",  # "approve" | "needs_revision"
+        "issues": [],
+        "summary": "Plan review stub - implement with LLM call",
+    }
+    
+    result = {
+        "workflow_phase": "plan_review",
+        "last_plan_review_verdict": agent_output["verdict"],
+    }
+    
+    # Increment replan counter if needs_revision
+    if agent_output["verdict"] == "needs_revision":
+        result["replan_count"] = state.get("replan_count", 0) + 1
+        result["planner_feedback"] = agent_output.get("feedback", agent_output.get("summary", ""))
+    
+    return result
 
 
 def select_stage_node(state: ReproState) -> dict:
@@ -221,29 +248,85 @@ def simulation_designer_node(state: ReproState) -> ReproState:
     return state
 
 
-def design_reviewer_node(state: ReproState) -> ReproState:
-    """DesignReviewerAgent: Review simulation design before code generation."""
-    state["workflow_phase"] = "design_review"
+def design_reviewer_node(state: ReproState) -> dict:
+    """
+    DesignReviewerAgent: Review simulation design before code generation.
+    
+    Returns dict with state updates (LangGraph merges this into state).
+    
+    IMPORTANT:
+    - Sets `last_design_review_verdict` state field.
+    - Increments `design_revision_count` when verdict is "needs_revision".
+    The routing function `route_after_design_review` reads these fields.
+    """
     # TODO: Implement design review logic using prompts/design_reviewer_agent.md
     # - Check geometry matches paper
     # - Verify physics setup is correct
     # - Validate material choices
     # - Check unit system (a_unit)
     # - Verify source/excitation setup
-    # - Set last_design_review_verdict: "approve" | "needs_revision"
-    return state
+    # - Call LLM with design_reviewer_agent.md prompt
+    # - Parse agent output per design_reviewer_output_schema.json
+    
+    # STUB: Replace with actual LLM call
+    agent_output = {
+        "verdict": "approve",  # "approve" | "needs_revision"
+        "issues": [],
+        "summary": "Design review stub - implement with LLM call",
+    }
+    
+    result = {
+        "workflow_phase": "design_review",
+        "last_design_review_verdict": agent_output["verdict"],
+        "reviewer_issues": agent_output.get("issues", []),
+    }
+    
+    # Increment design revision counter if needs_revision
+    if agent_output["verdict"] == "needs_revision":
+        result["design_revision_count"] = state.get("design_revision_count", 0) + 1
+        result["reviewer_feedback"] = agent_output.get("feedback", agent_output.get("summary", ""))
+    
+    return result
 
 
-def code_reviewer_node(state: ReproState) -> ReproState:
-    """CodeReviewerAgent: Review generated code before execution."""
-    state["workflow_phase"] = "code_review"
+def code_reviewer_node(state: ReproState) -> dict:
+    """
+    CodeReviewerAgent: Review generated code before execution.
+    
+    Returns dict with state updates (LangGraph merges this into state).
+    
+    IMPORTANT:
+    - Sets `last_code_review_verdict` state field.
+    - Increments `code_revision_count` when verdict is "needs_revision".
+    The routing function `route_after_code_review` reads these fields.
+    """
     # TODO: Implement code review logic using prompts/code_reviewer_agent.md
     # - Verify a_unit matches design
     # - Check Meep API usage
     # - Validate numerics implementation
     # - Check code quality (no plt.show, etc.)
-    # - Set last_code_review_verdict: "approve" | "needs_revision"
-    return state
+    # - Call LLM with code_reviewer_agent.md prompt
+    # - Parse agent output per code_reviewer_output_schema.json
+    
+    # STUB: Replace with actual LLM call
+    agent_output = {
+        "verdict": "approve",  # "approve" | "needs_revision"
+        "issues": [],
+        "summary": "Code review stub - implement with LLM call",
+    }
+    
+    result = {
+        "workflow_phase": "code_review",
+        "last_code_review_verdict": agent_output["verdict"],
+        "reviewer_issues": agent_output.get("issues", []),
+    }
+    
+    # Increment code revision counter if needs_revision
+    if agent_output["verdict"] == "needs_revision":
+        result["code_revision_count"] = state.get("code_revision_count", 0) + 1
+        result["reviewer_feedback"] = agent_output.get("feedback", agent_output.get("summary", ""))
+    
+    return result
 
 
 def code_generator_node(state: ReproState) -> ReproState:
@@ -256,24 +339,99 @@ def code_generator_node(state: ReproState) -> ReproState:
     return state
 
 
-def execution_validator_node(state: ReproState) -> ReproState:
-    """ExecutionValidatorAgent: Validate simulation ran correctly."""
-    state["workflow_phase"] = "execution_validation"
+def execution_validator_node(state: ReproState) -> dict:
+    """
+    ExecutionValidatorAgent: Validate simulation ran correctly.
+    
+    Returns dict with state updates (LangGraph merges this into state).
+    
+    IMPORTANT: 
+    - Sets `execution_verdict` state field from agent output's `verdict`.
+    - Increments `execution_failure_count` when verdict is "fail".
+    - Increments `total_execution_failures` for metrics tracking.
+    The routing function `route_after_execution_check` reads these fields.
+    """
     # TODO: Implement execution validation logic
     # - Check completion status
     # - Verify output files exist
     # - Check for NaN/Inf in data
-    return state
+    # - Call LLM with execution_validator_agent.md prompt
+    # - Parse agent output per execution_validator_output_schema.json
+    
+    # STUB: Replace with actual LLM call
+    agent_output = {
+        "verdict": "pass",  # "pass" | "warning" | "fail"
+        "stage_id": state.get("current_stage_id"),
+        "summary": "Execution validation stub - implement with LLM call",
+    }
+    
+    result = {
+        "workflow_phase": "execution_validation",
+        # Copy verdict to type-specific state field for routing
+        "execution_verdict": agent_output["verdict"],
+    }
+    
+    # Increment failure counters if verdict is "fail"
+    # This happens BEFORE routing function reads the count
+    if agent_output["verdict"] == "fail":
+        result["execution_failure_count"] = state.get("execution_failure_count", 0) + 1
+        result["total_execution_failures"] = state.get("total_execution_failures", 0) + 1
+    
+    return result
 
 
-def physics_sanity_node(state: ReproState) -> ReproState:
-    """PhysicsSanityAgent: Validate physics of results."""
-    state["workflow_phase"] = "physics_validation"
+def physics_sanity_node(state: ReproState) -> dict:
+    """
+    PhysicsSanityAgent: Validate physics of results.
+    
+    Returns dict with state updates (LangGraph merges this into state).
+    
+    IMPORTANT: 
+    - Sets `physics_verdict` state field from agent output's `verdict`.
+    - Increments `physics_failure_count` when verdict is "fail".
+    - Increments `design_revision_count` when verdict is "design_flaw".
+    The routing function `route_after_physics_check` reads these fields.
+    
+    Verdict options:
+    - "pass": Physics looks good, proceed to analysis
+    - "warning": Minor concerns but proceed
+    - "fail": Code/numerics issue, route to code generator
+    - "design_flaw": Fundamental design problem, route to simulation designer
+    """
     # TODO: Implement physics validation logic
     # - Check conservation laws (T + R + A ≈ 1)
     # - Verify value ranges
     # - Check numerical quality
-    return state
+    # - Call LLM with physics_sanity_agent.md prompt
+    # - Parse agent output per physics_sanity_output_schema.json
+    
+    # STUB: Replace with actual LLM call
+    agent_output = {
+        "verdict": "pass",  # "pass" | "warning" | "fail" | "design_flaw"
+        "stage_id": state.get("current_stage_id"),
+        "summary": "Physics validation stub - implement with LLM call",
+        "backtrack_suggestion": {"suggest_backtrack": False},
+    }
+    
+    result = {
+        "workflow_phase": "physics_validation",
+        # Copy verdict to type-specific state field for routing
+        "physics_verdict": agent_output["verdict"],
+    }
+    
+    # Increment failure counters based on verdict type
+    # This happens BEFORE routing function reads the count
+    if agent_output["verdict"] == "fail":
+        result["physics_failure_count"] = state.get("physics_failure_count", 0) + 1
+    elif agent_output["verdict"] == "design_flaw":
+        # design_flaw routes to design node, use design_revision_count
+        result["design_revision_count"] = state.get("design_revision_count", 0) + 1
+    
+    # If agent suggests backtrack, populate backtrack_suggestion for supervisor
+    if agent_output.get("backtrack_suggestion", {}).get("suggest_backtrack"):
+        result["backtrack_suggestion"] = agent_output["backtrack_suggestion"]
+    
+    return result
 
 
 def results_analyzer_node(state: ReproState) -> ReproState:
@@ -286,14 +444,43 @@ def results_analyzer_node(state: ReproState) -> ReproState:
     return state
 
 
-def comparison_validator_node(state: ReproState) -> ReproState:
-    """ComparisonValidatorAgent: Validate comparison accuracy."""
-    state["workflow_phase"] = "comparison_validation"
+def comparison_validator_node(state: ReproState) -> dict:
+    """
+    ComparisonValidatorAgent: Validate comparison accuracy.
+    
+    Returns dict with state updates (LangGraph merges this into state).
+    
+    IMPORTANT: 
+    - Sets `comparison_verdict` state field from agent output's `verdict`.
+    - Increments `analysis_revision_count` when verdict is "needs_revision".
+    The routing function `route_after_comparison_check` reads these fields.
+    """
     # TODO: Implement comparison validation logic
     # - Verify math is correct
     # - Check classifications match numbers
     # - Validate discrepancy documentation
-    return state
+    # - Call LLM with comparison_validator_agent.md prompt
+    # - Parse agent output per comparison_validator_output_schema.json
+    
+    # STUB: Replace with actual LLM call
+    agent_output = {
+        "verdict": "approve",  # "approve" | "needs_revision"
+        "stage_id": state.get("current_stage_id"),
+        "summary": "Comparison validation stub - implement with LLM call",
+    }
+    
+    result = {
+        "workflow_phase": "comparison_validation",
+        # Copy verdict to type-specific state field for routing
+        "comparison_verdict": agent_output["verdict"],
+    }
+    
+    # Increment analysis revision counter if needs_revision
+    # This happens BEFORE routing function reads the count
+    if agent_output["verdict"] == "needs_revision":
+        result["analysis_revision_count"] = state.get("analysis_revision_count", 0) + 1
+    
+    return result
 
 
 def supervisor_node(state: ReproState) -> ReproState:
@@ -634,8 +821,9 @@ def _format_material_checkpoint_question(
     if validated_materials:
         materials_info = []
         for mat in validated_materials:
+            mat_name = mat.get('name') or mat.get('material_id', 'unknown')
             materials_info.append(
-                f"- {mat['material'].upper()}: source={mat['source']}, file={mat['path']}"
+                f"- {mat_name.upper()}: source={mat.get('source', 'unknown')}, file={mat.get('path', 'N/A')}"
             )
     else:
         materials_info = ["- No materials automatically detected"]

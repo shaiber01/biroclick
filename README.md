@@ -390,7 +390,7 @@ mypy src/
 
 ```python
 from src.graph import create_repro_graph
-from src.paper_loader import create_paper_input
+from src.paper_loader import create_paper_input, create_state_from_paper_input
 
 # Initialize the graph
 app = create_repro_graph()
@@ -407,8 +407,11 @@ paper_input = create_paper_input(
     paper_domain="plasmonics"
 )
 
+# Convert paper input to initial state (handles field mapping: figures → paper_figures)
+initial_state = create_state_from_paper_input(paper_input)
+
 # Run reproduction
-result = app.invoke(paper_input)
+result = app.invoke(initial_state)
 ```
 
 ### Quick Debug Mode
@@ -418,13 +421,15 @@ Don't want to commit to a full multi-hour run? Use debug mode for fast sanity ch
 ```python
 from src.graph import create_repro_graph
 from schemas.state import DEBUG_RUNTIME_CONFIG
+from src.paper_loader import create_state_from_paper_input
 
 # Debug mode: 30 min max, minimal stages, lower resolution
 app = create_repro_graph()
-result = app.invoke({
-    **paper_input,
-    "runtime_config": DEBUG_RUNTIME_CONFIG
-})
+initial_state = create_state_from_paper_input(
+    paper_input, 
+    runtime_config=DEBUG_RUNTIME_CONFIG
+)
+result = app.invoke(initial_state)
 
 # Check diagnostic summary
 print(result.get("debug_summary"))

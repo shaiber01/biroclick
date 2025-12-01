@@ -460,10 +460,20 @@ class ReproState(TypedDict, total=False):
     # Structure matches plan_schema.json extracted_parameters items
     extracted_parameters: List[Dict[str, Any]]
     
-    # ─── Validated Materials ─────────────────────────────────────────────
-    # After material_checkpoint (Stage 0), stores validated material mappings.
-    # Code Generator MUST read material file paths from here, NOT hardcode them.
-    # Example: [{"material": "gold", "source": "palik", "path": "materials/palik_gold.csv"}]
+    # ─── Materials (Two-Phase Handling) ─────────────────────────────────────
+    # 
+    # PHASE 1: planned_materials (populated by PlannerAgent)
+    # - Contains materials identified from paper analysis
+    # - Used by Stage 0 Code Generator (before validation)
+    # - Source: PlannerAgent extracts from paper text/figures
+    # Example: [{"material_id": "palik_gold", "name": "Gold", "path": "materials/palik_gold.csv"}]
+    planned_materials: List[Dict[str, Any]]
+    
+    # PHASE 2: validated_materials (populated after Stage 0 + user confirmation)
+    # - After material_checkpoint node, stores user-confirmed material mappings
+    # - Used by Stage 1+ Code Generator (after validation)
+    # - Code Generator for Stage 1+ MUST read from here, NOT hardcode paths
+    # Example: [{"material_id": "palik_gold", "name": "Gold", "source": "palik", "path": "materials/palik_gold.csv"}]
     validated_materials: List[Dict[str, str]]
     
     # ─── Validation Tracking ────────────────────────────────────────────
@@ -525,11 +535,17 @@ class ReproState(TypedDict, total=False):
     backtrack_count: int  # Track number of backtracks (for limits)
     
     # ─── Verdicts ───────────────────────────────────────────────────────
-    # Separate verdict fields for each review type (avoid context field)
+    # Separate verdict fields for each review/validation type
+    # Review verdicts (from reviewer agents):
     last_plan_review_verdict: Optional[str]  # approve | needs_revision (from PlanReviewerAgent)
     last_design_review_verdict: Optional[str]  # approve | needs_revision (from DesignReviewerAgent)
     last_code_review_verdict: Optional[str]  # approve | needs_revision (from CodeReviewerAgent)
     reviewer_issues: List[ReviewerIssue]
+    # Validation verdicts (from validator agents - copied from agent output's "verdict" field):
+    execution_verdict: Optional[str]  # pass | warning | fail (from ExecutionValidatorAgent)
+    physics_verdict: Optional[str]  # pass | warning | fail | design_flaw (from PhysicsSanityAgent)
+    comparison_verdict: Optional[str]  # approve | needs_revision (from ComparisonValidatorAgent)
+    # Supervisor verdict:
     supervisor_verdict: Optional[str]  # ok_continue | replan_needed | change_priority | ask_user | backtrack_to_stage
     backtrack_decision: Optional[Dict[str, Any]]  # {accepted, target_stage_id, stages_to_invalidate, reason}
     
@@ -651,8 +667,9 @@ def create_initial_state(
         # Extracted parameters
         extracted_parameters=[],
         
-        # Validated materials (populated after Stage 0 material checkpoint)
-        validated_materials=[],
+        # Materials (two-phase handling)
+        planned_materials=[],  # Populated by PlannerAgent, used by Stage 0
+        validated_materials=[],  # Populated after Stage 0 + user confirmation, used by Stage 1+
         
         # Validation tracking
         # NOTE: validation_hierarchy is computed on demand via get_validation_hierarchy()
@@ -680,11 +697,14 @@ def create_initial_state(
         invalidated_stages=[],
         backtrack_count=0,
         
-        # Verdicts (separate fields for each review type)
+        # Verdicts (separate fields for each review/validation type)
         last_plan_review_verdict=None,
         last_design_review_verdict=None,
         last_code_review_verdict=None,
         reviewer_issues=[],
+        execution_verdict=None,  # From ExecutionValidatorAgent
+        physics_verdict=None,  # From PhysicsSanityAgent
+        comparison_verdict=None,  # From ComparisonValidatorAgent
         supervisor_verdict=None,
         backtrack_decision=None,
         
