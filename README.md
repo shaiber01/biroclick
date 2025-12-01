@@ -24,13 +24,15 @@ The first implementation targets a minimal vertical slice to validate the archit
 
 **Included in v0:**
 - Single test paper (Stage 0 material validation + one Stage 1 single structure)
-- Core agent path: Planner → Designer → CodeGenerator → CodeReviewer → RUN_CODE → ExecutionValidator → ResultsAnalyzer → Supervisor
-- Material checkpoint via ASK_USER
+- Core agent path: Planner → PlanReviewer → Designer → DesignReviewer → CodeGenerator → CodeReviewer → RUN_CODE → ExecutionValidator → ResultsAnalyzer → Supervisor
+- **Dedicated review nodes**: Separate PlanReviewer, DesignReviewer, and CodeReviewer agents
+- **Mandatory material checkpoint**: Explicit `material_checkpoint` node after Stage 0 requiring user confirmation
+- **Cross-stage backtracking**: `handle_backtrack` node for invalidating and re-running stages
+- **Single source of truth**: Validation hierarchy computed from progress (not stored separately)
 - Basic error handling (max 3 revisions, then escalate)
 - Simple report generation
 
 **Deferred to v1.1+:**
-- Cross-stage backtracking (`handle_backtrack` node)
 - Full context management (`estimate_loop_context_tokens`)
 - Rich metrics pipeline and detailed token tracking
 - Multi-paper batch processing
@@ -68,15 +70,17 @@ This isn't "just another agents demo"—it's a framework for rigorous, auditable
 
 ## Architecture
 
-### Agents (10 total)
+### Agents (12 total)
 
 | Agent | Role | Responsibilities |
 |-------|------|------------------|
 | **PromptAdaptorAgent** | System customization | Analyzes paper, adapts agent prompts for domain-specific needs |
 | **PlannerAgent** | Strategic planning | Reads paper, extracts parameters, classifies figures, designs staged reproduction plan |
+| **PlanReviewerAgent** | Plan QA | Reviews reproduction plan before stage execution begins |
 | **SimulationDesignerAgent** | Simulation design | Interprets geometry, selects materials, designs sources/BCs, estimates performance |
+| **DesignReviewerAgent** | Design QA | Reviews simulation design before code generation |
 | **CodeGeneratorAgent** | Code generation | Writes Python+Meep code from approved designs |
-| **CodeReviewerAgent** | Pre-run QA | Reviews designs and code before execution |
+| **CodeReviewerAgent** | Code QA | Reviews generated code before execution (Meep API, unit normalization, etc.) |
 | **ExecutionValidatorAgent** | Execution validation | Validates simulation ran correctly, checks output files |
 | **PhysicsSanityAgent** | Physics validation | Validates conservation laws, value ranges, numerical quality |
 | **ResultsAnalyzerAgent** | Analysis | Compares results to paper, classifies success/partial/failure |
@@ -92,7 +96,7 @@ ADAPT_PROMPTS (PromptAdaptorAgent) ← Customizes system for paper
   ↓
 PLAN (PlannerAgent) ← Uses adapted prompts
   ↓
-CODE_REVIEW (CodeReviewerAgent) ← reviews plan
+PLAN_REVIEW (PlanReviewerAgent) ← reviews plan
   ├→ [needs_revision] → PLAN (max 2 replans)
   └→ [approve] ↓
         ↓
@@ -102,11 +106,11 @@ SELECT_STAGE
         ↓
      DESIGN (SimulationDesignerAgent)
         ↓
-     CODE_REVIEW (CodeReviewerAgent) ← reviews design
+     DESIGN_REVIEW (DesignReviewerAgent) ← reviews design
         ├→ [needs_revision] → DESIGN (max 3 times)
         └→ [approve] → GENERATE_CODE (CodeGeneratorAgent)
               ↓
-           CODE_REVIEW (CodeReviewerAgent) ← reviews code
+           CODE_REVIEW (CodeReviewerAgent) ← reviews code only
               ├→ [needs_revision] → GENERATE_CODE (max 3 times)
               └→ [approve] → RUN_CODE
                     ↓
@@ -119,10 +123,17 @@ SELECT_STAGE
                              COMPARISON_CHECK (ComparisonValidatorAgent)
                                 ├→ [needs_revision] → ANALYZE (max 2 times)
                                 └→ [approve] → SUPERVISOR
-                                      ├→ [ok_continue] → SELECT_STAGE
+                                      ├→ [ok_continue + Stage 0] → MATERIAL_CHECKPOINT → ASK_USER
+                                      ├→ [ok_continue + other] → SELECT_STAGE
+                                      ├→ [backtrack_to_stage] → HANDLE_BACKTRACK → SELECT_STAGE
                                       ├→ [replan_needed] → PLAN
-                                      └→ [ask_user] → USER_INPUT
+                                      └→ [ask_user] → ASK_USER → SUPERVISOR
 ```
+
+**Key features:**
+- **Separate review nodes**: Plan, Design, and Code each have dedicated reviewers
+- **Material checkpoint**: After Stage 0 completes, `material_checkpoint` node ALWAYS routes to `ask_user` for mandatory user confirmation
+- **Backtracking**: `handle_backtrack` node marks target stage as `needs_rerun` and dependent stages as `invalidated`
 
 ### Adaptive Validation Hierarchy
 
@@ -151,7 +162,9 @@ reprolab/
 │   ├── global_rules.md                   # Non-negotiable rules for all agents
 │   ├── prompt_adaptor_agent.md           # PromptAdaptorAgent (runs first)
 │   ├── planner_agent.md                  # PlannerAgent system prompt
+│   ├── plan_reviewer_agent.md            # PlanReviewerAgent prompt
 │   ├── simulation_designer_agent.md      # SimulationDesignerAgent prompt
+│   ├── design_reviewer_agent.md          # DesignReviewerAgent prompt
 │   ├── code_generator_agent.md           # CodeGeneratorAgent prompt
 │   ├── code_reviewer_agent.md            # CodeReviewerAgent prompt
 │   ├── execution_validator_agent.md      # ExecutionValidatorAgent prompt
@@ -168,6 +181,7 @@ reprolab/
 │   ├── metrics_schema.json   # Metrics tracking schema
 │   ├── report_schema.json    # Reproduction report schema
 │   ├── prompt_adaptations_schema.json # Prompt adaptation schema
+│   ├── *_output_schema.json  # Agent output schemas for function calling
 │   └── state.py              # LangGraph workflow state (imports generated types)
 │
 ├── docs/                     # Additional documentation

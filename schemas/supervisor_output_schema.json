@@ -1,0 +1,122 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "supervisor_output_schema.json",
+  "title": "SupervisorAgentOutput",
+  "description": "Output schema for SupervisorAgent - big-picture assessment and workflow decisions",
+  "type": "object",
+  "required": ["verdict", "validation_hierarchy_status", "main_physics_assessment", "summary"],
+  "properties": {
+    "verdict": {
+      "type": "string",
+      "enum": ["ok_continue", "replan_needed", "change_priority", "ask_user", "backtrack_to_stage", "all_complete"],
+      "description": "High-level decision on what to do next"
+    },
+    "validation_hierarchy_status": {
+      "type": "object",
+      "description": "Current status of the validation hierarchy",
+      "properties": {
+        "material_validation": { "type": "string", "enum": ["passed", "partial", "failed", "not_done"] },
+        "single_structure": { "type": "string", "enum": ["passed", "partial", "failed", "not_done"] },
+        "arrays_systems": { "type": "string", "enum": ["passed", "partial", "failed", "not_done"] },
+        "parameter_sweeps": { "type": "string", "enum": ["passed", "partial", "failed", "not_done"] }
+      },
+      "required": ["material_validation", "single_structure", "arrays_systems", "parameter_sweeps"]
+    },
+    "main_physics_assessment": {
+      "type": "object",
+      "description": "Assessment of simulation physics correctness",
+      "properties": {
+        "physics_plausible": { "type": "boolean" },
+        "conservation_satisfied": { "type": "boolean" },
+        "value_ranges_reasonable": { "type": "boolean" },
+        "systematic_issues": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "notes": { "type": "string" }
+      },
+      "required": ["physics_plausible", "conservation_satisfied", "value_ranges_reasonable"]
+    },
+    "error_analysis": {
+      "type": "object",
+      "description": "Analysis of errors observed in current stage",
+      "properties": {
+        "error_type": {
+          "type": "string",
+          "enum": ["systematic", "random", "none"],
+          "description": "Classification of error pattern"
+        },
+        "error_persistence": {
+          "type": "string",
+          "enum": ["improving", "stable", "worsening", "not_applicable"]
+        },
+        "root_cause_hypothesis": { "type": "string" },
+        "confidence": {
+          "type": "string",
+          "enum": ["high", "medium", "low"]
+        }
+      }
+    },
+    "recommendations": {
+      "type": "array",
+      "description": "Specific recommendations for next steps",
+      "items": {
+        "type": "object",
+        "properties": {
+          "action": { "type": "string" },
+          "priority": { "type": "string", "enum": ["critical", "high", "medium", "low"] },
+          "rationale": { "type": "string" }
+        },
+        "required": ["action", "priority"]
+      }
+    },
+    "backtrack_decision": {
+      "type": "object",
+      "description": "Details if verdict is backtrack_to_stage",
+      "properties": {
+        "accepted": { "type": "boolean" },
+        "target_stage_id": { "type": "string" },
+        "stages_to_invalidate": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "reason": { "type": "string" }
+      },
+      "required": ["accepted", "target_stage_id", "stages_to_invalidate", "reason"]
+    },
+    "user_question": {
+      "type": "string",
+      "description": "Question for user if verdict is ask_user"
+    },
+    "progress_summary": {
+      "type": "object",
+      "description": "Summary of overall reproduction progress",
+      "properties": {
+        "stages_completed": { "type": "integer" },
+        "stages_remaining": { "type": "integer" },
+        "overall_confidence": { "type": "string", "enum": ["high", "medium", "low"] },
+        "key_achievements": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "key_blockers": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "should_stop": {
+      "type": "boolean",
+      "description": "Whether reproduction should stop (budget exceeded, diminishing returns, etc.)"
+    },
+    "stop_reason": {
+      "type": "string",
+      "description": "Reason for stopping if should_stop is true"
+    },
+    "summary": {
+      "type": "string",
+      "description": "One paragraph summary of supervisor assessment"
+    }
+  }
+}
+

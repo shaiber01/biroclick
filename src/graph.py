@@ -8,6 +8,7 @@ from schemas.state import (
     ReproState, 
     save_checkpoint, 
     checkpoint_name_for_stage,
+    get_validation_hierarchy,
     MAX_DESIGN_REVISIONS,
     MAX_CODE_REVISIONS,
     MAX_EXECUTION_FAILURES,
@@ -18,8 +19,10 @@ from schemas.state import (
 from src.agents import (
     adapt_prompts_node,
     plan_node,
+    plan_reviewer_node,
     select_stage_node,
     simulation_designer_node,
+    design_reviewer_node,
     code_reviewer_node,
     code_generator_node,
     execution_validator_node,
@@ -29,7 +32,8 @@ from src.agents import (
     supervisor_node,
     ask_user_node,
     generate_report_node as _generate_report_node,
-    handle_backtrack_node
+    handle_backtrack_node,
+    material_checkpoint_node,
 )
 # Assuming run_code_node is in code_runner.py as per docs/workflow.md
 from src.code_runner import run_code_node
@@ -52,17 +56,82 @@ def generate_report_node_with_checkpoint(state: ReproState) -> Dict[str, Any]:
     
     return result
 
-def route_after_plan(state: ReproState) -> Literal["code_review"]:
-    """Route after planning to plan review.
+def route_after_plan(state: ReproState) -> Literal["plan_review"]:
+    """Route after planning to dedicated plan review.
     
-    The plan goes through CODE_REVIEW with review_context="plan" before
-    proceeding to stage selection. This ensures plan quality before execution.
+    The plan goes through PLAN_REVIEW node before proceeding to stage selection.
+    This ensures plan quality before execution begins.
     """
     # Save checkpoint after planning
     save_checkpoint(state, "after_plan")
-    # Note: plan_node should set review_context="plan" before returning
-    # If not set, we set it here as a safety measure
-    return "code_review"
+    return "plan_review"
+
+
+def route_after_plan_review(state: ReproState) -> Literal["select_stage", "plan", "ask_user"]:
+    """Route after plan review based on verdict.
+    
+    Plan review has its own verdict field: last_plan_review_verdict
+    """
+    verdict = state.get("last_plan_review_verdict")
+    runtime_config = state.get("runtime_config", {})
+    replan_count = state.get("replan_count", 0)
+    max_replans = runtime_config.get("max_replans", MAX_REPLANS)
+    
+    if verdict == "approve":
+        return "select_stage"
+    elif verdict == "needs_revision":
+        if replan_count < max_replans:
+            return "plan"
+        else:
+            return "ask_user"
+    
+    # Fallback
+    return "ask_user"
+
+
+def route_after_design_review(state: ReproState) -> Literal["generate_code", "design", "ask_user"]:
+    """Route after design review based on verdict.
+    
+    Design review has its own verdict field: last_design_review_verdict
+    """
+    verdict = state.get("last_design_review_verdict")
+    runtime_config = state.get("runtime_config", {})
+    revision_count = state.get("design_revision_count", 0)
+    max_design = runtime_config.get("max_design_revisions", MAX_DESIGN_REVISIONS)
+    
+    if verdict == "approve":
+        return "generate_code"
+    elif verdict == "needs_revision":
+        if revision_count < max_design:
+            return "design"
+        else:
+            return "ask_user"
+    
+    # Fallback
+    return "ask_user"
+
+
+def route_after_code_review(state: ReproState) -> Literal["run_code", "generate_code", "ask_user"]:
+    """Route after code review based on verdict.
+    
+    Code review has its own verdict field: last_code_review_verdict
+    This is now a focused code-only review (no plan/design review).
+    """
+    verdict = state.get("last_code_review_verdict")
+    runtime_config = state.get("runtime_config", {})
+    revision_count = state.get("code_revision_count", 0)
+    max_code = runtime_config.get("max_code_revisions", MAX_CODE_REVISIONS)
+    
+    if verdict == "approve":
+        return "run_code"
+    elif verdict == "needs_revision":
+        if revision_count < max_code:
+            return "generate_code"
+        else:
+            return "ask_user"
+    
+    # Fallback
+    return "ask_user"
 
 def route_after_select_stage(state: ReproState) -> Literal["design", "generate_report"]:
     """
@@ -79,62 +148,6 @@ def route_after_select_stage(state: ReproState) -> Literal["design", "generate_r
     if state.get("current_stage_id"):
         return "design"
     return "generate_report"
-
-def route_after_code_review(state: ReproState) -> Literal["generate_code", "run_code", "design", "ask_user", "select_stage", "plan"]:
-    """
-    Route based on reviewer verdict.
-    
-    Uses review_context field (set by caller) to determine what we're reviewing:
-    - "plan" → reviewing reproduction plan from PlannerAgent
-    - "design" → reviewing simulation design from SimulationDesignerAgent
-    - "code" → reviewing code from CodeGeneratorAgent
-    """
-    verdict = state.get("last_reviewer_verdict")
-    runtime_config = state.get("runtime_config", {})
-    
-    # review_context is set by the node that called code_review:
-    # - plan_node sets "plan"
-    # - simulation_designer_node sets "design"
-    # - code_generator_node sets "code"
-    context = state.get("review_context", "")
-    
-    if context == "plan":
-        # Plan review: approve → proceed to stages, needs_revision → replan
-        replan_count = state.get("replan_count", 0)
-        max_replans = runtime_config.get("max_replans", MAX_REPLANS)
-        if verdict == "approve":
-            return "select_stage"
-        elif verdict == "needs_revision":
-            if replan_count < max_replans:
-                return "plan"
-            else:
-                return "ask_user"
-    
-    elif context == "design":
-        revision_count = state.get("design_revision_count", 0)
-        max_design = runtime_config.get("max_design_revisions", MAX_DESIGN_REVISIONS)
-        if verdict == "approve":
-            return "generate_code"
-        elif verdict == "needs_revision":
-            if revision_count < max_design:
-                return "design"
-            else:
-                return "ask_user"
-                
-    elif context == "code":
-        revision_count = state.get("code_revision_count", 0)
-        max_code = runtime_config.get("max_code_revisions", MAX_CODE_REVISIONS)
-        if verdict == "approve":
-            return "run_code"
-        elif verdict == "needs_revision":
-            if revision_count < max_code:
-                return "generate_code"
-            else:
-                return "ask_user"
-    
-    # Fallback/Safety - should not reach here if review_context is set correctly
-    # Log warning and escalate to user
-    return "ask_user"
 
 def route_after_execution_check(state: ReproState) -> Literal["physics_check", "generate_code", "ask_user"]:
     """
@@ -198,15 +211,28 @@ def route_after_comparison_check(state: ReproState) -> Literal["supervisor", "an
             return "supervisor"  # Proceed with flag
     return "supervisor"
 
-def route_after_supervisor(state: ReproState) -> Literal["select_stage", "plan", "ask_user", "handle_backtrack", "generate_report"]:
+def route_after_supervisor(state: ReproState) -> Literal["select_stage", "plan", "ask_user", "handle_backtrack", "generate_report", "material_checkpoint"]:
+    """
+    Route after supervisor decision.
+    
+    Includes mandatory material checkpoint after Stage 0 completes.
+    """
     verdict = state.get("supervisor_verdict")
+    current_stage_type = state.get("current_stage_type", "")
     
     if verdict == "ok_continue" or verdict == "change_priority":
         if state.get("should_stop"):
             return "generate_report"
+        
         # Save checkpoint after stage completion using consistent naming
         checkpoint_name = checkpoint_name_for_stage(state, "complete")
         save_checkpoint(state, checkpoint_name)
+        
+        # MANDATORY: Material checkpoint after Stage 0 completes
+        # Check if current stage was material validation
+        if current_stage_type == "MATERIAL_VALIDATION":
+            return "material_checkpoint"
+        
         return "select_stage"
         
     elif verdict == "replan_needed":
@@ -229,14 +255,21 @@ def route_after_supervisor(state: ReproState) -> Literal["select_stage", "plan",
 def create_repro_graph():
     """
     Constructs the LangGraph state graph for ReproLab.
+    
+    The graph has three separate review nodes:
+    - plan_review: Reviews reproduction plan before stage selection
+    - design_review: Reviews simulation design before code generation
+    - code_review: Reviews generated code before execution
     """
     workflow = StateGraph(ReproState)
 
     # Add Nodes
     workflow.add_node("adapt_prompts", adapt_prompts_node)
     workflow.add_node("plan", plan_node)
+    workflow.add_node("plan_review", plan_reviewer_node)
     workflow.add_node("select_stage", select_stage_node)
     workflow.add_node("design", simulation_designer_node)
+    workflow.add_node("design_review", design_reviewer_node)
     workflow.add_node("code_review", code_reviewer_node)
     workflow.add_node("generate_code", code_generator_node)
     workflow.add_node("run_code", run_code_node)
@@ -248,15 +281,27 @@ def create_repro_graph():
     workflow.add_node("ask_user", ask_user_node)
     workflow.add_node("generate_report", generate_report_node_with_checkpoint)
     workflow.add_node("handle_backtrack", handle_backtrack_node)
+    workflow.add_node("material_checkpoint", material_checkpoint_node)
 
     # Define Edges
     workflow.add_edge(START, "adapt_prompts")
     workflow.add_edge("adapt_prompts", "plan")
     
+    # Plan → Plan Review → Select Stage (or back to Plan)
     workflow.add_conditional_edges(
         "plan",
         route_after_plan,
-        {"code_review": "code_review"}  # Plan goes to review before stage selection
+        {"plan_review": "plan_review"}
+    )
+    
+    workflow.add_conditional_edges(
+        "plan_review",
+        route_after_plan_review,
+        {
+            "select_stage": "select_stage",
+            "plan": "plan",
+            "ask_user": "ask_user"
+        }
     )
     
     workflow.add_conditional_edges(
@@ -268,26 +313,31 @@ def create_repro_graph():
         }
     )
     
-    workflow.add_edge("design", "code_review")
+    # Design → Design Review → Generate Code (or back to Design)
+    workflow.add_edge("design", "design_review")
+    
+    workflow.add_conditional_edges(
+        "design_review",
+        route_after_design_review,
+        {
+            "generate_code": "generate_code",
+            "design": "design",
+            "ask_user": "ask_user"
+        }
+    )
+    
+    # Generate Code → Code Review → Run Code (or back to Generate Code)
+    workflow.add_edge("generate_code", "code_review")
     
     workflow.add_conditional_edges(
         "code_review",
         route_after_code_review,
         {
-            # Plan review routes
-            "select_stage": "select_stage",  # Plan approved → proceed to stages
-            "plan": "plan",                  # Plan needs revision → replan
-            # Design review routes
-            "generate_code": "generate_code",
-            "design": "design",
-            # Code review routes
             "run_code": "run_code",
-            # Common fallback
+            "generate_code": "generate_code",
             "ask_user": "ask_user"
         }
     )
-    
-    workflow.add_edge("generate_code", "code_review")
     workflow.add_edge("run_code", "execution_check")
     
     workflow.add_conditional_edges(
@@ -329,11 +379,15 @@ def create_repro_graph():
             "plan": "plan",
             "ask_user": "ask_user",
             "handle_backtrack": "handle_backtrack",
-            "generate_report": "generate_report"
+            "generate_report": "generate_report",
+            "material_checkpoint": "material_checkpoint"
         }
     )
     
     workflow.add_edge("handle_backtrack", "select_stage")
+    
+    # Material checkpoint ALWAYS routes to ask_user (mandatory user confirmation)
+    workflow.add_edge("material_checkpoint", "ask_user")
     
     # Ask user resumes to Supervisor, who evaluates user feedback and decides next steps.
     # 

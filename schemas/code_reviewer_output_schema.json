@@ -1,0 +1,153 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "code_reviewer_output_schema.json",
+  "title": "CodeReviewerAgentOutput",
+  "description": "Output schema for CodeReviewerAgent - pre-run code quality review",
+  "type": "object",
+  "required": ["stage_id", "verdict", "checklist_results", "issues", "summary"],
+  "properties": {
+    "stage_id": {
+      "type": "string",
+      "description": "ID of the stage being reviewed"
+    },
+    "verdict": {
+      "type": "string",
+      "enum": ["approve", "needs_revision"],
+      "description": "Overall verdict on the generated code"
+    },
+    "checklist_results": {
+      "type": "object",
+      "description": "Results of code checklist items",
+      "properties": {
+        "unit_normalization": {
+          "type": "object",
+          "properties": {
+            "status": { "type": "string", "enum": ["pass", "fail", "warning"] },
+            "a_unit_value": { "type": "number" },
+            "design_a_unit": { "type": "number" },
+            "match": { "type": "boolean" },
+            "notes": { "type": "string" }
+          },
+          "required": ["status"]
+        },
+        "numerics": {
+          "type": "object",
+          "properties": {
+            "status": { "type": "string", "enum": ["pass", "fail", "warning"] },
+            "notes": { "type": "string" }
+          },
+          "required": ["status"]
+        },
+        "source": {
+          "type": "object",
+          "properties": {
+            "status": { "type": "string", "enum": ["pass", "fail", "warning"] },
+            "notes": { "type": "string" }
+          },
+          "required": ["status"]
+        },
+        "domain": {
+          "type": "object",
+          "properties": {
+            "status": { "type": "string", "enum": ["pass", "fail", "warning"] },
+            "notes": { "type": "string" }
+          },
+          "required": ["status"]
+        },
+        "monitors": {
+          "type": "object",
+          "properties": {
+            "status": { "type": "string", "enum": ["pass", "fail", "warning"] },
+            "notes": { "type": "string" }
+          },
+          "required": ["status"]
+        },
+        "visualization": {
+          "type": "object",
+          "properties": {
+            "status": { "type": "string", "enum": ["pass", "fail", "warning"] },
+            "notes": { "type": "string" }
+          },
+          "required": ["status"]
+        },
+        "code_quality": {
+          "type": "object",
+          "properties": {
+            "status": { "type": "string", "enum": ["pass", "fail", "warning"] },
+            "has_plt_show": { "type": "boolean" },
+            "has_input": { "type": "boolean" },
+            "notes": { "type": "string" }
+          },
+          "required": ["status"]
+        },
+        "runtime": {
+          "type": "object",
+          "properties": {
+            "status": { "type": "string", "enum": ["pass", "fail", "warning"] },
+            "estimated_minutes": { "type": "number" },
+            "budget_minutes": { "type": "number" },
+            "notes": { "type": "string" }
+          },
+          "required": ["status"]
+        },
+        "meep_api": {
+          "type": "object",
+          "properties": {
+            "status": { "type": "string", "enum": ["pass", "fail", "warning"] },
+            "notes": { "type": "string" }
+          },
+          "required": ["status"]
+        }
+      },
+      "required": ["unit_normalization", "numerics", "source", "domain", "monitors", "visualization", "code_quality", "runtime", "meep_api"]
+    },
+    "strengths": {
+      "type": "array",
+      "description": "List of things done well in the code",
+      "items": { "type": "string" }
+    },
+    "issues": {
+      "type": "array",
+      "description": "List of issues found during review",
+      "items": {
+        "type": "object",
+        "properties": {
+          "severity": { "type": "string", "enum": ["blocking", "major", "minor"] },
+          "category": { "type": "string", "enum": ["unit_normalization", "numerics", "source", "domain", "monitors", "visualization", "code_quality", "runtime", "meep_api"] },
+          "description": { "type": "string" },
+          "suggested_fix": { "type": "string" },
+          "code_location": { "type": "string", "description": "Line number or function name if applicable" }
+        },
+        "required": ["severity", "category", "description", "suggested_fix"]
+      }
+    },
+    "revision_count": {
+      "type": "integer",
+      "description": "Number of code revision iterations so far"
+    },
+    "escalate_to_user": {
+      "oneOf": [
+        { "type": "boolean" },
+        { "type": "string" }
+      ],
+      "description": "False, or a specific question string for user"
+    },
+    "backtrack_suggestion": {
+      "type": "object",
+      "description": "Suggestion to backtrack if code reveals design issues",
+      "properties": {
+        "suggest_backtrack": { "type": "boolean" },
+        "target_stage_id": { "type": "string" },
+        "reason": { "type": "string" },
+        "severity": { "type": "string", "enum": ["critical", "significant", "minor"] },
+        "evidence": { "type": "string" }
+      },
+      "required": ["suggest_backtrack"]
+    },
+    "summary": {
+      "type": "string",
+      "description": "One paragraph summary of code review"
+    }
+  }
+}
+

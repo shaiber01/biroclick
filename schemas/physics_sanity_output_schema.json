@@ -1,0 +1,118 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "physics_sanity_output_schema.json",
+  "title": "PhysicsSanityAgentOutput",
+  "description": "Output schema for PhysicsSanityAgent - validates physics of simulation results",
+  "type": "object",
+  "required": ["stage_id", "verdict", "conservation_checks", "value_range_checks", "summary"],
+  "properties": {
+    "stage_id": {
+      "type": "string",
+      "description": "ID of the stage being validated"
+    },
+    "verdict": {
+      "type": "string",
+      "enum": ["pass", "warning", "fail"],
+      "description": "Overall verdict on physics validity"
+    },
+    "conservation_checks": {
+      "type": "array",
+      "description": "Results of conservation law checks",
+      "items": {
+        "type": "object",
+        "properties": {
+          "law": {
+            "type": "string",
+            "description": "Conservation law being checked (e.g., 'energy: T+R+A=1')"
+          },
+          "status": { "type": "string", "enum": ["pass", "warning", "fail"] },
+          "expected_value": { "type": "number" },
+          "actual_value": { "type": "number" },
+          "deviation_percent": { "type": "number" },
+          "threshold_percent": { "type": "number" },
+          "notes": { "type": "string" }
+        },
+        "required": ["law", "status"]
+      }
+    },
+    "value_range_checks": {
+      "type": "array",
+      "description": "Results of physical value range checks",
+      "items": {
+        "type": "object",
+        "properties": {
+          "quantity": { "type": "string" },
+          "status": { "type": "string", "enum": ["pass", "warning", "fail"] },
+          "value": { "type": "number" },
+          "expected_range": {
+            "type": "object",
+            "properties": {
+              "min": { "type": "number" },
+              "max": { "type": "number" }
+            }
+          },
+          "notes": { "type": "string" }
+        },
+        "required": ["quantity", "status"]
+      }
+    },
+    "numerical_quality": {
+      "type": "object",
+      "description": "Assessment of numerical simulation quality",
+      "properties": {
+        "field_decay_achieved": { "type": "boolean" },
+        "convergence_observed": { "type": "boolean" },
+        "artifacts_detected": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "notes": { "type": "string" }
+      }
+    },
+    "physical_plausibility": {
+      "type": "object",
+      "description": "Assessment of physical plausibility of results",
+      "properties": {
+        "resonance_positions_reasonable": { "type": "boolean" },
+        "linewidths_reasonable": { "type": "boolean" },
+        "magnitude_scale_reasonable": { "type": "boolean" },
+        "spectral_features_expected": { "type": "boolean" },
+        "concerns": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "concerns": {
+      "type": "array",
+      "description": "List of physics concerns that should be investigated",
+      "items": {
+        "type": "object",
+        "properties": {
+          "concern": { "type": "string" },
+          "severity": { "type": "string", "enum": ["critical", "moderate", "minor"] },
+          "possible_cause": { "type": "string" },
+          "suggested_action": { "type": "string" }
+        },
+        "required": ["concern", "severity"]
+      }
+    },
+    "backtrack_suggestion": {
+      "type": "object",
+      "description": "Suggestion to backtrack if physics issues reveal design problems",
+      "properties": {
+        "suggest_backtrack": { "type": "boolean" },
+        "target_stage_id": { "type": "string" },
+        "reason": { "type": "string" },
+        "severity": { "type": "string", "enum": ["critical", "significant", "minor"] },
+        "evidence": { "type": "string" }
+      },
+      "required": ["suggest_backtrack"]
+    },
+    "summary": {
+      "type": "string",
+      "description": "One paragraph summary of physics validation"
+    }
+  }
+}
+

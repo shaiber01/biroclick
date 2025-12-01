@@ -1,0 +1,127 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "results_analyzer_output_schema.json",
+  "title": "ResultsAnalyzerAgentOutput",
+  "description": "Output schema for ResultsAnalyzerAgent - comparison of simulation results to paper figures",
+  "type": "object",
+  "required": ["stage_id", "per_result_reports", "figure_comparisons", "overall_classification", "summary"],
+  "properties": {
+    "stage_id": {
+      "type": "string",
+      "description": "ID of the stage being analyzed"
+    },
+    "per_result_reports": {
+      "type": "array",
+      "description": "Detailed analysis for each simulation output",
+      "items": {
+        "type": "object",
+        "properties": {
+          "result_id": { "type": "string" },
+          "target_figure": { "type": "string", "description": "Paper figure ID (e.g., 'fig2a')" },
+          "quantity": { "type": "string", "description": "Physical quantity measured" },
+          "simulated_value": {
+            "type": "object",
+            "properties": {
+              "value": { "type": "number" },
+              "unit": { "type": "string" }
+            }
+          },
+          "paper_value": {
+            "type": "object",
+            "properties": {
+              "value": { "type": "number" },
+              "unit": { "type": "string" },
+              "source": { "type": "string", "description": "Where in paper (figure, table, text)" }
+            }
+          },
+          "discrepancy": {
+            "type": "object",
+            "properties": {
+              "absolute": { "type": "number" },
+              "relative_percent": { "type": "number" },
+              "classification": {
+                "type": "string",
+                "enum": ["excellent", "acceptable", "investigate", "unacceptable"]
+              }
+            }
+          },
+          "notes": { "type": "string" }
+        },
+        "required": ["result_id", "target_figure", "quantity", "discrepancy"]
+      }
+    },
+    "figure_comparisons": {
+      "type": "array",
+      "description": "Side-by-side figure comparison details",
+      "items": {
+        "type": "object",
+        "properties": {
+          "paper_figure_id": { "type": "string" },
+          "simulated_figure_path": { "type": "string" },
+          "comparison_type": {
+            "type": "string",
+            "enum": ["overlay", "side_by_side", "difference_map", "quantitative_only"]
+          },
+          "visual_agreement": {
+            "type": "string",
+            "enum": ["excellent", "good", "fair", "poor"]
+          },
+          "key_features_matched": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "key_features_missed": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "notes": { "type": "string" }
+        },
+        "required": ["paper_figure_id", "simulated_figure_path", "comparison_type"]
+      }
+    },
+    "overall_classification": {
+      "type": "string",
+      "enum": ["EXCELLENT_MATCH", "ACCEPTABLE_MATCH", "PARTIAL_MATCH", "POOR_MATCH", "FAILED"],
+      "description": "Overall classification of reproduction quality for this stage"
+    },
+    "classification_rationale": {
+      "type": "string",
+      "description": "Explanation of why this classification was chosen"
+    },
+    "confidence": {
+      "type": "string",
+      "enum": ["high", "medium", "low"],
+      "description": "Confidence in the analysis"
+    },
+    "confidence_factors": {
+      "type": "array",
+      "description": "Factors affecting confidence",
+      "items": { "type": "string" }
+    },
+    "systematic_discrepancies": {
+      "type": "array",
+      "description": "Patterns of discrepancy that might indicate systematic issues",
+      "items": {
+        "type": "object",
+        "properties": {
+          "pattern": { "type": "string" },
+          "affected_results": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "possible_cause": { "type": "string" }
+        }
+      }
+    },
+    "recommendations": {
+      "type": "array",
+      "description": "Recommendations for improving results",
+      "items": { "type": "string" }
+    },
+    "summary": {
+      "type": "string",
+      "description": "One paragraph summary of analysis results"
+    }
+  }
+}
+

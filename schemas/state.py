@@ -93,27 +93,26 @@ class ValidationHierarchyStatus(TypedDict):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# STAGE STATUS ↔ VALIDATION HIERARCHY SYNCHRONIZATION
+# VALIDATION HIERARCHY - SINGLE SOURCE OF TRUTH
 # ═══════════════════════════════════════════════════════════════════════════════
 #
-# Two state tracking systems must stay synchronized:
-#   1. progress["stages"][stage_id]["status"] - tracks individual stage completion
-#   2. validation_hierarchy[stage_type] - gates progression to dependent stages
+# The validation hierarchy is COMPUTED from progress["stages"] on demand.
+# This eliminates the need for manual synchronization between two state systems.
 #
-# They use DIFFERENT terminology:
+# Stage Status → Hierarchy Value Mapping:
 #
 # ┌─────────────────────────┬──────────────────────────┬─────────────────────────┐
 # │ Stage Status            │ Validation Hierarchy     │ Meaning                 │
-# │ (StageProgress.status)  │ (ValidationHierarchy)    │                         │
+# │ (StageProgress.status)  │ (computed value)         │                         │
 # ├─────────────────────────┼──────────────────────────┼─────────────────────────┤
 # │ "completed_success"     │ "passed"                 │ Stage passed all checks │
 # │ "completed_partial"     │ "partial"                │ Acceptable gaps exist   │
 # │ "completed_failed"      │ "failed"                 │ Stage failed validation │
 # │ "not_started"           │ "not_done"               │ Stage hasn't run yet    │
-# │ "in_progress"           │ (no change)              │ Currently running       │
-# │ "blocked"               │ (no change)              │ Skipped (budget/deps)   │
-# │ "needs_rerun"           │ → "not_done"             │ Backtrack target        │
-# │ "invalidated"           │ → "not_done"             │ Will re-run when ready  │
+# │ "in_progress"           │ "not_done"               │ Currently running       │
+# │ "blocked"               │ "not_done"               │ Skipped (budget/deps)   │
+# │ "needs_rerun"           │ "not_done"               │ Backtrack target        │
+# │ "invalidated"           │ "not_done"               │ Will re-run when ready  │
 # └─────────────────────────┴──────────────────────────┴─────────────────────────┘
 #
 # STAGE TYPE → VALIDATION HIERARCHY KEY MAPPING:
@@ -136,9 +135,10 @@ STAGE_STATUS_TO_HIERARCHY_MAPPING = {
     "completed_partial": "partial",
     "completed_failed": "failed",
     "not_started": "not_done",
+    "in_progress": "not_done",
+    "blocked": "not_done",
     "needs_rerun": "not_done",
     "invalidated": "not_done",
-    # "in_progress" and "blocked" don't update hierarchy
 }
 
 # Mapping from stage type to validation hierarchy key
@@ -151,187 +151,63 @@ STAGE_TYPE_TO_HIERARCHY_KEY = {
 }
 
 
-def update_validation_hierarchy(state: dict, stage_id: str, stages: list) -> None:
-    """Synchronize validation hierarchy after stage status changes.
+def get_validation_hierarchy(state: dict) -> "ValidationHierarchyStatus":
+    """
+    Compute validation hierarchy from progress stages (single source of truth).
     
-    MUST be called by SupervisorAgent after updating any stage status.
+    This function derives the validation hierarchy on demand from the 
+    progress["stages"] data. There is no need to manually sync state—
+    the hierarchy is always computed fresh from the canonical source.
     
     Args:
-        state: ReproState dict (will be modified in place)
-        stage_id: ID of the stage that was updated
-        stages: List of stage dicts from state["plan"]["stages"]
-    
-    Example:
-        # In SupervisorAgent node after stage completion:
-        stage["status"] = "completed_success"
-        update_validation_hierarchy(state, stage["stage_id"], state["plan"]["stages"])
-    """
-    # Find the stage
-    stage = next((s for s in stages if s["stage_id"] == stage_id), None)
-    if not stage:
-        return
-    
-    stage_type = stage.get("stage_type")
-    stage_status = stage.get("status")
-    
-    # Get hierarchy key for this stage type
-    hierarchy_key = STAGE_TYPE_TO_HIERARCHY_KEY.get(stage_type)
-    if not hierarchy_key:
-        return  # Not a validation stage (e.g., COMPLEX_PHYSICS)
-    
-    # Get hierarchy value for this status
-    hierarchy_value = STAGE_STATUS_TO_HIERARCHY_MAPPING.get(stage_status)
-    if hierarchy_value:
-        state["validation_hierarchy"][hierarchy_key] = hierarchy_value
-
-
-class HierarchySyncError(Exception):
-    """Raised when validation hierarchy is out of sync with stage statuses."""
-    pass
-
-
-def verify_hierarchy_sync(state: dict) -> List[str]:
-    """
-    Verify that validation_hierarchy is correctly synced with stage statuses.
-    
-    This function should be called in select_stage (or similar routing logic)
-    to catch bugs early where update_validation_hierarchy() was not called
-    after a stage status change.
-    
-    Args:
-        state: ReproState dict containing plan and validation_hierarchy
+        state: ReproState dict containing progress with stages
         
     Returns:
-        List of sync issues (empty if all is well)
-        
-    Raises:
-        HierarchySyncError: If raise_on_error=True and sync issues found
+        ValidationHierarchyStatus dict with current hierarchy state
         
     Example:
-        # In select_stage routing function:
-        issues = verify_hierarchy_sync(state)
-        if issues:
-            logging.error(f"Hierarchy sync issues: {issues}")
-            # Could raise or attempt auto-repair
+        # In routing logic or agent code:
+        hierarchy = get_validation_hierarchy(state)
+        if hierarchy["material_validation"] != "passed":
+            # Cannot proceed to Stage 1
+            pass
+            
+        # In select_stage logic:
+        hierarchy = get_validation_hierarchy(state)
+        if hierarchy["single_structure"] in ["passed", "partial"]:
+            # Can proceed to array/sweep stages
+            pass
     """
-    issues = []
+    # Default hierarchy - everything starts as not_done
+    hierarchy: ValidationHierarchyStatus = {
+        "material_validation": "not_done",
+        "single_structure": "not_done",
+        "arrays_systems": "not_done",
+        "parameter_sweeps": "not_done",
+    }
     
-    plan = state.get("plan", {})
-    stages = plan.get("stages", [])
-    hierarchy = state.get("validation_hierarchy", {})
+    # Get stages from progress (single source of truth)
+    progress = state.get("progress", {})
+    stages = progress.get("stages", [])
     
     if not stages:
-        return issues  # No stages yet, nothing to verify
+        return hierarchy
     
-    # For each stage type that has a hierarchy key, check if status matches
+    # Compute hierarchy from stage statuses
     for stage in stages:
         stage_type = stage.get("stage_type")
-        stage_status = stage.get("status")
-        stage_id = stage.get("stage_id")
+        stage_status = stage.get("status", "not_started")
         
-        # Get expected hierarchy key and value
+        # Get hierarchy key for this stage type
         hierarchy_key = STAGE_TYPE_TO_HIERARCHY_KEY.get(stage_type)
         if not hierarchy_key:
-            continue  # Not a validation stage
-            
-        expected_value = STAGE_STATUS_TO_HIERARCHY_MAPPING.get(stage_status)
-        if not expected_value:
-            continue  # Status doesn't affect hierarchy (e.g., "in_progress")
+            continue  # Not a validation stage (e.g., COMPLEX_PHYSICS)
         
-        actual_value = hierarchy.get(hierarchy_key)
-        
-        if actual_value != expected_value:
-            issues.append(
-                f"Stage '{stage_id}' ({stage_type}) has status '{stage_status}' "
-                f"but hierarchy['{hierarchy_key}'] is '{actual_value}' "
-                f"(expected '{expected_value}')"
-            )
+        # Get hierarchy value for this status
+        hierarchy_value = STAGE_STATUS_TO_HIERARCHY_MAPPING.get(stage_status, "not_done")
+        hierarchy[hierarchy_key] = hierarchy_value
     
-    return issues
-
-
-def verify_hierarchy_sync_or_raise(state: dict) -> None:
-    """
-    Verify hierarchy sync and raise if issues found.
-    
-    Use this in critical paths where sync issues should halt execution.
-    
-    Args:
-        state: ReproState dict
-        
-    Raises:
-        HierarchySyncError: If any sync issues are detected
-        
-    Example:
-        # In select_stage, fail fast on sync issues:
-        verify_hierarchy_sync_or_raise(state)
-    """
-    issues = verify_hierarchy_sync(state)
-    if issues:
-        raise HierarchySyncError(
-            f"Validation hierarchy is out of sync with stage statuses. "
-            f"This usually means update_validation_hierarchy() was not called "
-            f"after a stage status change. Issues:\n"
-            + "\n".join(f"  - {issue}" for issue in issues)
-        )
-
-
-def repair_hierarchy_sync(state: dict) -> List[str]:
-    """
-    Automatically repair hierarchy sync issues by recomputing from stage statuses.
-    
-    Use with caution - this is a recovery mechanism, not a substitute for
-    properly calling update_validation_hierarchy().
-    
-    Args:
-        state: ReproState dict (will be modified in place)
-        
-    Returns:
-        List of repairs made
-        
-    Example:
-        # Attempt repair before failing:
-        issues = verify_hierarchy_sync(state)
-        if issues:
-            repairs = repair_hierarchy_sync(state)
-            logging.warning(f"Auto-repaired hierarchy: {repairs}")
-    """
-    repairs = []
-    
-    plan = state.get("plan", {})
-    stages = plan.get("stages", [])
-    
-    if "validation_hierarchy" not in state:
-        state["validation_hierarchy"] = {
-            "material_validation": "not_done",
-            "single_structure": "not_done",
-            "arrays_systems": "not_done",
-            "parameter_sweeps": "not_done",
-        }
-    
-    for stage in stages:
-        stage_type = stage.get("stage_type")
-        stage_status = stage.get("status")
-        stage_id = stage.get("stage_id")
-        
-        hierarchy_key = STAGE_TYPE_TO_HIERARCHY_KEY.get(stage_type)
-        if not hierarchy_key:
-            continue
-            
-        expected_value = STAGE_STATUS_TO_HIERARCHY_MAPPING.get(stage_status)
-        if not expected_value:
-            continue
-        
-        actual_value = state["validation_hierarchy"].get(hierarchy_key)
-        
-        if actual_value != expected_value:
-            state["validation_hierarchy"][hierarchy_key] = expected_value
-            repairs.append(
-                f"Set hierarchy['{hierarchy_key}'] = '{expected_value}' "
-                f"(was '{actual_value}') based on stage '{stage_id}'"
-            )
-    
-    return repairs
+    return hierarchy
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -585,7 +461,8 @@ class ReproState(TypedDict, total=False):
     extracted_parameters: List[Dict[str, Any]]
     
     # ─── Validation Tracking ────────────────────────────────────────────
-    validation_hierarchy: ValidationHierarchyStatus
+    # NOTE: validation_hierarchy is computed on demand via get_validation_hierarchy()
+    # from progress["stages"]. It is not stored in state to avoid sync issues.
     geometry_interpretations: Dict[str, str]  # ambiguous_term → interpretation
     # Structure matches progress_schema.json#/definitions/discrepancy
     discrepancies_log: List[Dict[str, Any]]  # All discrepancies across all stages
@@ -595,7 +472,7 @@ class ReproState(TypedDict, total=False):
     current_stage_id: Optional[str]
     current_stage_type: Optional[str]  # MATERIAL_VALIDATION | SINGLE_STRUCTURE | etc.
     workflow_phase: str  # planning | design | pre_run_review | running | analysis | post_run_review | supervision
-    review_context: Optional[str]  # "design" | "code" - set by caller before CODE_REVIEW node, used by router
+    # NOTE: review_context removed - now using separate review nodes (plan_review, design_review, code_review)
     
     # ─── Revision Tracking ──────────────────────────────────────────────
     design_revision_count: int
@@ -642,7 +519,10 @@ class ReproState(TypedDict, total=False):
     backtrack_count: int  # Track number of backtracks (for limits)
     
     # ─── Verdicts ───────────────────────────────────────────────────────
-    last_reviewer_verdict: Optional[str]  # approve | needs_revision
+    # Separate verdict fields for each review type (avoid context field)
+    last_plan_review_verdict: Optional[str]  # approve | needs_revision (from PlanReviewerAgent)
+    last_design_review_verdict: Optional[str]  # approve | needs_revision (from DesignReviewerAgent)
+    last_code_review_verdict: Optional[str]  # approve | needs_revision (from CodeReviewerAgent)
     reviewer_issues: List[ReviewerIssue]
     supervisor_verdict: Optional[str]  # ok_continue | replan_needed | change_priority | ask_user | backtrack_to_stage
     backtrack_decision: Optional[Dict[str, Any]]  # {accepted, target_stage_id, stages_to_invalidate, reason}
@@ -766,12 +646,7 @@ def create_initial_state(
         extracted_parameters=[],
         
         # Validation tracking
-        validation_hierarchy={
-            "material_validation": "not_done",
-            "single_structure": "not_done",
-            "arrays_systems": "not_done",
-            "parameter_sweeps": "not_done"
-        },
+        # NOTE: validation_hierarchy is computed on demand via get_validation_hierarchy()
         geometry_interpretations={},
         discrepancies_log=[],
         systematic_shifts=[],
@@ -780,7 +655,7 @@ def create_initial_state(
         current_stage_id=None,
         current_stage_type=None,
         workflow_phase="planning",
-        review_context=None,
+        # NOTE: review_context removed - now using separate review nodes
         
         # Revision tracking
         design_revision_count=0,
@@ -796,8 +671,10 @@ def create_initial_state(
         invalidated_stages=[],
         backtrack_count=0,
         
-        # Verdicts
-        last_reviewer_verdict=None,
+        # Verdicts (separate fields for each review type)
+        last_plan_review_verdict=None,
+        last_design_review_verdict=None,
+        last_code_review_verdict=None,
         reviewer_issues=[],
         supervisor_verdict=None,
         backtrack_decision=None,
@@ -1976,7 +1853,7 @@ NODE_REQUIREMENTS: Dict[str, List[str]] = {
     "select_stage": [
         "paper_id",
         "plan",
-        "validation_hierarchy",
+        "progress",  # validation_hierarchy is computed from progress["stages"]
     ],
     "design": [
         "paper_id",
@@ -1984,14 +1861,22 @@ NODE_REQUIREMENTS: Dict[str, List[str]] = {
         "plan",
         "assumptions",
     ],
-    # code_review handles both design review and code review
-    # Requirements are the union of both contexts
+    # Separate review nodes with focused requirements
+    "plan_review": [
+        "paper_id",
+        "plan",
+        "assumptions",
+    ],
+    "design_review": [
+        "paper_id",
+        "current_stage_id",
+        "design_description",
+    ],
     "code_review": [
         "paper_id",
         "current_stage_id",
-        "plan",
-        # design_description required for design review
-        # code required for code review (but may not exist during design review)
+        "code",
+        "design_description",
     ],
     "generate_code": [
         "paper_id",
@@ -2030,8 +1915,7 @@ NODE_REQUIREMENTS: Dict[str, List[str]] = {
     "supervisor": [
         "paper_id",
         "plan",
-        "progress",
-        "validation_hierarchy",
+        "progress",  # validation_hierarchy is computed from progress["stages"]
     ],
     "handle_backtrack": [
         "paper_id",
@@ -2119,21 +2003,30 @@ def validate_state_transition(
     # Check specific transition requirements
     # NOTE: Node names must match graph.py node names (lowercase)
     transition_checks = {
-        ("design", "code_review"): [
+        ("plan", "plan_review"): [
+            ("plan", "Plan not set after plan node"),
+            ("assumptions", "Assumptions not set after plan node"),
+        ],
+        ("plan_review", "select_stage"): [
+            ("last_plan_review_verdict", "Plan review verdict not set"),
+        ],
+        ("design", "design_review"): [
             ("design_description", "Design description not set after design node"),
+        ],
+        ("design_review", "generate_code"): [
+            ("last_design_review_verdict", "Design review verdict not set"),
         ],
         ("generate_code", "code_review"): [
             ("code", "Code not set after generate_code node"),
+        ],
+        ("code_review", "run_code"): [
+            ("last_code_review_verdict", "Code review verdict not set"),
         ],
         ("run_code", "execution_check"): [
             ("stage_outputs", "Stage outputs not set after run_code node"),
         ],
         ("analyze", "comparison_check"): [
             ("analysis_summary", "Analysis summary not set after analyze node"),
-        ],
-        ("plan", "select_stage"): [
-            ("plan", "Plan not set after plan node"),
-            ("assumptions", "Assumptions not set after plan node"),
         ],
     }
     

@@ -1,0 +1,116 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "comparison_validator_output_schema.json",
+  "title": "ComparisonValidatorAgentOutput",
+  "description": "Output schema for ComparisonValidatorAgent - validates accuracy of result comparisons",
+  "type": "object",
+  "required": ["stage_id", "verdict", "accuracy_check", "math_check", "summary"],
+  "properties": {
+    "stage_id": {
+      "type": "string",
+      "description": "ID of the stage being validated"
+    },
+    "verdict": {
+      "type": "string",
+      "enum": ["approve", "needs_revision"],
+      "description": "Overall verdict on comparison accuracy"
+    },
+    "accuracy_check": {
+      "type": "object",
+      "description": "Verification that comparisons are accurate",
+      "properties": {
+        "status": { "type": "string", "enum": ["pass", "fail", "warning"] },
+        "paper_values_verified": { "type": "boolean" },
+        "simulation_values_verified": { "type": "boolean" },
+        "units_consistent": { "type": "boolean" },
+        "axis_ranges_appropriate": { "type": "boolean" },
+        "notes": { "type": "string" }
+      },
+      "required": ["status"]
+    },
+    "math_check": {
+      "type": "object",
+      "description": "Verification that calculations are correct",
+      "properties": {
+        "status": { "type": "string", "enum": ["pass", "fail", "warning"] },
+        "discrepancy_calculations_correct": { "type": "boolean" },
+        "percentage_calculations_correct": { "type": "boolean" },
+        "classification_matches_thresholds": { "type": "boolean" },
+        "errors_found": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "calculation": { "type": "string" },
+              "reported_value": { "type": "number" },
+              "correct_value": { "type": "number" },
+              "impact": { "type": "string" }
+            }
+          }
+        },
+        "notes": { "type": "string" }
+      },
+      "required": ["status"]
+    },
+    "classification_check": {
+      "type": "object",
+      "description": "Verification that classifications match numerical results",
+      "properties": {
+        "status": { "type": "string", "enum": ["pass", "fail", "warning"] },
+        "misclassifications": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "result_id": { "type": "string" },
+              "reported_classification": { "type": "string" },
+              "correct_classification": { "type": "string" },
+              "discrepancy_value": { "type": "number" },
+              "threshold_used": { "type": "number" }
+            }
+          }
+        },
+        "notes": { "type": "string" }
+      }
+    },
+    "documentation_check": {
+      "type": "object",
+      "description": "Verification that discrepancies are properly documented",
+      "properties": {
+        "status": { "type": "string", "enum": ["pass", "fail", "warning"] },
+        "all_discrepancies_logged": { "type": "boolean" },
+        "sources_cited": { "type": "boolean" },
+        "assumptions_documented": { "type": "boolean" },
+        "missing_documentation": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "notes": { "type": "string" }
+      }
+    },
+    "issues": {
+      "type": "array",
+      "description": "Issues found during validation",
+      "items": {
+        "type": "object",
+        "properties": {
+          "severity": { "type": "string", "enum": ["blocking", "major", "minor"] },
+          "category": { "type": "string", "enum": ["accuracy", "math", "classification", "documentation"] },
+          "description": { "type": "string" },
+          "suggested_fix": { "type": "string" }
+        },
+        "required": ["severity", "category", "description"]
+      }
+    },
+    "revision_suggestions": {
+      "type": "array",
+      "description": "Suggestions for improving the analysis",
+      "items": { "type": "string" }
+    },
+    "summary": {
+      "type": "string",
+      "description": "One paragraph summary of comparison validation"
+    }
+  }
+}
+

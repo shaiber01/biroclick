@@ -18,6 +18,7 @@ import json
 from schemas.state import (
     DISCREPANCY_THRESHOLDS,
     format_thresholds_table,
+    get_validation_hierarchy,
     MAX_DESIGN_REVISIONS,
     MAX_CODE_REVISIONS,
     MAX_ANALYSIS_REVISIONS,
@@ -33,11 +34,16 @@ from schemas.state import (
 # Path to prompts directory (relative to this file)
 PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
 
+# Path to schemas directory (relative to this file)
+SCHEMAS_DIR = Path(__file__).parent.parent / "schemas"
+
 # Agents and their prompt files
 AGENT_PROMPTS = {
     "prompt_adaptor": "prompt_adaptor_agent.md",
     "planner": "planner_agent.md",
+    "plan_reviewer": "plan_reviewer_agent.md",
     "simulation_designer": "simulation_designer_agent.md",
+    "design_reviewer": "design_reviewer_agent.md",
     "code_generator": "code_generator_agent.md",
     "code_reviewer": "code_reviewer_agent.md",
     "execution_validator": "execution_validator_agent.md",
@@ -45,6 +51,18 @@ AGENT_PROMPTS = {
     "results_analyzer": "results_analyzer_agent.md",
     "comparison_validator": "comparison_validator_agent.md",
     "supervisor": "supervisor_agent.md",
+}
+
+# Agent output schemas (for function calling)
+AGENT_OUTPUT_SCHEMAS = {
+    "plan_reviewer": "plan_reviewer_output_schema.json",
+    "design_reviewer": "design_reviewer_output_schema.json",
+    "code_reviewer": "code_reviewer_output_schema.json",
+    "execution_validator": "execution_validator_output_schema.json",
+    "physics_sanity": "physics_sanity_output_schema.json",
+    "results_analyzer": "results_analyzer_output_schema.json",
+    "comparison_validator": "comparison_validator_output_schema.json",
+    "supervisor": "supervisor_output_schema.json",
 }
 
 # Global rules file (prepended to all agent prompts)
@@ -94,6 +112,46 @@ def load_agent_prompt(agent_name: str) -> str:
         raise ValueError(f"Unknown agent: {agent_name}. Available: {list(AGENT_PROMPTS.keys())}")
     
     return load_prompt_template(AGENT_PROMPTS[agent_name])
+
+
+def load_output_schema(agent_name: str) -> Dict[str, Any]:
+    """
+    Load an agent's output schema for function calling.
+    
+    This loads the JSON schema that defines the agent's output format.
+    Use this schema with LLM function calling APIs to ensure structured,
+    schema-compliant outputs.
+    
+    Args:
+        agent_name: Short name (e.g., "plan_reviewer", "supervisor")
+        
+    Returns:
+        JSON schema dict for function calling
+        
+    Raises:
+        ValueError: If no output schema defined for this agent
+        FileNotFoundError: If schema file doesn't exist
+        
+    Example:
+        schema = load_output_schema("plan_reviewer")
+        response = llm.invoke(
+            prompt,
+            tools=[{"type": "function", "function": {"name": "output", "parameters": schema}}]
+        )
+    """
+    if agent_name not in AGENT_OUTPUT_SCHEMAS:
+        raise ValueError(
+            f"No output schema for agent: {agent_name}. "
+            f"Available: {list(AGENT_OUTPUT_SCHEMAS.keys())}"
+        )
+    
+    schema_filename = AGENT_OUTPUT_SCHEMAS[agent_name]
+    schema_path = SCHEMAS_DIR / schema_filename
+    
+    if not schema_path.exists():
+        raise FileNotFoundError(f"Output schema not found: {schema_path}")
+    
+    return json.loads(schema_path.read_text(encoding='utf-8'))
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -495,6 +553,8 @@ ANALYSIS TASK (injected at runtime)
 def _build_supervisor_context(state: Dict[str, Any]) -> str:
     """Build context section for SupervisorAgent."""
     progress_summary = _format_progress_summary(state)
+    # Get validation hierarchy computed from progress (single source of truth)
+    validation_hierarchy = get_validation_hierarchy(state)
     
     return f"""
 ═══════════════════════════════════════════════════════════════════════
@@ -505,7 +565,7 @@ CURRENT STATE (injected at runtime)
 {progress_summary}
 
 ### Validation Hierarchy Status:
-{json.dumps(state.get('validation_hierarchy', {}), indent=2)}
+{json.dumps(validation_hierarchy, indent=2)}
 
 ### Recent Figure Comparisons:
 {_format_recent_comparisons(state)}
