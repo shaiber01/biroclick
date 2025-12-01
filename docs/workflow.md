@@ -1122,18 +1122,299 @@ Prompts use placeholders that are replaced at runtime:
 | `{MAX_DESIGN_REVISIONS}` | `state.py:MAX_DESIGN_REVISIONS` | Anywhere revision limits mentioned |
 | `{MAX_REPLANS}` | `state.py:MAX_REPLANS` | Workflow decision prompts |
 
-### State Context by Agent
+### State Context by Agent (Detailed)
 
-Each agent receives different context from state:
+Each agent receives **only what it needs** - not full repo access. This section documents exactly what context is injected for each agent.
 
-| Agent | Context Injected |
-|-------|------------------|
-| **PlannerAgent** | paper_id, paper_title, paper_domain, paper_text, paper_figures |
-| **SimulationDesignerAgent** | current_stage_id, stage requirements, assumptions, reviewer_feedback |
-| **CodeGeneratorAgent** | design_description, reviewer_feedback, performance_estimate |
-| **ResultsAnalyzerAgent** | stage_outputs (files, stdout), target_figures, digitized_data paths |
-| **SupervisorAgent** | progress summary, validation_hierarchy, figure_comparisons, runtime budget |
-| **PromptAdaptorAgent** | paper_text (truncated), paper_domain, available agents list |
+---
+
+#### PromptAdaptorAgent Context
+
+**Purpose**: Quick scan of paper to customize agent prompts for the domain.
+
+**Receives**:
+| Field | Source | Notes |
+|-------|--------|-------|
+| `paper_text` | `state["paper_text"]` | **Truncated** to first ~10,000 chars (abstract + intro) |
+| `paper_domain` | `state["paper_domain"]` | e.g., "plasmonics", "photonic_crystals" |
+| `available_agents` | Hardcoded list | Names and roles of all agents |
+| `available_prompts` | `prompts/*.md` file list | What can be adapted |
+
+**Does NOT receive**: Full paper text, figures, any simulation-related state.
+
+**Rationale**: Only needs high-level domain understanding to suggest prompt adaptations.
+
+---
+
+#### PlannerAgent Context
+
+**Purpose**: Full paper analysis, parameter extraction, stage planning.
+
+**Receives**:
+| Field | Source | Notes |
+|-------|--------|-------|
+| `paper_id` | `state["paper_id"]` | Identifier |
+| `paper_title` | `state["paper_title"]` | From paper metadata |
+| `paper_domain` | `state["paper_domain"]` | Domain classification |
+| `paper_text` | `state["paper_text"]` | **Full** paper text (markdown) |
+| `paper_figures` | `state["paper_figures"]` | List of {id, description, image_path} |
+| `supplementary_text` | `state["supplementary_text"]` | If available |
+| `supplementary_figures` | `state["supplementary_figures"]` | If available |
+| `prompt_adaptations` | `state["prompt_adaptations"]` | From PromptAdaptorAgent |
+
+**Does NOT receive**: Any simulation outputs, code, progress, validation state.
+
+**Rationale**: Needs complete paper information to create comprehensive plan.
+
+---
+
+#### SimulationDesignerAgent Context
+
+**Purpose**: Design simulation for current stage based on plan.
+
+**Receives**:
+| Field | Source | Notes |
+|-------|--------|-------|
+| `current_stage_id` | `state["current_stage_id"]` | Which stage we're designing |
+| `current_stage` | `state["plan"]["stages"][current]` | Stage requirements from plan |
+| `assumptions` | `state["assumptions"]` | All documented assumptions |
+| `extracted_parameters` | `state["extracted_parameters"]` | Parameter values with sources |
+| `reviewer_feedback` | `state["reviewer_feedback"]` | **Only if revision** - previous issues |
+| `revision_count` | `state["design_revision_count"]` | How many revisions so far |
+| `paper_domain` | `state["paper_domain"]` | For domain-specific defaults |
+| `available_materials` | `materials/index.json` | What materials are available |
+
+**Does NOT receive**: Full paper text, figures, other stages, simulation code, outputs.
+
+**Rationale**: Focused on current stage design. Paper details already extracted to plan.
+
+---
+
+#### CodeGeneratorAgent Context
+
+**Purpose**: Generate Python+Meep code from approved design.
+
+**Receives**:
+| Field | Source | Notes |
+|-------|--------|-------|
+| `design_description` | `state["design_description"]` | Approved design spec |
+| `performance_estimate` | `state["performance_estimate"]` | Expected runtime, memory |
+| `reviewer_feedback` | `state["reviewer_feedback"]` | **Only if revision** |
+| `revision_count` | `state["code_revision_count"]` | How many revisions so far |
+| `stage_id` | `state["current_stage_id"]` | For output naming |
+| `paper_id` | `state["paper_id"]` | For output naming |
+| `output_dir` | Computed | Where to save outputs |
+
+**Does NOT receive**: Full paper, plan details, assumptions, figures, previous code.
+
+**Rationale**: Design spec contains everything needed. Doesn't need paper interpretation.
+
+---
+
+#### CodeReviewerAgent Context
+
+**Purpose**: Review design OR code before execution.
+
+**For Design Review**:
+| Field | Source | Notes |
+|-------|--------|-------|
+| `design_description` | `state["design_description"]` | Design to review |
+| `current_stage` | `state["plan"]["stages"][current]` | Stage requirements |
+| `assumptions` | `state["assumptions"]` | Check consistency |
+| `paper_domain` | `state["paper_domain"]` | Domain-specific checks |
+
+**For Code Review**:
+| Field | Source | Notes |
+|-------|--------|-------|
+| `code` | `state["code"]` | Code to review |
+| `design_description` | `state["design_description"]` | What code should implement |
+| `expected_outputs` | From design | What files should be created |
+
+**Does NOT receive**: Full paper, figures, previous outputs, other stages.
+
+**Rationale**: Focused review on specific artifact. Doesn't need full context.
+
+---
+
+#### ExecutionValidatorAgent Context
+
+**Purpose**: Verify simulation ran correctly.
+
+**Receives**:
+| Field | Source | Notes |
+|-------|--------|-------|
+| `stdout` | `state["stage_outputs"]["stdout"]` | Simulation output |
+| `stderr` | `state["stage_outputs"]["stderr"]` | Error output |
+| `exit_code` | `state["stage_outputs"]["exit_code"]` | 0 = success |
+| `output_files` | `state["stage_outputs"]["files"]` | List of created files |
+| `expected_outputs` | From design | What was expected |
+| `runtime_seconds` | `state["stage_outputs"]["runtime"]` | How long it took |
+
+**Does NOT receive**: The code itself, paper, figures, design details.
+
+**Rationale**: Only checks execution success, not correctness of design.
+
+---
+
+#### PhysicsSanityAgent Context
+
+**Purpose**: Validate physical reasonableness of results.
+
+**Receives**:
+| Field | Source | Notes |
+|-------|--------|-------|
+| `output_data_files` | `state["stage_outputs"]["files"]` | CSV/data files to analyze |
+| `simulation_code` | `state["code"]` | To understand what was computed |
+| `paper_domain` | `state["paper_domain"]` | Domain-specific physics checks |
+| `current_stage` | `state["plan"]["stages"][current]` | What physics is expected |
+
+**Does NOT receive**: Paper text, figures, previous stages' data.
+
+**Rationale**: Checks physics (T≤1, conservation laws) independent of paper comparison.
+
+---
+
+#### ResultsAnalyzerAgent Context
+
+**Purpose**: Compare simulation results to paper figures.
+
+**Receives**:
+| Field | Source | Notes |
+|-------|--------|-------|
+| `output_files` | `state["stage_outputs"]["files"]` | Plots and data from simulation |
+| `target_figures` | `state["paper_figures"][target_ids]` | **Only** the figures this stage targets |
+| `digitized_data` | `state["digitized_data_paths"]` | CSV paths if user provided |
+| `validation_criteria` | `state["plan"]["stages"][current]` | What to check |
+| `stage_id` | `state["current_stage_id"]` | For reporting |
+| `discrepancy_thresholds` | Constants | Classification thresholds |
+
+**Does NOT receive**: Full paper text, non-target figures, code, design.
+
+**Rationale**: Focused comparison. Paper details already encoded in validation criteria.
+
+---
+
+#### ComparisonValidatorAgent Context
+
+**Purpose**: Validate that ResultsAnalyzer's comparison is accurate.
+
+**Receives**:
+| Field | Source | Notes |
+|-------|--------|-------|
+| `figure_comparisons` | `state["figure_comparisons"]` | What Analyzer produced |
+| `analysis_summary` | `state["analysis_summary"]` | Analyzer's conclusions |
+| `discrepancies` | From figure_comparisons | Logged discrepancies |
+| `target_figures` | `state["paper_figures"][target_ids]` | To verify comparison |
+| `output_plots` | `state["stage_outputs"]["plots"]` | Simulation plots |
+
+**Does NOT receive**: Paper text, code, design, other stages.
+
+**Rationale**: QA on comparison accuracy, not redoing the analysis.
+
+---
+
+#### SupervisorAgent Context
+
+**Purpose**: Big-picture oversight, decision making.
+
+**Receives** (most comprehensive view):
+| Field | Source | Notes |
+|-------|--------|-------|
+| `plan_summary` | Summarized from `state["plan"]` | Stage names, targets, status |
+| `progress` | `state["progress"]` | All stage statuses |
+| `validation_hierarchy` | `state["validation_hierarchy"]` | What's validated |
+| `figure_comparisons` | `state["figure_comparisons"]` | All comparisons so far |
+| `current_stage_summary` | Summarized | What just happened |
+| `runtime_budget` | `state["runtime_budget_remaining_seconds"]` | Time left |
+| `revision_counts` | Various `state` fields | How many revisions used |
+| `backtrack_suggestion` | `state["backtrack_suggestion"]` | If any agent suggested |
+| `systematic_discrepancies` | `state["systematic_discrepancies_identified"]` | Known shifts |
+
+**Does NOT receive**: Full paper text, raw code, raw data files.
+
+**Rationale**: Strategic oversight needs summary, not raw details.
+
+---
+
+### Context Building Implementation
+
+```python
+def build_agent_context(state: ReproState, agent: str) -> Dict[str, Any]:
+    """Build context dictionary for a specific agent."""
+    
+    if agent == "PlannerAgent":
+        return {
+            "paper_id": state["paper_id"],
+            "paper_title": state["paper_title"],
+            "paper_domain": state["paper_domain"],
+            "paper_text": state["paper_text"],  # Full
+            "paper_figures": state["paper_figures"],
+            "supplementary_text": state.get("supplementary_text"),
+            "supplementary_figures": state.get("supplementary_figures"),
+            "prompt_adaptations": state.get("prompt_adaptations", []),
+        }
+    
+    elif agent == "SimulationDesignerAgent":
+        current_stage = get_current_stage(state)
+        return {
+            "current_stage_id": state["current_stage_id"],
+            "current_stage": current_stage,
+            "assumptions": state["assumptions"],
+            "extracted_parameters": state["extracted_parameters"],
+            "reviewer_feedback": state.get("reviewer_feedback"),  # May be None
+            "revision_count": state["design_revision_count"],
+            "paper_domain": state["paper_domain"],
+            "available_materials": load_materials_index(),
+        }
+    
+    elif agent == "ResultsAnalyzerAgent":
+        target_ids = get_target_figure_ids(state)
+        return {
+            "output_files": state["stage_outputs"]["files"],
+            "target_figures": [f for f in state["paper_figures"] if f["id"] in target_ids],
+            "digitized_data": state.get("digitized_data_paths", {}),
+            "validation_criteria": get_current_stage(state).get("validation_criteria"),
+            "stage_id": state["current_stage_id"],
+            "discrepancy_thresholds": DISCREPANCY_THRESHOLDS,
+        }
+    
+    elif agent == "SupervisorAgent":
+        return {
+            "plan_summary": summarize_plan(state["plan"]),
+            "progress": state["progress"],
+            "validation_hierarchy": state["validation_hierarchy"],
+            "figure_comparisons": state["figure_comparisons"],
+            "current_stage_summary": summarize_current_stage(state),
+            "runtime_budget": state["runtime_budget_remaining_seconds"],
+            "revision_counts": {
+                "design": state["design_revision_count"],
+                "code": state["code_revision_count"],
+                "analysis": state["analysis_revision_count"],
+            },
+            "backtrack_suggestion": state.get("backtrack_suggestion"),
+            "systematic_discrepancies": state["systematic_discrepancies_identified"],
+        }
+    
+    # ... other agents ...
+```
+
+---
+
+### Why This Design (Principle of Least Context)
+
+**Benefits**:
+1. **Prevents context bloat** - LLM context windows are limited
+2. **Focused agents** - Each agent sees only what it needs to decide
+3. **Faster inference** - Less context = faster response
+4. **Easier debugging** - Each call is self-contained
+5. **Cost control** - Fewer tokens = lower API costs
+6. **Security** - Agents can't access irrelevant data
+
+**Anti-patterns avoided**:
+- ❌ Passing full `ReproState` to every agent
+- ❌ Including full paper text in every call
+- ❌ Sharing conversation history between agents
+- ❌ Giving validators access to code details
 
 ### Why Runtime Injection?
 
