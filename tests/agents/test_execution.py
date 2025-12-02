@@ -15,15 +15,14 @@ class TestExecutionValidatorNode:
     @patch("src.agents.execution.call_agent_with_metrics")
     @patch("src.agents.execution.check_context_or_escalate")
     @patch("src.agents.execution.build_agent_prompt")
-    def test_validates_successful_execution(self, mock_prompt, mock_context, mock_call):
-        """Should validate successful execution."""
+    def test_validates_successful_execution(self, mock_prompt, mock_context, mock_call, validated_execution_validator_response):
+        """Should validate successful execution (using validated mock)."""
         mock_context.return_value = None
         mock_prompt.return_value = "system prompt"
-        mock_call.return_value = {
-            "verdict": "pass",
-            "issues": [],
-            "summary": "Execution completed successfully",
-        }
+        
+        mock_response = validated_execution_validator_response.copy()
+        mock_response["verdict"] = "pass"
+        mock_call.return_value = mock_response
         
         state = {
             "current_stage_id": "stage1",
@@ -42,16 +41,16 @@ class TestExecutionValidatorNode:
     @patch("src.agents.execution.call_agent_with_metrics")
     @patch("src.agents.execution.check_context_or_escalate")
     @patch("src.agents.execution.build_agent_prompt")
-    def test_fails_on_execution_error(self, mock_prompt, mock_context, mock_call):
-        """Should fail validation on execution error."""
+    def test_fails_on_execution_error(self, mock_prompt, mock_context, mock_call, validated_execution_validator_response):
+        """Should fail validation on execution error (using validated mock)."""
         mock_context.return_value = None
         mock_prompt.return_value = "prompt"
-        mock_call.return_value = {
-            "verdict": "fail",
-            "issues": [{"severity": "critical", "description": "Segmentation fault"}],
-            "summary": "Execution crashed",
-            "feedback": "Check memory allocation",
-        }
+        
+        mock_response = validated_execution_validator_response.copy()
+        mock_response["verdict"] = "fail"
+        mock_response["issues"] = [{"severity": "critical", "description": "Segmentation fault"}]
+        mock_response["feedback"] = "Check memory allocation"
+        mock_call.return_value = mock_response
         
         state = {
             "current_stage_id": "stage1",
@@ -136,16 +135,16 @@ class TestPhysicsSanityNode:
     @patch("src.agents.execution.call_agent_with_metrics")
     @patch("src.agents.execution.check_context_or_escalate")
     @patch("src.agents.execution.build_agent_prompt")
-    def test_passes_physically_valid_results(self, mock_prompt, mock_context, mock_call):
-        """Should pass physically valid results."""
+    def test_passes_physically_valid_results(self, mock_prompt, mock_context, mock_call, validated_physics_sanity_response):
+        """Should pass physically valid results (using validated mock)."""
         mock_context.return_value = None
         mock_prompt.return_value = "system prompt"
-        mock_call.return_value = {
-            "verdict": "pass",
-            "issues": [],
-            "summary": "Results are physically reasonable",
-            "backtrack_suggestion": {"suggest_backtrack": False},
-        }
+        
+        mock_response = validated_physics_sanity_response.copy()
+        mock_response["verdict"] = "pass"
+        # Remove critical issues if any to ensure validity
+        mock_response["concerns"] = [] 
+        mock_call.return_value = mock_response
         
         state = {
             "current_stage_id": "stage1",
@@ -161,17 +160,18 @@ class TestPhysicsSanityNode:
     @patch("src.agents.execution.call_agent_with_metrics")
     @patch("src.agents.execution.check_context_or_escalate")
     @patch("src.agents.execution.build_agent_prompt")
-    def test_fails_unphysical_results(self, mock_prompt, mock_context, mock_call):
-        """Should fail unphysical results."""
+    def test_fails_unphysical_results(self, mock_prompt, mock_context, mock_call, validated_physics_sanity_response):
+        """Should fail unphysical results (using validated mock)."""
         mock_context.return_value = None
         mock_prompt.return_value = "prompt"
-        mock_call.return_value = {
-            "verdict": "fail",
-            "issues": [{"severity": "critical", "description": "Negative absorption"}],
-            "summary": "Results violate physics",
-            "feedback": "Check energy conservation",
-            "backtrack_suggestion": {"suggest_backtrack": False},
-        }
+        
+        mock_response = validated_physics_sanity_response.copy()
+        mock_response["verdict"] = "fail"
+        mock_response["issues"] = [{"severity": "critical", "description": "Negative absorption"}]
+        # Ensure it has concerns or failed checks as per contract
+        mock_response["concerns"] = [{"concern": "Negative abs", "severity": "critical"}]
+        mock_response["backtrack_suggestion"] = {"suggest_backtrack": False}
+        mock_call.return_value = mock_response
         
         state = {
             "current_stage_id": "stage1",
@@ -222,16 +222,15 @@ class TestPhysicsSanityNode:
     @patch("src.agents.execution.call_agent_with_metrics")
     @patch("src.agents.execution.check_context_or_escalate")
     @patch("src.agents.execution.build_agent_prompt")
-    def test_respects_max_failures(self, mock_prompt, mock_context, mock_call):
+    def test_respects_max_failures(self, mock_prompt, mock_context, mock_call, validated_physics_sanity_response):
         """Should not exceed max failures."""
         mock_context.return_value = None
         mock_prompt.return_value = "prompt"
-        mock_call.return_value = {
-            "verdict": "fail",
-            "issues": [],
-            "summary": "Still unphysical",
-            "backtrack_suggestion": {"suggest_backtrack": False},
-        }
+        
+        mock_response = validated_physics_sanity_response.copy()
+        mock_response["verdict"] = "fail"
+        mock_response["concerns"] = [{"concern": "Still unphysical", "severity": "critical"}]
+        mock_call.return_value = mock_response
         
         state = {
             "current_stage_id": "stage1",
@@ -244,4 +243,3 @@ class TestPhysicsSanityNode:
         
         # Should not increment past max
         assert result["physics_failure_count"] == 3
-

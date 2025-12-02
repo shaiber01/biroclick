@@ -252,7 +252,17 @@ def _create_resource_limiter(max_memory_gb: float):
             
             # Set address space limit (soft and hard)
             max_bytes = int(max_memory_gb * 1024 * 1024 * 1024)
-            resource.setrlimit(resource.RLIMIT_AS, (max_bytes, max_bytes))
+            soft, hard = resource.getrlimit(resource.RLIMIT_AS)
+            
+            # Ensure we don't try to exceed system hard limit (which raises ValueError)
+            # And ensure soft <= hard
+            new_soft = min(max_bytes, hard)
+            new_hard = min(max_bytes, hard)
+            
+            # Debug print to help diagnose failures (will be captured in tests)
+            # print(f"DEBUG: Setting RLIMIT_AS. Request: {max_bytes}, Current: ({soft}, {hard}), New: ({new_soft}, {new_hard})")
+            
+            resource.setrlimit(resource.RLIMIT_AS, (new_soft, new_hard))
             
             # Optionally set other limits for more comprehensive control
             # resource.setrlimit(resource.RLIMIT_DATA, (max_bytes, max_bytes))
@@ -404,6 +414,7 @@ def run_simulation(
             timeout=cfg["timeout_seconds"],
             capture_output=True,
             text=True,
+            errors='replace',  # Handle binary output gracefully
             preexec_fn=preexec_fn,
             env=env
         )

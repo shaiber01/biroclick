@@ -68,6 +68,53 @@ class TestGenerateReportNode:
         assert "metrics" in result
         assert "token_summary" in result["metrics"]
 
+    @patch("src.agents.reporting.call_agent_with_metrics")
+    @patch("src.agents.reporting.build_agent_prompt")
+    def test_builds_quantitative_summary(self, mock_prompt, mock_call):
+        """Should build quantitative summary table from reports."""
+        mock_prompt.return_value = "prompt"
+        mock_call.return_value = {}
+        
+        state = {
+            "paper_id": "test_paper",
+            "analysis_result_reports": [
+                {
+                    "stage_id": "stage1",
+                    "target_figure": "Fig1",
+                    "status": "match",
+                    "precision_requirement": "acceptable",
+                    "quantitative_metrics": {
+                        "peak_position_error_percent": 1.5,
+                        "normalized_rmse_percent": 2.0
+                    }
+                }
+            ]
+        }
+        
+        result = generate_report_node(state)
+        
+        summary = result.get("quantitative_summary", [])
+        assert len(summary) == 1
+        assert summary[0]["peak_position_error_percent"] == 1.5
+
+    @patch("src.agents.reporting.call_agent_with_metrics")
+    @patch("src.agents.reporting.build_agent_prompt")
+    def test_creates_default_structures(self, mock_prompt, mock_call):
+        """Should create default executive summary and citation if missing."""
+        mock_prompt.return_value = "prompt"
+        mock_call.return_value = {}
+        
+        state = {
+            "paper_id": "test_paper",
+            "paper_title": "My Paper"
+        }
+        
+        result = generate_report_node(state)
+        
+        assert "executive_summary" in result
+        assert "paper_citation" in result
+        assert result["paper_citation"]["title"] == "My Paper"
+
 
 class TestHandleBacktrackNode:
     """Tests for handle_backtrack_node function."""
@@ -176,3 +223,47 @@ class TestHandleBacktrackNode:
         assert result["workflow_phase"] == "backtracking_limit"
         assert result["awaiting_user_input"] is True
 
+    def test_backtrack_to_stage_0_clears_materials(self):
+        """Should clear materials when backtracking to Stage 0 (MATERIAL_VALIDATION)."""
+        state = {
+            "backtrack_decision": {
+                "accepted": True,
+                "target_stage_id": "stage0",
+                "stages_to_invalidate": ["stage1"],
+            },
+            "progress": {
+                "stages": [
+                    {
+                        "stage_id": "stage0", 
+                        "stage_type": "MATERIAL_VALIDATION",
+                        "status": "completed_success"
+                    },
+                    {"stage_id": "stage1", "status": "completed_success"},
+                ]
+            },
+            "validated_materials": ["gold.py"],
+        }
+        
+        result = handle_backtrack_node(state)
+        
+        assert result["current_stage_id"] == "stage0"
+        assert result["validated_materials"] == []
+        assert result["pending_validated_materials"] == []
+
+    def test_errors_on_missing_target_in_progress(self):
+        """Should error when target stage is not in progress history."""
+        state = {
+            "backtrack_decision": {
+                "accepted": True,
+                "target_stage_id": "stageX", # Not in progress
+                "stages_to_invalidate": [],
+            },
+            "progress": {
+                "stages": [{"stage_id": "stage1", "status": "completed_success"}]
+            },
+        }
+        
+        result = handle_backtrack_node(state)
+        
+        assert result["ask_user_trigger"] == "backtrack_target_not_found"
+        assert result["awaiting_user_input"] is True

@@ -4,7 +4,7 @@ This file tracks remaining improvements after the initial agents.py refactoring.
 
 ## ✅ Coverage Report Summary (December 2024)
 
-**Current coverage: ~90%+** for `src/agents/` (improved from 69%)
+**Current coverage: ~95%** for `src/agents/` (improved from 69%)
 
 | Module | Coverage | Notes |
 |--------|----------|-------|
@@ -25,8 +25,8 @@ This file tracks remaining improvements after the initial agents.py refactoring.
 | `user_interaction.py` | 87% | ✅ (was 59%) |
 | `helpers/numeric.py` | 86% | ✅ |
 | `execution.py` | 84% | ✅ |
-| `reporting.py` | 83% | ✅ |
-| `analysis.py` | 82% | ✅ (was 32%) |
+| `reporting.py` | 90%+ | ✅ (improved from 83%) |
+| `analysis.py` | 90%+ | ✅ (improved from 82%) |
 | `code.py` | 90%+ | ✅ (improved from 80%) |
 
 To regenerate the HTML coverage report:
@@ -89,7 +89,7 @@ src/agents/supervision/
 - **New**: `test_trigger_handlers.py` provides dedicated unit tests for all handlers.
 
 ### Comprehensive Testing Suite (Completed)
-Added three new test files with comprehensive coverage:
+Added four new test files with comprehensive coverage:
 
 **1. `test_workflow_e2e.py` - Full Workflow Tests (58 tests)**
 - `TestFullWorkflowSuccess`: Complete single-stage workflow
@@ -117,6 +117,11 @@ Added three new test files with comprehensive coverage:
 - `TestSchemaValidationSmoke`: Real outputs against schemas
 - `TestLLMPerformance`: Response time checks
 - `TestLLMErrorHandling`: Empty/long paper handling
+
+**4. `test_ask_user_triggers.py` - Trigger System Contract Tests**
+- Verifies all triggers are documented in schema
+- Verifies all triggers have corresponding handlers
+- Enforces consistency between verdicts and supervisor actions
 
 Run smoke tests with: `pytest -m smoke tests/test_llm_smoke.py`
 

@@ -349,7 +349,7 @@ def results_analyzer_node(state: ReproState) -> dict:
             "figure_id": target_id,
             "stage_id": current_stage_id,
             "title": figure_meta.get("description", target_id),
-            "paper_image_path": figure_meta.get("image_path"),
+            "paper_image_path": paper_image_path,
             "reproduction_image_path": matched_file,
             "comparison_table": comparison_table,
             "shape_comparison": [],

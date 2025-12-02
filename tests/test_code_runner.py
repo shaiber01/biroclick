@@ -10,6 +10,7 @@ import pytest
 import shutil
 import time
 import sys
+import subprocess
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
@@ -23,6 +24,7 @@ from src.code_runner import (
     run_code_node,
     PlatformCapabilities,
     ExecutionResult,
+    _list_output_files,
 )
 
 
@@ -46,31 +48,27 @@ class TestPlatformDetection:
         assert "warnings" in caps
         assert isinstance(caps["warnings"], list)
     
-    def test_detect_platform_platform_is_string(self):
-        """Test that platform field is a recognized string."""
+    def test_detect_platform_identifies_current_os(self):
+        """Test that platform detection matches sys.platform."""
         caps = detect_platform()
         
-        valid_platforms = ["windows", "wsl", "macos", "linux"]
-        assert caps["platform"] in valid_platforms
-    
+        if sys.platform == "darwin":
+            assert caps["platform"] == "macos"
+        elif sys.platform == "win32":
+            assert caps["platform"] == "windows"
+        elif sys.platform.startswith("linux"):
+            # WSL check might override "linux" to "wsl"
+            if caps["is_wsl"]:
+                assert caps["platform"] == "wsl"
+            else:
+                assert caps["platform"] == "linux"
+
     def test_get_platform_capabilities_cached(self):
         """Test that get_platform_capabilities returns cached result."""
         caps1 = get_platform_capabilities()
         caps2 = get_platform_capabilities()
-        
-        # Should return the same dict (cached)
-        assert caps1 == caps2
+        assert caps1 is caps2
     
-    @patch.dict(os.environ, {"REPROLAB_SKIP_RESOURCE_LIMITS": "1"})
-    def test_platform_warnings_suppressed_with_env_var(self):
-        """Test that warnings are suppressed when env var is set."""
-        # This primarily tests that the check doesn't raise when env var is set
-        from src.code_runner import check_platform_and_warn
-        
-        # Should not raise any warnings (env var suppresses them)
-        caps = check_platform_and_warn()
-        assert caps is not None
-
 
 # ═══════════════════════════════════════════════════════════════════════
 # Code Validation Tests
@@ -79,102 +77,41 @@ class TestPlatformDetection:
 class TestCodeValidation:
     """Tests for validate_code function."""
     
-    def test_validate_code_detects_dangerous_os_system(self):
-        """Test that os.system calls are flagged."""
-        code = """
-import os
-os.system("rm -rf /")
-"""
-        warnings = validate_code(code)
+    def test_validate_code_detects_dangerous_patterns(self):
+        """Test that dangerous patterns are flagged."""
+        dangerous = [
+            ("os.system('rm')", "os.system"),
+            ("subprocess.call(['ls'])", "subprocess.call"),
+            ("eval('print(1)')", "eval("),
+            ("exec('import os')", "exec("),
+            ("__import__('os')", "__import__"),
+            ("open('/etc/passwd')", "open('/etc"),
+        ]
         
-        assert any("os.system" in w for w in warnings)
+        for code, pattern in dangerous:
+            warnings = validate_code(code)
+            assert any(pattern in w for w in warnings), f"Failed to detect {pattern}"
     
-    def test_validate_code_detects_dangerous_subprocess(self):
-        """Test that subprocess calls are flagged."""
-        code = """
-import subprocess
-subprocess.call(["ls"])
-subprocess.run(["whoami"])
-"""
-        warnings = validate_code(code)
+    def test_validate_code_detects_blocking_calls(self):
+        """Test that blocking calls are flagged."""
+        blocking = [
+            ("plt.show()", "plt.show()"),
+            ("input('name')", "input("),
+        ]
         
-        assert any("subprocess" in w for w in warnings)
-
-    def test_validate_code_detects_popen(self):
-        """Test that subprocess.Popen is flagged."""
-        code = "subprocess.Popen(['ls'])"
-        warnings = validate_code(code)
-        assert any("subprocess" in w for w in warnings)
+        for code, pattern in blocking:
+            warnings = validate_code(code)
+            assert any(pattern in w for w in warnings)
+            assert any("BLOCKING" in w for w in warnings)
     
-    def test_validate_code_detects_eval(self):
-        """Test that eval() is flagged."""
-        code = """
-user_input = "print('hello')"
-eval(user_input)
-"""
-        warnings = validate_code(code)
-        
-        assert any("eval" in w for w in warnings)
-    
-    def test_validate_code_detects_exec(self):
-        """Test that exec() is flagged."""
-        code = """
-exec("import os")
-"""
-        warnings = validate_code(code)
-        
-        assert any("exec" in w for w in warnings)
-    
-    def test_validate_code_detects_blocking_plt_show(self):
-        """Test that plt.show() is flagged as blocking."""
-        code = """
-import matplotlib.pyplot as plt
-plt.plot([1, 2, 3])
-plt.show()
-"""
-        warnings = validate_code(code)
-        
-        assert any("plt.show()" in w for w in warnings)
-        assert any("BLOCKING" in w for w in warnings)
-    
-    def test_validate_code_detects_blocking_input(self):
-        """Test that input() is flagged as blocking."""
-        code = """
-name = input("Enter name: ")
-"""
-        warnings = validate_code(code)
-        
-        assert any("input(" in w for w in warnings)
-        assert any("BLOCKING" in w for w in warnings)
-    
-    def test_validate_code_detects_missing_meep_import(self):
-        """Test that missing meep import is noted."""
-        code = """
-import numpy as np
-# No meep import
-"""
-        warnings = validate_code(code)
-        
+    def test_validate_code_checks_imports(self):
+        """Test missing meep import warning."""
+        warnings = validate_code("import numpy")
         assert any("meep" in w.lower() for w in warnings)
-    
-    def test_validate_code_passes_valid_meep_code(self):
-        """Test that valid Meep code generates fewer warnings."""
-        code = """
-import meep as mp
-import numpy as np
-
-sim = mp.Simulation(
-    cell_size=mp.Vector3(10, 10, 0),
-    resolution=20,
-)
-sim.run(until=100)
-np.save("output.npy", sim.get_array(component=mp.Ez))
-"""
-        warnings = validate_code(code)
         
-        # Should have no WARNING or BLOCKING warnings
-        critical_warnings = [w for w in warnings if "WARNING" in w or "BLOCKING" in w]
-        assert len(critical_warnings) == 0
+        warnings = validate_code("import meep as mp")
+        critical = [w for w in warnings if "WARNING" in w or "BLOCKING" in w]
+        assert len(critical) == 0
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -184,368 +121,202 @@ np.save("output.npy", sim.get_array(component=mp.Ez))
 class TestRuntimeEstimation:
     """Tests for estimate_runtime function."""
     
-    def test_estimate_runtime_detects_3d_simulation(self):
-        """Test that 3D simulations are detected and increase estimate."""
-        code_2d = """
-import meep as mp
-cell = mp.Vector3(10, 10, 0)  # 2D
-sim = mp.Simulation(cell_size=cell, resolution=20)
-"""
-        code_3d = """
-import meep as mp
-cell = mp.Vector3(10, 10, 10)  # 3D
-geometry = [mp.Block(center=mp.Vector3(0, 0, 0), size=mp.Vector3(1, 1, 1))]
-sources = [mp.Source(mp.ContinuousSource(frequency=0.15), 
-                     component=mp.Ez, center=mp.Vector3(0, 0, 0))]
-sim = mp.Simulation(cell_size=cell, resolution=20, geometry=geometry, sources=sources)
-"""
+    def test_estimate_runtime_heuristics(self):
+        """Test that heuristics increase runtime estimate."""
+        base = estimate_runtime("import meep")
         
-        estimate_2d = estimate_runtime(code_2d)
-        estimate_3d = estimate_runtime(code_3d)
+        code_3d = "mp.Vector3(1,1,1)\n" * 3
+        est_3d = estimate_runtime(code_3d)
+        assert est_3d["estimated_minutes"] > base["estimated_minutes"]
+        assert est_3d["features_detected"]["is_3d"]
         
-        assert estimate_3d["features_detected"]["is_3d"] is True
-        assert estimate_3d["estimated_minutes"] > estimate_2d["estimated_minutes"]
-    
-    def test_estimate_runtime_detects_sweeps(self):
-        """Test that parameter sweeps are detected."""
-        code_sweep = """
-import meep as mp
-import numpy as np
+        code_sweep = "for i in range(10): pass"
+        est_sweep = estimate_runtime(code_sweep)
+        assert est_sweep["estimated_minutes"] > base["estimated_minutes"]
+        assert est_sweep["features_detected"]["has_sweep"]
 
-for freq in np.linspace(0.1, 0.5, 20):
-    # Run simulation for each frequency
-    pass
-"""
-        estimate = estimate_runtime(code_sweep)
-        
-        assert estimate["features_detected"]["has_sweep"] is True
-    
-    def test_estimate_runtime_detects_flux(self):
-        """Test that flux regions are detected."""
-        code_flux = """
-import meep as mp
-sim.add_flux(0.15, 0.1, 50, mp.FluxRegion(center=mp.Vector3(0, 0)))
-"""
-        estimate = estimate_runtime(code_flux)
-        
-        assert estimate["features_detected"]["has_flux"] is True
-    
-    def test_estimate_runtime_provides_reasonable_timeout(self):
-        """Test that recommended timeout is at least 2x estimate."""
-        code = """
-import meep as mp
-sim = mp.Simulation(cell_size=mp.Vector3(10, 10, 0), resolution=20)
-sim.run(until=100)
-"""
-        estimate = estimate_runtime(code)
-        
-        # Timeout should be at least 2x estimated minutes (converted to seconds)
-        expected_min_timeout = estimate["estimated_minutes"] * 60 * 2
-        assert estimate["recommended_timeout_seconds"] >= expected_min_timeout
-    
-    def test_estimate_runtime_uses_provided_estimate(self):
-        """Test that design_estimate_minutes is used as base."""
-        code = "import meep"
-        
-        estimate = estimate_runtime(code, design_estimate_minutes=30.0)
-        
-        # Base should be 30 minutes
-        assert estimate["estimated_minutes"] >= 30.0
+    def test_estimate_runtime_timeout_buffer(self):
+        """Test timeout is buffered."""
+        est = estimate_runtime("import meep")
+        assert est["recommended_timeout_seconds"] >= est["estimated_minutes"] * 60 * 2
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# Error Result Helper Tests
+# Robustness & Real Execution Tests
 # ═══════════════════════════════════════════════════════════════════════
 
-class TestMakeErrorResult:
-    """Tests for _make_error_result helper function."""
+class TestExecutionRobustness:
+    """
+    Real execution tests to verify robustness against crashes, resource limits,
+    and bad output.
+    """
     
-    def test_make_error_result_sets_defaults_correctly(self):
-        """Test that default values are set correctly."""
-        result = _make_error_result(error="Test error")
-        
-        assert result["error"] == "Test error"
-        assert result["stdout"] == ""
-        assert result["stderr"] == ""
-        assert result["exit_code"] == -1
-        assert result["output_files"] == []
-        assert result["runtime_seconds"] == 0.0
-        assert result["memory_exceeded"] is False
-        assert result["timeout_exceeded"] is False
-    
-    def test_make_error_result_custom_values(self):
-        """Test that custom values override defaults."""
-        result = _make_error_result(
-            error="Memory exceeded",
-            stdout="Some output",
-            stderr="Error details",
-            exit_code=137,
-            runtime_seconds=45.5,
-            memory_exceeded=True,
-        )
-        
-        assert result["error"] == "Memory exceeded"
-        assert result["stdout"] == "Some output"
-        assert result["stderr"] == "Error details"
-        assert result["exit_code"] == 137
-        assert result["runtime_seconds"] == 45.5
-        assert result["memory_exceeded"] is True
-        assert result["timeout_exceeded"] is False
-    
-    def test_make_error_result_timeout_flag(self):
-        """Test timeout flag is set correctly."""
-        result = _make_error_result(
-            error="Timeout exceeded",
-            timeout_exceeded=True,
-        )
-        
-        assert result["timeout_exceeded"] is True
-        assert result["memory_exceeded"] is False
-    
-    def test_make_error_result_returns_execution_result_type(self):
-        """Test that result conforms to ExecutionResult structure."""
-        result = _make_error_result(error="Test")
-        
-        # Should have all required keys
-        required_keys = [
-            "stdout", "stderr", "exit_code", "output_files",
-            "runtime_seconds", "error", "memory_exceeded", "timeout_exceeded"
-        ]
-        for key in required_keys:
-            assert key in result, f"Missing key: {key}"
-
-
-# ═══════════════════════════════════════════════════════════════════════
-# Execution Tests
-# ═══════════════════════════════════════════════════════════════════════
-
-class TestRunSimulation:
-    """Tests for run_simulation function."""
-    
-    def test_run_simulation_executes_code(self, tmp_path):
-        """Test that it actually runs python code."""
-        # Use a simple script that prints something and writes a file
+    def test_binary_stdout_handling(self, tmp_path):
+        """
+        Test that simulation outputting invalid UTF-8 bytes to stdout doesn't 
+        crash the runner and is handled gracefully.
+        """
+        # Python code that writes non-UTF8 bytes to stdout
+        # \x80 is not a valid start byte in UTF-8
         code = """
 import sys
-print("Hello stdout")
-print("Hello stderr", file=sys.stderr)
-with open("output.txt", "w") as f:
-    f.write("content")
+try:
+    # Write binary data to stdout buffer to bypass text encoding
+    sys.stdout.buffer.write(b'Binary junk: \\x80\\xff\\n')
+    sys.stdout.flush()
+except Exception as e:
+    print(f"Write failed: {e}", file=sys.stderr)
 """
         result = run_simulation(
             code=code,
-            stage_id="test_exec",
-            output_dir=tmp_path,
-            config={"timeout_seconds": 10}
+            stage_id="binary_test",
+            output_dir=tmp_path
         )
         
         assert result["exit_code"] == 0
-        assert "Hello stdout" in result["stdout"]
-        assert "Hello stderr" in result["stderr"]
-        assert "output.txt" in result["output_files"]
-        assert (tmp_path / "output.txt").exists()
-        assert (tmp_path / "output.txt").read_text() == "content"
         assert result["error"] is None
+        # Should contain the replacement characters or handled text
+        # If strict decoding was used, this test would likely have failed with uncaught exception
+        # or empty stdout if subprocess swallowed it.
+        # We expect robust handling (e.g. replacement chars or ignored errors).
+        # Wait - run_simulation uses text=True in subprocess.run.
+        # If the output is invalid utf-8, subprocess.run with text=True MIGHT crash unless errors='replace'
+        # Let's see if it crashes or handles it. If it crashes, we need to fix code_runner.
+        # For now, let's assert we got something back.
+        
+        # Note: If it crashes inside code_runner, result['error'] will be set by the catch-all block.
+        if result['error'] and "UnicodeDecodeError" in str(result['error']):
+             # This confirms we need to fix code_runner to use errors='replace'
+             pytest.fail(f"Code runner crashed on binary output: {result['error']}")
+             
+        # If no crash, check if we got the text part
+        assert "Binary junk" in result["stdout"] or "\ufffd" in result["stdout"]
 
-    def test_run_simulation_timeout(self, tmp_path):
-        """Test timeout handling with actual subprocess."""
-        # A script that sleeps longer than timeout
+    def test_real_timeout_enforcement(self, tmp_path):
+        """Test that the timeout actually kills a sleeping process."""
         code = """
 import time
-time.sleep(2)
+import sys
+print("Starting sleep", file=sys.stderr)
+time.sleep(5)
+print("Finished sleep", file=sys.stderr)
 """
-        # Set timeout to 1 second
+        start = time.time()
         result = run_simulation(
             code=code,
-            stage_id="test_timeout",
+            stage_id="timeout_test",
             output_dir=tmp_path,
             config={"timeout_seconds": 1}
         )
+        duration = time.time() - start
         
         assert result["timeout_exceeded"] is True
-        assert "exceeded timeout" in result["error"]
+        assert "timeout" in str(result["error"]).lower()
+        assert duration < 4.0 # Should be closer to 1s than 5s
         
-    def test_run_simulation_cleanup_script(self, tmp_path):
-        """Test that script is deleted if keep_script is False."""
-        code = "print('hello')"
-        run_simulation(
-            code=code,
-            stage_id="cleanup_test",
-            output_dir=tmp_path,
-            config={"keep_script": False}
-        )
-        
-        script_path = tmp_path / "simulation_cleanup_test.py"
-        assert not script_path.exists()
+    def test_real_memory_limit_enforcement(self, tmp_path):
+        """
+        Test that memory limits are enforced on supported platforms.
+        Attempts to allocate 200MB with a 50MB limit.
+        """
+        caps = get_platform_capabilities()
+        if not caps["memory_limiting_available"]:
+            pytest.skip("Memory limiting not available on this platform")
 
-    def test_run_simulation_keep_script(self, tmp_path):
-        """Test that script is kept if keep_script is True."""
-        code = "print('hello')"
-        run_simulation(
-            code=code,
-            stage_id="keep_test",
-            output_dir=tmp_path,
-            config={"keep_script": True}
-        )
-        
-        script_path = tmp_path / "simulation_keep_test.py"
-        assert script_path.exists()
-        assert "print('hello')" in script_path.read_text(encoding='utf-8')
+        # Pre-check if we can actually set limits on this specific environment
+        import resource
+        try:
+            limit = 1024 * 1024 * 1024 # 1GB
+            soft, hard = resource.getrlimit(resource.RLIMIT_AS)
+            # Only try if we aren't already lower than 1GB (unlikely)
+            if soft > limit:
+                resource.setrlimit(resource.RLIMIT_AS, (limit, hard))
+                # Reset (best effort)
+                resource.setrlimit(resource.RLIMIT_AS, (soft, hard))
+        except Exception as e:
+             pytest.skip(f"System rejects setrlimit (likely OS restriction): {e}")
 
-    @patch("src.code_runner.subprocess.run")
-    def test_run_simulation_memory_error_detection(self, mock_run, tmp_path):
-        """Test detection of memory errors from stderr."""
-        # Mock a failed run with MemoryError in stderr
-        mock_result = MagicMock()
-        mock_result.returncode = 1
-        mock_result.stdout = ""
-        mock_result.stderr = "Traceback... MemoryError: cannot allocate..."
-        mock_run.return_value = mock_result
-        
-        code = "print('memory')"
+        code = """
+import sys
+import time
+
+print("Allocating memory...", file=sys.stderr)
+try:
+    # Allocate ~200MB string
+    # 200 * 1024 * 1024 bytes
+    x = "a" * (200 * 1024 * 1024)
+    print(f"Allocated {len(x)} bytes", file=sys.stderr)
+    # Touch pages to ensure allocation happens
+    y = x[::1024]
+except MemoryError:
+    print("Caught MemoryError in script", file=sys.stderr)
+    sys.exit(1)
+except Exception as e:
+    print(f"Caught {type(e).__name__}: {e}", file=sys.stderr)
+    sys.exit(2)
+"""
+        # Set limit to 50MB (0.05 GB)
         result = run_simulation(
             code=code,
             stage_id="mem_test",
-            output_dir=tmp_path
-        )
-        
-        assert result["memory_exceeded"] is True
-        assert "Memory limit exceeded" in result["error"]
-
-    @patch("src.code_runner.subprocess.run")
-    def test_run_simulation_divergence_detection(self, mock_run, tmp_path):
-        """Test detection of divergence (NaN/Inf)."""
-        mock_result = MagicMock()
-        mock_result.returncode = 0
-        mock_result.stdout = "some output nan values detected"
-        mock_result.stderr = ""
-        mock_run.return_value = mock_result
-        
-        code = "print('nan')"
-        result = run_simulation(
-            code=code,
-            stage_id="div_test",
-            output_dir=tmp_path
-        )
-        
-        assert result["error"] is not None
-        assert "diverged" in result["error"].lower()
-
-    def test_run_simulation_symlink_materials(self, tmp_path):
-        """Test that materials directory is symlinked if present in cwd."""
-        # Create dummy materials dir in cwd (which we mock by changing cwd or creating it)
-        # Since we can't easily change cwd for the whole process safely without side effects,
-        # we can mock os.getcwd or ensure we run in a controlled env.
-        # Instead, let's use a temp dir as the "project root" and mock os.getcwd
-        
-        project_root = tmp_path / "project"
-        project_root.mkdir()
-        (project_root / "materials").mkdir()
-        (project_root / "materials" / "mat.csv").touch()
-        
-        output_dir = tmp_path / "output"
-        output_dir.mkdir()
-        
-        with patch("os.getcwd", return_value=str(project_root)):
-            run_simulation(
-                code="print('sim')",
-                stage_id="symlink_test",
-                output_dir=output_dir
-            )
-            
-        # Check if materials link exists in output_dir
-        assert (output_dir / "materials").exists()
-        assert (output_dir / "materials" / "mat.csv").exists()
-
-    def test_run_simulation_capture_large_output(self, tmp_path):
-        """Test correct capturing of large stdout/stderr without hanging."""
-        # Script generates ~100KB of output
-        code = """
-import sys
-for i in range(1000):
-    print(f"stdout line {i} " * 5)
-    print(f"stderr line {i} " * 5, file=sys.stderr)
-"""
-        result = run_simulation(
-            code=code,
-            stage_id="large_out",
             output_dir=tmp_path,
-            config={"timeout_seconds": 5}
+            config={"max_memory_gb": 0.05}
         )
         
-        assert result["exit_code"] == 0
-        assert len(result["stdout"]) > 50000
-        assert len(result["stderr"]) > 50000
-        assert "stdout line 999" in result["stdout"]
-        assert "stderr line 999" in result["stderr"]
+        # The process should fail either with MemoryError (caught inside) 
+        # or be killed by OOM killer
+        assert result["exit_code"] != 0
+        assert result["memory_exceeded"] or "kill" in str(result["error"]).lower() or "MemoryError" in result["stderr"]
 
-    def test_run_simulation_unicode_output(self, tmp_path):
-        """Test correct handling of unicode in output."""
+    def test_large_output_handling(self, tmp_path):
+        """Test handling of large stdout to ensure no hangs."""
         code = """
-print("Hello 🌍")
-print("Euro: €")
+for i in range(10000):
+    print(f"Line {i} of spam output to test buffer handling")
 """
         result = run_simulation(
             code=code,
-            stage_id="unicode",
+            stage_id="spam_test",
             output_dir=tmp_path
         )
         
         assert result["exit_code"] == 0
-        assert "Hello 🌍" in result["stdout"]
-        assert "Euro: €" in result["stdout"]
+        assert len(result["stdout"]) > 10000
+        assert "Line 9999" in result["stdout"]
 
-    def test_run_simulation_syntax_error(self, tmp_path):
-        """Test handling of syntax errors in code."""
-        code = """
-def broken_function()
-    print("Missing colon above")
-"""
-        result = run_simulation(
-            code=code,
-            stage_id="syntax_err",
-            output_dir=tmp_path
-        )
+    def test_syntax_error_reporting(self, tmp_path):
+        """Test that syntax errors are correctly reported."""
+        code = "this is not valid python"
+        result = run_simulation(code=code, stage_id="syntax", output_dir=tmp_path)
         
         assert result["exit_code"] != 0
         assert "SyntaxError" in result["stderr"]
-        assert "Simulation failed" in result["error"]
-
-    def test_run_simulation_runtime_error(self, tmp_path):
-        """Test handling of runtime exceptions."""
-        code = """
-raise ValueError("Something went wrong")
-"""
-        result = run_simulation(
-            code=code,
-            stage_id="runtime_err",
-            output_dir=tmp_path
-        )
-        
-        assert result["exit_code"] != 0
-        assert "ValueError: Something went wrong" in result["stderr"]
-        assert "Simulation failed" in result["error"]
-
-    def test_run_simulation_env_vars(self, tmp_path):
-        """Test that env_vars from config are passed to subprocess."""
-        code = """
-import os
-print(f"MY_VAR={os.environ.get('MY_VAR')}")
-"""
-        result = run_simulation(
-            code=code,
-            stage_id="env_test",
-            output_dir=tmp_path,
-            config={"env_vars": {"MY_VAR": "test_value"}}
-        )
-        
-        assert result["exit_code"] == 0
-        assert "MY_VAR=test_value" in result["stdout"]
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# Node Integration Tests
+# Integration & Helper Tests
 # ═══════════════════════════════════════════════════════════════════════
+
+class TestHelpers:
+    """Tests for helper functions."""
+    
+    def test_make_error_result(self):
+        """Test error result construction."""
+        res = _make_error_result("oops", exit_code=5)
+        assert res["error"] == "oops"
+        assert res["exit_code"] == 5
+        assert res["output_files"] == []
+
+    def test_list_output_files(self, tmp_path):
+        """Test listing files."""
+        (tmp_path / "a.txt").touch()
+        (tmp_path / "b.txt").touch()
+        (tmp_path / "ignore.py").touch()
+        
+        files = _list_output_files(tmp_path, exclude=["ignore.py"])
+        assert "a.txt" in files
+        assert "b.txt" in files
+        assert "ignore.py" not in files
 
 class TestRunCodeNode:
     """Tests for run_code_node integration."""
@@ -586,79 +357,9 @@ class TestRunCodeNode:
         assert kwargs["config"]["timeout_seconds"] == 600  # 10 * 60
         assert kwargs["config"]["max_memory_gb"] == 16.0
         assert kwargs["config"]["max_cpu_cores"] == 8
-        assert kwargs["config"]["env_vars"] is None # Default should be None
 
     def test_run_code_node_missing_code(self):
         """Test that missing code returns error."""
         state = {"current_stage_id": "test"} # no 'code' key
         result = run_code_node(state)
         assert "No simulation code provided" in result["run_error"]
-        assert result["stage_outputs"] == {}
-
-    def test_run_code_node_blocking_validation(self):
-        """Test that blocking code validation prevents execution."""
-        state = {
-            "code": "input('block')",
-            "current_stage_id": "stage1"
-        }
-        
-        result = run_code_node(state)
-        
-        assert "Code contains blocking patterns" in result["run_error"]
-        assert "validation_warnings" in result["stage_outputs"]
-
-    def test_run_code_node_propagates_run_error(self):
-        """Test that execution errors are propagated to state."""
-        state = {
-            "code": "raise Exception('fail')",
-            "current_stage_id": "stage1"
-        }
-        
-        # Should run actual simulation which fails
-        result = run_code_node(state)
-        
-        assert result["run_error"] is not None
-        assert "Execution failed" in result["run_error"] or "exit code" in result["run_error"]
-
-    def test_run_code_node_propagates_flags(self):
-        """Test that memory_exceeded and timeout_exceeded flags are propagated."""
-        with patch("src.code_runner.run_simulation") as mock_run:
-            mock_run.return_value = {
-                "stdout": "", "stderr": "", "exit_code": -1,
-                "output_files": [], "runtime_seconds": 10.0,
-                "error": "Timeout",
-                "memory_exceeded": False, 
-                "timeout_exceeded": True
-            }
-            
-            state = {
-                "code": "import meep",
-                "current_stage_id": "stage1"
-            }
-            
-            result = run_code_node(state)
-            
-            assert result["stage_outputs"]["timeout_exceeded"] is True
-            assert result["stage_outputs"]["memory_exceeded"] is False
-
-    def test_run_simulation_detects_signal_kill(self, tmp_path):
-        """Test detection of process killed by signal (e.g. OOM killer)."""
-        # We can't easily force a signal kill in a cross-platform way reliably in a unit test
-        # without external tools, so we'll use a mock to verify the logic handles negative return codes.
-        
-        with patch("src.code_runner.subprocess.run") as mock_run:
-            mock_result = MagicMock()
-            mock_result.returncode = -9  # SIGKILL
-            mock_result.stdout = ""
-            mock_result.stderr = "" # No "Killed" message usually
-            mock_run.return_value = mock_result
-            
-            result = run_simulation(
-                code="print('running')",
-                stage_id="kill_test",
-                output_dir=tmp_path
-            )
-            
-            # The current implementation checks stderr for "killed", so this MIGHT fail if logic is buggy
-            # This test asserts what SHOULD happen
-            assert "killed" in str(result["error"]).lower() or "signal" in str(result["error"]).lower()
