@@ -865,6 +865,26 @@ class TestAdditionalCoverage:
         assert result.get("ask_user_trigger") is None, \
             f"ask_user_trigger should be cleared: {result.get('ask_user_trigger')}"
     
+    def test_supervisor_material_checkpoint_without_pending_materials_escalates(self, base_state):
+        """Approving material checkpoint without pending materials should escalate back to user."""
+        from src.agents.supervision.supervisor import supervisor_node
+        
+        base_state["ask_user_trigger"] = "material_checkpoint"
+        base_state["user_responses"] = {"Q1": "APPROVE"}
+        base_state["pending_validated_materials"] = []
+        base_state["pending_user_questions"] = ["Approve materials?"]
+        
+        result = supervisor_node(base_state)
+        
+        assert result.get("supervisor_verdict") == "ask_user", \
+            f"Should re-ask user when no materials were collected, got {result.get('supervisor_verdict')}"
+        questions = result.get("pending_user_questions", [])
+        assert questions, "Escalation should include a follow-up question"
+        assert "No materials were extracted" in questions[0], \
+            f"Follow-up question should explain missing materials, got {questions}"
+        assert result.get("ask_user_trigger") is None, \
+            f"ask_user_trigger should still be cleared, found {result.get('ask_user_trigger')}"
+    
     def test_results_analyzer_sets_workflow_phase(self, base_state, valid_plan):
         """results_analyzer_node should set workflow_phase on all paths (success and error)."""
         from src.agents.analysis import results_analyzer_node
@@ -2030,6 +2050,14 @@ class TestSupervisorTriggerHandlers:
             f"BUG: code_revision_count should be reset to 0, got {result.get('code_revision_count')}"
         assert result.get("supervisor_verdict") == "ok_continue", \
             f"Should continue with hint, got '{result.get('supervisor_verdict')}'"
+        assert "User hint" in result.get("reviewer_feedback", ""), \
+            f"BUG: reviewer_feedback should capture user hint, got '{result.get('reviewer_feedback')}'"
+        assert result.get("ask_user_trigger") is None, \
+            f"ask_user_trigger should be cleared, found {result.get('ask_user_trigger')}"
+        assert result.get("workflow_phase") == "supervision", \
+            f"workflow_phase must be supervision, got {result.get('workflow_phase')}"
+        assert result.get("pending_user_questions") in (None, []), \
+            f"pending questions should be cleared, found {result.get('pending_user_questions')}"
     
     def test_supervisor_handles_design_review_limit_skip(self, base_state):
         """supervisor_node should handle design_review_limit with SKIP."""
@@ -2060,6 +2088,12 @@ class TestSupervisorTriggerHandlers:
         
         assert result.get("execution_failure_count") == 0, \
             f"BUG: execution_failure_count should reset, got {result.get('execution_failure_count')}"
+        assert result.get("supervisor_verdict") == "ok_continue", \
+            f"Should proceed after retry, got '{result.get('supervisor_verdict')}'"
+        assert "User guidance" in result.get("supervisor_feedback", ""), \
+            f"Supervisor feedback should mention guidance, got '{result.get('supervisor_feedback')}'"
+        assert result.get("ask_user_trigger") is None, \
+            f"ask_user_trigger should be cleared, found {result.get('ask_user_trigger')}"
     
     def test_supervisor_handles_llm_error_with_retry(self, base_state):
         """supervisor_node should handle llm_error trigger with RETRY."""
@@ -2094,6 +2128,40 @@ class TestSupervisorTriggerHandlers:
                 "BUG: Paper text should be truncated"
             assert "[TRUNCATED" in result["paper_text"], \
                 "Truncated text should contain marker"
+        assert result.get("supervisor_verdict") == "ok_continue", \
+            f"Context overflow should yield ok_continue, got {result.get('supervisor_verdict')}"
+        assert "Truncating" in result.get("supervisor_feedback", ""), \
+            f"Supervisor feedback should mention truncation, got '{result.get('supervisor_feedback')}'"
+        assert result.get("ask_user_trigger") is None, \
+            f"ask_user_trigger should be cleared, found {result.get('ask_user_trigger')}"
+
+    def test_supervisor_logs_user_interactions(self, base_state):
+        """supervisor_node should append user_interactions entries after trigger handling."""
+        from src.agents.supervision.supervisor import supervisor_node
+        
+        base_state["ask_user_trigger"] = "code_review_limit"
+        base_state["user_responses"] = {"Q1": "PROVIDE_HINT: Focus on resonance monitors"}
+        base_state["pending_user_questions"] = ["Code review limit reached"]
+        base_state["code_revision_count"] = 3
+        base_state["current_stage_id"] = "stage_0"
+        base_state["progress"] = {
+            "stages": [{"stage_id": "stage_0", "status": "in_progress"}],
+            "user_interactions": [],
+        }
+        
+        result = supervisor_node(base_state)
+        
+        interactions = result.get("progress", {}).get("user_interactions", [])
+        assert len(interactions) == 1, \
+            f"Should log exactly one user interaction, found {len(interactions)}"
+        entry = interactions[0]
+        assert entry.get("interaction_type") == "code_review_limit", \
+            f"Interaction type mismatch: {entry}"
+        assert entry.get("context", {}).get("stage_id") == "stage_0", \
+            f"Interaction should capture stage context, entry={entry}"
+        assert "PROVIDE_HINT" in entry.get("user_response", ""), \
+            f"User response should be recorded: {entry}"
+        assert entry.get("question"), "Question text should be captured in log entry"
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -2299,6 +2367,53 @@ class TestStageSelectionEdgeCases:
             f"design_revision_count should reset to 0, got {result.get('design_revision_count')}"
         assert result.get("code_revision_count") == 0, \
             f"code_revision_count should reset to 0, got {result.get('code_revision_count')}"
+    
+    def test_select_stage_sets_stage_start_time_and_clears_outputs(self, base_state):
+        """Selecting a new stage should stamp start time and clear stale outputs."""
+        from src.agents.stage_selection import select_stage_node
+        
+        base_state["plan"] = {
+            "paper_id": "test",
+            "stages": [{"stage_id": "stage_0", "stage_type": "MATERIAL_VALIDATION", "targets": ["Fig1"]}],
+        }
+        base_state["progress"] = {
+            "stages": [{"stage_id": "stage_0", "stage_type": "MATERIAL_VALIDATION", "status": "not_started"}]
+        }
+        base_state["stage_outputs"] = {"files": ["/tmp/old.csv"]}
+        base_state["run_error"] = "stale failure"
+        
+        result = select_stage_node(base_state)
+        
+        assert result["current_stage_id"] == "stage_0", \
+            f"Should select stage_0, got {result.get('current_stage_id')}"
+        assert result.get("stage_outputs") == {}, \
+            f"stage_outputs should be cleared, got {result.get('stage_outputs')}"
+        assert result.get("run_error") is None, \
+            f"run_error should reset to None, got {result.get('run_error')}"
+        start_time = result.get("stage_start_time")
+        assert isinstance(start_time, str) and "T" in start_time, \
+            f"stage_start_time must be ISO string, got {start_time}"
+    
+    def test_select_stage_reports_progress_init_failure(self, base_state):
+        """select_stage_node should escalate when progress initialization fails."""
+        from src.agents.stage_selection import select_stage_node
+        
+        base_state["plan"] = {
+            "paper_id": "test",
+            "stages": [{"stage_id": "stage_0", "stage_type": "MATERIAL_VALIDATION", "targets": ["Fig1"]}],
+        }
+        base_state["progress"] = {}
+        
+        with patch("src.agents.stage_selection.initialize_progress_from_plan", side_effect=RuntimeError("boom")):
+            result = select_stage_node(base_state)
+        
+        assert result.get("ask_user_trigger") == "progress_init_failed", \
+            f"Expected progress_init_failed trigger, got {result.get('ask_user_trigger')}"
+        assert result.get("awaiting_user_input") is True, \
+            "Should await user input when progress init fails"
+        questions = result.get("pending_user_questions", [])
+        assert questions and "Failed to initialize progress" in questions[0], \
+            f"Follow-up question should explain init failure, got {questions}"
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -2343,12 +2458,17 @@ class TestComparisonValidatorEdgeCases:
         }
         base_state["figure_comparisons"] = []
         base_state["progress"] = {"stages": [{"stage_id": "stage_0", "status": "running"}]}
+        base_state["analysis_revision_count"] = 2
         
         result = comparison_validator_node(base_state)
         
         # Should approve (no targets to compare)
         assert result["comparison_verdict"] == "approve", \
             f"Should approve when no targets, got '{result.get('comparison_verdict')}'"
+        assert "analysis_revision_count" not in result, \
+            f"analysis_revision_count should not change on approval, got {result.get('analysis_revision_count')}"
+        assert result.get("analysis_feedback") is None, \
+            f"analysis_feedback should be cleared on approval, got {result.get('analysis_feedback')}"
     
     def test_comparison_validator_rejects_missing_comparisons(self, base_state, valid_plan):
         """comparison_validator should reject when expected comparisons missing."""
@@ -2358,12 +2478,19 @@ class TestComparisonValidatorEdgeCases:
         base_state["current_stage_id"] = "stage_0"
         base_state["figure_comparisons"] = []  # No comparisons produced!
         base_state["progress"] = {"stages": [{"stage_id": "stage_0", "status": "running"}]}
+        base_state["analysis_revision_count"] = 1
         
         result = comparison_validator_node(base_state)
         
         # Should reject - expected targets but no comparisons
         assert result["comparison_verdict"] == "needs_revision", \
             f"Should reject missing comparisons, got '{result.get('comparison_verdict')}'"
+        assert result.get("analysis_revision_count") == 2, \
+            f"analysis_revision_count should increment, got {result.get('analysis_revision_count')}"
+        feedback = result.get("analysis_feedback", "")
+        assert feedback, "analysis_feedback should describe the rejection reason"
+        assert any(keyword in feedback.lower() for keyword in ("comparison", "report")), \
+            f"Feedback should mention missing comparisons or reports, got '{feedback}'"
 
 
 # ═══════════════════════════════════════════════════════════════════════
