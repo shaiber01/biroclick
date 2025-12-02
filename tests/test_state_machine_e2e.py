@@ -2058,25 +2058,28 @@ class TestMultiStageWorkflow:
                     nodes_visited.append(node_name)
                     print(f"  → {node_name}", flush=True)
                     
-                    # Diagnose: check plan after plan node
-                    if node_name == "plan":
-                        state_after_plan = graph.get_state(config).values
-                        plan = state_after_plan.get("plan", {})
+                    # Diagnose: check plan updates directly from stream
+                    if node_name == "plan" and updates:
+                        plan = updates.get("plan", {})
                         plan_stages_count = len(plan.get("stages", []))
-                        print(f"    Plan stages: {plan_stages_count}", flush=True)
+                        print(f"    Plan stages (from updates): {plan_stages_count}", flush=True)
                         if plan_stages_count == 0:
                             print(f"    WARNING: Plan has 0 stages!", flush=True)
-                            print(f"    Plan keys: {plan.keys()}", flush=True)
+                            print(f"    Updates keys: {updates.keys()}", flush=True)
                     
                     if node_name == "select_stage":
                         select_stage_count += 1
-                        state = graph.get_state(config).values
-                        current_stage = state.get("current_stage_id")
+                        # Read from updates first, fallback to graph state
+                        current_stage = updates.get("current_stage_id") if updates else None
+                        if current_stage is None:
+                            state = graph.get_state(config).values
+                            current_stage = state.get("current_stage_id")
                         stage_selections.append(current_stage)
                         print(f"    Selected: {current_stage}", flush=True)
                         
                         # Diagnose: if None, show more state
                         if current_stage is None:
+                            state = graph.get_state(config).values
                             progress = state.get("progress", {})
                             print(f"    Progress stages: {len(progress.get('stages', []))}", flush=True)
                             for ps in progress.get("stages", []):
