@@ -409,7 +409,7 @@ def run_simulation(
     # Execute
     try:
         result = subprocess.run(
-            ["python", str(script_path)],
+            ["python", script_name],
             cwd=str(output_dir),
             timeout=cfg["timeout_seconds"],
             capture_output=True,

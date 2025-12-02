@@ -363,3 +363,100 @@ class TestRunCodeNode:
         state = {"current_stage_id": "test"} # no 'code' key
         result = run_code_node(state)
         assert "No simulation code provided" in result["run_error"]
+
+    def test_run_code_node_blocking_validation(self):
+        """Test that blocking code validation prevents execution."""
+        state = {
+            "code": "input('block')",
+            "current_stage_id": "stage1"
+        }
+        
+        result = run_code_node(state)
+        
+        assert "Code contains blocking patterns" in result["run_error"]
+        assert "validation_warnings" in result["stage_outputs"]
+
+    def test_run_code_node_propagates_run_error(self):
+        """Test that execution errors are propagated to state."""
+        state = {
+            "code": "raise Exception('fail')",
+            "current_stage_id": "stage1"
+        }
+        
+        # Should run actual simulation which fails
+        result = run_code_node(state)
+        
+        assert result["run_error"] is not None
+        assert "Execution failed" in result["run_error"] or "exit code" in result["run_error"]
+
+    def test_run_code_node_propagates_flags(self):
+        """Test that memory_exceeded and timeout_exceeded flags are propagated."""
+        with patch("src.code_runner.run_simulation") as mock_run:
+            mock_run.return_value = {
+                "stdout": "", "stderr": "", "exit_code": -1,
+                "output_files": [], "runtime_seconds": 10.0,
+                "error": "Timeout",
+                "memory_exceeded": False, 
+                "timeout_exceeded": True
+            }
+            
+            state = {
+                "code": "import meep",
+                "current_stage_id": "stage1"
+            }
+            
+            result = run_code_node(state)
+            
+            assert result["stage_outputs"]["timeout_exceeded"] is True
+            assert result["stage_outputs"]["memory_exceeded"] is False
+
+    def test_run_simulation_detects_signal_kill(self, tmp_path):
+        """Test detection of process killed by signal (e.g. OOM killer)."""
+        with patch("src.code_runner.subprocess.run") as mock_run:
+            mock_result = MagicMock()
+            mock_result.returncode = -9  # SIGKILL
+            mock_result.stdout = ""
+            mock_result.stderr = "" # No "Killed" message usually
+            mock_run.return_value = mock_result
+            
+            result = run_simulation(
+                code="print('running')",
+                stage_id="kill_test",
+                output_dir=tmp_path
+            )
+            
+            assert "killed" in str(result["error"]).lower() or "signal" in str(result["error"]).lower()
+
+    def test_run_code_node_integration_real_run(self, tmp_path):
+        """
+        Test that run_code_node works with real execution (no mocks)
+        for a trivial script.
+        """
+        # Temporarily patch output path generation inside run_code_node if needed
+        # Actually run_code_node constructs output path based on paper_id/stage_id.
+        # We should clean up after ourselves or use unique IDs.
+        
+        paper_id = f"test_paper_{int(time.time())}"
+        stage_id = "test_stage"
+        
+        state = {
+            "code": "print('real integration test')",
+            "current_stage_id": stage_id,
+            "paper_id": paper_id,
+            "plan": {
+                "stages": [{"stage_id": stage_id, "runtime_budget_minutes": 1}]
+            }
+        }
+        
+        try:
+            result = run_code_node(state)
+            
+            assert result["run_error"] is None
+            assert "real integration test" in result["stage_outputs"]["stdout"]
+            assert result["stage_outputs"]["exit_code"] == 0
+            
+        finally:
+            # Cleanup
+            output_dir = Path("outputs") / paper_id
+            if output_dir.exists():
+                shutil.rmtree(output_dir)
