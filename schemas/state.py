@@ -808,6 +808,8 @@ class ReproState(TypedDict, total=False):
     stage_outputs: Dict[str, Any]  # Filenames, stdout, etc.
     run_error: Optional[str]  # Capture simulation failures
     analysis_summary: Optional[str]  # Per-result report JSON
+    analysis_result_reports: List[Dict[str, Any]]  # Detailed per-result comparisons
+    analysis_overall_classification: Optional[str]  # ResultsAnalyzer overall verdict
     
     # ─── Agent Feedback ─────────────────────────────────────────────────
     reviewer_feedback: Optional[str]  # Last reviewer feedback for revision
@@ -2894,6 +2896,15 @@ def update_progress_stage_status(
             if invalidation_reason:
                 stage["invalidation_reason"] = invalidation_reason
             break
+    
+    metrics = state.get("metrics", {})
+    stage_metrics = metrics.get("stage_metrics") if isinstance(metrics, dict) else None
+    if stage_metrics:
+        for metric in stage_metrics:
+            if metric.get("stage_id") == stage_id:
+                metric["final_status"] = status
+                metric["completed_at"] = metric.get("completed_at") or datetime.now(timezone.utc).isoformat()
+                break
     
     return state
 

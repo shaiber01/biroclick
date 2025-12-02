@@ -13,7 +13,8 @@ See prompts/*.md for the corresponding agent system prompts.
 
 import os
 import signal
-from typing import Dict, Any, Optional
+from pathlib import Path
+from typing import Dict, Any, Optional, List, Tuple
 
 from schemas.state import (
     ReproState, 
@@ -22,6 +23,7 @@ from schemas.state import (
     initialize_progress_from_plan,
     sync_extracted_parameters,
     validate_state_for_node,
+    get_plan_stage,
 )
 from src.prompts import build_agent_prompt
 from datetime import datetime, timezone
@@ -133,6 +135,12 @@ def _validate_state_or_warn(state: ReproState, node_name: str) -> list:
 
 def adapt_prompts_node(state: ReproState) -> ReproState:
     """PromptAdaptorAgent: Customize prompts for paper-specific needs."""
+    context_update = _check_context_or_escalate(state, "adapt_prompts")
+    if context_update:
+        if context_update.get("awaiting_user_input"):
+            return context_update  # type: ignore[return-value]
+        state = {**state, **context_update}
+
     state["workflow_phase"] = "adapting_prompts"
     
     # Initialize empty adaptations list (to be populated by LLM)
@@ -144,6 +152,217 @@ def adapt_prompts_node(state: ReproState) -> ReproState:
     # - Generate prompt modifications
     # - Store in state["prompt_adaptations"]
     return state
+
+
+def _ensure_stub_figures(state: ReproState) -> List[Dict[str, Any]]:
+    """Return available paper figures or a placeholder stub."""
+    figures = state.get("paper_figures") or []
+    if figures:
+        return figures
+    return [{
+        "id": "FigStub",
+        "description": "Placeholder figure generated for stub planning",
+        "image_path": "",
+    }]
+
+
+def _build_stub_targets(figures: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Create target entries compatible with plan schema."""
+    targets: List[Dict[str, Any]] = []
+    for idx, fig in enumerate(figures):
+        figure_id = fig.get("id") or f"Fig{idx + 1}"
+        targets.append({
+            "figure_id": figure_id,
+            "description": fig.get("description", f"Simulation target {figure_id}"),
+            "type": "spectrum",
+            "simulation_class": "FDTD_DIRECT",
+            "precision_requirement": "acceptable",
+            "digitized_data_path": fig.get("digitized_data_path"),
+        })
+    if not targets:
+        targets.append({
+            "figure_id": "FigStub",
+            "description": "Placeholder simulation target",
+            "type": "spectrum",
+            "simulation_class": "FDTD_DIRECT",
+            "precision_requirement": "acceptable",
+            "digitized_data_path": None,
+        })
+    return targets
+
+
+def _build_stub_expected_outputs(paper_id: str, stage_id: str, target_ids: List[str], columns: List[str]) -> List[Dict[str, Any]]:
+    outputs: List[Dict[str, Any]] = []
+    for target in target_ids:
+        outputs.append({
+            "artifact_type": "spectrum_csv",
+            "filename_pattern": f"{paper_id}_{stage_id}_{target.lower()}_spectrum.csv",
+            "description": f"Simulation data for {target}",
+            "columns": columns,
+            "target_figure": target,
+        })
+    return outputs
+
+
+def _build_stub_stages(paper_id: str, targets: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    stage0_target = targets[0]["figure_id"]
+    stage1_targets = [t["figure_id"] for t in targets]
+    
+    stage0 = {
+        "stage_id": "stage0_material_validation",
+        "stage_type": "MATERIAL_VALIDATION",
+        "name": "Material optical properties validation",
+        "description": "Validate material optical constants against primary reference figure.",
+        "targets": [stage0_target],
+        "dependencies": [],
+        "is_mandatory_validation": True,
+        "complexity_class": "analytical",
+        "runtime_estimate_minutes": 2,
+        "runtime_budget_minutes": 10,
+        "max_revisions": 3,
+        "fallback_strategy": "ask_user",
+        "validation_criteria": [
+            f"{stage0_target}: optical constants track reference within 10%"
+        ],
+        "expected_outputs": _build_stub_expected_outputs(
+            paper_id,
+            "stage0_material_validation",
+            [stage0_target],
+            ["wavelength_nm", "n", "k"]
+        ),
+        "reference_data_path": None,
+    }
+    
+    stage1 = {
+        "stage_id": "stage1_primary_structure",
+        "stage_type": "SINGLE_STRUCTURE",
+        "name": "Primary structure reproduction",
+        "description": "Simulate the main structure described in the paper and compare spectra to referenced figures.",
+        "targets": stage1_targets,
+        "dependencies": ["stage0_material_validation"],
+        "is_mandatory_validation": False,
+        "complexity_class": "2D_light",
+        "runtime_estimate_minutes": 15,
+        "runtime_budget_minutes": 45,
+        "max_revisions": 3,
+        "fallback_strategy": "ask_user",
+        "validation_criteria": [
+            f"{target}: resonance within 5% of reference" for target in stage1_targets
+        ],
+        "expected_outputs": _build_stub_expected_outputs(
+            paper_id,
+            "stage1_primary_structure",
+            stage1_targets,
+            ["wavelength_nm", "transmission"]
+        ),
+        "reference_data_path": None,
+    }
+    
+    return [stage0, stage1]
+
+
+def _build_stub_planned_materials(state: ReproState) -> List[Dict[str, Any]]:
+    domain = state.get("paper_domain", "generic")
+    return [{
+        "material_id": f"{domain}_placeholder",
+        "name": f"{domain.title()} Material",
+        "source": "stub",
+        "path": "materials/placeholder.csv",
+    }]
+
+
+def _build_stub_assumptions() -> Dict[str, Any]:
+    return {
+        "global_assumptions": {
+            "materials": [],
+            "geometry": [],
+            "sources": [],
+        },
+        "stage_specific": [],
+    }
+
+
+def _build_stub_plan(state: ReproState) -> Dict[str, Any]:
+    paper_id = state.get("paper_id", "paper_stub")
+    paper_title = state.get("paper_title", paper_id.replace("_", " ").title())
+    figures = _ensure_stub_figures(state)
+    targets = _build_stub_targets(figures)
+    stages = _build_stub_stages(paper_id, targets)
+    total_figures = len(figures)
+    attempted = [t["figure_id"] for t in targets]
+    coverage = 0.0
+    if total_figures:
+        coverage = round(len(attempted) / total_figures * 100, 2)
+    
+    plan = {
+        "paper_id": paper_id,
+        "paper_domain": state.get("paper_domain", "other"),
+        "title": paper_title,
+        "summary": f"Stub plan automatically generated for {paper_title}. Replace with PlannerAgent output.",
+        "simulation_approach": "FDTD with Meep (stub)",
+        "main_system": state.get("paper_domain", "other"),
+        "targets": targets,
+        "stages": stages,
+        "reproduction_scope": {
+            "total_figures": total_figures,
+            "reproducible_figures": len(attempted),
+            "reproducible_figure_ids": attempted,
+            "attempted_figures": attempted,
+            "skipped_figures": [],
+            "coverage_percent": coverage,
+        },
+        "extracted_parameters": [
+            {
+                "name": "stub_dimension_nm",
+                "value": 100,
+                "unit": "nm",
+                "source": "inferred",
+                "location": "stub_generator",
+                "cross_checked": False,
+                "discrepancy_notes": "Placeholder parameter - replace with PlannerAgent output.",
+            }
+        ],
+    }
+    return plan
+
+
+def _match_output_file(file_entries: List[Any], target_id: str) -> Optional[str]:
+    """Best-effort match simulation output files to a target figure."""
+    normalized_id = (target_id or "").lower()
+    for entry in file_entries:
+        path_str = entry if isinstance(entry, str) else entry.get("path") or entry.get("file") or str(entry)
+        name = Path(path_str).name.lower()
+        if normalized_id and normalized_id in name:
+            return path_str
+    if file_entries:
+        entry = file_entries[0]
+        return entry if isinstance(entry, str) else entry.get("path") or entry.get("file")
+    return None
+
+
+def _stage_comparisons_for_stage(state: ReproState, stage_id: Optional[str]) -> List[Dict[str, Any]]:
+    """Return figure comparison entries associated with a specific stage."""
+    if not stage_id:
+        return []
+    return [
+        comp for comp in state.get("figure_comparisons", [])
+        if comp.get("stage_id") == stage_id
+    ]
+
+
+def _breakdown_comparison_classifications(comparisons: List[Dict[str, Any]]) -> Dict[str, List[str]]:
+    """Summarize comparison classifications into missing/pending/match buckets."""
+    breakdown: Dict[str, List[str]] = {"missing": [], "pending": [], "matches": []}
+    for comp in comparisons:
+        classification = (comp.get("classification") or "").lower()
+        figure_id = comp.get("figure_id") or "unknown"
+        if classification in {"missing_output", "fail", "not_reproduced"}:
+            breakdown["missing"].append(figure_id)
+        elif classification in {"pending_validation", "partial_match", "match_pending", "partial"}:
+            breakdown["pending"].append(figure_id)
+        else:
+            breakdown["matches"].append(figure_id)
+    return breakdown
 
 
 def plan_node(state: ReproState) -> dict:
@@ -182,17 +401,15 @@ def plan_node(state: ReproState) -> dict:
         system_prompt += f"\n\nNOTE: This is Replan Attempt #{replan_count}. Previous plan was rejected. Improve strategy based on feedback."
     
     # STUB: Replace with actual LLM call that populates plan, assumptions, etc.
+    plan_data = _build_stub_plan(state)
+    planned_materials = state.get("planned_materials") or _build_stub_planned_materials(state)
+    assumptions = state.get("assumptions") or _build_stub_assumptions()
+    
     result = {
         "workflow_phase": "planning",
-        "plan": {
-            "reproducible_figure_ids": [], # Initialize empty list to satisfy schema
-            "expected_outputs": [],        # Initialize empty list for outputs
-            # ... other plan fields would be populated by LLM ...
-        },
-        "planned_materials": [], # Populated by PlannerAgent, used by Stage 0
-        # state["plan"] = generated_plan
-        # state["assumptions"] = generated_assumptions
-        # state["planned_materials"] = extracted_materials
+        "plan": plan_data,
+        "planned_materials": planned_materials,
+        "assumptions": assumptions,
     }
     
     # ═══════════════════════════════════════════════════════════════════════
@@ -346,6 +563,9 @@ def select_stage_node(state: ReproState) -> dict:
                 "stage_outputs": {},
                 # CRITICAL: Clear previous run_error to prevent stale failure signals
                 "run_error": None,
+                "analysis_summary": None,
+                "analysis_overall_classification": None,
+                "analysis_result_reports": [],
             }
     
     # Priority 2: Find not_started stages with satisfied dependencies
@@ -429,6 +649,9 @@ def select_stage_node(state: ReproState) -> dict:
             "stage_outputs": {},
             # CRITICAL: Clear previous run_error to prevent stale failure signals
             "run_error": None,
+            "analysis_summary": None,
+            "analysis_overall_classification": None,
+            "analysis_result_reports": [],
         }
     
     # No more stages to run
@@ -645,6 +868,15 @@ def execution_validator_node(state: ReproState) -> dict:
     - Increments `total_execution_failures` for metrics tracking.
     The routing function `route_after_execution_check` reads these fields.
     """
+    # ═══════════════════════════════════════════════════════════════════════
+    # CONTEXT CHECK: Execution analysis may include long logs
+    # ═══════════════════════════════════════════════════════════════════════
+    context_update = _check_context_or_escalate(state, "execution_check")
+    if context_update:
+        if context_update.get("awaiting_user_input"):
+            return context_update
+        state = {**state, **context_update}
+
     # Connect prompt adaptation
     system_prompt = build_agent_prompt("execution_validator", state)
     
@@ -689,20 +921,6 @@ def execution_validator_node(state: ReproState) -> dict:
             "summary": "Execution validation stub - implement with LLM call",
         }
     
-    # Check limits and prepare user question if needed
-    runtime_config = state.get("runtime_config", {})
-    max_failures = runtime_config.get("max_execution_failures", MAX_EXECUTION_FAILURES)
-    current_failures = state.get("execution_failure_count", 0)
-    
-    # If we are about to fail (verdict="fail") and will hit the limit
-    if agent_output["verdict"] == "fail" and (current_failures + 1) >= max_failures:
-        # Prepare for escalation
-        result["ask_user_trigger"] = "execution_failure_limit"
-        result["pending_user_questions"] = [
-            f"Execution failed {max_failures} times. Last error: {run_error or 'Unknown'}. "
-            "Options: RETRY_WITH_GUIDANCE (provide hint), SKIP_STAGE, or STOP?"
-        ]
-    
     result = {
         "workflow_phase": "execution_validation",
         # Copy verdict to type-specific state field for routing
@@ -714,6 +932,17 @@ def execution_validator_node(state: ReproState) -> dict:
     if agent_output["verdict"] == "fail":
         result["execution_failure_count"] = state.get("execution_failure_count", 0) + 1
         result["total_execution_failures"] = state.get("total_execution_failures", 0) + 1
+        
+        runtime_config = state.get("runtime_config", {})
+        max_failures = runtime_config.get("max_execution_failures", MAX_EXECUTION_FAILURES)
+        current_failures = state.get("execution_failure_count", 0)
+        
+        if (current_failures + 1) >= max_failures:
+            result["ask_user_trigger"] = "execution_failure_limit"
+            result["pending_user_questions"] = [
+                f"Execution failed {max_failures} times. Last error: {run_error or 'Unknown'}. "
+                "Options: RETRY_WITH_GUIDANCE (provide hint), SKIP_STAGE, or STOP?"
+            ]
     
     return result
 
@@ -736,6 +965,15 @@ def physics_sanity_node(state: ReproState) -> dict:
     - "fail": Code/numerics issue, route to code generator
     - "design_flaw": Fundamental design problem, route to simulation designer
     """
+    # ═══════════════════════════════════════════════════════════════════════
+    # CONTEXT CHECK: Physics sanity can include large data payloads
+    # ═══════════════════════════════════════════════════════════════════════
+    context_update = _check_context_or_escalate(state, "physics_check")
+    if context_update:
+        if context_update.get("awaiting_user_input"):
+            return context_update
+        state = {**state, **context_update}
+
     # Connect prompt adaptation
     system_prompt = build_agent_prompt("physics_sanity", state)
     
@@ -775,53 +1013,104 @@ def physics_sanity_node(state: ReproState) -> dict:
     return result
 
 
-def results_analyzer_node(state: ReproState) -> ReproState:
+def results_analyzer_node(state: ReproState) -> dict:
     """ResultsAnalyzerAgent: Compare results to paper figures."""
+    context_update = _check_context_or_escalate(state, "analyze")
+    if context_update:
+        if context_update.get("awaiting_user_input"):
+            return context_update  # type: ignore[return-value]
+        state = {**state, **context_update}
+    
     state["workflow_phase"] = "analysis"
+    current_stage_id = state.get("current_stage_id")
+    stage_info = get_plan_stage(state, current_stage_id) if current_stage_id else None
+    figures = _ensure_stub_figures(state)
+    target_ids = (stage_info.get("targets") if stage_info else []) or [
+        fig.get("id", "FigStub") for fig in figures
+    ]
     
-    # Connect prompt adaptation
-    system_prompt = build_agent_prompt("results_analyzer", state)
-    
-    # Fetch specific validation criteria for this stage
-    from schemas.state import get_stage_design_spec
-    criteria = get_stage_design_spec(state, state.get("current_stage_id"), "validation_criteria", [])
-    ref_data = get_stage_design_spec(state, state.get("current_stage_id"), "reference_data_path", None)
-    
-    # Get files to analyze
     output_files = state.get("stage_outputs", {}).get("files", [])
-    system_prompt += f"\n\nFILES_TO_ANALYZE: {output_files}"
+    figure_lookup = {fig.get("id") or fig.get("figure_id"): fig for fig in figures}
     
-    # Check for previous feedback if this is a revision
-    feedback = state.get("analysis_feedback")
-    if feedback:
-        system_prompt += f"\n\nNOTE: This is a revision. Previous analysis was rejected: {feedback}"
+    figure_comparisons: List[Dict[str, Any]] = []
+    per_result_reports: List[Dict[str, Any]] = []
+    matches = 0
     
-    # TODO: Implement analysis logic
-    # - Compare simulation outputs to paper figures
-    # - Use reference_data_path ({ref_data}) for quantitative comparison if available
-    # - Evaluate against validation_criteria
-    # - Compute discrepancies
-    # - Classify reproduction quality
+    for target_id in target_ids:
+        matched_file = _match_output_file(output_files, target_id)
+        has_output = matched_file is not None
+        if has_output:
+            matches += 1
+        
+        figure_meta = figure_lookup.get(target_id) or {}
+        classification_label = "pending_validation" if has_output else "missing_output"
+        comparison_table = [{
+            "feature": "Simulation Output",
+            "paper": figure_meta.get("description", target_id),
+            "reproduction": matched_file or "Not generated",
+            "status": "✅ Match" if has_output else "❌ Mismatch",
+        }]
+        comparison_entry = {
+            "figure_id": target_id,
+            "stage_id": current_stage_id,
+            "title": figure_meta.get("description", target_id),
+            "paper_image_path": figure_meta.get("image_path"),
+            "reproduction_image_path": matched_file,
+            "comparison_table": comparison_table,
+            "shape_comparison": [],
+            "reason_for_difference": "" if has_output else "No simulation output matched this figure.",
+            "classification": classification_label,
+        }
+        figure_comparisons.append(comparison_entry)
+        
+        per_result_reports.append({
+            "result_id": f"{current_stage_id or 'stage'}_{target_id}",
+            "target_figure": target_id,
+            "quantity": stage_info.get("stage_type", "unknown") if stage_info else "unknown",
+            "paper_value": {
+                "value": 0,
+                "unit": "a.u.",
+                "source": figure_meta.get("description", "paper_description"),
+            },
+            "simulated_value": {
+                "value": 0,
+                "unit": "a.u.",
+            },
+            "discrepancy": {
+                "absolute": 0,
+                "relative_percent": 0 if has_output else 100,
+                "classification": "excellent" if has_output else "investigate",
+            },
+            "notes": "Output file identified." if has_output else "No output file matched the target figure.",
+        })
     
-    # STUB: Populate figure comparisons for report
-    # This structure matches report_schema.json
-    stub_comparison = {
-        "figure_id": "Fig3a",
-        "title": "Transmission Spectrum",
-        "paper_image_path": "papers/fig3a.png",
-        "reproduction_image_path": "outputs/fig3a_repro.png",
-        "comparison_table": [
-            {"feature": "Resonance Wavelength", "paper": "520 nm", "reproduction": "540 nm", "status": "⚠️ Partial"},
-            {"feature": "Peak Width", "paper": "50 meV", "reproduction": "52 meV", "status": "✅ Match"}
-        ],
-        "shape_comparison": [],
-        "reason_for_difference": "2D approximation red-shift",
-        "classification": "partial" # Used for progress mapping
-    }
+    total_targets = len(target_ids)
+    if total_targets == 0:
+        overall_classification = "ACCEPTABLE_MATCH"
+    elif matches == total_targets:
+        overall_classification = "EXCELLENT_MATCH"
+    elif matches == 0:
+        overall_classification = "POOR_MATCH"
+    else:
+        overall_classification = "PARTIAL_MATCH"
+    
+    summary = (
+        f"{matches}/{total_targets or 1} targets produced simulation outputs."
+        if total_targets else "No explicit targets defined for this stage."
+    )
+    
+    existing_comparisons = state.get("figure_comparisons", [])
+    filtered_existing = [
+        comp for comp in existing_comparisons
+        if comp.get("stage_id") != current_stage_id
+    ]
     
     return {
         "workflow_phase": "analysis",
-        "figure_comparisons": state.get("figure_comparisons", []) + [stub_comparison]
+        "analysis_summary": summary,
+        "analysis_overall_classification": overall_classification,
+        "analysis_result_reports": per_result_reports,
+        "figure_comparisons": filtered_existing + figure_comparisons,
     }
 
 
@@ -836,34 +1125,41 @@ def comparison_validator_node(state: ReproState) -> dict:
     - Increments `analysis_revision_count` when verdict is "needs_revision".
     The routing function `route_after_comparison_check` reads these fields.
     """
-    # Connect prompt adaptation
-    system_prompt = build_agent_prompt("comparison_validator", state)
+    # ═══════════════════════════════════════════════════════════════════════
+    # CONTEXT CHECK: Comparison validator reads analyzer outputs
+    # ═══════════════════════════════════════════════════════════════════════
+    context_update = _check_context_or_escalate(state, "comparison_check")
+    if context_update:
+        if context_update.get("awaiting_user_input"):
+            return context_update
+        state = {**state, **context_update}
+
+    stage_id = state.get("current_stage_id")
+    comparisons = _stage_comparisons_for_stage(state, stage_id)
+    breakdown = _breakdown_comparison_classifications(comparisons)
     
-    # TODO: Implement comparison validation logic
-    # - Verify math is correct
-    # - Check classifications match numbers
-    # - Validate discrepancy documentation
-    # - Call LLM with comparison_validator_agent.md prompt
-    # - Parse agent output per comparison_validator_output_schema.json
-    
-    # STUB: Replace with actual LLM call
-    agent_output = {
-        "verdict": "approve",  # "approve" | "needs_revision"
-        "stage_id": state.get("current_stage_id"),
-        "summary": "Comparison validation stub - implement with LLM call",
-        "feedback": "Analysis looks correct." # Added feedback field
-    }
+    if not comparisons:
+        verdict = "needs_revision"
+        feedback = "Results analyzer did not produce figure comparisons for this stage."
+    elif breakdown["missing"]:
+        verdict = "needs_revision"
+        feedback = f"Simulation outputs missing for: {', '.join(breakdown['missing'])}"
+    elif breakdown["pending"]:
+        verdict = "needs_revision"
+        feedback = f"Comparisons pending quantitative checks for: {', '.join(breakdown['pending'])}"
+    else:
+        verdict = "approve"
+        feedback = "All required comparisons present."
     
     result = {
         "workflow_phase": "comparison_validation",
-        # Copy verdict to type-specific state field for routing
-        "comparison_verdict": agent_output["verdict"],
+        "comparison_verdict": verdict,
+        "comparison_feedback": feedback,
     }
     
-    # Increment analysis revision counter if needs_revision
-    if agent_output["verdict"] == "needs_revision":
+    if verdict == "needs_revision":
         result["analysis_revision_count"] = state.get("analysis_revision_count", 0) + 1
-        result["analysis_feedback"] = agent_output.get("feedback")
+        result["analysis_feedback"] = feedback
     else:
         # Clear feedback on success
         result["analysis_feedback"] = None
@@ -914,6 +1210,54 @@ def supervisor_node(state: ReproState) -> dict:
         archive_stage_outputs_to_progress
     )
     
+    # ═══════════════════════════════════════════════════════════════════════
+    # CONTEXT CHECK: Supervisor aggregates most of the state
+    # ═══════════════════════════════════════════════════════════════════════
+    context_update = _check_context_or_escalate(state, "supervisor")
+    if context_update:
+        if context_update.get("awaiting_user_input"):
+            return context_update
+        state = {**state, **context_update}
+
+    def _derive_stage_completion_outcome(current_state: ReproState, stage_id: Optional[str]) -> Tuple[str, str]:
+        classification = (current_state.get("analysis_overall_classification") or "").upper()
+        comparison_verdict = current_state.get("comparison_verdict")
+        physics_verdict = current_state.get("physics_verdict")
+        comparisons = _stage_comparisons_for_stage(current_state, stage_id)
+        comparison_breakdown = _breakdown_comparison_classifications(comparisons)
+        
+        classification_map = {
+            "FAILED": "completed_failed",
+            "POOR_MATCH": "completed_failed",
+            "PARTIAL_MATCH": "completed_partial",
+            "ACCEPTABLE_MATCH": "completed_success",
+            "EXCELLENT_MATCH": "completed_success",
+        }
+        status = classification_map.get(classification, "completed_success")
+        
+        if comparison_breakdown["missing"]:
+            status = "completed_failed"
+        elif comparison_breakdown["pending"] and status == "completed_success":
+            status = "completed_partial"
+        
+        if comparison_verdict == "needs_revision":
+            status = "completed_partial"
+        if physics_verdict == "warning" and status == "completed_success":
+            status = "completed_partial"
+        if physics_verdict == "fail" or classification == "":
+            if physics_verdict == "fail":
+                status = "completed_failed"
+        
+        if comparison_breakdown["missing"]:
+            summary_text = f"Missing outputs for: {', '.join(comparison_breakdown['missing'])}"
+        elif comparison_breakdown["pending"]:
+            summary_text = f"Comparisons pending for: {', '.join(comparison_breakdown['pending'])}"
+        else:
+            summary_text = current_state.get("analysis_summary") or \
+                f"Stage classified as {classification or comparison_verdict or 'OK_CONTINUE'}"
+        
+        return status, summary_text
+
     # Connect prompt adaptation
     system_prompt = build_agent_prompt("supervisor", state)
     
@@ -1215,9 +1559,8 @@ def supervisor_node(state: ReproState) -> dict:
         # If completing a stage, archive outputs
         if current_stage_id:
             archive_stage_outputs_to_progress(state, current_stage_id)
-            # NOTE: In full implementation, LLM decides status. 
-            # For stub, assume success if we got here without issues.
-            update_progress_stage_status(state, current_stage_id, "completed_success")
+            status, summary_text = _derive_stage_completion_outcome(state, current_stage_id)
+            update_progress_stage_status(state, current_stage_id, status, summary=summary_text)
     
     # Log user interaction if one just happened
     if ask_user_trigger and user_responses:

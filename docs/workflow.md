@@ -1531,6 +1531,12 @@ outputs/<paper_id>/
 
 ## Context Window Management
 
+> **Heads-up:** Automated `context_budget` accounting is planned for the next release.  
+> In the current build, nodes still call `check_context_before_node()` for safety, but the
+> per-state budget ledger described below is forward-looking design documentation.
+
+> **Implementation note (v0.1.0)**: The `context_budget` tracking mechanics described below are part of the v0 planning spec. The actual state field and metrics wiring will land in the next implementation milestone. Until then, treat this section as forward-looking guidance.
+
 ### Overview
 
 Claude Opus 4.5 has a 200K token context window, but we reserve tokens for prompts, state context, and response generation. Long papers, accumulated feedback, or many revision cycles can exceed safe limits.
@@ -1607,9 +1613,9 @@ When context exceeds limits, recovery actions are attempted in this order:
 | 4 | Clear non-critical working fields | Medium | ❌ No |
 | 5 | Escalate to user | None | Always available |
 
-### Context Budget Tracking
+### Context Budget Tracking (Planned)
 
-The `context_budget` field in state tracks estimated tokens across the workflow:
+The `context_budget` field will track estimated tokens across the workflow in a future release:
 
 ```python
 # After each LLM call, update context budget tracking
