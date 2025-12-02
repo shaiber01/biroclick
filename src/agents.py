@@ -1151,6 +1151,74 @@ def plan_reviewer_node(state: ReproState) -> dict:
             "Current plan has no stages defined."
         )
     
+    # ═══════════════════════════════════════════════════════════════════════
+    # DETECT CIRCULAR DEPENDENCIES: Prevent infinite loops
+    # ═══════════════════════════════════════════════════════════════════════
+    if plan_stages:
+        stage_ids = {s.get("stage_id") for s in plan_stages if s.get("stage_id")}
+        
+        def detect_cycles() -> List[List[str]]:
+            """Detect circular dependencies using DFS."""
+            cycles = []
+            visited = set()
+            rec_stack = set()
+            path = []
+            
+            def dfs(stage_id: str):
+                if stage_id in rec_stack:
+                    # Found a cycle - extract the cycle path
+                    cycle_start = path.index(stage_id)
+                    cycle = path[cycle_start:] + [stage_id]
+                    cycles.append(cycle)
+                    return
+                
+                if stage_id in visited:
+                    return
+                
+                visited.add(stage_id)
+                rec_stack.add(stage_id)
+                path.append(stage_id)
+                
+                # Find stage and check its dependencies
+                stage = next((s for s in plan_stages if s.get("stage_id") == stage_id), None)
+                if stage:
+                    dependencies = stage.get("dependencies", [])
+                    for dep_id in dependencies:
+                        if dep_id in stage_ids:  # Only check if dependency exists
+                            dfs(dep_id)
+                
+                path.pop()
+                rec_stack.remove(stage_id)
+            
+            # Check all stages
+            for stage_id in stage_ids:
+                if stage_id not in visited:
+                    dfs(stage_id)
+            
+            return cycles
+        
+        cycles = detect_cycles()
+        if cycles:
+            cycle_descriptions = [
+                " → ".join(cycle) + " (circular)"
+                for cycle in cycles
+            ]
+            blocking_issues.append(
+                f"PLAN_ISSUE: Circular dependencies detected: {', '.join(cycle_descriptions)}. "
+                "Stages cannot depend on themselves or form dependency cycles. "
+                "Please fix the dependency graph."
+            )
+        
+        # Also check for self-dependencies
+        for stage in plan_stages:
+            stage_id = stage.get("stage_id")
+            dependencies = stage.get("dependencies", [])
+            if stage_id in dependencies:
+                blocking_issues.append(
+                    f"PLAN_ISSUE: Stage '{stage_id}' depends on itself. "
+                    "Stages cannot depend on themselves."
+                )
+    
     # If there are blocking plan issues (e.g., excellent precision without digitized data),
     # automatically flag for revision
     if blocking_issues:
@@ -1299,8 +1367,20 @@ def select_stage_node(state: ReproState) -> dict:
         # Check if dependencies are satisfied
         dependencies = stage.get("dependencies", [])
         deps_satisfied = True
+        missing_deps = []
+        
+        # Build stage_id lookup for validation
+        stage_ids = {s.get("stage_id") for s in stages if s.get("stage_id")}
         
         for dep_id in dependencies:
+            # ═══════════════════════════════════════════════════════════════════════
+            # VALIDATE DEPENDENCY EXISTS: Check dependency stage_id exists in plan
+            # ═══════════════════════════════════════════════════════════════════════
+            if dep_id not in stage_ids:
+                missing_deps.append(dep_id)
+                deps_satisfied = False
+                continue
+            
             # Find the dependency stage
             dep_stage = next((s for s in stages if s.get("stage_id") == dep_id), None)
             if dep_stage:
@@ -1309,6 +1389,30 @@ def select_stage_node(state: ReproState) -> dict:
                 if dep_status not in ["completed_success", "completed_partial"]:
                     deps_satisfied = False
                     break
+            else:
+                # Stage ID exists but stage not found - this is an error
+                missing_deps.append(dep_id)
+                deps_satisfied = False
+        
+        # If dependencies are missing, mark stage as blocked
+        if missing_deps:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(
+                f"Stage '{stage.get('stage_id')}' has missing dependencies: {missing_deps}. "
+                "This indicates a plan inconsistency. Marking stage as blocked."
+            )
+            # Update progress to mark stage as blocked
+            from schemas.state import get_progress_stage, update_progress_stage_status
+            progress_stage = get_progress_stage(state, stage.get("stage_id"))
+            if progress_stage and progress_stage.get("status") != "blocked":
+                update_progress_stage_status(
+                    state,
+                    stage.get("stage_id"),
+                    "blocked",
+                    summary=f"Blocked: Missing dependencies {missing_deps}"
+                )
+            continue
         
         if not deps_satisfied:
             continue
@@ -1369,7 +1473,49 @@ def select_stage_node(state: ReproState) -> dict:
             "run_error": None,
         }
     
-    # No more stages to run
+    # ═══════════════════════════════════════════════════════════════════════
+    # DEADLOCK DETECTION: Check if all remaining stages are permanently blocked
+    # ═══════════════════════════════════════════════════════════════════════
+    # Before returning None, check if this is a deadlock vs normal completion
+    remaining_stages = [
+        s for s in stages
+        if s.get("status") not in ["completed_success", "completed_partial"]
+    ]
+    
+    if remaining_stages:
+        # Check if any remaining stages could potentially run
+        potentially_runnable = []
+        permanently_blocked = []
+        
+        for stage in remaining_stages:
+            status = stage.get("status", "not_started")
+            if status in ["not_started", "invalidated", "needs_rerun"]:
+                potentially_runnable.append(stage.get("stage_id"))
+            elif status in ["blocked", "completed_failed"]:
+                permanently_blocked.append(stage.get("stage_id"))
+        
+        if not potentially_runnable and permanently_blocked:
+            # All remaining stages are permanently blocked - this is a deadlock
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(
+                f"Deadlock detected: All remaining stages are permanently blocked or failed. "
+                f"Blocked stages: {permanently_blocked}. Cannot proceed with reproduction."
+            )
+            return {
+                "workflow_phase": "stage_selection",
+                "current_stage_id": None,
+                "current_stage_type": None,
+                "ask_user_trigger": "deadlock_detected",
+                "pending_user_questions": [
+                    f"Deadlock detected: All remaining stages ({len(permanently_blocked)}) are permanently blocked or failed. "
+                    f"Blocked stages: {', '.join(permanently_blocked[:5])}{'...' if len(permanently_blocked) > 5 else ''}. "
+                    "Options: 1) Generate report with current results, 2) Replan to fix blocked stages, 3) Stop."
+                ],
+                "awaiting_user_input": True,
+            }
+    
+    # No more stages to run - normal completion
     return {
         "workflow_phase": "stage_selection",
         "current_stage_id": None,
@@ -1551,6 +1697,30 @@ def code_generator_node(state: ReproState) -> dict:
     
     # Connect prompt adaptation
     system_prompt = build_agent_prompt("code_generator", state)
+    
+    # ═══════════════════════════════════════════════════════════════════════
+    # VALIDATE MATERIALS FOR STAGE 1+: Ensure validated_materials exists
+    # ═══════════════════════════════════════════════════════════════════════
+    current_stage_type = state.get("current_stage_type", "")
+    if current_stage_type != "MATERIAL_VALIDATION":
+        # Stage 1+ requires validated materials
+        validated_materials = state.get("validated_materials", [])
+        if not validated_materials:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(
+                f"validated_materials is empty for Stage 1+ ({current_stage_type}). "
+                "Code generation cannot proceed without validated materials."
+            )
+            return {
+                "workflow_phase": "code_generation",
+                "run_error": (
+                    f"validated_materials is empty but required for {current_stage_type} code generation. "
+                    "This indicates material_checkpoint_node did not run or user did not approve materials. "
+                    "Check that Stage 0 completed and user confirmation was received."
+                ),
+                "code_revision_count": state.get("code_revision_count", 0) + 1,
+            }
     
     # TODO: Implement code generation logic
     # - Convert design to Meep code
@@ -2368,7 +2538,23 @@ def supervisor_node(state: ReproState) -> dict:
                 
                 # Archive outputs before moving on
                 if current_stage_id:
-                    archive_stage_outputs_to_progress(state, current_stage_id)
+                    try:
+                        archive_stage_outputs_to_progress(state, current_stage_id)
+                    except Exception as e:
+                        import logging
+                        logger = logging.getLogger(__name__)
+                        logger.error(
+                            f"Failed to archive outputs for stage {current_stage_id}: {e}. "
+                            "Continuing but outputs may not be persisted."
+                        )
+                        # Set flag for potential retry later
+                        if "archive_errors" not in state:
+                            state["archive_errors"] = []
+                        state["archive_errors"].append({
+                            "stage_id": current_stage_id,
+                            "error": str(e),
+                            "timestamp": datetime.now(timezone.utc).isoformat()
+                        })
                     update_progress_stage_status(state, current_stage_id, "completed_success")
                     
             elif "CHANGE_DATABASE" in response_text or (is_rejection and "DATABASE" in response_text):
@@ -2389,6 +2575,10 @@ def supervisor_node(state: ReproState) -> dict:
                     )
                 # Clear pending materials since they're rejected
                 result["pending_validated_materials"] = []
+                # ═══════════════════════════════════════════════════════════════════════
+                # CLEAR VALIDATED_MATERIALS: Remove any previously validated materials
+                # ═══════════════════════════════════════════════════════════════════════
+                result["validated_materials"] = []  # Clear validated materials on rejection
             elif "CHANGE_MATERIAL" in response_text or (is_rejection and "MATERIAL" in response_text):
                 # Need to replan with different material
                 result["supervisor_verdict"] = "replan_needed"
@@ -2403,6 +2593,10 @@ def supervisor_node(state: ReproState) -> dict:
                     )
                 # Clear pending materials since they're rejected
                 result["pending_validated_materials"] = []
+                # ═══════════════════════════════════════════════════════════════════════
+                # CLEAR VALIDATED_MATERIALS: Remove any previously validated materials
+                # ═══════════════════════════════════════════════════════════════════════
+                result["validated_materials"] = []  # Clear validated materials on rejection
             elif "NEED_HELP" in response_text or "HELP" in response_text:
                 result["supervisor_verdict"] = "ask_user"
                 # OVERWRITE pending questions to avoid loop
@@ -2610,6 +2804,31 @@ def supervisor_node(state: ReproState) -> dict:
             else:
                 result["supervisor_verdict"] = "ok_continue"
         
+        # ─── DEADLOCK DETECTED ──────────────────────────────────────────────────
+        elif ask_user_trigger == "deadlock_detected":
+            response_text = ""
+            for q, r in user_responses.items():
+                response_text = r.upper() if isinstance(r, str) else str(r)
+            
+            if "GENERATE_REPORT" in response_text or "REPORT" in response_text:
+                result["supervisor_verdict"] = "all_complete"
+                result["should_stop"] = True
+                result["supervisor_feedback"] = "Generating report with current results despite deadlock."
+            elif "REPLAN" in response_text:
+                result["supervisor_verdict"] = "replan_needed"
+                result["planner_feedback"] = (
+                    f"User requested replan due to deadlock: {response_text}. "
+                    "Please review blocked stages and fix dependencies or validation issues."
+                )
+            elif "STOP" in response_text:
+                result["supervisor_verdict"] = "all_complete"
+                result["should_stop"] = True
+            else:
+                result["supervisor_verdict"] = "ask_user"
+                result["pending_user_questions"] = [
+                    "Please clarify: GENERATE_REPORT (with current results), REPLAN (to fix blocked stages), or STOP?"
+                ]
+        
         # ─── BACKTRACK LIMIT ──────────────────────────────────────────────────
         elif ask_user_trigger == "backtrack_limit":
             response_text = ""
@@ -2653,7 +2872,23 @@ def supervisor_node(state: ReproState) -> dict:
         
         # If completing a stage, archive outputs
         if current_stage_id:
-            archive_stage_outputs_to_progress(state, current_stage_id)
+            try:
+                archive_stage_outputs_to_progress(state, current_stage_id)
+            except Exception as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(
+                    f"Failed to archive outputs for stage {current_stage_id}: {e}. "
+                    "Continuing but outputs may not be persisted."
+                )
+                # Set flag for potential retry later
+                if "archive_errors" not in state:
+                    state["archive_errors"] = []
+                state["archive_errors"].append({
+                    "stage_id": current_stage_id,
+                    "error": str(e),
+                    "timestamp": datetime.now(timezone.utc).isoformat()
+                })
             status, summary_text = _derive_stage_completion_outcome(state, current_stage_id)
             update_progress_stage_status(state, current_stage_id, status, summary=summary_text)
     
