@@ -121,6 +121,20 @@
           "type": "array",
           "items": {"type": "string"},
           "description": "Recommended next steps"
+        },
+        "analysis_summary": {
+          "type": ["object", "null"],
+          "description": "Per-stage analysis summary from ResultsAnalyzer"
+        },
+        "analysis_result_reports": {
+          "type": "array",
+          "description": "Detailed per-target quantitative reports",
+          "items": {"type": "object"}
+        },
+        "quantitative_summary": {
+          "type": "array",
+          "description": "Stage-level quantitative metrics",
+          "items": {"type": "object"}
         }
       }
     },
@@ -298,7 +312,12 @@
         ],
         "discrepancies": [],
         "issues": [],
-        "next_actions": ["Proceed to stage1_single_disk"]
+        "next_actions": ["Proceed to stage1_single_disk"],
+        "analysis_summary": {
+          "totals": {"targets": 1, "matches": 1, "pending": 0, "missing": 0}
+        },
+        "analysis_result_reports": [],
+        "quantitative_summary": []
       },
       {
         "stage_id": "stage1_single_disk",
@@ -388,7 +407,12 @@
           }
         ],
         "issues": [],
-        "next_actions": ["Proceed to stage3_coated_single"]
+        "next_actions": ["Proceed to stage3_coated_single"],
+        "analysis_summary": {
+          "totals": {"targets": 1, "matches": 1, "pending": 0, "missing": 0}
+        },
+        "analysis_result_reports": [],
+        "quantitative_summary": []
       },
       {
         "stage_id": "stage3_coated_single",

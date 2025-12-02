@@ -590,7 +590,8 @@ def _classification_from_metrics(
     if not has_reference:
         if precision_requirement == "excellent":
             return "pending_validation"
-        return "match"
+        # Without reference data, treat as qualitative-only pending further review
+        return "pending_validation"
     if precision_requirement == "qualitative":
         return "match"
     
@@ -1905,9 +1906,18 @@ def comparison_validator_node(state: ReproState) -> dict:
     comparisons = _stage_comparisons_for_stage(state, stage_id)
     breakdown = _breakdown_comparison_classifications(comparisons)
     stage_info = get_plan_stage(state, stage_id) if stage_id else None
-    expected_targets = (stage_info.get("targets") if stage_info else []) or []
+    if stage_info:
+        expected_targets = stage_info.get("targets") or [
+            t.get("figure_id") for t in stage_info.get("target_details", []) if t.get("figure_id")
+        ]
+    else:
+        expected_targets = []
     analysis_reports = _analysis_reports_for_stage(state, stage_id)
     report_issues = _validate_analysis_reports(analysis_reports)
+    missing_report_targets = [
+        target for target in expected_targets
+        if target not in {report.get("target_figure") for report in analysis_reports}
+    ]
     
     if not comparisons:
         if not expected_targets:
@@ -1926,15 +1936,23 @@ def comparison_validator_node(state: ReproState) -> dict:
         verdict = "approve"
         feedback = "All required comparisons present."
     
-    if report_issues:
+    missing_comparisons = [
+        target for target in expected_targets
+        if target not in {comp.get("figure_id") for comp in comparisons}
+    ]
+    if missing_comparisons:
         verdict = "needs_revision"
-        feedback = "; ".join(report_issues[:3])
-        if len(report_issues) > 3:
-            feedback += f" (+{len(report_issues)-3} more)"
-    elif expected_targets and not analysis_reports:
-        verdict = "needs_revision"
-        feedback = "Analysis reports missing; cannot verify quantitative metrics."
+        feedback = f"Results analyzer did not produce comparisons for: {', '.join(missing_comparisons)}"
     
+    if report_issues or missing_report_targets:
+        verdict = "needs_revision"
+        combined = report_issues + (
+            [f"Missing quantitative reports for: {', '.join(missing_report_targets)}"]
+            if missing_report_targets else []
+        )
+        feedback = "; ".join(combined[:3])
+        if len(combined) > 3:
+            feedback += f" (+{len(combined)-3} more)"
     result = {
         "workflow_phase": "comparison_validation",
         "comparison_verdict": verdict,
