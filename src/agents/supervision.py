@@ -3,6 +3,20 @@ Supervisor agent node: supervisor_node.
 
 The supervisor handles big-picture assessment and decisions,
 including handling user responses and routing decisions.
+
+State Keys
+----------
+supervisor_node:
+    READS: current_stage_id, plan, progress, stage_outputs, analysis_reports,
+           stage_comparisons, validated_materials, pending_validated_materials,
+           ask_user_trigger, user_responses, pending_user_questions,
+           supervisor_call_count, backtrack_count, runtime_config, metrics
+    WRITES: workflow_phase, supervisor_verdict, supervisor_feedback, progress,
+            stage_outputs, validated_materials, pending_validated_materials,
+            current_stage_id, user_responses, pending_user_questions,
+            awaiting_user_input, ask_user_trigger, supervisor_call_count,
+            backtrack_count, backtrack_decision, replan_count, design_feedback,
+            code_feedback, design_revision_count, code_revision_count
 """
 
 import json

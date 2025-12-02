@@ -2,6 +2,21 @@
 Design agent nodes: simulation_designer_node, design_reviewer_node.
 
 These nodes handle simulation design and review before code generation.
+
+State Keys
+----------
+simulation_designer_node:
+    READS: current_stage_id, plan, paper_text, paper_domain, validated_materials,
+           assumptions, design_revision_count, design_feedback
+    WRITES: workflow_phase, design_description, design_parameters, design_feedback,
+            ask_user_trigger, pending_user_questions, awaiting_user_input
+
+design_reviewer_node:
+    READS: current_stage_id, design_description, plan, paper_text, paper_domain,
+           design_revision_count, design_feedback, runtime_config
+    WRITES: workflow_phase, last_design_review_verdict, design_feedback,
+            design_revision_count, ask_user_trigger, pending_user_questions,
+            awaiting_user_input
 """
 
 import json
@@ -39,7 +54,10 @@ def simulation_designer_node(state: ReproState) -> dict:
     # Context check
     escalation = check_context_or_escalate(state, "design")
     if escalation is not None:
-        return escalation
+        if escalation.get("awaiting_user_input"):
+            return escalation
+        # Just state updates (e.g., metrics) - merge into state and continue
+        state = {**state, **escalation}
     
     # Validate current_stage_id
     current_stage_id = state.get("current_stage_id")

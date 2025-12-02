@@ -2,6 +2,22 @@
 Execution agent nodes: execution_validator_node, physics_sanity_node.
 
 These nodes handle execution validation and physics sanity checking.
+
+State Keys
+----------
+execution_validator_node:
+    READS: execution_result, current_stage_id, code, design_description,
+           execution_failure_count, runtime_config
+    WRITES: workflow_phase, execution_verdict, execution_feedback,
+            execution_failure_count, ask_user_trigger, pending_user_questions,
+            awaiting_user_input
+
+physics_sanity_node:
+    READS: execution_result, current_stage_id, design_description, plan,
+           physics_failure_count, runtime_config
+    WRITES: workflow_phase, physics_verdict, physics_feedback, physics_failure_count,
+            design_revision_count, design_feedback, ask_user_trigger,
+            pending_user_questions, awaiting_user_input
 """
 
 import json

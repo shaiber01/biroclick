@@ -2,6 +2,26 @@
 Planning agent nodes: plan_node, plan_reviewer_node, adapt_prompts_node.
 
 These nodes handle the initial paper analysis and reproduction plan creation.
+
+State Keys
+----------
+adapt_prompts_node:
+    READS: paper_text, paper_domain
+    WRITES: workflow_phase, prompt_adaptations, paper_domain
+
+plan_node:
+    READS: paper_text, paper_id, paper_figures, paper_domain, replan_count,
+           runtime_config, prompt_adaptations
+    WRITES: workflow_phase, plan, planned_materials, assumptions, paper_domain,
+            progress, extracted_parameters, last_plan_review_verdict, planner_feedback,
+            replan_count, ask_user_trigger, pending_user_questions, awaiting_user_input
+
+plan_reviewer_node:
+    READS: plan, paper_text, paper_figures, paper_domain, assumptions,
+           last_plan_review_verdict, planner_feedback, digitized_data, replan_count,
+           runtime_config
+    WRITES: workflow_phase, last_plan_review_verdict, planner_feedback, replan_count,
+            ask_user_trigger, pending_user_questions, awaiting_user_input
 """
 
 import json
@@ -109,7 +129,10 @@ def plan_node(state: ReproState) -> dict:
     # Context check - critical for planner
     escalation = check_context_or_escalate(state, "plan")
     if escalation is not None:
-        return escalation
+        if escalation.get("awaiting_user_input"):
+            return escalation
+        # Just state updates (e.g., metrics) - merge into state and continue
+        state = {**state, **escalation}
     
     # Connect prompt adaptation
     system_prompt = build_agent_prompt("planner", state)

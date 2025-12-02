@@ -2,6 +2,21 @@
 Analysis agent nodes: results_analyzer_node, comparison_validator_node.
 
 These nodes handle results analysis and comparison validation.
+
+State Keys
+----------
+results_analyzer_node:
+    READS: execution_result, current_stage_id, plan, paper_figures, paper_text,
+           digitized_data, stage_outputs, analysis_revision_count
+    WRITES: workflow_phase, analysis_reports, stage_outputs, analysis_summary,
+            ask_user_trigger, pending_user_questions, awaiting_user_input
+
+comparison_validator_node:
+    READS: current_stage_id, analysis_reports, plan, stage_outputs,
+           analysis_revision_count, runtime_config
+    WRITES: workflow_phase, comparison_verdict, analysis_revision_count,
+            stage_comparisons, ask_user_trigger, pending_user_questions,
+            awaiting_user_input
 """
 
 import json

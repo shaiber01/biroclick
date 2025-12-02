@@ -14,6 +14,20 @@ This package contains all agent node implementations, split into logical modules
 
 All public node functions are re-exported here for backward compatibility.
 Import via: `from src.agents import plan_node, supervisor_node, ...`
+
+State Keys Reference
+--------------------
+Each agent node documents the state keys it READS and WRITES in its module docstring.
+See individual module docstrings for detailed state dependencies.
+
+Common State Keys (used by multiple nodes):
+    - workflow_phase: Current workflow phase (all nodes write)
+    - current_stage_id: ID of stage being processed (most nodes read)
+    - plan: Reproduction plan with stages and targets
+    - progress: Stage progress tracking dict
+    - ask_user_trigger: Trigger type for user interaction
+    - pending_user_questions: Questions awaiting user response
+    - awaiting_user_input: Boolean flag for user input state
 """
 
 # Re-export all node functions from submodules
@@ -29,6 +43,19 @@ from .reporting import generate_report_node, handle_backtrack_node
 
 # Re-export helper utilities that may be used externally
 from .helpers.metrics import log_agent_call
+
+# Re-export constants/enums for type-safe verdict and phase handling
+from .constants import (
+    ReviewVerdict,
+    SupervisorVerdict,
+    ExecutionVerdict,
+    PhysicsVerdict,
+    AnalysisClassification,
+    WorkflowPhase,
+    AskUserTrigger,
+    StageStatus,
+    StageType,
+)
 
 __all__ = [
     # Planning
@@ -59,5 +86,15 @@ __all__ = [
     "handle_backtrack_node",
     # Helpers
     "log_agent_call",
+    # Constants/Enums
+    "ReviewVerdict",
+    "SupervisorVerdict",
+    "ExecutionVerdict",
+    "PhysicsVerdict",
+    "AnalysisClassification",
+    "WorkflowPhase",
+    "AskUserTrigger",
+    "StageStatus",
+    "StageType",
 ]
 

@@ -342,7 +342,6 @@ class TestResultsAnalyzerNode:
 class TestErrorHandling:
     """Tests for error handling in agent nodes."""
     
-    @pytest.mark.skip(reason="Plan node returns early with metrics due to complex log_agent_call wrapper")
     def test_plan_node_handles_llm_error(self, mock_llm_client):
         """Test that plan_node handles LLM errors gracefully."""
         from src.agents import plan_node
@@ -381,7 +380,6 @@ class TestErrorHandling:
 class TestStateUpdates:
     """Tests that agent nodes produce valid state updates."""
     
-    @pytest.mark.skip(reason="Plan node returns early with metrics due to complex log_agent_call wrapper")
     def test_plan_node_returns_valid_updates(self, mock_llm_client):
         """Test that plan_node returns valid state updates."""
         from src.agents import plan_node

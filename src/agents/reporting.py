@@ -2,6 +2,21 @@
 Reporting agent nodes: generate_report_node, handle_backtrack_node.
 
 These nodes handle report generation and backtracking.
+
+State Keys
+----------
+generate_report_node:
+    READS: metrics, progress, stage_comparisons, plan
+    WRITES: workflow_phase, quantitative_summary
+
+handle_backtrack_node:
+    READS: backtrack_decision, plan, progress, current_stage_id, backtrack_count,
+           runtime_config
+    WRITES: workflow_phase, progress, current_stage_id, backtrack_count,
+            backtrack_stage_id, design_revision_count, code_revision_count,
+            execution_failure_count, analysis_revision_count, design_description,
+            code, stage_outputs, stage_comparisons, ask_user_trigger,
+            pending_user_questions, awaiting_user_input
 """
 
 import copy

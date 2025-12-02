@@ -2,6 +2,18 @@
 User interaction agent nodes: ask_user_node, material_checkpoint_node.
 
 These nodes handle user interactions and mandatory checkpoints.
+
+State Keys
+----------
+ask_user_node:
+    READS: pending_user_questions, ask_user_trigger, paper_id, user_responses
+    WRITES: workflow_phase, user_responses, pending_user_questions,
+            awaiting_user_input, user_validation_attempts_*
+
+material_checkpoint_node:
+    READS: current_stage_id, stage_outputs, progress
+    WRITES: workflow_phase, pending_validated_materials, pending_user_questions,
+            awaiting_user_input, ask_user_trigger, last_node_before_ask_user
 """
 
 import os

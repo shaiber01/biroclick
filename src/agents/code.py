@@ -2,6 +2,21 @@
 Code agent nodes: code_generator_node, code_reviewer_node.
 
 These nodes handle code generation and review.
+
+State Keys
+----------
+code_reviewer_node:
+    READS: current_stage_id, code, design_description, plan, paper_text,
+           code_revision_count, code_feedback, runtime_config
+    WRITES: workflow_phase, last_code_review_verdict, code_feedback,
+            code_revision_count, ask_user_trigger, pending_user_questions,
+            awaiting_user_input
+
+code_generator_node:
+    READS: current_stage_id, plan, design_description, paper_text, paper_domain,
+           validated_materials, code_revision_count, code_feedback
+    WRITES: workflow_phase, code, ask_user_trigger, pending_user_questions,
+            awaiting_user_input
 """
 
 import json
@@ -118,7 +133,10 @@ def code_generator_node(state: ReproState) -> dict:
     # Context check
     escalation = check_context_or_escalate(state, "generate_code")
     if escalation is not None:
-        return escalation
+        if escalation.get("awaiting_user_input"):
+            return escalation
+        # Just state updates (e.g., metrics) - merge into state and continue
+        state = {**state, **escalation}
     
     # Validate current_stage_id
     current_stage_id = state.get("current_stage_id")

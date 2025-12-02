@@ -3,6 +3,15 @@ Stage selection agent node.
 
 Handles the selection of the next stage to execute based on
 dependencies, validation hierarchy, and stage status.
+
+State Keys
+----------
+select_stage_node:
+    READS: plan, progress, current_stage_id, validated_materials
+    WRITES: workflow_phase, current_stage_id, progress, design_revision_count,
+            code_revision_count, execution_failure_count, physics_failure_count,
+            analysis_revision_count, ask_user_trigger, pending_user_questions,
+            awaiting_user_input
 """
 
 import logging
