@@ -174,6 +174,10 @@ def plan_node(state: ReproState) -> dict:
     # STUB: Replace with actual LLM call that populates plan, assumptions, etc.
     result = {
         "workflow_phase": "planning",
+        "plan": {
+            "reproducible_figure_ids": [], # Initialize empty list to satisfy schema
+            # ... other plan fields would be populated by LLM ...
+        }
         # state["plan"] = generated_plan
         # state["assumptions"] = generated_assumptions
         # state["planned_materials"] = extracted_materials
@@ -353,6 +357,12 @@ def select_stage_node(state: ReproState) -> dict:
     # We need to re-fetch hierarchy here as it might change if we processed multiple stages.
     hierarchy = get_validation_hierarchy(state)
     
+    # Use schema-defined keys for robustness
+    MAT_VAL_KEY = STAGE_TYPE_TO_HIERARCHY_KEY["MATERIAL_VALIDATION"]
+    SINGLE_STRUCT_KEY = STAGE_TYPE_TO_HIERARCHY_KEY["SINGLE_STRUCTURE"]
+    ARRAY_SYS_KEY = STAGE_TYPE_TO_HIERARCHY_KEY["ARRAY_SYSTEM"]
+    PARAM_SWEEP_KEY = STAGE_TYPE_TO_HIERARCHY_KEY["PARAMETER_SWEEP"]
+    
     # Enforce hierarchy using STAGE_TYPE_TO_HIERARCHY_KEY mapping
     # This ensures robustness against schema changes
     required_level_key = STAGE_TYPE_TO_HIERARCHY_KEY.get(stage_type)
@@ -361,18 +371,18 @@ def select_stage_node(state: ReproState) -> dict:
         # Map current stage type to its prerequisite level in the hierarchy
         # e.g., SINGLE_STRUCTURE needs 'material_validation' to be passed
         if stage_type == "SINGLE_STRUCTURE":
-            if hierarchy.get("material_validation") not in ["passed", "partial"]:
+            if hierarchy.get(MAT_VAL_KEY) not in ["passed", "partial"]:
                 continue
         elif stage_type == "ARRAY_SYSTEM":
-            if hierarchy.get("single_structure") not in ["passed", "partial"]:
+            if hierarchy.get(SINGLE_STRUCT_KEY) not in ["passed", "partial"]:
                 continue
         elif stage_type == "PARAMETER_SWEEP":
             # Parameter sweeps typically need at least single structure
-            if hierarchy.get("single_structure") not in ["passed", "partial"]:
+            if hierarchy.get(SINGLE_STRUCT_KEY) not in ["passed", "partial"]:
                 continue
         elif stage_type == "COMPLEX_PHYSICS":
-             if hierarchy.get("parameter_sweep") not in ["passed", "partial"] and \
-                hierarchy.get("array_system") not in ["passed", "partial"]:
+             if hierarchy.get(PARAM_SWEEP_KEY) not in ["passed", "partial"] and \
+                hierarchy.get(ARRAY_SYS_KEY) not in ["passed", "partial"]:
                 continue
 
         # This stage is eligible
@@ -587,15 +597,25 @@ def execution_validator_node(state: ReproState) -> dict:
     # - Check completion status
     # - Verify output files exist
     # - Check for NaN/Inf in data
+    # - Check for TIMEOUT_ERROR in run_error
     # - Call LLM with execution_validator_agent.md prompt
     # - Parse agent output per execution_validator_output_schema.json
     
-    # STUB: Replace with actual LLM call
-    agent_output = {
-        "verdict": "pass",  # "pass" | "warning" | "fail"
-        "stage_id": state.get("current_stage_id"),
-        "summary": "Execution validation stub - implement with LLM call",
-    }
+    run_error = state.get("run_error")
+    if run_error and "TIMEOUT_ERROR" in run_error:
+        # Auto-fail on timeout if not handled by LLM
+        agent_output = {
+            "verdict": "fail",
+            "stage_id": state.get("current_stage_id"),
+            "summary": f"Execution timed out: {run_error}",
+        }
+    else:
+        # STUB: Replace with actual LLM call
+        agent_output = {
+            "verdict": "pass",  # "pass" | "warning" | "fail"
+            "stage_id": state.get("current_stage_id"),
+            "summary": "Execution validation stub - implement with LLM call",
+        }
     
     result = {
         "workflow_phase": "execution_validation",
@@ -1150,6 +1170,27 @@ def ask_user_node(state: ReproState) -> Dict[str, Any]:
             
             responses[question] = response
             print(f"✓ Response recorded")
+            
+            # Log interaction immediately
+            if "progress" not in state:
+                state["progress"] = {}
+            if "user_interactions" not in state["progress"]:
+                state["progress"]["user_interactions"] = []
+                
+            state["progress"]["user_interactions"].append({
+                "id": f"U{len(state['progress']['user_interactions']) + 1}",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "interaction_type": state.get("ask_user_trigger", "unknown"),
+                "context": {
+                    "stage_id": state.get("current_stage_id"),
+                    "agent": "AskUserNode",
+                    "reason": "Direct user input"
+                },
+                "question": question,
+                "user_response": response,
+                "impact": "Response recorded",
+                "alternatives_considered": []
+            })
         
         # Cancel timeout
         if hasattr(signal, 'SIGALRM'):
