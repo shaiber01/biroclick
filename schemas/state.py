@@ -664,6 +664,7 @@ class ReproState(TypedDict, total=False):
     paper_domain: str  # plasmonics | photonic_crystal | metamaterial | thin_film | waveguide | strong_coupling | nonlinear | other
     paper_text: str  # Full extracted text from PDF
     paper_title: str
+    paper_citation: Optional[Dict[str, Any]] # Added for report schema compatibility
     
     # ─── Runtime & Hardware Configuration ────────────────────────────────
     # These control execution behavior, timeouts, and resource limits.

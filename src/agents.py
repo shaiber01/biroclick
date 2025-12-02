@@ -775,7 +775,27 @@ def results_analyzer_node(state: ReproState) -> ReproState:
     # - Evaluate against validation_criteria
     # - Compute discrepancies
     # - Classify reproduction quality
-    return state
+    
+    # STUB: Populate figure comparisons for report
+    # This structure matches report_schema.json
+    stub_comparison = {
+        "figure_id": "Fig3a",
+        "title": "Transmission Spectrum",
+        "paper_image_path": "papers/fig3a.png",
+        "reproduction_image_path": "outputs/fig3a_repro.png",
+        "comparison_table": [
+            {"feature": "Resonance Wavelength", "paper": "520 nm", "reproduction": "540 nm", "status": "⚠️ Partial"},
+            {"feature": "Peak Width", "paper": "50 meV", "reproduction": "52 meV", "status": "✅ Match"}
+        ],
+        "shape_comparison": [],
+        "reason_for_difference": "2D approximation red-shift",
+        "classification": "partial" # Used for progress mapping
+    }
+    
+    return {
+        "workflow_phase": "analysis",
+        "figure_comparisons": state.get("figure_comparisons", []) + [stub_comparison]
+    }
 
 
 def comparison_validator_node(state: ReproState) -> dict:
@@ -1661,6 +1681,23 @@ def generate_report_node(state: ReproState) -> ReproState:
             "total_output_tokens": total_output,
             "estimated_cost": (total_input * 3.0 + total_output * 15.0) / 1_000_000 # Example pricing
         }
+    
+    # STUB: Populate report structures if missing
+    if "paper_citation" not in state:
+        state["paper_citation"] = {
+            "title": state.get("paper_title", "Unknown"),
+            "authors": "Unknown",
+            "journal": "Unknown", 
+            "year": 2023
+        }
+        
+    if "executive_summary" not in state:
+        state["executive_summary"] = {
+            "overall_assessment": [
+                {"aspect": "Material Properties", "status": "Reproduced", "status_icon": "✅", "notes": "Validated against Palik"},
+                {"aspect": "Geometric Resonances", "status": "Partial", "status_icon": "⚠️", "notes": "Systematic red-shift"}
+            ]
+        }
         
     # TODO: Implement report generation logic
     # - Compile figure comparisons
@@ -1717,6 +1754,7 @@ def handle_backtrack_node(state: ReproState) -> dict:
         "progress": progress,
         "current_stage_id": target_id,
         "backtrack_count": state.get("backtrack_count", 0) + 1,
+        "backtrack_decision": None, # Clear decision to prevent re-processing
         # Clear working data to prepare for re-run
         "code": None,
         "design_description": None,
