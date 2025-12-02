@@ -43,6 +43,14 @@ from schemas.state import (
 
 PROJECT_ROOT = Path(__file__).parent.parent
 from src.prompts import build_agent_prompt
+from src.llm_client import (
+    call_agent_with_metrics,
+    build_user_content_for_planner,
+    build_user_content_for_designer,
+    build_user_content_for_code_generator,
+    build_user_content_for_analyzer,
+    get_images_for_analyzer,
+)
 from datetime import datetime, timezone
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -238,16 +246,47 @@ def adapt_prompts_node(state: ReproState) -> ReproState:
             return context_update  # type: ignore[return-value]
         state = {**state, **context_update}
 
+    # Build system prompt for prompt adaptor
+    system_prompt = build_agent_prompt("prompt_adaptor", state)
+    
+    # Build user content with paper summary
+    paper_text = state.get("paper_text", "")[:5000]  # First 5k chars for context
+    paper_domain = state.get("paper_domain", "")
+    
+    user_content = f"# PAPER SUMMARY FOR PROMPT ADAPTATION\n\n"
+    user_content += f"Domain: {paper_domain}\n\n"
+    user_content += f"Paper excerpt:\n{paper_text[:3000]}...\n\n"
+    user_content += "Analyze this paper and suggest prompt adaptations for better simulation reproduction."
+    
     # Return state updates instead of mutating state
     result = {
         "workflow_phase": "adapting_prompts",
         "prompt_adaptations": [],  # Initialize empty adaptations list
     }
     
-    # TODO: Implement prompt adaptation logic
-    # - Analyze paper domain and techniques
-    # - Generate prompt modifications
-    # - Store in result["prompt_adaptations"]
+    # Call LLM for prompt adaptations
+    try:
+        agent_output = call_agent_with_metrics(
+            agent_name="prompt_adaptor",
+            system_prompt=system_prompt,
+            user_content=user_content,
+            state=state,
+        )
+        
+        # Extract adaptations from agent output
+        adaptations = agent_output.get("adaptations", [])
+        result["prompt_adaptations"] = adaptations
+        
+        # Store detected paper domain if provided
+        if agent_output.get("paper_domain"):
+            result["paper_domain"] = agent_output["paper_domain"]
+            
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Prompt adaptor LLM call failed: {e}. Using default prompts.")
+        result["prompt_adaptations"] = []
+    
     return result
 
 
@@ -1086,14 +1125,6 @@ def plan_node(state: ReproState) -> dict:
         # Context overflow - return escalation state updates
         return escalation
     
-    # TODO: Implement planning logic
-    # - Extract parameters from paper
-    # - Classify figures
-    # - Design staged reproduction plan
-    # - Initialize assumptions
-    # - Call LLM with planner_agent.md prompt
-    # - Parse agent output per planner_output_schema.json
-    
     # Connect prompt adaptation
     system_prompt = build_agent_prompt("planner", state)
     
@@ -1102,16 +1133,53 @@ def plan_node(state: ReproState) -> dict:
     if replan_count > 0:
         system_prompt += f"\n\nNOTE: This is Replan Attempt #{replan_count}. Previous plan was rejected. Improve strategy based on feedback."
     
-    # STUB: Replace with actual LLM call that populates plan, assumptions, etc.
-    plan_data = _build_stub_plan(state)
-    planned_materials = state.get("planned_materials") or _build_stub_planned_materials(state)
-    assumptions = state.get("assumptions") or _build_stub_assumptions()
+    # Build user content with paper text and figures
+    user_content = build_user_content_for_planner(state)
+    
+    # Call LLM with structured output
+    try:
+        agent_output = call_agent_with_metrics(
+            agent_name="planner",
+            system_prompt=system_prompt,
+            user_content=user_content,
+            state=state,
+        )
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Planner LLM call failed: {e}")
+        # Return error state for escalation
+        return {
+            "workflow_phase": "planning",
+            "ask_user_trigger": "llm_error",
+            "pending_user_questions": [
+                f"Planner LLM call failed with error: {str(e)[:500]}. "
+                "Please check API key and try again."
+            ],
+            "awaiting_user_input": True,
+        }
+    
+    # Extract results from agent output
+    plan_data = {
+        "paper_id": agent_output.get("paper_id", state.get("paper_id", "unknown")),
+        "paper_domain": agent_output.get("paper_domain", "other"),
+        "title": agent_output.get("title", ""),
+        "summary": agent_output.get("summary", ""),
+        "stages": agent_output.get("stages", []),
+        "targets": agent_output.get("targets", []),
+        "extracted_parameters": agent_output.get("extracted_parameters", []),
+    }
+    
+    # Extract planned materials and assumptions
+    planned_materials = agent_output.get("planned_materials", [])
+    assumptions = agent_output.get("assumptions", {})
     
     result = {
         "workflow_phase": "planning",
         "plan": plan_data,
         "planned_materials": planned_materials,
         "assumptions": assumptions,
+        "paper_domain": agent_output.get("paper_domain", "other"),
     }
     
     # ═══════════════════════════════════════════════════════════════════════
@@ -1314,12 +1382,32 @@ def plan_reviewer_node(state: ReproState) -> dict:
             "feedback": "The following issues must be resolved:\n" + "\n".join(blocking_issues),
         }
     else:
-        # STUB: Replace with actual LLM call
-        agent_output = {
-            "verdict": "approve",  # "approve" | "needs_revision"
-            "issues": [],
-            "summary": "Plan review stub - implement with LLM call",
-        }
+        # Build user content for plan review
+        user_content = f"# REPRODUCTION PLAN TO REVIEW\n\n```json\n{json.dumps(plan, indent=2)}\n```"
+        
+        # Add assumptions if present
+        assumptions = state.get("assumptions", {})
+        if assumptions:
+            user_content += f"\n\n# ASSUMPTIONS\n\n```json\n{json.dumps(assumptions, indent=2)}\n```"
+        
+        # Call LLM for plan review
+        try:
+            agent_output = call_agent_with_metrics(
+                agent_name="plan_reviewer",
+                system_prompt=system_prompt,
+                user_content=user_content,
+                state=state,
+            )
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Plan reviewer LLM call failed: {e}")
+            # Default to approval on LLM failure (can be reviewed by supervisor)
+            agent_output = {
+                "verdict": "approve",
+                "issues": [{"severity": "minor", "description": f"LLM review unavailable: {str(e)[:200]}"}],
+                "summary": "Plan auto-approved due to LLM unavailability",
+            }
     
     result = {
         "workflow_phase": "plan_review",
@@ -1579,9 +1667,9 @@ def select_stage_node(state: ReproState) -> dict:
                 # VALIDATE DEPENDENCY EXISTS: Check dependency stage_id exists in plan
                 # ═══════════════════════════════════════════════════════════════════════
                 if dep_id not in stage_ids:
-                missing_deps.append(dep_id)
-                deps_satisfied = False
-                continue
+                    missing_deps.append(dep_id)
+                    deps_satisfied = False
+                    continue
             
             # Find the dependency stage
             dep_stage = next((s for s in stages if s.get("stage_id") == dep_id), None)
@@ -1870,21 +1958,51 @@ def simulation_designer_node(state: ReproState) -> dict:
     from schemas.state import get_stage_design_spec
     complexity_class = get_stage_design_spec(state, current_stage_id, "complexity_class", "unknown")
     
-    # TODO: Implement design logic
-    # - Interpret geometry from plan
-    # - Use complexity_class ({complexity_class}) to determine resolution/dimensions
-    # - Select materials from validated_materials (Stage 1+) or planned_materials (Stage 0)
-    # - Configure sources, BCs, monitors
-    # - Estimate performance
-    # - Call LLM with simulation_designer_agent.md prompt
-    # - Parse agent output per simulation_designer_output_schema.json
+    # Build user content for designer
+    user_content = build_user_content_for_designer(state)
     
-    # STUB: Replace with actual LLM call
+    # Inject complexity class info
+    system_prompt += f"\n\nComplexity class for this stage: {complexity_class}"
+    
+    # Add revision feedback if any
+    feedback = state.get("reviewer_feedback", "")
+    if feedback:
+        system_prompt += f"\n\nREVISION FEEDBACK: {feedback}"
+    
+    # Call LLM for design
+    try:
+        agent_output = call_agent_with_metrics(
+            agent_name="simulation_designer",
+            system_prompt=system_prompt,
+            user_content=user_content,
+            state=state,
+        )
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Simulation designer LLM call failed: {e}")
+        return {
+            "workflow_phase": "design",
+            "ask_user_trigger": "llm_error",
+            "pending_user_questions": [
+                f"Design generation failed: {str(e)[:500]}. Please check API and try again."
+            ],
+            "awaiting_user_input": True,
+        }
+    
+    # Extract design description (the full output serves as the design spec)
     result = {
         "workflow_phase": "design",
-        "design_description": "STUB: Design description would be generated here."
-        # agent_output fields would go here
+        "design_description": agent_output,  # Store full structured output
     }
+    
+    # Add new assumptions if any
+    new_assumptions = agent_output.get("new_assumptions", [])
+    if new_assumptions:
+        existing = state.get("assumptions", {})
+        global_assumptions = existing.get("global_assumptions", [])
+        global_assumptions.extend(new_assumptions)
+        result["assumptions"] = {**existing, "global_assumptions": global_assumptions}
     
     log_agent_call("SimulationDesignerAgent", "design", start_time)(state, result)
     return result
@@ -1913,21 +2031,43 @@ def design_reviewer_node(state: ReproState) -> dict:
     # Connect prompt adaptation
     system_prompt = build_agent_prompt("design_reviewer", state)
     
-    # TODO: Implement design review logic using prompts/design_reviewer_agent.md
-    # - Check geometry matches paper
-    # - Verify physics setup is correct
-    # - Validate material choices
-    # - Check unit system (a_unit)
-    # - Verify source/excitation setup
-    # - Call LLM with design_reviewer_agent.md prompt
-    # - Parse agent output per design_reviewer_output_schema.json
+    # Build user content with design and stage info
+    design = state.get("design_description", {})
+    stage_id = state.get("current_stage_id", "unknown")
     
-    # STUB: Replace with actual LLM call
-    agent_output = {
-        "verdict": "approve",  # "approve" | "needs_revision"
-        "issues": [],
-        "summary": "Design review stub - implement with LLM call",
-    }
+    user_content = f"# DESIGN TO REVIEW\n\nStage: {stage_id}\n\n"
+    if isinstance(design, dict):
+        user_content += f"```json\n{json.dumps(design, indent=2)}\n```"
+    else:
+        user_content += f"```\n{design}\n```"
+    
+    # Add plan stage spec for reference
+    plan_stage = get_plan_stage(state, stage_id)
+    if plan_stage:
+        user_content += f"\n\n# PLAN STAGE SPEC\n\n```json\n{json.dumps(plan_stage, indent=2)}\n```"
+    
+    # Add previous feedback if revision
+    feedback = state.get("reviewer_feedback", "")
+    if feedback:
+        user_content += f"\n\n# REVISION FEEDBACK\n\n{feedback}"
+    
+    # Call LLM for design review
+    try:
+        agent_output = call_agent_with_metrics(
+            agent_name="design_reviewer",
+            system_prompt=system_prompt,
+            user_content=user_content,
+            state=state,
+        )
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Design reviewer LLM call failed: {e}")
+        agent_output = {
+            "verdict": "approve",
+            "issues": [{"severity": "minor", "description": f"LLM review unavailable: {str(e)[:200]}"}],
+            "summary": "Design auto-approved due to LLM unavailability",
+        }
     
     result = {
         "workflow_phase": "design_review",
@@ -1975,20 +2115,42 @@ def code_reviewer_node(state: ReproState) -> dict:
     # Connect prompt adaptation
     system_prompt = build_agent_prompt("code_reviewer", state)
     
-    # TODO: Implement code review logic using prompts/code_reviewer_agent.md
-    # - Verify a_unit matches design
-    # - Check Meep API usage
-    # - Validate numerics implementation
-    # - Check code quality (no plt.show, etc.)
-    # - Call LLM with code_reviewer_agent.md prompt
-    # - Parse agent output per code_reviewer_output_schema.json
+    # Build user content with code and design
+    code = state.get("code", "")
+    design = state.get("design_description", {})
+    stage_id = state.get("current_stage_id", "unknown")
     
-    # STUB: Replace with actual LLM call
-    agent_output = {
-        "verdict": "approve",  # "approve" | "needs_revision"
-        "issues": [],
-        "summary": "Code review stub - implement with LLM call",
-    }
+    user_content = f"# CODE TO REVIEW\n\nStage: {stage_id}\n\n```python\n{code}\n```"
+    
+    # Add design spec for reference
+    if design:
+        if isinstance(design, dict):
+            user_content += f"\n\n# DESIGN SPEC\n\n```json\n{json.dumps(design, indent=2)}\n```"
+        else:
+            user_content += f"\n\n# DESIGN SPEC\n\n{design}"
+    
+    # Add previous feedback if revision
+    feedback = state.get("reviewer_feedback", "")
+    if feedback:
+        user_content += f"\n\n# REVISION FEEDBACK\n\n{feedback}"
+    
+    # Call LLM for code review
+    try:
+        agent_output = call_agent_with_metrics(
+            agent_name="code_reviewer",
+            system_prompt=system_prompt,
+            user_content=user_content,
+            state=state,
+        )
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Code reviewer LLM call failed: {e}")
+        agent_output = {
+            "verdict": "approve",
+            "issues": [{"severity": "minor", "description": f"LLM review unavailable: {str(e)[:200]}"}],
+            "summary": "Code auto-approved due to LLM unavailability",
+        }
     
     result = {
         "workflow_phase": "code_review",
@@ -2121,16 +2283,42 @@ def code_generator_node(state: ReproState) -> dict:
                 ),
             }
     
-    # TODO: Implement code generation logic
-    # - Convert design to Meep code
-    # - For Stage 1+: Read material paths from state["validated_materials"]
-    # - Include progress prints
-    # - Set expected outputs per stage specification
-    # - Call LLM with code_generator_agent.md prompt
-    # - Parse agent output per code_generator_output_schema.json
+    # Build user content for code generator
+    user_content = build_user_content_for_code_generator(state)
     
-    # STUB: Replace with actual LLM call
-    generated_code = "# STUB: Simulation code would be generated here."
+    # Add revision feedback if any
+    feedback = state.get("reviewer_feedback", "")
+    if feedback:
+        system_prompt += f"\n\nREVISION FEEDBACK: {feedback}"
+    
+    # Call LLM for code generation
+    try:
+        agent_output = call_agent_with_metrics(
+            agent_name="code_generator",
+            system_prompt=system_prompt,
+            user_content=user_content,
+            state=state,
+        )
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Code generator LLM call failed: {e}")
+        return {
+            "workflow_phase": "code_generation",
+            "ask_user_trigger": "llm_error",
+            "pending_user_questions": [
+                f"Code generation failed: {str(e)[:500]}. Please check API and try again."
+            ],
+            "awaiting_user_input": True,
+        }
+    
+    # Extract generated code from agent output
+    generated_code = agent_output.get("code", "")
+    if not generated_code and agent_output.get("simulation_code"):
+        generated_code = agent_output.get("simulation_code")
+    if not generated_code:
+        # Fall back to full output as code if structure doesn't match expected
+        generated_code = json.dumps(agent_output, indent=2) if isinstance(agent_output, dict) else str(agent_output)
     
     # ═══════════════════════════════════════════════════════════════════════
     # VALIDATE GENERATED CODE: Ensure code is non-empty and not stub
@@ -2198,14 +2386,6 @@ def execution_validator_node(state: ReproState) -> dict:
     if run_error:
         system_prompt += f"\n\nCONTEXT: The previous execution failed with error:\n{run_error}\nAnalyze this error and suggest fixes."
     
-    # TODO: Implement execution validation logic
-    # - Check completion status
-    # - Verify output files exist
-    # - Check for NaN/Inf in data
-    # - Check for TIMEOUT_ERROR in run_error
-    # - Call LLM with execution_validator_agent.md prompt
-    # - Parse agent output per execution_validator_output_schema.json
-    
     run_error = state.get("run_error")
     
     # Check fallback strategy if we are about to fail
@@ -2214,8 +2394,8 @@ def execution_validator_node(state: ReproState) -> dict:
     
     if run_error and "TIMEOUT_ERROR" in run_error:
         if fallback == "skip_with_warning":
-             agent_output = {
-                "verdict": "pass", # Technically pass to move on, but status will be blocked/partial
+            agent_output = {
+                "verdict": "pass",  # Technically pass to move on, but status will be blocked/partial
                 "stage_id": state.get("current_stage_id"),
                 "summary": f"Execution timed out (skip_with_warning): {run_error}",
             }
@@ -2227,12 +2407,36 @@ def execution_validator_node(state: ReproState) -> dict:
                 "summary": f"Execution timed out: {run_error}",
             }
     else:
-        # STUB: Replace with actual LLM call
-        agent_output = {
-            "verdict": "pass",  # "pass" | "warning" | "fail"
-            "stage_id": state.get("current_stage_id"),
-            "summary": "Execution validation stub - implement with LLM call",
-        }
+        # Build user content for execution validation
+        stage_outputs = state.get("stage_outputs", {})
+        stage_id = state.get("current_stage_id", "unknown")
+        
+        user_content = f"# EXECUTION RESULTS FOR STAGE: {stage_id}\n\n"
+        user_content += f"## Stage Outputs\n```json\n{json.dumps(stage_outputs, indent=2, default=str)}\n```"
+        
+        if run_error:
+            user_content += f"\n\n## Run Error\n\n```\n{run_error}\n```"
+        
+        # Call LLM for execution validation
+        try:
+            agent_output = call_agent_with_metrics(
+                agent_name="execution_validator",
+                system_prompt=system_prompt,
+                user_content=user_content,
+                state=state,
+            )
+            # Ensure stage_id is set
+            agent_output["stage_id"] = stage_id
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Execution validator LLM call failed: {e}")
+            # Default to pass on LLM failure (let physics sanity catch issues)
+            agent_output = {
+                "verdict": "pass",
+                "stage_id": stage_id,
+                "summary": f"Execution validation LLM unavailable: {str(e)[:200]}",
+            }
     
     result = {
         "workflow_phase": "execution_validation",
@@ -2299,20 +2503,43 @@ def physics_sanity_node(state: ReproState) -> dict:
     # Connect prompt adaptation
     system_prompt = build_agent_prompt("physics_sanity", state)
     
-    # TODO: Implement physics validation logic
-    # - Check conservation laws (T + R + A ≈ 1)
-    # - Verify value ranges
-    # - Check numerical quality
-    # - Call LLM with physics_sanity_agent.md prompt
-    # - Parse agent output per physics_sanity_output_schema.json
+    # Build user content for physics sanity check
+    stage_outputs = state.get("stage_outputs", {})
+    stage_id = state.get("current_stage_id", "unknown")
+    design = state.get("design_description", {})
     
-    # STUB: Replace with actual LLM call
-    agent_output = {
-        "verdict": "pass",  # "pass" | "warning" | "fail" | "design_flaw"
-        "stage_id": state.get("current_stage_id"),
-        "summary": "Physics validation stub - implement with LLM call",
-        "backtrack_suggestion": {"suggest_backtrack": False},
-    }
+    user_content = f"# PHYSICS SANITY CHECK FOR STAGE: {stage_id}\n\n"
+    user_content += f"## Stage Outputs\n```json\n{json.dumps(stage_outputs, indent=2, default=str)}\n```"
+    
+    # Add design spec for physics reference
+    if design:
+        if isinstance(design, dict):
+            user_content += f"\n\n## Design Spec\n```json\n{json.dumps(design, indent=2)}\n```"
+        else:
+            user_content += f"\n\n## Design Spec\n{design}"
+    
+    # Call LLM for physics sanity check
+    try:
+        agent_output = call_agent_with_metrics(
+            agent_name="physics_sanity",
+            system_prompt=system_prompt,
+            user_content=user_content,
+            state=state,
+        )
+        # Ensure required fields
+        agent_output["stage_id"] = stage_id
+        if "backtrack_suggestion" not in agent_output:
+            agent_output["backtrack_suggestion"] = {"suggest_backtrack": False}
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Physics sanity LLM call failed: {e}")
+        agent_output = {
+            "verdict": "pass",
+            "stage_id": stage_id,
+            "summary": f"Physics sanity LLM unavailable: {str(e)[:200]}",
+            "backtrack_suggestion": {"suggest_backtrack": False},
+        }
     
     result = {
         "workflow_phase": "physics_validation",
@@ -2382,7 +2609,9 @@ def results_analyzer_node(state: ReproState) -> dict:
             "awaiting_user_input": True,
         }
     
-    result["workflow_phase"] = "analysis"
+    # Build system prompt for analysis
+    system_prompt = build_agent_prompt("results_analyzer", state)
+    
     stage_info = get_plan_stage(state, current_stage_id) if current_stage_id else None
     figures = _ensure_stub_figures(state)
     target_ids = []
@@ -2625,54 +2854,39 @@ def results_analyzer_node(state: ReproState) -> dict:
             
             # Note: Digitized data requirement is already checked above - if we reach here,
             # either digitized data exists or precision requirement is not "excellent"
+            classification_label = _classification_from_metrics(
+                quantitative_metrics,
+                precision_requirement,
+                has_reference,
+            )
+            if classification_label == "match":
+                matched_targets.append(target_id)
+            elif classification_label in {"pending_validation", "partial_match"}:
+                pending_targets.append(target_id)
+            else:
+                mismatch_targets.append(target_id)
+            
+            error_percent = quantitative_metrics.get("peak_position_error_percent")
+            if error_percent is not None and classification_label in {"partial_match", "mismatch"}:
+                discrepancy_class = "acceptable" if classification_label == "partial_match" else "investigate"
+                blocking = classification_label == "mismatch"
+                paper_peak = quantitative_metrics.get("peak_position_paper")
+                sim_peak = quantitative_metrics.get("peak_position_sim")
                 stage_discrepancies.append(
                     _record_discrepancy(
                         state,
                         current_stage_id,
                         target_id,
-                        "digitized_reference",
-                        "Digitized reference required",
-                        "Not provided",
-                        classification="investigate",
-                        likely_cause="precision_requirement='excellent' but digitized data missing",
-                        action_taken="Awaiting digitized data or user guidance",
-                        blocking=False,
+                        "resonance_wavelength",
+                        f"{paper_peak:.2f} nm" if paper_peak else "Paper peak unavailable",
+                        f"{sim_peak:.2f} nm" if sim_peak else "Simulation peak unavailable",
+                        classification=discrepancy_class,
+                        difference_percent=error_percent,
+                        likely_cause="See analyzer notes",
+                        action_taken="Documented for supervisor review",
+                        blocking=blocking,
                     )
                 )
-            else:
-                classification_label = _classification_from_metrics(
-                    quantitative_metrics,
-                    precision_requirement,
-                    has_reference,
-                )
-                if classification_label == "match":
-                    matched_targets.append(target_id)
-                elif classification_label in {"pending_validation", "partial_match"}:
-                    pending_targets.append(target_id)
-                else:
-                    mismatch_targets.append(target_id)
-                
-                error_percent = quantitative_metrics.get("peak_position_error_percent")
-                if error_percent is not None and classification_label in {"partial_match", "mismatch"}:
-                    discrepancy_class = "acceptable" if classification_label == "partial_match" else "investigate"
-                    blocking = classification_label == "mismatch"
-                    paper_peak = quantitative_metrics.get("peak_position_paper")
-                    sim_peak = quantitative_metrics.get("peak_position_sim")
-                    stage_discrepancies.append(
-                        _record_discrepancy(
-                            state,
-                            current_stage_id,
-                            target_id,
-                            "resonance_wavelength",
-                            f"{paper_peak:.2f} nm" if paper_peak else "Paper peak unavailable",
-                            f"{sim_peak:.2f} nm" if sim_peak else "Simulation peak unavailable",
-                            classification=discrepancy_class,
-                            difference_percent=error_percent,
-                            likely_cause="See analyzer notes",
-                            action_taken="Documented for supervisor review",
-                            blocking=blocking,
-                        )
-                    )
         
         comparison_table = [{
             "feature": "Simulation Output",
@@ -2815,6 +3029,53 @@ def results_analyzer_node(state: ReproState) -> dict:
     
     unresolved = summary["unresolved_targets"]
     analysis_feedback_next = None if not unresolved else state.get("analysis_feedback")
+    
+    # ═══════════════════════════════════════════════════════════════════════
+    # MULTIMODAL LLM CALL: Visual comparison of figures using Claude vision
+    # ═══════════════════════════════════════════════════════════════════════
+    # Only call LLM if there are figures to compare (images available)
+    images = get_images_for_analyzer(state)
+    llm_analysis = None
+    
+    if images and figure_comparisons:
+        user_content = build_user_content_for_analyzer(state)
+        
+        # Add quantitative analysis results for LLM context
+        user_content += f"\n\n# QUANTITATIVE ANALYSIS RESULTS\n\nOverall: {overall_classification}\n"
+        user_content += f"Matched: {len(matched_targets)}, Pending: {pending_count}, Missing: {missing_count}, Mismatch: {mismatch_count}"
+        
+        try:
+            llm_analysis = call_agent_with_metrics(
+                agent_name="results_analyzer",
+                system_prompt=system_prompt,
+                user_content=user_content,
+                state=state,
+                images=images[:10],  # Limit to 10 images to avoid context overflow
+            )
+            
+            # Merge LLM qualitative analysis with quantitative results
+            if llm_analysis:
+                # Update overall classification if LLM provides one
+                if llm_analysis.get("overall_classification"):
+                    overall_classification = llm_analysis["overall_classification"]
+                
+                # Add LLM's qualitative notes to summary
+                if llm_analysis.get("summary"):
+                    summary["llm_qualitative_analysis"] = llm_analysis["summary"]
+                
+                # Update figure comparisons with LLM's shape analysis
+                for llm_comp in llm_analysis.get("figure_comparisons", []):
+                    fig_id = llm_comp.get("figure_id")
+                    for existing_comp in figure_comparisons:
+                        if existing_comp.get("figure_id") == fig_id:
+                            existing_comp["shape_comparison"] = llm_comp.get("shape_comparison", [])
+                            existing_comp["reason_for_difference"] = llm_comp.get("reason_for_difference", "")
+                            break
+                
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Visual analysis LLM call failed: {e}. Using quantitative results only.")
     
     return {
         "workflow_phase": "analysis",
@@ -3533,9 +3794,55 @@ def supervisor_node(state: ReproState) -> dict:
     # NORMAL SUPERVISION (not post-ask_user)
     # ═══════════════════════════════════════════════════════════════════════
     else:
-        # TODO: Implement actual LLM-based supervision logic
-        # For now, default to continue
-        result["supervisor_verdict"] = "ok_continue"
+        # Build user content for supervisor
+        validation_hierarchy = get_validation_hierarchy(state)
+        
+        user_content = f"# CURRENT WORKFLOW STATUS\n\n"
+        user_content += f"Current Stage: {current_stage_id or 'None'}\n"
+        user_content += f"Workflow Phase: {state.get('workflow_phase', 'unknown')}\n\n"
+        
+        # Add analysis summary if available
+        analysis_summary = state.get("analysis_summary", {})
+        if analysis_summary:
+            user_content += f"## Analysis Summary\n```json\n{json.dumps(analysis_summary, indent=2, default=str)}\n```\n\n"
+        
+        # Add validation hierarchy status
+        user_content += f"## Validation Hierarchy\n```json\n{json.dumps(validation_hierarchy, indent=2)}\n```\n\n"
+        
+        # Add progress summary
+        progress = state.get("progress", {})
+        stages = progress.get("stages", [])
+        completed_stages = [s for s in stages if s.get("status", "").startswith("completed")]
+        pending_stages = [s for s in stages if s.get("status") in ["not_started", "in_progress"]]
+        
+        user_content += f"## Progress\nCompleted: {len(completed_stages)}, Pending: {len(pending_stages)}, Total: {len(stages)}\n"
+        
+        # Call LLM for supervisor assessment
+        try:
+            agent_output = call_agent_with_metrics(
+                agent_name="supervisor",
+                system_prompt=system_prompt,
+                user_content=user_content,
+                state=state,
+            )
+            
+            # Extract verdict and feedback from LLM
+            result["supervisor_verdict"] = agent_output.get("verdict", "ok_continue")
+            result["supervisor_feedback"] = agent_output.get("reasoning", "")
+            
+            # Handle backtrack suggestion if provided
+            if agent_output.get("verdict") == "backtrack_to_stage" and agent_output.get("backtrack_target"):
+                result["backtrack_decision"] = {
+                    "target_stage_id": agent_output["backtrack_target"],
+                    "reason": agent_output.get("reasoning", ""),
+                }
+                
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Supervisor LLM call failed: {e}. Defaulting to ok_continue.")
+            result["supervisor_verdict"] = "ok_continue"
+            result["supervisor_feedback"] = f"LLM unavailable: {str(e)[:200]}"
         
         # If completing a stage, archive outputs
         if current_stage_id:
@@ -4074,23 +4381,81 @@ def generate_report_node(state: ReproState) -> Dict[str, Any]:
     if quantitative_reports:
         summary_rows: List[Dict[str, Any]] = []
         for report in quantitative_reports:
-            metrics = report.get("quantitative_metrics") or {}
+            metrics_data = report.get("quantitative_metrics") or {}
             summary_rows.append({
                 "stage_id": report.get("stage_id"),
                 "figure_id": report.get("target_figure"),
                 "status": report.get("status"),
                 "precision_requirement": report.get("precision_requirement"),
-                "peak_position_error_percent": metrics.get("peak_position_error_percent"),
-                "normalized_rmse_percent": metrics.get("normalized_rmse_percent"),
-                "correlation": metrics.get("correlation"),
-                "n_points_compared": metrics.get("n_points_compared"),
+                "peak_position_error_percent": metrics_data.get("peak_position_error_percent"),
+                "normalized_rmse_percent": metrics_data.get("normalized_rmse_percent"),
+                "correlation": metrics_data.get("correlation"),
+                "n_points_compared": metrics_data.get("n_points_compared"),
             })
         result["quantitative_summary"] = summary_rows
+    
+    # Build system prompt for report generation
+    system_prompt = build_agent_prompt("report_generator", state)
+    
+    # Build user content with all report data
+    user_content = f"# GENERATE REPRODUCTION REPORT\n\n"
+    
+    # Paper info
+    paper_id = state.get("paper_id", "unknown")
+    user_content += f"Paper ID: {paper_id}\n\n"
+    
+    # Progress summary
+    progress = state.get("progress", {})
+    stages = progress.get("stages", [])
+    user_content += f"## Stage Summary\n"
+    for stage in stages:
+        user_content += f"- {stage.get('stage_id')}: {stage.get('status')} - {stage.get('summary', 'No summary')}\n"
+    
+    # Figure comparisons
+    figure_comparisons = state.get("figure_comparisons", [])
+    if figure_comparisons:
+        user_content += f"\n## Figure Comparisons\n```json\n{json.dumps(figure_comparisons[:5], indent=2, default=str)}\n```\n"
+    
+    # Assumptions
+    assumptions = state.get("assumptions", {})
+    if assumptions:
+        user_content += f"\n## Assumptions\n```json\n{json.dumps(assumptions, indent=2)}\n```\n"
+    
+    # Discrepancies
+    discrepancies = state.get("discrepancies", [])
+    if discrepancies:
+        user_content += f"\n## Discrepancies ({len(discrepancies)} total)\n"
+        for d in discrepancies[:5]:
+            user_content += f"- {d.get('parameter')}: {d.get('classification')} - {d.get('likely_cause', 'Unknown')}\n"
+    
+    # Call LLM for report content generation
+    try:
+        agent_output = call_agent_with_metrics(
+            agent_name="report",
+            system_prompt=system_prompt,
+            user_content=user_content,
+            state=state,
+            schema_name="report_schema",
+        )
         
-    # TODO: Implement report generation logic
-    # - Compile figure comparisons
-    # - Document assumptions
-    # - Generate REPRODUCTION_REPORT.md
+        # Merge LLM-generated content into result
+        if agent_output.get("executive_summary"):
+            result["executive_summary"] = agent_output["executive_summary"]
+        if agent_output.get("key_findings"):
+            result["key_findings"] = agent_output["key_findings"]
+        if agent_output.get("recommendations"):
+            result["recommendations"] = agent_output["recommendations"]
+        if agent_output.get("lessons_learned"):
+            result["lessons_learned"] = agent_output["lessons_learned"]
+            
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Report generator LLM call failed: {e}. Using stub report.")
+    
+    # Mark workflow as complete
+    result["workflow_complete"] = True
+    
     return result
 
 

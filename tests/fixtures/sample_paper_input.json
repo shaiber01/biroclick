@@ -1,0 +1,22 @@
+{
+  "paper_id": "test_gold_nanorod",
+  "paper_title": "Optical Properties of Gold Nanorods: A Test Paper",
+  "paper_domain": "plasmonics",
+  "paper_text": "We study the optical properties of gold nanorods using finite-difference time-domain (FDTD) simulations. The nanorod has dimensions of 100 nm length and 40 nm diameter, embedded in water (n=1.33). We observe a longitudinal surface plasmon resonance at approximately 700 nm wavelength. The extinction spectrum shows a characteristic peak that depends strongly on the aspect ratio. Material properties for gold were taken from Johnson and Christy (1972). The simulation cell was 400x200x200 nm with perfectly matched layer (PML) boundary conditions. A plane wave source was used with polarization along the nanorod long axis. The mesh resolution was 2 nm. Figure 1 shows the extinction spectrum from 400-900 nm. Figure 2 shows the near-field enhancement at resonance.",
+  "paper_figures": [
+    {
+      "id": "Fig1",
+      "description": "Extinction spectrum of gold nanorod from 400-900 nm",
+      "image_path": "papers/test_gold_nanorod/fig1_extinction.png",
+      "digitized_data_path": "papers/test_gold_nanorod/fig1_extinction.csv",
+      "type": "spectrum"
+    },
+    {
+      "id": "Fig2",
+      "description": "Near-field enhancement at resonance wavelength",
+      "image_path": "papers/test_gold_nanorod/fig2_nearfield.png",
+      "type": "field_map"
+    }
+  ]
+}
+

@@ -1,0 +1,13 @@
+{
+  "verdict": "approve",
+  "summary": "Code follows Meep best practices and matches design specification",
+  "issues": [],
+  "feedback": "",
+  "checks_passed": [
+    "a_unit_consistent",
+    "no_plt_show",
+    "outputs_saved_correctly",
+    "meep_api_correct"
+  ]
+}
+

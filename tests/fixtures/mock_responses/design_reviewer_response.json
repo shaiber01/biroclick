@@ -1,0 +1,13 @@
+{
+  "verdict": "approve",
+  "summary": "Design correctly captures nanorod geometry and simulation parameters",
+  "issues": [],
+  "feedback": "",
+  "checks_passed": [
+    "geometry_matches_paper",
+    "materials_from_validated_source",
+    "resolution_adequate",
+    "pml_boundaries_correct"
+  ]
+}
+

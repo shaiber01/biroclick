@@ -1,0 +1,91 @@
+{
+  "paper_id": "test_gold_nanorod",
+  "paper_domain": "plasmonics",
+  "title": "Gold Nanorod Optical Properties Reproduction",
+  "summary": "Reproduce extinction spectrum and near-field enhancement of gold nanorod in water",
+  "stages": [
+    {
+      "stage_id": "stage_0_materials",
+      "stage_type": "MATERIAL_VALIDATION",
+      "description": "Validate gold optical properties from Johnson & Christy database",
+      "targets": ["material_gold"],
+      "dependencies": [],
+      "priority": 1,
+      "target_details": [
+        {
+          "figure_id": "material_gold",
+          "description": "Gold optical constants validation",
+          "precision_requirement": "acceptable"
+        }
+      ]
+    },
+    {
+      "stage_id": "stage_1_extinction",
+      "stage_type": "SINGLE_STRUCTURE",
+      "description": "Simulate gold nanorod extinction spectrum",
+      "targets": ["Fig1"],
+      "dependencies": ["stage_0_materials"],
+      "priority": 2,
+      "target_details": [
+        {
+          "figure_id": "Fig1",
+          "description": "Extinction spectrum 400-900nm",
+          "precision_requirement": "acceptable",
+          "digitized_data_path": "papers/test_gold_nanorod/fig1_extinction.csv"
+        }
+      ]
+    }
+  ],
+  "targets": [
+    {
+      "figure_id": "Fig1",
+      "description": "Extinction spectrum of gold nanorod",
+      "type": "spectrum",
+      "simulation_class": "FDTD_DIRECT",
+      "precision_requirement": "acceptable"
+    }
+  ],
+  "extracted_parameters": [
+    {
+      "name": "nanorod_length",
+      "value": 100,
+      "unit": "nm",
+      "source": "paper_text",
+      "confidence": 0.95
+    },
+    {
+      "name": "nanorod_diameter",
+      "value": 40,
+      "unit": "nm",
+      "source": "paper_text",
+      "confidence": 0.95
+    },
+    {
+      "name": "medium_refractive_index",
+      "value": 1.33,
+      "unit": "",
+      "source": "paper_text",
+      "confidence": 0.9
+    }
+  ],
+  "planned_materials": [
+    {
+      "material_name": "gold",
+      "database": "johnson_christy",
+      "path": "materials/johnson_christy/Au.csv",
+      "wavelength_range": "400-900nm"
+    }
+  ],
+  "assumptions": {
+    "global_assumptions": [
+      {
+        "id": "A1",
+        "description": "Gold properties from Johnson & Christy 1972",
+        "source": "standard_database",
+        "confidence": "high",
+        "impact_if_wrong": "Peak position shift"
+      }
+    ]
+  }
+}
+

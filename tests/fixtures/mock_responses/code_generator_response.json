@@ -1,0 +1,13 @@
+{
+  "stage_id": "stage_1_extinction",
+  "code": "import meep as mp\nimport numpy as np\n\n# Unit conversion: a_unit = 100 nm\na_unit = 100  # nm\n\n# Nanorod dimensions in Meep units\nlength = 100 / a_unit  # 1.0\nradius = 20 / a_unit   # 0.2\n\n# Simulation domain\ncell_size = mp.Vector3(4, 2, 2)\npml_layers = [mp.PML(0.2)]\n\n# Gold material from validated data\ngold = mp.Medium(epsilon=1)  # Placeholder - use from_file in real code\n\n# Geometry\ngeometry = [\n    mp.Cylinder(\n        radius=radius,\n        height=length,\n        axis=mp.Vector3(1, 0, 0),\n        material=gold\n    )\n]\n\n# Source\nfcen = 1 / 0.65  # Center frequency (650 nm)\ndf = 0.5  # Bandwidth\nsources = [\n    mp.Source(\n        mp.GaussianSource(fcen, fwidth=df),\n        component=mp.Ex,\n        center=mp.Vector3(0, 0, -0.8),\n        size=mp.Vector3(0, 2, 2)\n    )\n]\n\n# Simulation\nsim = mp.Simulation(\n    cell_size=cell_size,\n    geometry=geometry,\n    sources=sources,\n    boundary_layers=pml_layers,\n    resolution=50\n)\n\n# Run and collect flux\nprint('Starting simulation...')\nsim.run(until=200)\nprint('Simulation complete.')\n\n# Save results\nprint('Saving extinction_spectrum.csv')\n",
+  "expected_outputs": [
+    {
+      "filename": "extinction_spectrum.csv",
+      "type": "spectrum_csv",
+      "columns": ["wavelength_nm", "extinction"]
+    }
+  ],
+  "notes": "Basic Meep simulation for gold nanorod extinction"
+}
+

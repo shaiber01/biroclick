@@ -1,0 +1,9 @@
+{
+  "verdict": "pass",
+  "stage_id": "stage_1_extinction",
+  "summary": "Simulation completed successfully, output files generated",
+  "output_files_verified": ["extinction_spectrum.csv"],
+  "runtime_seconds": 1800,
+  "issues": []
+}
+

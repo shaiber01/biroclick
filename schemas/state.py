@@ -49,7 +49,7 @@ from __future__ import annotations  # Enable forward references for type hints
 
 from typing import TypedDict, Optional, List, Dict, Any
 from typing_extensions import NotRequired
-from datetime import datetime
+from datetime import datetime, timezone
 import re
 
 

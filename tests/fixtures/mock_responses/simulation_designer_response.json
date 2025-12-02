@@ -1,0 +1,56 @@
+{
+  "stage_id": "stage_1_extinction",
+  "design_summary": "FDTD simulation of gold nanorod in water with plane wave excitation",
+  "geometry": {
+    "structure_type": "cylinder",
+    "dimensions": {
+      "length": 100,
+      "diameter": 40,
+      "unit": "nm"
+    },
+    "position": [0, 0, 0],
+    "orientation": "x-axis"
+  },
+  "materials": {
+    "structure": {
+      "name": "gold",
+      "source": "validated_materials",
+      "path": "materials/johnson_christy/Au.csv"
+    },
+    "background": {
+      "name": "water",
+      "epsilon": 1.77
+    }
+  },
+  "simulation_domain": {
+    "size": [400, 200, 200],
+    "unit": "nm",
+    "resolution": 2,
+    "pml_thickness": 20
+  },
+  "source": {
+    "type": "plane_wave",
+    "wavelength_range": [400, 900],
+    "polarization": "x",
+    "direction": "-z"
+  },
+  "monitors": [
+    {
+      "name": "extinction_monitor",
+      "type": "flux",
+      "position": "downstream",
+      "purpose": "Calculate extinction cross-section"
+    }
+  ],
+  "expected_outputs": [
+    {
+      "artifact_type": "spectrum_csv",
+      "filename": "extinction_spectrum.csv",
+      "columns": ["wavelength_nm", "extinction"]
+    }
+  ],
+  "a_unit": 100,
+  "estimated_runtime_minutes": 30,
+  "new_assumptions": []
+}
+
