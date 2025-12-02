@@ -2412,8 +2412,6 @@ Each agent receives **only what it needs** - not full repo access. This section 
 | `analysis_summary` | `state["analysis_summary"]` | Structured targets/missing/pending counts |
 | `analysis_result_reports` | `state["analysis_result_reports"]` | Per-target quantitative data |
 | `discrepancies` | From figure_comparisons | Logged discrepancies |
-| `analysis_summary` | `state["analysis_summary"]` | Analyzer's conclusions |
-| `discrepancies` | From figure_comparisons | Logged discrepancies |
 | `target_figures` | `state["paper_figures"][target_ids]` | To verify comparison |
 | `output_plots` | `state["stage_outputs"]["plots"]` | Simulation plots |
 
