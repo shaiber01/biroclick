@@ -168,8 +168,13 @@ def plan_node(state: ReproState) -> dict:
     # - Call LLM with planner_agent.md prompt
     # - Parse agent output per planner_output_schema.json
     
-    # Note: We need to fetch the prompt to use adaptations
+    # Connect prompt adaptation
     system_prompt = build_agent_prompt("planner", state)
+    
+    # Inject replan context for learning
+    replan_count = state.get("replan_count", 0)
+    if replan_count > 0:
+        system_prompt += f"\n\nNOTE: This is Replan Attempt #{replan_count}. Previous plan was rejected. Improve strategy based on feedback."
     
     # STUB: Replace with actual LLM call that populates plan, assumptions, etc.
     result = {
@@ -318,6 +323,7 @@ def select_stage_node(state: ReproState) -> dict:
                 "analysis_revision_count": 0,
                 # Reset per-stage outputs (prevent stale data from previous stage)
                 "stage_outputs": {},
+                # CRITICAL: Clear previous run_error to prevent stale failure signals
                 "run_error": None,
             }
     
@@ -347,44 +353,44 @@ def select_stage_node(state: ReproState) -> dict:
         if not deps_satisfied:
             continue
         
-    # Check validation hierarchy for stage type
-    stage_type = stage.get("stage_type")
-    
-    # Use consistent hierarchy keys from state.py
-    # Note: get_validation_hierarchy returns keys like 'stage0_material_validation' (specific)
-    # or abstract keys. The current implementation of get_validation_hierarchy in state.py
-    # returns a dict with keys corresponding to the hierarchy levels.
-    # We need to re-fetch hierarchy here as it might change if we processed multiple stages.
-    hierarchy = get_validation_hierarchy(state)
-    
-    # Use schema-defined keys for robustness
-    MAT_VAL_KEY = STAGE_TYPE_TO_HIERARCHY_KEY["MATERIAL_VALIDATION"]
-    SINGLE_STRUCT_KEY = STAGE_TYPE_TO_HIERARCHY_KEY["SINGLE_STRUCTURE"]
-    ARRAY_SYS_KEY = STAGE_TYPE_TO_HIERARCHY_KEY["ARRAY_SYSTEM"]
-    PARAM_SWEEP_KEY = STAGE_TYPE_TO_HIERARCHY_KEY["PARAMETER_SWEEP"]
-    
-    # Enforce hierarchy using STAGE_TYPE_TO_HIERARCHY_KEY mapping
-    # This ensures robustness against schema changes
-    required_level_key = STAGE_TYPE_TO_HIERARCHY_KEY.get(stage_type)
-    
-    if required_level_key:
-        # Map current stage type to its prerequisite level in the hierarchy
-        # e.g., SINGLE_STRUCTURE needs 'material_validation' to be passed
-        if stage_type == "SINGLE_STRUCTURE":
-            if hierarchy.get(MAT_VAL_KEY) not in ["passed", "partial"]:
-                continue
-        elif stage_type == "ARRAY_SYSTEM":
-            if hierarchy.get(SINGLE_STRUCT_KEY) not in ["passed", "partial"]:
-                continue
-        elif stage_type == "PARAMETER_SWEEP":
-            # Parameter sweeps typically need at least single structure
-            if hierarchy.get(SINGLE_STRUCT_KEY) not in ["passed", "partial"]:
-                continue
-        elif stage_type == "COMPLEX_PHYSICS":
-             if hierarchy.get(PARAM_SWEEP_KEY) not in ["passed", "partial"] and \
-                hierarchy.get(ARRAY_SYS_KEY) not in ["passed", "partial"]:
-                continue
-
+        # Check validation hierarchy for stage type
+        stage_type = stage.get("stage_type")
+        
+        # Use consistent hierarchy keys from state.py
+        # Note: get_validation_hierarchy returns keys like 'stage0_material_validation' (specific)
+        # or abstract keys. The current implementation of get_validation_hierarchy in state.py
+        # returns a dict with keys corresponding to the hierarchy levels.
+        # We need to re-fetch hierarchy here as it might change if we processed multiple stages.
+        hierarchy = get_validation_hierarchy(state)
+        
+        # Use schema-defined keys for robustness
+        MAT_VAL_KEY = STAGE_TYPE_TO_HIERARCHY_KEY["MATERIAL_VALIDATION"]
+        SINGLE_STRUCT_KEY = STAGE_TYPE_TO_HIERARCHY_KEY["SINGLE_STRUCTURE"]
+        ARRAY_SYS_KEY = STAGE_TYPE_TO_HIERARCHY_KEY["ARRAY_SYSTEM"]
+        PARAM_SWEEP_KEY = STAGE_TYPE_TO_HIERARCHY_KEY["PARAMETER_SWEEP"]
+        
+        # Enforce hierarchy using STAGE_TYPE_TO_HIERARCHY_KEY mapping
+        # This ensures robustness against schema changes
+        required_level_key = STAGE_TYPE_TO_HIERARCHY_KEY.get(stage_type)
+        
+        if required_level_key:
+            # Map current stage type to its prerequisite level in the hierarchy
+            # e.g., SINGLE_STRUCTURE needs 'material_validation' to be passed
+            if stage_type == "SINGLE_STRUCTURE":
+                if hierarchy.get(MAT_VAL_KEY) not in ["passed", "partial"]:
+                    continue
+            elif stage_type == "ARRAY_SYSTEM":
+                if hierarchy.get(SINGLE_STRUCT_KEY) not in ["passed", "partial"]:
+                    continue
+            elif stage_type == "PARAMETER_SWEEP":
+                # Parameter sweeps typically need at least single structure
+                if hierarchy.get(SINGLE_STRUCT_KEY) not in ["passed", "partial"]:
+                    continue
+            elif stage_type == "COMPLEX_PHYSICS":
+                 if hierarchy.get(PARAM_SWEEP_KEY) not in ["passed", "partial"] and \
+                    hierarchy.get(ARRAY_SYS_KEY) not in ["passed", "partial"]:
+                    continue
+        
         # This stage is eligible
         return {
             "workflow_phase": "stage_selection",
@@ -398,6 +404,7 @@ def select_stage_node(state: ReproState) -> dict:
             "analysis_revision_count": 0,
             # Reset per-stage outputs (prevent stale data from previous stage)
             "stage_outputs": {},
+            # CRITICAL: Clear previous run_error to prevent stale failure signals
             "run_error": None,
         }
     
@@ -696,8 +703,13 @@ def results_analyzer_node(state: ReproState) -> ReproState:
     # Connect prompt adaptation
     system_prompt = build_agent_prompt("results_analyzer", state)
     
+    # Fetch specific validation criteria for this stage
+    from schemas.state import get_stage_design_spec
+    criteria = get_stage_design_spec(state, state.get("current_stage_id"), "validation_criteria", [])
+    
     # TODO: Implement analysis logic
     # - Compare simulation outputs to paper figures
+    # - Evaluate against validation_criteria
     # - Compute discrepancies
     # - Classify reproduction quality
     return state
@@ -1540,12 +1552,15 @@ def handle_backtrack_node(state: ReproState) -> dict:
         if stage_id == target_id:
             # Target stage: mark for re-run
             stage["status"] = "needs_rerun"
+            # CRITICAL: Clear persisted outputs for the target stage so history matches new state
+            stage["outputs"] = []
+            stage["discrepancies"] = []
         elif stage_id in stages_to_invalidate:
             # Dependent stages: mark as invalidated
             stage["status"] = "invalidated"
     
     # Build return dict with all state updates
-    return {
+    result = {
         "workflow_phase": "backtracking",
         "progress": progress,
         "current_stage_id": target_id,
@@ -1569,4 +1584,20 @@ def handle_backtrack_node(state: ReproState) -> dict:
         "physics_failure_count": 0,
         "analysis_revision_count": 0,
     }
+    
+    # Guard clause: Check if max backtracks exceeded
+    max_backtracks = state.get("runtime_config", {}).get("max_backtracks", 2)
+    if result["backtrack_count"] > max_backtracks:
+        # Escalate to user instead of looping forever
+        return {
+            "workflow_phase": "backtracking_limit",
+            "ask_user_trigger": "backtrack_limit", # Needs new trigger type or generic "unknown"
+            "pending_user_questions": [
+                f"Backtrack limit ({max_backtracks}) exceeded. System is looping. How to proceed?"
+            ],
+            "awaiting_user_input": True,
+            "last_node_before_ask_user": "handle_backtrack"
+        }
+        
+    return result
 
