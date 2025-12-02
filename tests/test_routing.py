@@ -357,3 +357,4 @@ class TestNoneVerdictHandling:
         mock_save_checkpoint.assert_called_once()
 
 
+

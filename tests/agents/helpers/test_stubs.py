@@ -221,3 +221,4 @@ class TestBuildStubPlan:
         assert scope["coverage_percent"] == 100.0
 
 
+

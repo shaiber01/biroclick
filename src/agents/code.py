@@ -98,6 +98,7 @@ def code_reviewer_node(state: ReproState) -> dict:
         "workflow_phase": "code_review",
         "last_code_review_verdict": agent_output["verdict"],
         "reviewer_issues": agent_output.get("issues", []),
+        "code_revision_count": state.get("code_revision_count", 0),  # Always include current count
     }
     
     # Increment code revision counter if needs_revision
@@ -253,7 +254,8 @@ def code_generator_node(state: ReproState) -> dict:
     
     result = {
         "workflow_phase": "code_generation",
-        "code": generated_code
+        "code": generated_code,
+        "expected_outputs": agent_output.get("expected_outputs", []),
     }
     
     log_agent_call("CodeGeneratorAgent", "generate_code", start_time)(state, result)

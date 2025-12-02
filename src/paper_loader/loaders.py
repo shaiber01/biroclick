@@ -585,3 +585,4 @@ def get_all_figures(paper_input: PaperInput) -> List[FigureInput]:
     return main_figures + supplementary_figures
 
 
+

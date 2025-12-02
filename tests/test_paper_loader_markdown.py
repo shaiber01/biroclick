@@ -324,3 +324,4 @@ class TestGetFileExtension:
         assert ext == ".webp"
 
 
+

@@ -49,9 +49,9 @@ def select_stage_node(state: ReproState) -> dict:
     """
     logger = logging.getLogger(__name__)
     
-    progress = state.get("progress", {})
+    progress = state.get("progress") or {}  # Handle None gracefully
     stages = progress.get("stages", [])
-    plan = state.get("plan", {})
+    plan = state.get("plan") or {}  # Handle None gracefully
     plan_stages = plan.get("stages", [])
     
     if not stages and not plan_stages:

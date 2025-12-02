@@ -38,3 +38,4 @@ The simulation results agree well with Mie theory predictions.
 Gold nanospheres show a characteristic LSPR around 520 nm wavelength.
 
 
+

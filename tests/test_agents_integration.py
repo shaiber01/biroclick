@@ -417,9 +417,12 @@ class TestMissingNodeCoverage:
         assert len(result["code"]) > 10, "Code too short"
         assert result["workflow_phase"] == "code_generation"
         
-        # Note: expected_outputs from LLM is NOT currently passed through
-        # This could be a missing feature - the expected outputs could help
-        # validate execution results
+        # BUG: expected_outputs from LLM response should be passed through
+        # so execution_validator can verify the right files were created
+        assert "expected_outputs" in result, \
+            "BUG: expected_outputs from LLM not passed through to state"
+        assert result["expected_outputs"] == ["output.csv", "spectrum.png"], \
+            f"BUG: expected_outputs mismatch: {result.get('expected_outputs')}"
     
     def test_code_generator_requires_validated_materials_for_stage1(self, base_state, valid_plan):
         """code_generator_node should fail for Stage 1+ without validated_materials."""
@@ -1033,17 +1036,21 @@ class TestEdgeCases:
                result.get("ask_user_trigger") is not None, \
             "Should handle missing plan gracefully"
     
-    def test_select_stage_crashes_on_none_progress(self, base_state):
-        """BUG: select_stage_node crashes when progress is None."""
+    def test_select_stage_handles_none_progress(self, base_state):
+        """select_stage_node should handle None progress gracefully, not crash."""
         from src.agents.stage_selection import select_stage_node
         
-        # This documents a known bug - should be fixed
         base_state["plan"] = {}
-        base_state["progress"] = None  # This causes AttributeError!
+        base_state["progress"] = None  # This should be handled gracefully
         
-        # Currently crashes - this test documents the bug
-        with pytest.raises(AttributeError):
-            select_stage_node(base_state)
+        # BUG: Currently crashes with AttributeError instead of handling gracefully
+        # Should return error state, not crash
+        result = select_stage_node(base_state)
+        
+        # Should not crash and should indicate error
+        assert result.get("current_stage_id") is None or \
+               result.get("ask_user_trigger") is not None, \
+            "BUG: Should handle None progress gracefully"
     
     def test_code_generator_with_stub_design(self, base_state, valid_plan):
         """code_generator_node should reject stub/placeholder designs."""
@@ -1277,7 +1284,7 @@ class TestReviewerOutputFields:
         
         base_state["current_stage_id"] = "stage_0"
         base_state["current_design"] = {"stage_id": "stage_0", "geometry": [{"type": "box"}]}
-        base_state["design_revision_count"] = 0
+        base_state["design_revision_count"] = 2  # Already had some revisions
         
         with patch("src.agents.design.call_agent_with_metrics", return_value=mock_response):
             result = design_reviewer_node(base_state)
@@ -1286,8 +1293,10 @@ class TestReviewerOutputFields:
         assert result.get("last_design_review_verdict") == "approve"
         assert "workflow_phase" in result
         
-        # Note: design_revision_count is only included on rejection (increment)
-        # On approve, counter is not modified (stays at previous value)
+        # BUG: design_revision_count should be included in result even on approve
+        # so downstream nodes know how many revisions occurred
+        assert "design_revision_count" in result, \
+            "BUG: design_revision_count not included on approve - should preserve counter"
     
     def test_code_reviewer_sets_all_fields_on_approve(self, base_state):
         """code_reviewer_node should set all fields on approve."""
@@ -1301,7 +1310,7 @@ class TestReviewerOutputFields:
         
         base_state["current_stage_id"] = "stage_0"
         base_state["code"] = "import meep as mp\nprint('good code')"
-        base_state["code_revision_count"] = 0
+        base_state["code_revision_count"] = 3  # Already had some revisions
         
         with patch("src.agents.code.call_agent_with_metrics", return_value=mock_response):
             result = code_reviewer_node(base_state)
@@ -1310,8 +1319,10 @@ class TestReviewerOutputFields:
         assert result.get("last_code_review_verdict") == "approve"
         assert "workflow_phase" in result
         
-        # Note: code_revision_count is only included on rejection (increment)
-        # On approve, counter is not modified (stays at previous value)
+        # BUG: code_revision_count should be included in result even on approve
+        # so downstream nodes know how many revisions occurred
+        assert "code_revision_count" in result, \
+            "BUG: code_revision_count not included on approve - should preserve counter"
 
 
 # ═══════════════════════════════════════════════════════════════════════

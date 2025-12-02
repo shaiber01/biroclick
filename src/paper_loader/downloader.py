@@ -96,3 +96,4 @@ def download_figure(
         raise FigureDownloadError(f"Failed to save figure to {output_path}: {e}")
 
 
+

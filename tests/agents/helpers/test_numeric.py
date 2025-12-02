@@ -317,3 +317,4 @@ class TestQuantitativeCurveMetrics:
         assert result["r_squared"] == pytest.approx(1.0, abs=0.01)
 
 
+

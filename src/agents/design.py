@@ -183,6 +183,7 @@ def design_reviewer_node(state: ReproState) -> dict:
         "workflow_phase": "design_review",
         "last_design_review_verdict": agent_output["verdict"],
         "reviewer_issues": agent_output.get("issues", []),
+        "design_revision_count": state.get("design_revision_count", 0),  # Always include current count
     }
     
     # Increment design revision counter if needs_revision

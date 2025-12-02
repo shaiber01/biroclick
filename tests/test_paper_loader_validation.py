@@ -228,3 +228,4 @@ class TestValidateFigureImage:
         assert isinstance(warnings, list)
 
 
+
