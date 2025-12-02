@@ -1,0 +1,59 @@
+# Indium Phosphide (InP) optical constants
+# Source: D.E. Aspnes and A.A. Studna, Phys. Rev. B 27, 985-1009 (1983)
+# DOI: 10.1103/PhysRevB.27.985
+# Data compiled from: https://refractiveindex.info/?shelf=main&book=InP&page=Aspnes
+# Format: wavelength_nm, n (real part of refractive index), k (imaginary part)
+#
+# Note: III-V semiconductor, direct bandgap 1.34 eV (~925nm). Key material for
+# telecom photonics (1550nm), lasers, and photonic integrated circuits.
+# Substrate for InGaAsP devices. High refractive index (n~3.1-3.5).
+#
+wavelength_nm,n,k
+300,3.45,2.35
+320,3.68,2.52
+340,3.98,2.61
+360,4.36,2.55
+380,4.70,2.20
+400,4.76,1.60
+420,4.53,1.15
+440,4.28,0.90
+460,4.10,0.73
+480,3.96,0.60
+500,3.85,0.51
+520,3.76,0.43
+540,3.68,0.37
+560,3.62,0.32
+580,3.57,0.28
+600,3.52,0.24
+620,3.48,0.21
+640,3.44,0.18
+660,3.41,0.16
+680,3.38,0.14
+700,3.36,0.12
+720,3.33,0.10
+740,3.31,0.09
+760,3.29,0.07
+780,3.28,0.06
+800,3.26,0.05
+820,3.25,0.04
+840,3.23,0.03
+860,3.22,0.02
+880,3.21,0.01
+900,3.20,0.005
+920,3.19,0.00
+940,3.18,0.00
+960,3.17,0.00
+980,3.17,0.00
+1000,3.16,0.00
+1100,3.14,0.00
+1200,3.12,0.00
+1300,3.11,0.00
+1400,3.10,0.00
+1500,3.09,0.00
+1550,3.08,0.00
+1600,3.08,0.00
+1700,3.07,0.00
+1800,3.06,0.00
+1900,3.06,0.00
+2000,3.05,0.00
+

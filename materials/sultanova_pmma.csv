@@ -1,0 +1,45 @@
+# PMMA (Poly(methyl methacrylate), Acrylic) optical constants
+# Source: N. Sultanova et al., Acta Physica Polonica A 116, 585-587 (2009)
+# DOI: 10.12693/APhysPolA.116.585
+# Data compiled from: https://refractiveindex.info/?shelf=organic&book=PMMA&page=Sultanova
+# Format: wavelength_nm, n (real part of refractive index), k (imaginary part)
+#
+# Note: Common optical polymer, e-beam resist (for lithography), and optical fiber
+# material. Trade names: Plexiglas, Lucite, Perspex. Transparent in visible.
+# Low absorption in visible, some absorption in UV and IR.
+#
+wavelength_nm,n,k
+400,1.506,0.00
+420,1.502,0.00
+440,1.499,0.00
+460,1.496,0.00
+480,1.494,0.00
+500,1.492,0.00
+520,1.490,0.00
+540,1.489,0.00
+560,1.488,0.00
+580,1.487,0.00
+600,1.486,0.00
+620,1.485,0.00
+640,1.484,0.00
+660,1.483,0.00
+680,1.483,0.00
+700,1.482,0.00
+720,1.482,0.00
+740,1.481,0.00
+760,1.481,0.00
+780,1.480,0.00
+800,1.480,0.00
+850,1.479,0.00
+900,1.478,0.00
+950,1.478,0.00
+1000,1.477,0.00
+1050,1.477,0.00
+1100,1.476,0.00
+1150,1.476,0.00
+1200,1.475,0.00
+1300,1.474,0.00
+1400,1.473,0.00
+1500,1.472,0.00
+1600,1.471,0.00
+

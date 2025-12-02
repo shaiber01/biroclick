@@ -1,0 +1,51 @@
+# Molybdenum Disulfide (MoS2) optical constants - monolayer
+# Source: Y. Li et al., Phys. Rev. B 90, 205422 (2014)
+# DOI: 10.1103/PhysRevB.90.205422
+# Data compiled from: https://refractiveindex.info/?shelf=2d&book=MoS2&page=Li-0.65nm
+# Format: wavelength_nm, n (real part of refractive index), k (imaginary part)
+#
+# Note: EFFECTIVE optical constants for monolayer MoS2 assuming 0.65nm thickness.
+# 2D transition metal dichalcogenide (TMD) with direct bandgap (~1.9eV) in
+# monolayer form. Strong exciton peaks (A, B excitons). Valley-selective
+# optical properties. Use with appropriate thickness in simulations.
+#
+wavelength_nm,n,k
+400,5.20,2.80
+420,5.05,2.55
+440,4.85,2.30
+460,4.60,2.05
+480,4.35,1.82
+500,4.12,1.62
+520,3.92,1.45
+540,3.75,1.30
+560,3.60,1.18
+580,3.48,1.08
+600,3.38,1.00
+610,3.55,1.25
+620,4.00,1.65
+630,4.35,1.45
+640,4.20,0.95
+650,3.90,0.70
+660,3.68,0.58
+680,3.52,0.52
+700,3.42,0.48
+720,3.35,0.45
+740,3.30,0.43
+760,3.26,0.41
+780,3.22,0.40
+800,3.20,0.38
+850,3.14,0.35
+900,3.10,0.32
+950,3.06,0.30
+1000,3.03,0.28
+1100,2.98,0.24
+1200,2.94,0.20
+1300,2.91,0.16
+1400,2.88,0.12
+1500,2.86,0.08
+1600,2.84,0.04
+1700,2.82,0.02
+1800,2.81,0.00
+1900,2.80,0.00
+2000,2.79,0.00
+
