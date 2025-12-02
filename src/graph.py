@@ -161,6 +161,19 @@ def route_after_execution_check(state: ReproState) -> Literal["physics_check", "
     runtime_config = state.get("runtime_config", {})
     max_failures = runtime_config.get("max_execution_failures", MAX_EXECUTION_FAILURES)
     
+    # ═══════════════════════════════════════════════════════════════════════
+    # VALIDATE VERDICT EXISTS: Handle None or missing verdict
+    # ═══════════════════════════════════════════════════════════════════════
+    if verdict is None:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(
+            "execution_verdict is None - execution_validator_node may not have run or failed. "
+            "Escalating to user for guidance."
+        )
+        # Set ask_user fields to handle missing verdict
+        return "ask_user"
+    
     if verdict in ["pass", "warning"]:
         return "physics_check"
     elif verdict == "fail":
@@ -186,6 +199,19 @@ def route_after_physics_check(state: ReproState) -> Literal["analyze", "generate
     runtime_config = state.get("runtime_config", {})
     max_failures = runtime_config.get("max_physics_failures", MAX_PHYSICS_FAILURES)
     max_design = runtime_config.get("max_design_revisions", MAX_DESIGN_REVISIONS)
+    
+    # ═══════════════════════════════════════════════════════════════════════
+    # VALIDATE VERDICT EXISTS: Handle None or missing verdict
+    # ═══════════════════════════════════════════════════════════════════════
+    if verdict is None:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(
+            "physics_verdict is None - physics_sanity_node may not have run or failed. "
+            "Escalating to user for guidance."
+        )
+        # Set ask_user fields to handle missing verdict
+        return "ask_user"
     
     if verdict in ["pass", "warning"]:
         return "analyze"

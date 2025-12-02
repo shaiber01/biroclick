@@ -1039,6 +1039,28 @@ def plan_node(state: ReproState) -> dict:
     start_time = datetime.now(timezone.utc)
     
     # ═══════════════════════════════════════════════════════════════════════
+    # VALIDATE PAPER TEXT: Ensure paper text exists and is non-empty
+    # ═══════════════════════════════════════════════════════════════════════
+    paper_text = state.get("paper_text", "")
+    if not paper_text or len(paper_text.strip()) < 100:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(
+            f"paper_text is missing or too short ({len(paper_text) if paper_text else 0} chars). "
+            "Planner requires paper text to create reproduction plan."
+        )
+        return {
+            "workflow_phase": "planning",
+            "ask_user_trigger": "missing_paper_text",
+            "pending_user_questions": [
+                f"ERROR: Paper text is missing or too short ({len(paper_text) if paper_text else 0} characters). "
+                "Planner requires paper text to create reproduction plan. "
+                "Please provide paper text via paper_loader or check paper input."
+            ],
+            "awaiting_user_input": True,
+        }
+    
+    # ═══════════════════════════════════════════════════════════════════════
     # CONTEXT CHECK: CRITICAL for planner - receives full paper text
     # ═══════════════════════════════════════════════════════════════════════
     escalation = _check_context_or_escalate(state, "plan")
@@ -1085,11 +1107,30 @@ def plan_node(state: ReproState) -> dict:
         if "progress" in state_with_plan:
             # Backup old progress for history if needed, but clear active progress
             state_with_plan["progress"] = None 
-            
-        state_with_plan = initialize_progress_from_plan(state_with_plan)
-        state_with_plan = sync_extracted_parameters(state_with_plan)
-        result["progress"] = state_with_plan.get("progress")
-        result["extracted_parameters"] = state_with_plan.get("extracted_parameters")
+        
+        # ═══════════════════════════════════════════════════════════════════════
+        # ERROR HANDLING: Wrap progress initialization in try-except
+        # ═══════════════════════════════════════════════════════════════════════
+        try:
+            state_with_plan = initialize_progress_from_plan(state_with_plan)
+            state_with_plan = sync_extracted_parameters(state_with_plan)
+            result["progress"] = state_with_plan.get("progress")
+            result["extracted_parameters"] = state_with_plan.get("extracted_parameters")
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(
+                f"Failed to initialize progress from plan: {e}. "
+                "This indicates a plan structure issue. Marking plan for revision."
+            )
+            # Mark plan for revision with clear error message
+            result["last_plan_review_verdict"] = "needs_revision"
+            result["planner_feedback"] = (
+                f"Progress initialization failed: {str(e)}. "
+                "Please check plan structure and ensure all stages have required fields."
+            )
+            result["replan_count"] = state.get("replan_count", 0) + 1
+            # Don't set progress if initialization failed - let plan_review handle it
     
     # Log metrics
     log_agent_call("PlannerAgent", "plan", start_time)(state, result)
@@ -1150,6 +1191,23 @@ def plan_reviewer_node(state: ReproState) -> dict:
             "PLAN_ISSUE: Plan must contain at least one stage. "
             "Current plan has no stages defined."
         )
+    
+    # ═══════════════════════════════════════════════════════════════════════
+    # VALIDATE STAGES HAVE TARGETS: Each stage must have at least one target
+    # ═══════════════════════════════════════════════════════════════════════
+    for stage in plan_stages:
+        stage_id = stage.get("stage_id", "unknown")
+        targets = stage.get("targets", [])
+        target_details = stage.get("target_details", [])
+        
+        # Check both targets (list of IDs) and target_details (list of objects)
+        has_targets = bool(targets) or bool(target_details)
+        
+        if not has_targets:
+            blocking_issues.append(
+                f"PLAN_ISSUE: Stage '{stage_id}' has no targets defined. "
+                "Each stage must have at least one target figure to reproduce."
+            )
     
     # ═══════════════════════════════════════════════════════════════════════
     # DETECT CIRCULAR DEPENDENCIES: Prevent infinite loops
@@ -1436,6 +1494,29 @@ def select_stage_node(state: ReproState) -> dict:
         # Enforce hierarchy using STAGE_TYPE_TO_HIERARCHY_KEY mapping
         # This ensures robustness against schema changes
         required_level_key = STAGE_TYPE_TO_HIERARCHY_KEY.get(stage_type)
+        
+        # ═══════════════════════════════════════════════════════════════════════
+        # VALIDATE STAGE TYPE: Check if stage type is recognized
+        # ═══════════════════════════════════════════════════════════════════════
+        if stage_type and stage_type not in ["COMPLEX_PHYSICS"] and not required_level_key:
+            # Unknown stage type (not in hierarchy mapping and not COMPLEX_PHYSICS)
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(
+                f"Unknown stage type '{stage_type}' for stage '{stage.get('stage_id')}'. "
+                "Stage type not recognized in validation hierarchy. Marking as blocked."
+            )
+            # Mark stage as blocked with reason
+            from schemas.state import get_progress_stage, update_progress_stage_status
+            progress_stage = get_progress_stage(state, stage.get("stage_id"))
+            if progress_stage and progress_stage.get("status") != "blocked":
+                update_progress_stage_status(
+                    state,
+                    stage.get("stage_id"),
+                    "blocked",
+                    summary=f"Blocked: Unknown stage type '{stage_type}'"
+                )
+            continue
         
         if required_level_key:
             # Map current stage type to its prerequisite level in the hierarchy
@@ -1946,6 +2027,28 @@ def results_analyzer_node(state: ReproState) -> dict:
         target_ids = [t.get("figure_id") for t in stage_info["target_details"] if t.get("figure_id")]
     else:
         target_ids = [fig.get("id", "FigStub") for fig in figures]
+    
+    # ═══════════════════════════════════════════════════════════════════════
+    # VALIDATE TARGETS EXIST: Stage must have targets for analysis
+    # ═══════════════════════════════════════════════════════════════════════
+    if not target_ids or len(target_ids) == 0:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(
+            f"Stage '{current_stage_id}' has no targets defined. "
+            "Cannot proceed with analysis without targets."
+        )
+        return {
+            "workflow_phase": "analysis",
+            "analysis_summary": {
+                "overall_classification": "NO_TARGETS",
+                "unresolved_targets": [],
+                "summary": "Analysis skipped: Stage has no targets defined."
+            },
+            "analysis_overall_classification": "NO_TARGETS",
+            "supervisor_verdict": "ok_continue",  # Allow supervisor to decide next step
+            "supervisor_feedback": f"Stage {current_stage_id} has no targets - skipping analysis.",
+        }
     
     feedback_targets = _extract_targets_from_feedback(state.get("analysis_feedback"), target_ids)
     ordered_targets = feedback_targets + [t for t in target_ids if t not in feedback_targets]
@@ -2803,6 +2906,26 @@ def supervisor_node(state: ReproState) -> dict:
                 result["supervisor_verdict"] = "ok_continue"
             else:
                 result["supervisor_verdict"] = "ok_continue"
+        
+        # ─── MISSING PAPER TEXT ───────────────────────────────────────────────────
+        elif ask_user_trigger == "missing_paper_text":
+            response_text = ""
+            for q, r in user_responses.items():
+                response_text = r.upper() if isinstance(r, str) else str(r)
+            
+            if "PROVIDE_TEXT" in response_text or "TEXT" in response_text:
+                # User provided paper text - route back to plan
+                # Note: User should update state["paper_text"] before resuming
+                result["supervisor_verdict"] = "ok_continue"
+                result["supervisor_feedback"] = "Paper text provided. Proceeding to planning."
+            elif "STOP" in response_text:
+                result["supervisor_verdict"] = "all_complete"
+                result["should_stop"] = True
+            else:
+                result["supervisor_verdict"] = "ask_user"
+                result["pending_user_questions"] = [
+                    "Please provide paper text or respond with STOP to exit."
+                ]
         
         # ─── DEADLOCK DETECTED ──────────────────────────────────────────────────
         elif ask_user_trigger == "deadlock_detected":
