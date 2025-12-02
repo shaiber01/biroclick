@@ -74,7 +74,7 @@ This isn't "just another agents demo"—it's a framework for rigorous, auditable
 
 ## Architecture
 
-### Agents (12 total)
+### Agents (13 total)
 
 | Agent | Role | Responsibilities |
 |-------|------|------------------|
@@ -90,6 +90,7 @@ This isn't "just another agents demo"—it's a framework for rigorous, auditable
 | **ResultsAnalyzerAgent** | Analysis | Compares results to paper, classifies success/partial/failure |
 | **ComparisonValidatorAgent** | Comparison QA | Validates comparison accuracy, math, and classifications |
 | **SupervisorAgent** | Scientific oversight | Big-picture assessment, validation hierarchy monitoring, decision-making |
+| **ReportGeneratorAgent** | Report generation | Synthesizes all stage results into final reproduction report |
 
 ### Workflow
 

@@ -1153,22 +1153,13 @@ class TestFullSingleStage:
             "output_files": ["extinction_spectrum.csv"],
         })
         
-        # Mock file existence checks
-        mock_path_exists = MagicMock(return_value=True)
-        mock_path_is_file = MagicMock(return_value=True)
-        
-        # Mock generate_report_node to avoid missing prompt file
-        mock_generate_report = MagicMock(return_value={
-            "final_report": MockLLMResponses.report_generator(),
-            "workflow_phase": "completed",
-        })
-        
+        # Mock file existence checks only in analysis module (not globally)
+        # This allows other code paths to run normally
         with MultiPatch(LLM_PATCH_LOCATIONS, side_effect=mock_llm), \
              MultiPatch(CHECKPOINT_PATCH_LOCATIONS, return_value="/tmp/cp.json"), \
              patch("src.graph.run_code_node", mock_run_code), \
-             patch.object(src.graph, "_generate_report_node", mock_generate_report), \
-             patch("pathlib.Path.exists", mock_path_exists), \
-             patch("pathlib.Path.is_file", mock_path_is_file):
+             patch("src.agents.analysis.Path.exists", MagicMock(return_value=True)), \
+             patch("src.agents.analysis.Path.is_file", MagicMock(return_value=True)):
             
             print("\n" + "=" * 60, flush=True)
             print("TEST: Full Single-Stage Happy Path", flush=True)
@@ -2060,18 +2051,12 @@ class TestMultiStageWorkflow:
             "output_files": ["extinction_spectrum.csv"],
         })
         
-        # Mock generate_report_node to avoid missing prompt file
-        mock_generate_report = MagicMock(return_value={
-            "final_report": MockLLMResponses.report_generator(),
-            "workflow_phase": "completed",
-        })
-        
+        # Mock file existence checks only in analysis module (not globally)
         with MultiPatch(LLM_PATCH_LOCATIONS, side_effect=mock_llm), \
              MultiPatch(CHECKPOINT_PATCH_LOCATIONS, return_value="/tmp/cp.json"), \
              patch("src.graph.run_code_node", mock_run_code), \
-             patch.object(src.graph, "_generate_report_node", mock_generate_report), \
-             patch("pathlib.Path.exists", MagicMock(return_value=True)), \
-             patch("pathlib.Path.is_file", MagicMock(return_value=True)):
+             patch("src.agents.analysis.Path.exists", MagicMock(return_value=True)), \
+             patch("src.agents.analysis.Path.is_file", MagicMock(return_value=True)):
             
             print("\n" + "=" * 60, flush=True)
             print("TEST: All Stages Complete Triggers Report", flush=True)
@@ -2556,18 +2541,12 @@ class TestReportGeneration:
             "output_files": ["extinction_spectrum.csv"],
         })
         
-        # Mock generate_report_node to avoid missing prompt file
-        mock_generate_report = MagicMock(return_value={
-            "final_report": MockLLMResponses.report_generator(),
-            "workflow_phase": "completed",
-        })
-        
+        # Mock file existence checks only in analysis module (not globally)
         with MultiPatch(LLM_PATCH_LOCATIONS, side_effect=mock_llm), \
              MultiPatch(CHECKPOINT_PATCH_LOCATIONS, return_value="/tmp/cp.json"), \
              patch("src.graph.run_code_node", mock_run_code), \
-             patch.object(src.graph, "_generate_report_node", mock_generate_report), \
-             patch("pathlib.Path.exists", MagicMock(return_value=True)), \
-             patch("pathlib.Path.is_file", MagicMock(return_value=True)):
+             patch("src.agents.analysis.Path.exists", MagicMock(return_value=True)), \
+             patch("src.agents.analysis.Path.is_file", MagicMock(return_value=True)):
             
             print("\n" + "=" * 60, flush=True)
             print("TEST: All Complete Triggers Report", flush=True)
