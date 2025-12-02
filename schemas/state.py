@@ -192,6 +192,50 @@ def get_validation_hierarchy(state: dict) -> "ValidationHierarchyStatus":
     progress = state.get("progress", {})
     stages = progress.get("stages", [])
     
+    # ═══════════════════════════════════════════════════════════════════════
+    # CONSISTENCY CHECK: Validate plan ↔ progress alignment
+    # ═══════════════════════════════════════════════════════════════════════
+    plan = state.get("plan", {})
+    plan_stages = plan.get("stages", [])
+    
+    if plan_stages and not stages:
+        # Plan exists but progress not initialized - this is an error state
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(
+            "Plan has stages but progress is not initialized. "
+            "This indicates a bug in plan → progress initialization."
+        )
+        # Return failed hierarchy to prevent proceeding
+        return {
+            "material_validation": "failed",
+            "single_structure": "failed",
+            "arrays_systems": "failed",
+            "parameter_sweeps": "failed",
+        }
+    
+    # Check that all plan stage types have corresponding progress entries
+    if plan_stages and stages:
+        plan_stage_ids = {s.get("stage_id") for s in plan_stages}
+        progress_stage_ids = {s.get("stage_id") for s in stages}
+        missing_stages = plan_stage_ids - progress_stage_ids
+        
+        if missing_stages:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(
+                f"Plan has {len(missing_stages)} stages missing from progress: {missing_stages}. "
+                "This indicates progress initialization failure."
+            )
+            # Mark affected hierarchy levels as failed
+            for stage_id in missing_stages:
+                plan_stage = next((s for s in plan_stages if s.get("stage_id") == stage_id), None)
+                if plan_stage:
+                    stage_type = plan_stage.get("stage_type")
+                    hierarchy_key = STAGE_TYPE_TO_HIERARCHY_KEY.get(stage_type)
+                    if hierarchy_key and hierarchy_key in hierarchy:
+                        hierarchy[hierarchy_key] = "failed"
+    
     if not stages:
         return hierarchy
     
@@ -1810,11 +1854,51 @@ def check_context_before_node(
     """
     estimation = estimate_context_for_node(state, node_name)
     
+    # ═══════════════════════════════════════════════════════════════════════
+    # BASIC TOKEN TRACKING: Track cumulative token usage
+    # ═══════════════════════════════════════════════════════════════════════
+    # Initialize metrics if not present (don't mutate state directly, use state_updates)
+    metrics = state.get("metrics", {})
+    if not isinstance(metrics, dict):
+        metrics = {}
+    
+    # Track estimated tokens for this call
+    estimated_tokens = estimation.get("estimated_tokens", 0)
+    current_budget = metrics.get("context_budget_used", 0)
+    new_budget = current_budget + estimated_tokens
+    
+    # Update metrics dict (will be merged into state via state_updates)
+    updated_metrics = {
+        **metrics,
+        "context_budget_used": new_budget,
+    }
+    
+    # Ensure required fields exist
+    if "agent_calls" not in updated_metrics:
+        updated_metrics["agent_calls"] = []
+    if "stage_metrics" not in updated_metrics:
+        updated_metrics["stage_metrics"] = []
+    if "total_input_tokens" not in updated_metrics:
+        updated_metrics["total_input_tokens"] = 0
+    if "total_output_tokens" not in updated_metrics:
+        updated_metrics["total_output_tokens"] = 0
+    
+    # Log warning if approaching limits
+    if new_budget > CONTEXT_WINDOW_LIMITS["safe_paper_tokens"] * 0.8:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(
+            f"Context budget usage high: {new_budget:,} tokens "
+            f"({new_budget / CONTEXT_WINDOW_LIMITS['safe_paper_tokens'] * 100:.1f}% of safe limit)"
+        )
+    
     result: Dict[str, Any] = {
         "ok": True,
         "estimation": estimation,
         "recovery_applied": None,
-        "state_updates": {},
+        "state_updates": {
+            "metrics": updated_metrics,  # Include updated metrics
+        },
         "escalate": False,
         "user_question": None,
     }

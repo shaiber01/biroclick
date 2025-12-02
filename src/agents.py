@@ -121,6 +121,86 @@ def _check_context_or_escalate(state: ReproState, node_name: str) -> Optional[Di
     }
 
 
+def _validate_user_responses(trigger: str, responses: Dict[str, str], questions: List[str]) -> List[str]:
+    """
+    Validate user responses against expected format for the trigger type.
+    
+    Args:
+        trigger: The ask_user_trigger value (e.g., "material_checkpoint")
+        responses: Dict mapping question -> response
+        questions: List of questions that were asked
+        
+    Returns:
+        List of validation error messages (empty if valid)
+    """
+    errors = []
+    
+    if not responses:
+        errors.append("No responses provided")
+        return errors
+    
+    # Get all response text (combined)
+    all_responses = " ".join(str(r).upper() for r in responses.values())
+    
+    if trigger == "material_checkpoint":
+        # Must contain one of: APPROVE, CHANGE_MATERIAL, CHANGE_DATABASE, NEED_HELP
+        valid_keywords = ["APPROVE", "CHANGE_MATERIAL", "CHANGE_DATABASE", "NEED_HELP", "HELP", 
+                         "YES", "NO", "REJECT", "CORRECT", "WRONG"]
+        if not any(kw in all_responses for kw in valid_keywords):
+            errors.append(
+                "Response must contain one of: APPROVE, CHANGE_MATERIAL, CHANGE_DATABASE, or NEED_HELP"
+            )
+    
+    elif trigger == "code_review_limit":
+        valid_keywords = ["PROVIDE_HINT", "HINT", "SKIP", "STOP", "RETRY"]
+        if not any(kw in all_responses for kw in valid_keywords):
+            errors.append(
+                "Response must contain one of: PROVIDE_HINT, SKIP_STAGE, or STOP"
+            )
+    
+    elif trigger == "design_review_limit":
+        valid_keywords = ["PROVIDE_HINT", "HINT", "SKIP", "STOP", "RETRY"]
+        if not any(kw in all_responses for kw in valid_keywords):
+            errors.append(
+                "Response must contain one of: PROVIDE_HINT, SKIP_STAGE, or STOP"
+            )
+    
+    elif trigger == "execution_failure_limit":
+        valid_keywords = ["RETRY", "GUIDANCE", "SKIP", "STOP"]
+        if not any(kw in all_responses for kw in valid_keywords):
+            errors.append(
+                "Response must contain one of: RETRY_WITH_GUIDANCE, SKIP_STAGE, or STOP"
+            )
+    
+    elif trigger == "physics_failure_limit":
+        valid_keywords = ["RETRY", "ACCEPT", "PARTIAL", "SKIP", "STOP"]
+        if not any(kw in all_responses for kw in valid_keywords):
+            errors.append(
+                "Response must contain one of: RETRY_WITH_GUIDANCE, ACCEPT_PARTIAL, SKIP_STAGE, or STOP"
+            )
+    
+    elif trigger == "backtrack_approval":
+        valid_keywords = ["APPROVE", "REJECT", "YES", "NO"]
+        if not any(kw in all_responses for kw in valid_keywords):
+            errors.append(
+                "Response must contain one of: APPROVE or REJECT"
+            )
+    
+    elif trigger == "replan_limit":
+        valid_keywords = ["FORCE", "ACCEPT", "GUIDANCE", "STOP"]
+        if not any(kw in all_responses for kw in valid_keywords):
+            errors.append(
+                "Response must contain one of: FORCE_ACCEPT, PROVIDE_GUIDANCE, or STOP"
+            )
+    
+    # For unknown triggers, just check that response is not empty
+    elif trigger not in ["context_overflow", "backtrack_limit"]:
+        if not all_responses.strip():
+            errors.append("Response cannot be empty")
+    
+    return errors
+
+
 def _validate_state_or_warn(state: ReproState, node_name: str) -> list:
     """
     Validate state for a node and return list of issues.
@@ -1129,8 +1209,23 @@ def select_stage_node(state: ReproState) -> dict:
     hierarchy = get_validation_hierarchy(state)
     
     # Priority 1: Find stages that need re-run (backtrack targets)
+    # CRITICAL: Check that dependencies are not invalidated before selecting needs_rerun stage
     for stage in stages:
         if stage.get("status") == "needs_rerun":
+            # Guard against race condition: ensure no dependencies are invalidated
+            dependencies = stage.get("dependencies", [])
+            has_invalidated_deps = False
+            for dep_id in dependencies:
+                dep_stage = next((s for s in stages if s.get("stage_id") == dep_id), None)
+                if dep_stage and dep_stage.get("status") == "invalidated":
+                    has_invalidated_deps = True
+                    break
+            
+            if has_invalidated_deps:
+                # Dependencies are invalidated - wait for them to be re-run first
+                # This stage will be selected once dependencies complete
+                continue
+            
             return {
                 "workflow_phase": "stage_selection",
                 "current_stage_id": stage.get("stage_id"),
@@ -2097,7 +2192,15 @@ def supervisor_node(state: ReproState) -> dict:
             for q, r in user_responses.items():
                 response_text = r.upper() if isinstance(r, str) else str(r)
             
-            if "APPROVE" in response_text:
+            # Explicit approval keywords
+            approval_keywords = ["APPROVE", "YES", "CORRECT", "OK", "ACCEPT", "VALID", "PROCEED"]
+            rejection_keywords = ["REJECT", "NO", "WRONG", "INCORRECT", "CHANGE", "FIX"]
+            
+            is_approval = any(kw in response_text for kw in approval_keywords)
+            is_rejection = any(kw in response_text for kw in rejection_keywords)
+            
+            if is_approval and not is_rejection:
+                # Explicit approval - proceed with materials
                 result["supervisor_verdict"] = "ok_continue"
                 result["supervisor_feedback"] = "Material validation approved by user."
                 # CRITICAL: Move pending materials to validated_materials on approval
@@ -2105,13 +2208,21 @@ def supervisor_node(state: ReproState) -> dict:
                 if pending_materials:
                     result["validated_materials"] = pending_materials
                     result["pending_validated_materials"] = []  # Clear pending
+                else:
+                    # No materials to validate - this is an error state
+                    result["supervisor_verdict"] = "ask_user"
+                    result["pending_user_questions"] = [
+                        "ERROR: No materials were extracted for validation. "
+                        "Please specify materials manually using CHANGE_MATERIAL or CHANGE_DATABASE."
+                    ]
+                    return result
                 
                 # Archive outputs before moving on
                 if current_stage_id:
                     archive_stage_outputs_to_progress(state, current_stage_id)
                     update_progress_stage_status(state, current_stage_id, "completed_success")
                     
-            elif "CHANGE_DATABASE" in response_text:
+            elif "CHANGE_DATABASE" in response_text or (is_rejection and "DATABASE" in response_text):
                 # User requested database change - requires REPLAN to update assumptions
                 result["supervisor_verdict"] = "replan_needed"
                 result["planner_feedback"] = (
@@ -2127,22 +2238,49 @@ def supervisor_node(state: ReproState) -> dict:
                         "invalidated", 
                         invalidation_reason="User requested material change"
                     )
-            elif "CHANGE_MATERIAL" in response_text:
+                # Clear pending materials since they're rejected
+                result["pending_validated_materials"] = []
+            elif "CHANGE_MATERIAL" in response_text or (is_rejection and "MATERIAL" in response_text):
                 # Need to replan with different material
                 result["supervisor_verdict"] = "replan_needed"
                 result["planner_feedback"] = f"User indicated wrong material: {response_text}. Please update plan."
-            elif "NEED_HELP" in response_text:
+                # Mark stage 0 as invalid
+                if current_stage_id:
+                    update_progress_stage_status(
+                        state,
+                        current_stage_id,
+                        "invalidated",
+                        invalidation_reason="User rejected material"
+                    )
+                # Clear pending materials since they're rejected
+                result["pending_validated_materials"] = []
+            elif "NEED_HELP" in response_text or "HELP" in response_text:
                 result["supervisor_verdict"] = "ask_user"
                 # OVERWRITE pending questions to avoid loop
                 result["pending_user_questions"] = [
                     "Please provide more details about the material issue. "
                     "What specific aspect of the optical constants looks incorrect? "
-                    "(e.g., 'Imaginary part too high', 'Wrong units', 'Resonance missing')"
+                    "(e.g., 'Imaginary part too high', 'Wrong units', 'Resonance missing'). "
+                    "Or respond with APPROVE, CHANGE_MATERIAL, or CHANGE_DATABASE."
+                ]
+            elif is_rejection:
+                # Generic rejection - ask for clarification
+                result["supervisor_verdict"] = "ask_user"
+                result["pending_user_questions"] = [
+                    "You indicated rejection but didn't specify what to change. "
+                    "Please respond with: APPROVE (to accept materials), "
+                    "CHANGE_MATERIAL (to specify different material), or "
+                    "CHANGE_DATABASE (to use different optical constants database)."
                 ]
             else:
-                # Default: assume approval if unclear
-                result["supervisor_verdict"] = "ok_continue"
-                result["supervisor_feedback"] = f"Proceeding with user response: {response_text[:100]}"
+                # Ambiguous response - ask for clarification instead of assuming approval
+                result["supervisor_verdict"] = "ask_user"
+                result["pending_user_questions"] = [
+                    f"Your response '{response_text[:100]}' is unclear. "
+                    "Please respond with: APPROVE (to accept materials), "
+                    "CHANGE_MATERIAL (to specify different material), or "
+                    "CHANGE_DATABASE (to use different optical constants database)."
+                ]
         
         # ─── CODE REVIEW LIMIT ────────────────────────────────────────────────
         elif ask_user_trigger == "code_review_limit":
@@ -2559,6 +2697,23 @@ def ask_user_node(state: ReproState) -> Dict[str, Any]:
         print("\nResume later with:")
         print(f"  python -m src.graph --resume {checkpoint_path}")
         raise SystemExit(0)
+    
+    # ═══════════════════════════════════════════════════════════════════════
+    # VALIDATE USER RESPONSES: Ensure format matches expected trigger type
+    # ═══════════════════════════════════════════════════════════════════════
+    validation_errors = _validate_user_responses(trigger, responses, questions)
+    if validation_errors:
+        # Re-prompt with validation errors
+        error_msg = "\n".join(f"  - {err}" for err in validation_errors)
+        return {
+            "pending_user_questions": [
+                f"Your response had validation errors:\n{error_msg}\n\n"
+                f"Please try again:\n{questions[0] if questions else 'Please provide a valid response.'}"
+            ],
+            "awaiting_user_input": True,
+            "ask_user_trigger": trigger,  # Keep same trigger
+            "last_node_before_ask_user": state.get("last_node_before_ask_user"),
+        }
     
     return {
         "user_responses": {**state.get("user_responses", {}), **responses},
