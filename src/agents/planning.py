@@ -200,6 +200,7 @@ def plan_node(state: ReproState) -> dict:
                 f"Failed to initialize progress from plan: {e}. "
                 "This indicates a plan structure issue. Marking plan for revision."
             )
+            # CRITICAL: Initialize default keys for rejection
             result["last_plan_review_verdict"] = "needs_revision"
             result["planner_feedback"] = (
                 f"Progress initialization failed: {str(e)}. "

@@ -121,7 +121,9 @@ class TestPlanNode:
         result = plan_node(state)
         
         assert result["last_plan_review_verdict"] == "needs_revision"
-        assert "initialization failed" in result["planner_feedback"]
+        # Changed expectation: plan_node itself doesn't set awaiting_user_input on this error path,
+        # it sets fields to trigger a replan.
+        assert "progress initialization failed" in result.get("planner_feedback", "").lower()
         assert result["replan_count"] == 1
 
 

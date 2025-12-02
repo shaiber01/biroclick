@@ -113,17 +113,22 @@ def results_analyzer_node(state: ReproState) -> dict:
                 "summary": "Analysis skipped: Stage has no targets defined."
             },
             "analysis_overall_classification": "NO_TARGETS",
+            "analysis_result_reports": [],
+            "figure_comparisons": [],
             "supervisor_verdict": "ok_continue",
             "supervisor_feedback": f"Stage {current_stage_id} has no targets - skipping analysis.",
         }
     
-    feedback_targets = extract_targets_from_feedback(state.get("analysis_feedback"), target_ids)
-    ordered_targets = feedback_targets + [t for t in target_ids if t not in feedback_targets]
-    ordered_targets = ordered_targets or target_ids
+    # Validate output files exist on disk
+    paper_id = state.get("paper_id", "unknown")
+    base_output_dir = PROJECT_ROOT / "outputs" / paper_id / current_stage_id
     
-    # Validate stage outputs
+    # Use stage_outputs.files from state
     stage_outputs = state.get("stage_outputs", {})
     output_files = stage_outputs.get("files", [])
+    
+    existing_files: List[str] = []
+    missing_files: List[str] = []
     
     if not stage_outputs or not output_files:
         logger.error(
@@ -141,12 +146,10 @@ def results_analyzer_node(state: ReproState) -> dict:
             "analysis_summary": "Analysis skipped: No outputs available",
         }
     
-    # Validate output files exist on disk
-    paper_id = state.get("paper_id", "unknown")
-    base_output_dir = PROJECT_ROOT / "outputs" / paper_id / current_stage_id
-    
-    existing_files: List[str] = []
-    missing_files: List[str] = []
+    # Initialize file lists before the loop (FIX for UnboundLocalError)
+    # This was the critical bug: output_files was used in loop but these lists weren't populated if loop didn't run? 
+    # No, the lists were initialized AFTER the loop in some versions, or not used correctly.
+    # Let's make sure we iterate over the list we just extracted.
     
     for file_path in output_files:
         file_path_str = str(file_path) if not isinstance(file_path, str) else file_path
@@ -201,6 +204,11 @@ def results_analyzer_node(state: ReproState) -> dict:
     stage_discrepancies: List[Dict[str, Any]] = []
     figure_comparisons: List[Dict[str, Any]] = []
     per_result_reports: List[Dict[str, Any]] = []
+    
+    # Prioritize feedback targets, then others
+    feedback_targets = extract_targets_from_feedback(state.get("analysis_feedback", ""), target_ids)
+    ordered_targets = feedback_targets + [t for t in target_ids if t not in feedback_targets]
+    ordered_targets = ordered_targets or target_ids
     
     for target_id in ordered_targets:
         expected_names = expected_outputs_map.get(target_id, [])
@@ -593,4 +601,3 @@ def comparison_validator_node(state: ReproState) -> dict:
         result["analysis_feedback"] = None
     
     return result
-
