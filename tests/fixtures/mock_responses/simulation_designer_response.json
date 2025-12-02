@@ -1,56 +1,123 @@
 {
   "stage_id": "stage_1_extinction",
-  "design_summary": "FDTD simulation of gold nanorod in water with plane wave excitation",
-  "geometry": {
-    "structure_type": "cylinder",
-    "dimensions": {
-      "length": 100,
-      "diameter": 40,
-      "unit": "nm"
-    },
-    "position": [0, 0, 0],
-    "orientation": "x-axis"
-  },
-  "materials": {
-    "structure": {
-      "name": "gold",
-      "source": "validated_materials",
-      "path": "materials/johnson_christy/Au.csv"
-    },
-    "background": {
-      "name": "water",
-      "epsilon": 1.77
+  "design_description": "FDTD simulation of gold nanorod in water with plane wave excitation. The nanorod is modeled as a cylinder with 100nm length and 40nm diameter, oriented along the x-axis. A broadband Gaussian source excites the longitudinal plasmon mode.",
+  "unit_system": {
+    "characteristic_length_m": 1e-9,
+    "length_unit": "nm",
+    "example_conversions": {
+      "100nm_in_meep": 100,
+      "wavelength_700nm_in_meep": 700
     }
   },
-  "simulation_domain": {
-    "size": [400, 200, 200],
-    "unit": "nm",
+  "geometry": {
+    "dimensionality": "3D",
+    "cell_size": {
+      "x": 400,
+      "y": 200,
+      "z": 200
+    },
     "resolution": 2,
-    "pml_thickness": 20
+    "structures": [
+      {
+        "name": "nanorod",
+        "type": "cylinder",
+        "material_ref": "gold",
+        "center": {"x": 0, "y": 0, "z": 0},
+        "dimensions": {
+          "radius": 20,
+          "height": 100,
+          "axis": "x"
+        },
+        "real_dimensions": {
+          "diameter_nm": 40,
+          "length_nm": 100
+        }
+      }
+    ],
+    "symmetries": []
   },
-  "source": {
-    "type": "plane_wave",
-    "wavelength_range": [400, 900],
-    "polarization": "x",
-    "direction": "-z"
+  "materials": [
+    {
+      "id": "gold",
+      "name": "Gold (Au)",
+      "model_type": "tabulated",
+      "source": "johnson_christy",
+      "data_file": "materials/johnson_christy/Au.csv",
+      "wavelength_range": {
+        "min_nm": 400,
+        "max_nm": 900
+      }
+    },
+    {
+      "id": "water",
+      "name": "Water",
+      "model_type": "constant",
+      "source": "standard",
+      "data_file": null,
+      "parameters": {
+        "epsilon": 1.77
+      }
+    }
+  ],
+  "sources": [
+    {
+      "type": "gaussian",
+      "component": "Ex",
+      "center": {"x": -150, "y": 0, "z": 0},
+      "size": {"x": 0, "y": 160, "z": 160},
+      "wavelength_center_nm": 650,
+      "wavelength_width_nm": 400,
+      "frequency_center_meep": 0.00154,
+      "frequency_width_meep": 0.00092
+    }
+  ],
+  "boundary_conditions": {
+    "x_min": "pml",
+    "x_max": "pml",
+    "y_min": "pml",
+    "y_max": "pml",
+    "z_min": "pml",
+    "z_max": "pml",
+    "pml_thickness": 20,
+    "pml_layers": 20
   },
   "monitors": [
     {
-      "name": "extinction_monitor",
       "type": "flux",
-      "position": "downstream",
-      "purpose": "Calculate extinction cross-section"
+      "name": "extinction_monitor",
+      "purpose": "Calculate extinction cross-section via transmitted flux",
+      "center": {"x": 150, "y": 0, "z": 0},
+      "size": {"x": 0, "y": 160, "z": 160},
+      "frequency_points": 200
     }
   ],
-  "expected_outputs": [
+  "simulation_parameters": {
+    "run_until": {
+      "type": "decay",
+      "decay_by": 1e-6
+    },
+    "subpixel_averaging": true,
+    "force_complex_fields": false
+  },
+  "performance_estimate": {
+    "runtime_estimate_minutes": 30,
+    "memory_estimate_gb": 2.5,
+    "total_cells": 16000000,
+    "timesteps_estimate": 50000,
+    "notes": "3D simulation with reasonable resolution"
+  },
+  "output_specifications": [
     {
       "artifact_type": "spectrum_csv",
-      "filename": "extinction_spectrum.csv",
+      "filename_pattern": "extinction_spectrum.csv",
+      "description": "Extinction cross-section vs wavelength",
       "columns": ["wavelength_nm", "extinction"]
     }
   ],
-  "a_unit": 100,
-  "estimated_runtime_minutes": 30,
-  "new_assumptions": []
+  "new_assumptions": [],
+  "design_rationale": "Standard FDTD setup for plasmonic nanorod. Using tabulated gold data from Johnson & Christy for accurate optical properties. PML boundaries absorb outgoing radiation.",
+  "potential_issues": [
+    "Resolution may need to be increased for accurate near-field calculations",
+    "Longer runtime may be needed for sharp resonance peaks"
+  ]
 }
-

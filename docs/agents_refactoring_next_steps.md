@@ -119,6 +119,12 @@ Added three new test files with comprehensive coverage:
 
 Run smoke tests with: `pytest -m smoke tests/test_llm_smoke.py`
 
+### Mock Response Cleanup (Completed)
+Fixed legacy mock responses to match JSON schemas:
+- `simulation_designer_response.json`: Changed `materials` from object to array format
+- `results_analyzer_response.json`: Changed `confidence_factors` from object to array format
+- Added `pytest.ini` with custom mark registration (`smoke`, `slow`)
+
 ## Low Priority (Future Improvements)
 
 ### Record LLM Responses for Regression
