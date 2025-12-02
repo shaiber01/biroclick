@@ -1,0 +1,810 @@
+{
+  "version": "0.5.0",
+  "materials": {
+    "palik_silver": {
+      "material_id": "palik_silver",
+      "name": "Silver (Johnson & Christy)",
+      "valid": true,
+      "issues": [],
+      "warnings": [
+        "WARNING: Poor fit accuracy (mean relative error: 31.2%)"
+      ],
+      "metrics": {
+        "wavelength_range_nm": [
+          187.86,
+          1000.0
+        ],
+        "n_range": [
+          0.05,
+          1.41
+        ],
+        "k_range": [
+          0.392,
+          9.11
+        ],
+        "num_points": 68,
+        "fit": {
+          "eps1_mean_rel_error": 0.28249515176139717,
+          "eps2_mean_rel_error": 0.7616561831315082,
+          "eps1_max_rel_error": 0.4826106559421792,
+          "eps2_max_rel_error": 5.451806084887328,
+          "overall_quality": "poor"
+        }
+      }
+    },
+    "palik_gold": {
+      "material_id": "palik_gold",
+      "name": "Gold (Palik)",
+      "valid": true,
+      "issues": [],
+      "warnings": [
+        "WARNING: Large k discontinuity at 800nm (\u0394k = 0.570)",
+        "WARNING: Large k discontinuity at 850nm (\u0394k = 0.570)",
+        "WARNING: Large k discontinuity at 900nm (\u0394k = 0.570)"
+      ],
+      "metrics": {
+        "wavelength_range_nm": [
+          200.0,
+          2000.0
+        ],
+        "n_range": [
+          0.13,
+          1.66
+        ],
+        "k_range": [
+          1.21,
+          19.07
+        ],
+        "num_points": 45,
+        "fit": {
+          "eps1_mean_rel_error": 0.17461149495244513,
+          "eps2_mean_rel_error": 0.1058893003338084,
+          "eps1_max_rel_error": 0.3969630650313362,
+          "eps2_max_rel_error": 0.2719405980250274,
+          "overall_quality": "good"
+        }
+      }
+    },
+    "johnson_christy_copper": {
+      "material_id": "johnson_christy_copper",
+      "name": "Copper (Johnson & Christy)",
+      "valid": true,
+      "issues": [],
+      "warnings": [
+        "WARNING: Poor fit accuracy (mean relative error: 60.8%)"
+      ],
+      "metrics": {
+        "wavelength_range_nm": [
+          187.86,
+          1000.0
+        ],
+        "n_range": [
+          0.21,
+          1.37
+        ],
+        "k_range": [
+          0.55,
+          5.71
+        ],
+        "num_points": 68,
+        "fit": {
+          "eps1_mean_rel_error": 2.3669446865682535,
+          "eps2_mean_rel_error": 0.40902245544567206,
+          "eps1_max_rel_error": 5.394590259858436,
+          "eps2_max_rel_error": 1.529905666523832,
+          "overall_quality": "poor"
+        }
+      }
+    },
+    "rakic_aluminum": {
+      "material_id": "rakic_aluminum",
+      "name": "Aluminum (Rakic)",
+      "valid": true,
+      "issues": [],
+      "warnings": [
+        "WARNING: Poor fit accuracy (mean relative error: 30.2%)"
+      ],
+      "metrics": {
+        "wavelength_range_nm": [
+          200.0,
+          1200.0
+        ],
+        "n_range": [
+          0.11,
+          3.69
+        ],
+        "k_range": [
+          2.21,
+          10.97
+        ],
+        "num_points": 45,
+        "fit": {
+          "eps1_mean_rel_error": 0.22225768830625128,
+          "eps2_mean_rel_error": 0.6280065181071968,
+          "eps1_max_rel_error": 0.6285097700686967,
+          "eps2_max_rel_error": 0.8251357131523218,
+          "overall_quality": "poor"
+        }
+      }
+    },
+    "naik_tin": {
+      "material_id": "naik_tin",
+      "name": "Titanium Nitride (Naik)",
+      "valid": true,
+      "issues": [],
+      "warnings": [
+        "WARNING: Large k discontinuity at 1000nm (\u0394k = 0.880)",
+        "WARNING: Large k discontinuity at 1100nm (\u0394k = 0.900)",
+        "WARNING: Large k discontinuity at 1200nm (\u0394k = 0.900)"
+      ],
+      "metrics": {
+        "wavelength_range_nm": [
+          300.0,
+          2000.0
+        ],
+        "n_range": [
+          0.24,
+          2.97
+        ],
+        "k_range": [
+          1.42,
+          14.28
+        ],
+        "num_points": 40,
+        "fit": {
+          "eps1_mean_rel_error": 0.250927088501629,
+          "eps2_mean_rel_error": 0.3864006576249877,
+          "eps1_max_rel_error": 0.4435972698228369,
+          "eps2_max_rel_error": 0.8257280514184707,
+          "overall_quality": "good"
+        }
+      }
+    },
+    "johnson_christy_chromium": {
+      "material_id": "johnson_christy_chromium",
+      "name": "Chromium (Johnson & Christy)",
+      "valid": true,
+      "issues": [],
+      "warnings": [
+        "WARNING: Poor fit accuracy (mean relative error: 86.2%)"
+      ],
+      "metrics": {
+        "wavelength_range_nm": [
+          200.0,
+          1200.0
+        ],
+        "n_range": [
+          1.53,
+          3.45
+        ],
+        "k_range": [
+          2.19,
+          5.68
+        ],
+        "num_points": 39,
+        "fit": {
+          "eps1_mean_rel_error": 1.671604270798228,
+          "eps2_mean_rel_error": 0.575755813315671,
+          "eps1_max_rel_error": 2.74567733651321,
+          "eps2_max_rel_error": 0.7191038436603502,
+          "overall_quality": "poor"
+        }
+      }
+    },
+    "johnson_christy_titanium": {
+      "material_id": "johnson_christy_titanium",
+      "name": "Titanium (Johnson & Christy)",
+      "valid": true,
+      "issues": [],
+      "warnings": [
+        "WARNING: Poor fit accuracy (mean relative error: 65.3%)"
+      ],
+      "metrics": {
+        "wavelength_range_nm": [
+          200.0,
+          1200.0
+        ],
+        "n_range": [
+          1.08,
+          4.09
+        ],
+        "k_range": [
+          1.68,
+          5.54
+        ],
+        "num_points": 39,
+        "fit": {
+          "eps1_mean_rel_error": 1.052515468098401,
+          "eps2_mean_rel_error": 0.7468907968978804,
+          "eps1_max_rel_error": 1.7314785600441913,
+          "eps2_max_rel_error": 0.7675588748297628,
+          "overall_quality": "poor"
+        }
+      }
+    },
+    "johnson_christy_nickel": {
+      "material_id": "johnson_christy_nickel",
+      "name": "Nickel (Johnson & Christy)",
+      "valid": true,
+      "issues": [],
+      "warnings": [
+        "WARNING: Poor fit accuracy (mean relative error: 139.1%)"
+      ],
+      "metrics": {
+        "wavelength_range_nm": [
+          200.0,
+          1200.0
+        ],
+        "n_range": [
+          1.22,
+          3.58
+        ],
+        "k_range": [
+          2.14,
+          6.89
+        ],
+        "num_points": 39,
+        "fit": {
+          "eps1_mean_rel_error": 3.093264925049451,
+          "eps2_mean_rel_error": 0.795671648140096,
+          "eps1_max_rel_error": 4.655161599609148,
+          "eps2_max_rel_error": 0.8090553666525214,
+          "overall_quality": "poor"
+        }
+      }
+    },
+    "rakic_platinum": {
+      "material_id": "rakic_platinum",
+      "name": "Platinum (Rakic)",
+      "valid": true,
+      "issues": [],
+      "warnings": [
+        "WARNING: Poor fit accuracy (mean relative error: 67.5%)"
+      ],
+      "metrics": {
+        "wavelength_range_nm": [
+          200.0,
+          1200.0
+        ],
+        "n_range": [
+          1.3,
+          2.74
+        ],
+        "k_range": [
+          1.62,
+          5.99
+        ],
+        "num_points": 39,
+        "fit": {
+          "eps1_mean_rel_error": 1.2053381999229607,
+          "eps2_mean_rel_error": 0.7998867844199394,
+          "eps1_max_rel_error": 1.6447513744504547,
+          "eps2_max_rel_error": 0.8111022171971346,
+          "overall_quality": "poor"
+        }
+      }
+    },
+    "palik_silicon": {
+      "material_id": "palik_silicon",
+      "name": "Silicon (Palik)",
+      "valid": true,
+      "issues": [],
+      "warnings": [
+        "WARNING: Large n discontinuity at 320nm (\u0394n = 1.050)",
+        "WARNING: Large n discontinuity at 340nm (\u0394n = 0.640)",
+        "WARNING: Large n discontinuity at 380nm (\u0394n = 0.950)",
+        "WARNING: Large k discontinuity at 300nm (\u0394k = 0.590)",
+        "WARNING: Large k discontinuity at 340nm (\u0394k = 1.520)",
+        "WARNING: Large k discontinuity at 360nm (\u0394k = 1.110)"
+      ],
+      "metrics": {
+        "wavelength_range_nm": [
+          300.0,
+          2000.0
+        ],
+        "n_range": [
+          3.34,
+          6.7
+        ],
+        "k_range": [
+          0.0,
+          3.59
+        ],
+        "num_points": 45,
+        "fit": {
+          "eps1_mean_rel_error": 0.17023301624433307,
+          "eps2_mean_rel_error": 0.36671766283997326,
+          "eps1_max_rel_error": 0.2804888971452958,
+          "eps2_max_rel_error": 0.8654424267646662,
+          "overall_quality": "good"
+        }
+      }
+    },
+    "aspnes_germanium": {
+      "material_id": "aspnes_germanium",
+      "name": "Germanium (Aspnes)",
+      "valid": true,
+      "issues": [],
+      "warnings": [
+        "WARNING: Large k discontinuity at 400nm (\u0394k = 0.800)",
+        "WARNING: Large k discontinuity at 420nm (\u0394k = 0.670)",
+        "WARNING: Poor fit accuracy (mean relative error: 52.0%)"
+      ],
+      "metrics": {
+        "wavelength_range_nm": [
+          300.0,
+          2000.0
+        ],
+        "n_range": [
+          3.51,
+          5.83
+        ],
+        "k_range": [
+          0.0,
+          4.14
+        ],
+        "num_points": 46,
+        "fit": {
+          "eps1_mean_rel_error": 0.7290679988032323,
+          "eps2_mean_rel_error": 1.7995850750218514,
+          "eps1_max_rel_error": 0.7630912009516434,
+          "eps2_max_rel_error": 3.46628291554616,
+          "overall_quality": "poor"
+        }
+      }
+    },
+    "aspnes_gaas": {
+      "material_id": "aspnes_gaas",
+      "name": "Gallium Arsenide (Aspnes)",
+      "valid": true,
+      "issues": [],
+      "warnings": [
+        "WARNING: Large k discontinuity at 400nm (\u0394k = 0.600)"
+      ],
+      "metrics": {
+        "wavelength_range_nm": [
+          300.0,
+          2000.0
+        ],
+        "n_range": [
+          3.32,
+          5.35
+        ],
+        "k_range": [
+          0.0,
+          2.48
+        ],
+        "num_points": 46,
+        "fit": {
+          "eps1_mean_rel_error": 0.28015404905521935,
+          "eps2_mean_rel_error": 1.2170757683358602,
+          "eps1_max_rel_error": 0.33063521266570256,
+          "eps2_max_rel_error": 2.0819208207973343,
+          "overall_quality": "moderate"
+        }
+      }
+    },
+    "aspnes_inp": {
+      "material_id": "aspnes_inp",
+      "name": "Indium Phosphide (Aspnes)",
+      "valid": true,
+      "issues": [],
+      "warnings": [
+        "WARNING: Large k discontinuity at 380nm (\u0394k = 0.600)"
+      ],
+      "metrics": {
+        "wavelength_range_nm": [
+          300.0,
+          2000.0
+        ],
+        "n_range": [
+          3.05,
+          4.76
+        ],
+        "k_range": [
+          0.0,
+          2.61
+        ],
+        "num_points": 47,
+        "fit": {
+          "eps1_mean_rel_error": 0.3576893651255003,
+          "eps2_mean_rel_error": 1.167778497899317,
+          "eps1_max_rel_error": 0.3815399116379523,
+          "eps2_max_rel_error": 1.8859552258371204,
+          "overall_quality": "moderate"
+        }
+      }
+    },
+    "malitson_sio2": {
+      "material_id": "malitson_sio2",
+      "name": "Silicon Dioxide (SiO2, Fused Silica)",
+      "valid": true,
+      "issues": [],
+      "warnings": [],
+      "metrics": {
+        "wavelength_range_nm": [
+          200.0,
+          2000.0
+        ],
+        "n_range": [
+          1.437,
+          1.552
+        ],
+        "k_range": [
+          0.0,
+          0.0
+        ],
+        "num_points": 45,
+        "fit": {
+          "eps1_mean_rel_error": 0.0203685822725448,
+          "eps2_mean_rel_error": 0.0,
+          "eps1_max_rel_error": 0.11462369201634805,
+          "eps2_max_rel_error": 0.0,
+          "overall_quality": "excellent"
+        }
+      }
+    },
+    "devore_tio2": {
+      "material_id": "devore_tio2",
+      "name": "Titanium Dioxide (TiO2, Rutile)",
+      "valid": true,
+      "issues": [],
+      "warnings": [],
+      "metrics": {
+        "wavelength_range_nm": [
+          430.0,
+          2000.0
+        ],
+        "n_range": [
+          2.303,
+          2.853
+        ],
+        "k_range": [
+          0.0,
+          0.0
+        ],
+        "num_points": 44,
+        "fit": {
+          "eps1_mean_rel_error": 0.09534883846848173,
+          "eps2_mean_rel_error": 0.0,
+          "eps1_max_rel_error": 0.24868393555513552,
+          "eps2_max_rel_error": 0.0,
+          "overall_quality": "excellent"
+        }
+      }
+    },
+    "philipp_si3n4": {
+      "material_id": "philipp_si3n4",
+      "name": "Silicon Nitride (Si3N4)",
+      "valid": true,
+      "issues": [],
+      "warnings": [],
+      "metrics": {
+        "wavelength_range_nm": [
+          200.0,
+          2000.0
+        ],
+        "n_range": [
+          1.94,
+          2.66
+        ],
+        "k_range": [
+          0.0,
+          0.33
+        ],
+        "num_points": 44,
+        "fit": {
+          "eps1_mean_rel_error": 0.05042918910536498,
+          "eps2_mean_rel_error": 0.0,
+          "eps1_max_rel_error": 0.18218546036069824,
+          "eps2_max_rel_error": 0.0,
+          "overall_quality": "excellent"
+        }
+      }
+    },
+    "malitson_al2o3": {
+      "material_id": "malitson_al2o3",
+      "name": "Aluminum Oxide (Al2O3, Sapphire)",
+      "valid": true,
+      "issues": [],
+      "warnings": [],
+      "metrics": {
+        "wavelength_range_nm": [
+          200.0,
+          3000.0
+        ],
+        "n_range": [
+          1.646,
+          1.926
+        ],
+        "k_range": [
+          0.0,
+          0.0
+        ],
+        "num_points": 44,
+        "fit": {
+          "eps1_mean_rel_error": 0.0612914104384896,
+          "eps2_mean_rel_error": 0.0,
+          "eps1_max_rel_error": 0.1550025345407765,
+          "eps2_max_rel_error": 0.0,
+          "overall_quality": "excellent"
+        }
+      }
+    },
+    "bright_hfo2": {
+      "material_id": "bright_hfo2",
+      "name": "Hafnium Dioxide (HfO2)",
+      "valid": true,
+      "issues": [],
+      "warnings": [],
+      "metrics": {
+        "wavelength_range_nm": [
+          200.0,
+          2000.0
+        ],
+        "n_range": [
+          1.88,
+          2.35
+        ],
+        "k_range": [
+          0.0,
+          0.15
+        ],
+        "num_points": 39,
+        "fit": {
+          "eps1_mean_rel_error": 0.03499193516936788,
+          "eps2_mean_rel_error": 0.0,
+          "eps1_max_rel_error": 0.11645344004661558,
+          "eps2_max_rel_error": 0.0,
+          "overall_quality": "excellent"
+        }
+      }
+    },
+    "bond_zno": {
+      "material_id": "bond_zno",
+      "name": "Zinc Oxide (ZnO)",
+      "valid": true,
+      "issues": [],
+      "warnings": [
+        "WARNING: n appears flat in absorption region - possible KK inconsistency"
+      ],
+      "metrics": {
+        "wavelength_range_nm": [
+          370.0,
+          2000.0
+        ],
+        "n_range": [
+          1.82,
+          2.45
+        ],
+        "k_range": [
+          0.0,
+          0.02
+        ],
+        "num_points": 35,
+        "fit": {
+          "eps1_mean_rel_error": 0.0675742028863584,
+          "eps2_mean_rel_error": 0.0,
+          "eps1_max_rel_error": 0.2326975845445953,
+          "eps2_max_rel_error": 0.0,
+          "overall_quality": "excellent"
+        }
+      }
+    },
+    "dodge_mgf2": {
+      "material_id": "dodge_mgf2",
+      "name": "Magnesium Fluoride (MgF2)",
+      "valid": true,
+      "issues": [],
+      "warnings": [],
+      "metrics": {
+        "wavelength_range_nm": [
+          200.0,
+          2000.0
+        ],
+        "n_range": [
+          1.363,
+          1.427
+        ],
+        "k_range": [
+          0.0,
+          0.0
+        ],
+        "num_points": 39,
+        "fit": {
+          "eps1_mean_rel_error": 0.01150043378120492,
+          "eps2_mean_rel_error": 0.0,
+          "eps1_max_rel_error": 0.06086219591502889,
+          "eps2_max_rel_error": 0.0,
+          "overall_quality": "excellent"
+        }
+      }
+    },
+    "konig_ito": {
+      "material_id": "konig_ito",
+      "name": "Indium Tin Oxide (ITO)",
+      "valid": true,
+      "issues": [],
+      "warnings": [],
+      "metrics": {
+        "wavelength_range_nm": [
+          300.0,
+          2000.0
+        ],
+        "n_range": [
+          0.52,
+          2.22
+        ],
+        "k_range": [
+          0.002,
+          1.5
+        ],
+        "num_points": 43,
+        "fit": {
+          "eps1_mean_rel_error": 0.3306105448024581,
+          "eps2_mean_rel_error": 0.5716423783949149,
+          "eps1_max_rel_error": 1.106615867054162,
+          "eps2_max_rel_error": 1.3554251400169073,
+          "overall_quality": "moderate"
+        }
+      }
+    },
+    "sultanova_pmma": {
+      "material_id": "sultanova_pmma",
+      "name": "PMMA (Acrylic)",
+      "valid": true,
+      "issues": [],
+      "warnings": [],
+      "metrics": {
+        "wavelength_range_nm": [
+          400.0,
+          1600.0
+        ],
+        "n_range": [
+          1.471,
+          1.506
+        ],
+        "k_range": [
+          0.0,
+          0.0
+        ],
+        "num_points": 33,
+        "fit": {
+          "eps1_mean_rel_error": 0.008223780176719169,
+          "eps2_mean_rel_error": 0.0,
+          "eps1_max_rel_error": 0.027270691069678294,
+          "eps2_max_rel_error": 0.0,
+          "overall_quality": "excellent"
+        }
+      }
+    },
+    "kuzmenko_graphene": {
+      "material_id": "kuzmenko_graphene",
+      "name": "Graphene (Kuzmenko)",
+      "valid": true,
+      "issues": [],
+      "warnings": [
+        "WARNING: Poor fit accuracy (mean relative error: 87.3%)"
+      ],
+      "metrics": {
+        "wavelength_range_nm": [
+          300.0,
+          2000.0
+        ],
+        "n_range": [
+          2.68,
+          2.92
+        ],
+        "k_range": [
+          1.17,
+          1.45
+        ],
+        "num_points": 37,
+        "fit": {
+          "eps1_mean_rel_error": 0.7686090569720712,
+          "eps2_mean_rel_error": 0.9044208621561338,
+          "eps1_max_rel_error": 0.7820785571396818,
+          "eps2_max_rel_error": 0.9090909090909091,
+          "overall_quality": "poor"
+        }
+      }
+    },
+    "segura_hbn": {
+      "material_id": "segura_hbn",
+      "name": "Hexagonal Boron Nitride (hBN)",
+      "valid": true,
+      "issues": [],
+      "warnings": [],
+      "metrics": {
+        "wavelength_range_nm": [
+          250.0,
+          2000.0
+        ],
+        "n_range": [
+          1.88,
+          2.56
+        ],
+        "k_range": [
+          0.0,
+          0.35
+        ],
+        "num_points": 39,
+        "fit": {
+          "eps1_mean_rel_error": 0.04059454656808946,
+          "eps2_mean_rel_error": 0.013598987982289689,
+          "eps1_max_rel_error": 0.1813618760461104,
+          "eps2_max_rel_error": 0.46236559139784944,
+          "overall_quality": "excellent"
+        }
+      }
+    },
+    "li_mos2": {
+      "material_id": "li_mos2",
+      "name": "Molybdenum Disulfide (MoS2)",
+      "valid": true,
+      "issues": [],
+      "warnings": [
+        "WARNING: Poor fit accuracy (mean relative error: 45.2%)"
+      ],
+      "metrics": {
+        "wavelength_range_nm": [
+          400.0,
+          2000.0
+        ],
+        "n_range": [
+          2.79,
+          5.2
+        ],
+        "k_range": [
+          0.0,
+          2.8
+        ],
+        "num_points": 38,
+        "fit": {
+          "eps1_mean_rel_error": 0.7761400549886138,
+          "eps2_mean_rel_error": 0.5969419530126923,
+          "eps1_max_rel_error": 0.8550426980866934,
+          "eps2_max_rel_error": 0.9090909090909091,
+          "overall_quality": "poor"
+        }
+      }
+    },
+    "constant_glass": {
+      "material_id": "constant_glass",
+      "name": "Glass (BK7-like, constant n)",
+      "valid": true,
+      "issues": [],
+      "warnings": [],
+      "metrics": {},
+      "skipped": true,
+      "reason": "No CSV data available"
+    },
+    "constant_air": {
+      "material_id": "constant_air",
+      "name": "Air (vacuum approximation)",
+      "valid": true,
+      "issues": [],
+      "warnings": [],
+      "metrics": {},
+      "skipped": true,
+      "reason": "No CSV data available"
+    },
+    "constant_water": {
+      "material_id": "constant_water",
+      "name": "Water (constant n)",
+      "valid": true,
+      "issues": [],
+      "warnings": [],
+      "metrics": {},
+      "skipped": true,
+      "reason": "No CSV data available"
+    }
+  },
+  "summary": {
+    "total": 28,
+    "valid": 28,
+    "with_warnings": 16,
+    "skipped": 3,
+    "failed": 0
+  }
+}

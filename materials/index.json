@@ -64,7 +64,7 @@
           {"omega_0_eV": 4.05, "gamma_eV": 0.5, "sigma": 0.5},
           {"omega_0_eV": 5.15, "gamma_eV": 1.5, "sigma": 0.3}
         ],
-        "fit_quality": "good",
+        "fit_quality": "approximate",
         "fit_wavelength_range_nm": [300, 1000]
       },
       "alternative_fits": {
@@ -74,7 +74,7 @@
           "eps_inf": 1.0,
           "drude_terms": [{"omega_p_eV": 9.17, "gamma_eV": 0.021}],
           "lorentz_terms": [],
-          "fit_quality": "excellent"
+          "fit_quality": "approximate"
         },
         "nir_extended": {
           "description": "Extended to NIR with better accuracy above 800nm",
@@ -82,7 +82,7 @@
           "eps_inf": 1.0,
           "drude_terms": [{"omega_p_eV": 9.01, "gamma_eV": 0.048}],
           "lorentz_terms": [],
-          "fit_quality": "good"
+          "fit_quality": "approximate"
         }
       },
       "temperature_correction": {
@@ -140,7 +140,7 @@
         "lorentz_terms": [
           {"omega_0_eV": 2.64, "gamma_eV": 0.75, "sigma": 1.0}
         ],
-        "fit_quality": "good",
+        "fit_quality": "approximate",
         "fit_wavelength_range_nm": [500, 1500]
       },
       "alternative_fits": {
@@ -150,7 +150,7 @@
           "eps_inf": 1.0,
           "drude_terms": [{"omega_p_eV": 9.03, "gamma_eV": 0.053}],
           "lorentz_terms": [],
-          "fit_quality": "excellent"
+          "fit_quality": "approximate"
         },
         "full_visible": {
           "description": "Full visible including interband region",
@@ -161,7 +161,7 @@
             {"omega_0_eV": 2.70, "gamma_eV": 0.50, "sigma": 1.1},
             {"omega_0_eV": 3.35, "gamma_eV": 0.80, "sigma": 0.9}
           ],
-          "fit_quality": "good"
+          "fit_quality": "approximate"
         }
       },
       "temperature_correction": {
@@ -220,7 +220,7 @@
         "lorentz_terms": [
           {"omega_0_eV": 2.13, "gamma_eV": 0.38, "sigma": 0.3}
         ],
-        "fit_quality": "good",
+        "fit_quality": "approximate",
         "fit_wavelength_range_nm": [600, 1000]
       },
       "alternative_fits": {
@@ -230,7 +230,7 @@
           "eps_inf": 1.0,
           "drude_terms": [{"omega_p_eV": 10.83, "gamma_eV": 0.047}],
           "lorentz_terms": [],
-          "fit_quality": "excellent"
+          "fit_quality": "approximate"
         }
       },
       "temperature_correction": {
@@ -285,7 +285,7 @@
           {"omega_0_eV": 0.62, "gamma_eV": 0.27, "sigma": 0.07},
           {"omega_0_eV": 1.54, "gamma_eV": 0.5, "sigma": 0.24}
         ],
-        "fit_quality": "excellent",
+        "fit_quality": "approximate",
         "fit_wavelength_range_nm": [200, 1000]
       },
       "alternative_fits": {
@@ -295,7 +295,7 @@
           "eps_inf": 1.0,
           "drude_terms": [{"omega_p_eV": 15.3, "gamma_eV": 0.058}],
           "lorentz_terms": [{"omega_0_eV": 1.5, "gamma_eV": 0.32, "sigma": 0.22}],
-          "fit_quality": "excellent"
+          "fit_quality": "approximate"
         }
       },
       "temperature_correction": {
@@ -351,7 +351,7 @@
           {"omega_p_eV": 8.0, "gamma_eV": 0.5}
         ],
         "lorentz_terms": [],
-        "fit_quality": "moderate",
+        "fit_quality": "approximate",
         "fit_wavelength_range_nm": [600, 2000]
       },
       "temperature_correction": {
@@ -391,7 +391,7 @@
         "eps_inf": 1.0,
         "drude_terms": [{"omega_p_eV": 10.75, "gamma_eV": 0.47}],
         "lorentz_terms": [],
-        "fit_quality": "moderate",
+        "fit_quality": "approximate",
         "fit_wavelength_range_nm": [400, 1000]
       },
       "thin_film_correction": {
@@ -423,7 +423,7 @@
         "eps_inf": 1.0,
         "drude_terms": [{"omega_p_eV": 7.29, "gamma_eV": 0.38}],
         "lorentz_terms": [],
-        "fit_quality": "moderate",
+        "fit_quality": "approximate",
         "fit_wavelength_range_nm": [400, 1000]
       },
       "thin_film_correction": {
@@ -455,7 +455,7 @@
         "eps_inf": 1.0,
         "drude_terms": [{"omega_p_eV": 15.92, "gamma_eV": 0.048}],
         "lorentz_terms": [],
-        "fit_quality": "moderate",
+        "fit_quality": "approximate",
         "fit_wavelength_range_nm": [400, 1000]
       },
       "uncertainty": {
@@ -481,7 +481,7 @@
         "eps_inf": 1.0,
         "drude_terms": [{"omega_p_eV": 9.59, "gamma_eV": 0.08}],
         "lorentz_terms": [],
-        "fit_quality": "moderate",
+        "fit_quality": "approximate",
         "fit_wavelength_range_nm": [400, 1000]
       },
       "uncertainty": {
@@ -506,7 +506,7 @@
         "eps_inf": 11.7,
         "drude_terms": [],
         "lorentz_terms": [{"omega_0_eV": 3.4, "gamma_eV": 0.1, "sigma": 3.0}],
-        "fit_quality": "good",
+        "fit_quality": "approximate",
         "fit_wavelength_range_nm": [500, 2000]
       },
       "alternative_fits": {
@@ -516,7 +516,7 @@
           "eps_inf": 11.7,
           "drude_terms": [],
           "lorentz_terms": [],
-          "fit_quality": "excellent"
+          "fit_quality": "good"
         }
       },
       "temperature_correction": {
@@ -561,7 +561,7 @@
         "eps_inf": 16.2,
         "drude_terms": [],
         "lorentz_terms": [{"omega_0_eV": 2.1, "gamma_eV": 0.3, "sigma": 6.0}],
-        "fit_quality": "good",
+        "fit_quality": "approximate",
         "fit_wavelength_range_nm": [1200, 2000]
       },
       "temperature_correction": {
@@ -594,7 +594,7 @@
         "eps_inf": 10.9,
         "drude_terms": [],
         "lorentz_terms": [{"omega_0_eV": 2.9, "gamma_eV": 0.2, "sigma": 4.0}],
-        "fit_quality": "good",
+        "fit_quality": "approximate",
         "fit_wavelength_range_nm": [900, 2000]
       },
       "temperature_correction": {
@@ -627,7 +627,7 @@
         "eps_inf": 9.6,
         "drude_terms": [],
         "lorentz_terms": [{"omega_0_eV": 3.2, "gamma_eV": 0.3, "sigma": 3.5}],
-        "fit_quality": "good",
+        "fit_quality": "approximate",
         "fit_wavelength_range_nm": [950, 2000]
       },
       "temperature_correction": {
@@ -846,7 +846,7 @@
         "eps_inf": 3.8,
         "drude_terms": [{"omega_p_eV": 1.78, "gamma_eV": 0.15}],
         "lorentz_terms": [],
-        "fit_quality": "good",
+        "fit_quality": "approximate",
         "fit_wavelength_range_nm": [400, 1500]
       },
       "uncertainty": {
