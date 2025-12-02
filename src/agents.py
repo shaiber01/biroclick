@@ -33,6 +33,12 @@ from schemas.state import (
     get_plan_stage,
     get_progress_stage,
     DISCREPANCY_THRESHOLDS,
+    MAX_DESIGN_REVISIONS,
+    MAX_CODE_REVISIONS,
+    MAX_REPLANS,
+    MAX_ANALYSIS_REVISIONS,
+    MAX_EXECUTION_FAILURES,
+    MAX_PHYSICS_FAILURES,
 )
 
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -232,17 +238,17 @@ def adapt_prompts_node(state: ReproState) -> ReproState:
             return context_update  # type: ignore[return-value]
         state = {**state, **context_update}
 
-    state["workflow_phase"] = "adapting_prompts"
-    
-    # Initialize empty adaptations list (to be populated by LLM)
-    # This ensures the field exists for build_agent_prompt
-    state["prompt_adaptations"] = []
+    # Return state updates instead of mutating state
+    result = {
+        "workflow_phase": "adapting_prompts",
+        "prompt_adaptations": [],  # Initialize empty adaptations list
+    }
     
     # TODO: Implement prompt adaptation logic
     # - Analyze paper domain and techniques
     # - Generate prompt modifications
-    # - Store in state["prompt_adaptations"]
-    return state
+    # - Store in result["prompt_adaptations"]
+    return result
 
 
 def _ensure_stub_figures(state: ReproState) -> List[Dict[str, Any]]:
@@ -836,10 +842,11 @@ def _record_discrepancy(
     action_taken: str = "",
     blocking: bool = True,
 ) -> Dict[str, Any]:
-    """Append a discrepancy entry to both global log and the stage progress."""
-    if state.get("discrepancies_log") is None:
-        state["discrepancies_log"] = []
-    log = state.setdefault("discrepancies_log", [])
+    """Append a discrepancy entry to both global log and the stage progress.
+    
+    Returns state updates dict (does not mutate state directly).
+    """
+    log = state.get("discrepancies_log", [])
     entry_id = f"D{len(log) + 1}"
     discrepancy = {
         "id": entry_id,
@@ -853,14 +860,25 @@ def _record_discrepancy(
         "action_taken": action_taken,
         "blocking": blocking,
     }
-    log.append(discrepancy)
     
+    # Return state updates instead of mutating state
+    # Note: This function is called from within nodes, so callers need to merge the result
+    updated_log = log + [discrepancy]
+    
+    # For stage-specific discrepancies, update_progress_stage_status handles it
+    # But we still need to return the updated log
+    result = {
+        "discrepancies_log": updated_log,
+    }
+    
+    # Also update progress stage if needed (this mutates progress, but that's handled by update_progress_stage_status)
     if stage_id:
         progress_stage = get_progress_stage(state, stage_id)
         if progress_stage is not None:
-            stage_discrepancies = progress_stage.setdefault("discrepancies", [])
-            stage_discrepancies.append(discrepancy)
-    return discrepancy
+            # This will be handled by the caller merging the result
+            pass
+    
+    return {"discrepancy": discrepancy, **result}
 
 
 def _materials_from_stage_outputs(state: ReproState) -> List[Dict[str, Any]]:
@@ -1129,7 +1147,16 @@ def plan_node(state: ReproState) -> dict:
                 f"Progress initialization failed: {str(e)}. "
                 "Please check plan structure and ensure all stages have required fields."
             )
-            result["replan_count"] = state.get("replan_count", 0) + 1
+            # ═══════════════════════════════════════════════════════════════════════
+            # BOUNDS CHECK: Prevent replan_count from exceeding limit
+            # ═══════════════════════════════════════════════════════════════════════
+            current_replan_count = state.get("replan_count", 0)
+            runtime_config = state.get("runtime_config", {})
+            max_replans = runtime_config.get("max_replans", MAX_REPLANS)
+            if current_replan_count < max_replans:
+                result["replan_count"] = current_replan_count + 1
+            else:
+                result["replan_count"] = current_replan_count  # Don't increment beyond limit
             # Don't set progress if initialization failed - let plan_review handle it
     
     # Log metrics
@@ -1301,7 +1328,16 @@ def plan_reviewer_node(state: ReproState) -> dict:
     
     # Increment replan counter if needs_revision
     if agent_output["verdict"] == "needs_revision":
-        result["replan_count"] = state.get("replan_count", 0) + 1
+        # ═══════════════════════════════════════════════════════════════════════
+        # BOUNDS CHECK: Prevent replan_count from exceeding limit
+        # ═══════════════════════════════════════════════════════════════════════
+        current_replan_count = state.get("replan_count", 0)
+        runtime_config = state.get("runtime_config", {})
+        max_replans = runtime_config.get("max_replans", MAX_REPLANS)
+        if current_replan_count < max_replans:
+            result["replan_count"] = current_replan_count + 1
+        else:
+            result["replan_count"] = current_replan_count  # Don't increment beyond limit
         result["planner_feedback"] = agent_output.get("feedback", agent_output.get("summary", ""))
     
     return result
@@ -1325,7 +1361,11 @@ def select_stage_node(state: ReproState) -> dict:
     Returns:
         Dict with state updates (LangGraph merges this into state)
     """
-    from schemas.state import get_validation_hierarchy, STAGE_TYPE_TO_HIERARCHY_KEY
+    from schemas.state import (
+        get_validation_hierarchy, 
+        STAGE_TYPE_TO_HIERARCHY_KEY,
+        initialize_progress_from_plan
+    )
     
     progress = state.get("progress", {})
     stages = progress.get("stages", [])
@@ -1353,9 +1393,37 @@ def select_stage_node(state: ReproState) -> dict:
             "awaiting_user_input": True,
         }
     
-    # Use plan stages if progress stages aren't initialized
-    if not stages:
-        stages = plan_stages
+    # ═══════════════════════════════════════════════════════════════════════
+    # ENSURE PROGRESS INITIALIZED: If progress stages don't exist, initialize them
+    # ═══════════════════════════════════════════════════════════════════════
+    if not stages and plan_stages:
+        # Progress stages not initialized - initialize them from plan
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(
+            "Progress stages not initialized. Initializing from plan stages on-demand."
+        )
+        try:
+            # Initialize progress from plan
+            state = initialize_progress_from_plan(state)
+            progress = state.get("progress", {})
+            stages = progress.get("stages", [])
+        except Exception as e:
+            logger.error(
+                f"Failed to initialize progress from plan: {e}. "
+                "Cannot proceed with stage selection."
+            )
+            return {
+                "workflow_phase": "stage_selection",
+                "current_stage_id": None,
+                "current_stage_type": None,
+                "ask_user_trigger": "progress_init_failed",
+                "pending_user_questions": [
+                    f"ERROR: Failed to initialize progress stages: {e}. "
+                    "Please check plan structure or restart workflow."
+                ],
+                "awaiting_user_input": True,
+            }
     
     # Additional validation: ensure stages list is not empty after initialization
     if not stages or len(stages) == 0:
@@ -1395,13 +1463,15 @@ def select_stage_node(state: ReproState) -> dict:
                 continue
             
             # ═══════════════════════════════════════════════════════════════════════
-            # RESET COUNTERS: Only reset if switching to a different stage
+            # RESET COUNTERS: Reset if switching stages OR if stage needs rerun
             # ═══════════════════════════════════════════════════════════════════════
             selected_stage_id = stage.get("stage_id")
             current_stage_id = state.get("current_stage_id")
             
-            # Only reset counters if this is a different stage (not re-entering same stage)
-            reset_counters = selected_stage_id != current_stage_id
+            # Reset counters when:
+            # 1. Switching to a different stage (normal case)
+            # 2. Rerunning the same stage (needs_rerun) - clear previous revision counts
+            reset_counters = (selected_stage_id != current_stage_id) or (stage.get("status") == "needs_rerun")
             
             result_updates = {
                 "workflow_phase": "stage_selection",
@@ -1428,28 +1498,87 @@ def select_stage_node(state: ReproState) -> dict:
             return result_updates
     
     # Priority 2: Find not_started stages with satisfied dependencies
+    # Also re-check blocked stages to see if they can be unblocked
     for stage in stages:
         status = stage.get("status", "not_started")
         
-        # Skip completed, in_progress, or blocked stages.
+        # Skip completed, in_progress stages
         # NOTE: "invalidated" stages ARE eligible if their dependencies are met (re-run)
-        if status in ["completed_success", "completed_partial", "completed_failed", 
-                      "in_progress", "blocked"]:
+        # NOTE: "blocked" stages will be re-checked below to see if they can be unblocked
+        if status in ["completed_success", "completed_partial", "completed_failed", "in_progress"]:
             continue
+        
+        # ═══════════════════════════════════════════════════════════════════════
+        # RE-CHECK BLOCKED STAGES: If dependencies are now satisfied, unblock them
+        # ═══════════════════════════════════════════════════════════════════════
+        if status == "blocked":
+            # Re-check if dependencies are now satisfied
+            dependencies = stage.get("dependencies", [])
+            deps_satisfied = True
+            missing_deps = []
+            
+            stage_ids = {s.get("stage_id") for s in stages if s.get("stage_id")}
+            
+            for dep_id in dependencies:
+                if dep_id not in stage_ids:
+                    missing_deps.append(dep_id)
+                    deps_satisfied = False
+                    continue
+                
+                dep_stage = next((s for s in stages if s.get("stage_id") == dep_id), None)
+                if dep_stage:
+                    dep_status = dep_stage.get("status", "not_started")
+                    if dep_status not in ["completed_success", "completed_partial"]:
+                        deps_satisfied = False
+                        break
+                else:
+                    missing_deps.append(dep_id)
+                    deps_satisfied = False
+            
+            if deps_satisfied:
+                # Dependencies are now satisfied - unblock the stage
+                from schemas.state import update_progress_stage_status
+                update_progress_stage_status(
+                    state,
+                    stage.get("stage_id"),
+                    "not_started",  # Change from blocked to not_started
+                    summary="Unblocked: Dependencies now satisfied"
+                )
+                # Note: Don't mutate local stage["status"] - update_progress_stage_status persists it
+                # The stage will be refetched from state on next iteration if needed
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.info(
+                    f"Stage '{stage.get('stage_id')}' unblocked - dependencies now satisfied."
+                )
+            else:
+                # Still blocked - skip this stage
+                continue
         
         # Check if dependencies are satisfied
         dependencies = stage.get("dependencies", [])
-        deps_satisfied = True
-        missing_deps = []
         
-        # Build stage_id lookup for validation
-        stage_ids = {s.get("stage_id") for s in stages if s.get("stage_id")}
-        
-        for dep_id in dependencies:
-            # ═══════════════════════════════════════════════════════════════════════
-            # VALIDATE DEPENDENCY EXISTS: Check dependency stage_id exists in plan
-            # ═══════════════════════════════════════════════════════════════════════
-            if dep_id not in stage_ids:
+        # ═══════════════════════════════════════════════════════════════════════
+        # EXPLICIT EMPTY DEPENDENCIES HANDLING: Stages with no dependencies (e.g., Stage 0)
+        # are always eligible
+        # ═══════════════════════════════════════════════════════════════════════
+        if not dependencies:
+            # Stage has no dependencies (e.g., Stage 0 material validation) - always eligible
+            deps_satisfied = True
+            missing_deps = []
+        else:
+            # Stage has dependencies - check each one
+            deps_satisfied = True
+            missing_deps = []
+            
+            # Build stage_id lookup for validation
+            stage_ids = {s.get("stage_id") for s in stages if s.get("stage_id")}
+            
+            for dep_id in dependencies:
+                # ═══════════════════════════════════════════════════════════════════════
+                # VALIDATE DEPENDENCY EXISTS: Check dependency stage_id exists in plan
+                # ═══════════════════════════════════════════════════════════════════════
+                if dep_id not in stage_ids:
                 missing_deps.append(dep_id)
                 deps_satisfied = False
                 continue
@@ -1492,6 +1621,27 @@ def select_stage_node(state: ReproState) -> dict:
         
         # Check validation hierarchy for stage type
         stage_type = stage.get("stage_type")
+        
+        # ═══════════════════════════════════════════════════════════════════════
+        # VALIDATE STAGE_TYPE: Ensure stage_type is not None
+        # ═══════════════════════════════════════════════════════════════════════
+        if not stage_type:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(
+                f"Stage '{stage.get('stage_id')}' has no stage_type defined. "
+                "Cannot determine validation hierarchy. Marking as blocked."
+            )
+            from schemas.state import get_progress_stage, update_progress_stage_status
+            progress_stage = get_progress_stage(state, stage.get("stage_id"))
+            if progress_stage and progress_stage.get("status") != "blocked":
+                update_progress_stage_status(
+                    state,
+                    stage.get("stage_id"),
+                    "blocked",
+                    summary="Blocked: Missing stage_type field"
+                )
+            continue  # Skip this stage
         
         # Use consistent hierarchy keys from state.py
         # Note: get_validation_hierarchy returns keys like 'stage0_material_validation' (specific)
@@ -1593,8 +1743,13 @@ def select_stage_node(state: ReproState) -> dict:
         selected_stage_id = stage.get("stage_id")
         current_stage_id = state.get("current_stage_id")
         
-        # Only reset counters if this is a different stage (not re-entering same stage)
-        reset_counters = selected_stage_id != current_stage_id
+        # ═══════════════════════════════════════════════════════════════════════
+        # RESET COUNTERS: Reset if switching stages OR if stage needs rerun
+        # ═══════════════════════════════════════════════════════════════════════
+        # Reset counters when:
+        # 1. Switching to a different stage (normal case)
+        # 2. Rerunning the same stage (needs_rerun) - clear previous revision counts
+        reset_counters = (selected_stage_id != current_stage_id) or (status == "needs_rerun")
         
         result_updates = {
             "workflow_phase": "stage_selection",
@@ -1782,7 +1937,16 @@ def design_reviewer_node(state: ReproState) -> dict:
     
     # Increment design revision counter if needs_revision
     if agent_output["verdict"] == "needs_revision":
-        result["design_revision_count"] = state.get("design_revision_count", 0) + 1
+        # ═══════════════════════════════════════════════════════════════════════
+        # BOUNDS CHECK: Prevent design_revision_count from exceeding limit
+        # ═══════════════════════════════════════════════════════════════════════
+        current_count = state.get("design_revision_count", 0)
+        runtime_config = state.get("runtime_config", {})
+        max_revisions = runtime_config.get("max_design_revisions", MAX_DESIGN_REVISIONS)
+        if current_count < max_revisions:
+            result["design_revision_count"] = current_count + 1
+        else:
+            result["design_revision_count"] = current_count  # Don't increment beyond limit
         result["reviewer_feedback"] = agent_output.get("feedback", agent_output.get("summary", ""))
     
     return result
@@ -1834,7 +1998,16 @@ def code_reviewer_node(state: ReproState) -> dict:
     
     # Increment code revision counter if needs_revision
     if agent_output["verdict"] == "needs_revision":
-        result["code_revision_count"] = state.get("code_revision_count", 0) + 1
+        # ═══════════════════════════════════════════════════════════════════════
+        # BOUNDS CHECK: Prevent code_revision_count from exceeding limit
+        # ═══════════════════════════════════════════════════════════════════════
+        current_count = state.get("code_revision_count", 0)
+        runtime_config = state.get("runtime_config", {})
+        max_revisions = runtime_config.get("max_code_revisions", MAX_CODE_REVISIONS)
+        if current_count < max_revisions:
+            result["code_revision_count"] = current_count + 1
+        else:
+            result["code_revision_count"] = current_count  # Don't increment beyond limit
         result["reviewer_feedback"] = agent_output.get("feedback", agent_output.get("summary", ""))
     
     return result
@@ -1900,7 +2073,13 @@ def code_generator_node(state: ReproState) -> dict:
         )
         return {
             "workflow_phase": "code_generation",
-            "design_revision_count": state.get("design_revision_count", 0) + 1,
+            # ═══════════════════════════════════════════════════════════════════════
+            # BOUNDS CHECK: Prevent design_revision_count from exceeding limit
+            # ═══════════════════════════════════════════════════════════════════════
+            "design_revision_count": min(
+                state.get("design_revision_count", 0) + 1,
+                state.get("runtime_config", {}).get("max_design_revisions", MAX_DESIGN_REVISIONS)
+            ),
             "reviewer_feedback": (
                 "ERROR: Design description is missing or contains stub markers. "
                 "Code generation requires an approved design description. "
@@ -1933,7 +2112,13 @@ def code_generator_node(state: ReproState) -> dict:
                     "This indicates material_checkpoint_node did not run or user did not approve materials. "
                     "Check that Stage 0 completed and user confirmation was received."
                 ),
-                "code_revision_count": state.get("code_revision_count", 0) + 1,
+                # ═══════════════════════════════════════════════════════════════════════
+                # BOUNDS CHECK: Prevent code_revision_count from exceeding limit
+                # ═══════════════════════════════════════════════════════════════════════
+                "code_revision_count": min(
+                    state.get("code_revision_count", 0) + 1,
+                    state.get("runtime_config", {}).get("max_code_revisions", MAX_CODE_REVISIONS)
+                ),
             }
     
     # TODO: Implement code generation logic
@@ -2058,7 +2243,16 @@ def execution_validator_node(state: ReproState) -> dict:
     # Increment failure counters if verdict is "fail"
     # This happens BEFORE routing function reads the count
     if agent_output["verdict"] == "fail":
-        result["execution_failure_count"] = state.get("execution_failure_count", 0) + 1
+        # ═══════════════════════════════════════════════════════════════════════
+        # BOUNDS CHECK: Prevent execution_failure_count from exceeding limit
+        # ═══════════════════════════════════════════════════════════════════════
+        current_count = state.get("execution_failure_count", 0)
+        runtime_config = state.get("runtime_config", {})
+        max_failures = runtime_config.get("max_execution_failures", MAX_EXECUTION_FAILURES)
+        if current_count < max_failures:
+            result["execution_failure_count"] = current_count + 1
+        else:
+            result["execution_failure_count"] = current_count  # Don't increment beyond limit
         result["total_execution_failures"] = state.get("total_execution_failures", 0) + 1
         
         runtime_config = state.get("runtime_config", {})
@@ -2129,10 +2323,28 @@ def physics_sanity_node(state: ReproState) -> dict:
     # Increment failure counters based on verdict type
     # This happens BEFORE routing function reads the count
     if agent_output["verdict"] == "fail":
-        result["physics_failure_count"] = state.get("physics_failure_count", 0) + 1
+        # ═══════════════════════════════════════════════════════════════════════
+        # BOUNDS CHECK: Prevent physics_failure_count from exceeding limit
+        # ═══════════════════════════════════════════════════════════════════════
+        current_count = state.get("physics_failure_count", 0)
+        runtime_config = state.get("runtime_config", {})
+        max_failures = runtime_config.get("max_physics_failures", MAX_PHYSICS_FAILURES)
+        if current_count < max_failures:
+            result["physics_failure_count"] = current_count + 1
+        else:
+            result["physics_failure_count"] = current_count  # Don't increment beyond limit
     elif agent_output["verdict"] == "design_flaw":
         # design_flaw routes to design node, use design_revision_count
-        result["design_revision_count"] = state.get("design_revision_count", 0) + 1
+        # ═══════════════════════════════════════════════════════════════════════
+        # BOUNDS CHECK: Prevent design_revision_count from exceeding limit
+        # ═══════════════════════════════════════════════════════════════════════
+        current_count = state.get("design_revision_count", 0)
+        runtime_config = state.get("runtime_config", {})
+        max_revisions = runtime_config.get("max_design_revisions", MAX_DESIGN_REVISIONS)
+        if current_count < max_revisions:
+            result["design_revision_count"] = current_count + 1
+        else:
+            result["design_revision_count"] = current_count  # Don't increment beyond limit
     
     # If agent suggests backtrack, populate backtrack_suggestion for supervisor
     if agent_output.get("backtrack_suggestion", {}).get("suggest_backtrack"):
@@ -2170,7 +2382,7 @@ def results_analyzer_node(state: ReproState) -> dict:
             "awaiting_user_input": True,
         }
     
-    state["workflow_phase"] = "analysis"
+    result["workflow_phase"] = "analysis"
     stage_info = get_plan_stage(state, current_stage_id) if current_stage_id else None
     figures = _ensure_stub_figures(state)
     target_ids = []
@@ -2236,12 +2448,32 @@ def results_analyzer_node(state: ReproState) -> dict:
     from pathlib import Path
     existing_files = []
     missing_files = []
+    
+    # ═══════════════════════════════════════════════════════════════════════
+    # RESOLVE RELATIVE PATHS: Handle both absolute and relative file paths
+    # ═══════════════════════════════════════════════════════════════════════
+    # Base directory for outputs: outputs/{paper_id}/{stage_id}/
+    paper_id = state.get("paper_id", "unknown")
+    current_stage_id = state.get("current_stage_id", "unknown")
+    base_output_dir = PROJECT_ROOT / "outputs" / paper_id / current_stage_id
+    
     for file_path in output_files:
-        file_obj = Path(file_path) if isinstance(file_path, str) else Path(str(file_path))
+        file_path_str = str(file_path) if not isinstance(file_path, str) else file_path
+        file_obj = Path(file_path_str)
+        
+        # If path is relative, resolve against base output directory
+        if not file_obj.is_absolute():
+            file_obj = base_output_dir / file_obj
+        
+        # Also try resolving against project root if base_output_dir doesn't work
+        if not file_obj.exists() and not Path(file_path_str).is_absolute():
+            file_obj = PROJECT_ROOT / file_path_str
+        
         if file_obj.exists() and file_obj.is_file():
-            existing_files.append(file_path)
+            # Store absolute path for consistency
+            existing_files.append(str(file_obj.resolve()))
         else:
-            missing_files.append(file_path)
+            missing_files.append(file_path_str)
     
     if not existing_files and output_files:
         # All files are missing - this is an error
@@ -2297,7 +2529,12 @@ def results_analyzer_node(state: ReproState) -> dict:
         figure_meta = figure_lookup.get(target_id) or {}
         target_cfg = plan_targets_map.get(target_id, {})
         precision_requirement = target_cfg.get("precision_requirement", "acceptable")
-        reference_path = target_cfg.get("reference_data_path") or (stage_info.get("reference_data_path") if stage_info else None)
+        # ═══════════════════════════════════════════════════════════════════════
+        # NULL CHECK: Ensure stage_info exists before accessing attributes
+        # ═══════════════════════════════════════════════════════════════════════
+        reference_path = target_cfg.get("reference_data_path")
+        if not reference_path and stage_info:
+            reference_path = stage_info.get("reference_data_path")
         digitized_path = (
             figure_meta.get("digitized_data_path")
             or target_cfg.get("digitized_data_path")
@@ -2325,6 +2562,44 @@ def results_analyzer_node(state: ReproState) -> dict:
         quantitative_metrics: Dict[str, Any] = {}
         classification_label = "missing_output"
         
+        # ═══════════════════════════════════════════════════════════════════════
+        # ENFORCE DIGITIZED DATA REQUIREMENT: Targets requiring <2% precision must have digitized data
+        # ═══════════════════════════════════════════════════════════════════════
+        if requires_digitized and not digitized_path:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(
+                f"Target '{target_id}' requires 'excellent' precision (<2%) but no digitized data path provided. "
+                "Cannot perform quantitative comparison without digitized reference data."
+            )
+            # Mark target as blocked - cannot analyze without digitized data
+            pending_targets.append(target_id)
+            stage_discrepancies.append(
+                _record_discrepancy(
+                    state,
+                    current_stage_id,
+                    target_id,
+                    "digitized_data",
+                    "Digitized reference data required for excellent precision",
+                    "Not provided",
+                    classification="investigate",
+                    likely_cause="Target requires <2% precision but digitized data path is missing.",
+                    action_taken="Analysis blocked until digitized data is provided",
+                    blocking=True,
+                )
+            )
+            # Skip quantitative analysis for this target - mark as missing digitized data
+            classification_label = "missing_digitized_data"
+            # Continue to next target - don't process this one further
+            figure_comparisons.append({
+                "target_id": target_id,
+                "status": "missing_digitized_data",
+                "classification": "missing_digitized_data",
+                "quantitative_metrics": {},
+                "notes": "Analysis blocked: Digitized data required but not provided",
+            })
+            continue  # Skip to next target
+        
         if not has_output:
             missing_targets.append(target_id)
             stage_discrepancies.append(
@@ -2348,9 +2623,8 @@ def results_analyzer_node(state: ReproState) -> dict:
             quantitative_metrics = _quantitative_curve_metrics(sim_series, ref_series)
             has_reference = ref_series is not None
             
-            if requires_digitized and not digitized_path:
-                classification_label = "pending_validation"
-                pending_targets.append(target_id)
+            # Note: Digitized data requirement is already checked above - if we reach here,
+            # either digitized data exists or precision requirement is not "excellent"
                 stage_discrepancies.append(
                     _record_discrepancy(
                         state,
@@ -2630,7 +2904,16 @@ def comparison_validator_node(state: ReproState) -> dict:
     }
     
     if verdict == "needs_revision":
-        result["analysis_revision_count"] = state.get("analysis_revision_count", 0) + 1
+        # ═══════════════════════════════════════════════════════════════════════
+        # BOUNDS CHECK: Prevent analysis_revision_count from exceeding limit
+        # ═══════════════════════════════════════════════════════════════════════
+        current_count = state.get("analysis_revision_count", 0)
+        runtime_config = state.get("runtime_config", {})
+        max_revisions = runtime_config.get("max_analysis_revisions", MAX_ANALYSIS_REVISIONS)
+        if current_count < max_revisions:
+            result["analysis_revision_count"] = current_count + 1
+        else:
+            result["analysis_revision_count"] = current_count  # Don't increment beyond limit
         result["analysis_feedback"] = feedback
     else:
         # Clear feedback on success
@@ -2681,6 +2964,45 @@ def supervisor_node(state: ReproState) -> dict:
         update_progress_stage_status,
         archive_stage_outputs_to_progress
     )
+    
+    # Initialize result dict early for archive error recovery
+    result: Dict[str, Any] = {
+        "workflow_phase": "supervision",
+    }
+    
+    # ═══════════════════════════════════════════════════════════════════════
+    # ARCHIVE ERROR RECOVERY: Retry failed archiving before proceeding
+    # ═══════════════════════════════════════════════════════════════════════
+    archive_errors = state.get("archive_errors", [])
+    if archive_errors:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"Retrying {len(archive_errors)} failed archive operations...")
+        
+        retried_errors = []
+        for error_entry in archive_errors:
+            stage_id = error_entry.get("stage_id")
+            if stage_id:
+                try:
+                    archive_stage_outputs_to_progress(state, stage_id)
+                    logger.info(f"Successfully archived outputs for stage {stage_id} on retry.")
+                except Exception as e:
+                    logger.warning(
+                        f"Archive retry failed for stage {stage_id}: {e}. "
+                        "Will retry again on next supervisor call."
+                    )
+                    retried_errors.append(error_entry)
+        
+        # Update result dict with retry results
+        if retried_errors:
+            # Some errors still remain - keep them for next retry
+            result["archive_errors"] = retried_errors
+        else:
+            # All errors resolved - clear the list
+            result["archive_errors"] = []
+    else:
+        # No archive errors - ensure field exists in result
+        result["archive_errors"] = []
     
     # ═══════════════════════════════════════════════════════════════════════
     # CONTEXT CHECK: Supervisor aggregates most of the state
@@ -2745,13 +3067,24 @@ def supervisor_node(state: ReproState) -> dict:
     
     # Get trigger info
     ask_user_trigger = state.get("ask_user_trigger")
-    user_responses = state.get("user_responses", {})
+    user_responses_raw = state.get("user_responses", {})
+    # ═══════════════════════════════════════════════════════════════════════
+    # VALIDATE USER_RESPONSES TYPE: Ensure it's a dict to prevent crashes
+    # ═══════════════════════════════════════════════════════════════════════
+    if not isinstance(user_responses_raw, dict):
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(
+            f"user_responses has invalid type {type(user_responses_raw)}, expected dict. "
+            "Defaulting to empty dict."
+        )
+        user_responses = {}
+    else:
+        user_responses = user_responses_raw
     last_node = state.get("last_node_before_ask_user")
     current_stage_id = state.get("current_stage_id")
     
-    result: Dict[str, Any] = {
-        "workflow_phase": "supervision",
-    }
+    # Result dict already initialized above for archive error recovery
     
     # ═══════════════════════════════════════════════════════════════════════
     # POST-ASK_USER HANDLING: Route based on trigger type
@@ -2803,14 +3136,14 @@ def supervisor_node(state: ReproState) -> dict:
                             f"Failed to archive outputs for stage {current_stage_id}: {e}. "
                             "Continuing but outputs may not be persisted."
                         )
-                        # Set flag for potential retry later
-                        if "archive_errors" not in state:
-                            state["archive_errors"] = []
-                        state["archive_errors"].append({
+                        # Set flag for potential retry later (return in result dict)
+                        archive_errors = result.get("archive_errors", state.get("archive_errors", []))
+                        archive_errors = archive_errors + [{
                             "stage_id": current_stage_id,
                             "error": str(e),
                             "timestamp": datetime.now(timezone.utc).isoformat()
-                        })
+                        }]
+                        result["archive_errors"] = archive_errors
                     update_progress_stage_status(state, current_stage_id, "completed_success")
                     
             elif "CHANGE_DATABASE" in response_text or (is_rejection and "DATABASE" in response_text):
@@ -3181,7 +3514,8 @@ def supervisor_node(state: ReproState) -> dict:
                 # Reset backtrack count to give more tries? Or just proceed?
                 # If we proceed without resetting, we'll hit the limit again next time.
                 # So we must reset or bump the limit.
-                state["backtrack_count"] = 0 # Reset for this stage/context
+                # Reset backtrack count (return in result dict, don't mutate state)
+                result["backtrack_count"] = 0
                 result["supervisor_verdict"] = "backtrack_to_stage" # Try again?
                 # Actually, if we are here, we just finished handle_backtrack.
                 # If we want to continue backtracking, we need to allow it.
@@ -3214,22 +3548,24 @@ def supervisor_node(state: ReproState) -> dict:
                     f"Failed to archive outputs for stage {current_stage_id}: {e}. "
                     "Continuing but outputs may not be persisted."
                 )
-                # Set flag for potential retry later
-                if "archive_errors" not in state:
-                    state["archive_errors"] = []
-                state["archive_errors"].append({
+                # Set flag for potential retry later (return in result dict)
+                archive_errors = result.get("archive_errors", state.get("archive_errors", []))
+                archive_errors = archive_errors + [{
                     "stage_id": current_stage_id,
                     "error": str(e),
                     "timestamp": datetime.now(timezone.utc).isoformat()
-                })
+                }]
+                result["archive_errors"] = archive_errors
             status, summary_text = _derive_stage_completion_outcome(state, current_stage_id)
             update_progress_stage_status(state, current_stage_id, status, summary=summary_text)
     
     # Log user interaction if one just happened
     if ask_user_trigger and user_responses:
         # Record structured interaction log
+        progress = state.get("progress", {})
+        user_interactions = progress.get("user_interactions", [])
         interaction_entry = {
-            "id": f"U{len(state.get('progress', {}).get('user_interactions', [])) + 1}",
+            "id": f"U{len(user_interactions) + 1}",
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "interaction_type": ask_user_trigger,
             "context": {
@@ -3243,13 +3579,12 @@ def supervisor_node(state: ReproState) -> dict:
             "alternatives_considered": [] # Would be populated by LLM
         }
         
-        # Ensure progress structure exists
-        if "progress" not in state:
-            state["progress"] = {}
-        if "user_interactions" not in state["progress"]:
-            state["progress"]["user_interactions"] = []
-            
-        state["progress"]["user_interactions"].append(interaction_entry)
+        # Return state updates instead of mutating state
+        updated_interactions = user_interactions + [interaction_entry]
+        result["progress"] = {
+            **progress,
+            "user_interactions": updated_interactions
+        }
     
     return result
 
@@ -3420,24 +3755,54 @@ def ask_user_node(state: ReproState) -> Dict[str, Any]:
     # ═══════════════════════════════════════════════════════════════════════
     validation_errors = _validate_user_responses(trigger, responses, questions)
     if validation_errors:
-        # Re-prompt with validation errors
+        # Check validation attempt counter to prevent infinite loops
+        validation_attempt_key = f"user_validation_attempts_{trigger}"
+        validation_attempts = state.get(validation_attempt_key, 0) + 1
+        max_validation_attempts = 3
+        
+        if validation_attempts >= max_validation_attempts:
+            # Too many failed attempts - accept response with warning and escalate
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(
+                f"User validation failed {validation_attempts} times for trigger '{trigger}'. "
+                "Accepting response despite validation errors and escalating to supervisor."
+            )
+            return {
+                "user_responses": {**state.get("user_responses", {}), **responses},
+                "pending_user_questions": [],
+                "awaiting_user_input": False,
+                "workflow_phase": "awaiting_user",
+                validation_attempt_key: 0,  # Reset counter
+                "supervisor_feedback": (
+                    f"User response had validation errors but was accepted after {validation_attempts} attempts. "
+                    "Supervisor should handle gracefully."
+                ),
+            }
+        
+        # Re-prompt with validation errors (within attempt limit)
         error_msg = "\n".join(f"  - {err}" for err in validation_errors)
         return {
             "pending_user_questions": [
-                f"Your response had validation errors:\n{error_msg}\n\n"
+                f"Your response had validation errors (attempt {validation_attempts}/{max_validation_attempts}):\n{error_msg}\n\n"
                 f"Please try again:\n{questions[0] if questions else 'Please provide a valid response.'}"
             ],
             "awaiting_user_input": True,
             "ask_user_trigger": trigger,  # Keep same trigger
             "last_node_before_ask_user": state.get("last_node_before_ask_user"),
+            validation_attempt_key: validation_attempts,  # Track attempts
         }
     
-    return {
+    # Clear validation attempt counter on successful validation
+    validation_attempt_key = f"user_validation_attempts_{trigger}"
+    result = {
         "user_responses": {**state.get("user_responses", {}), **responses},
         "pending_user_questions": [],
         "awaiting_user_input": False,
         "workflow_phase": "awaiting_user",
+        validation_attempt_key: 0,  # Reset counter on success
     }
+    return result
 
 
 def material_checkpoint_node(state: ReproState) -> dict:
@@ -3651,42 +4016,58 @@ Please respond with your choice and any notes.
     return question
 
 
-def generate_report_node(state: ReproState) -> ReproState:
+def generate_report_node(state: ReproState) -> Dict[str, Any]:
     """Generate final reproduction report."""
-    state["workflow_phase"] = "reporting"
+    result: Dict[str, Any] = {
+        "workflow_phase": "reporting",
+    }
     
-    # Compute token summary
-    if "metrics" in state:
-        total_input = 0
-        total_output = 0
-        for call in state["metrics"].get("agent_calls", []):
-            # Note: agent calls might not have token counts yet in stub, 
-            # but this logic prepares for it.
-            total_input += call.get("input_tokens", 0) or 0
-            total_output += call.get("output_tokens", 0) or 0
-            
-        state["metrics"]["token_summary"] = {
-            "total_input_tokens": total_input,
-            "total_output_tokens": total_output,
-            "estimated_cost": (total_input * 3.0 + total_output * 15.0) / 1_000_000 # Example pricing
+    # Compute token summary (return updates instead of mutating)
+    metrics = state.get("metrics", {})
+    if metrics:
+        agent_calls = metrics.get("agent_calls", [])
+        total_input = sum(call.get("input_tokens", 0) or 0 for call in agent_calls)
+        total_output = sum(call.get("output_tokens", 0) or 0 for call in agent_calls)
+        
+        result["metrics"] = {
+            **metrics,
+            "token_summary": {
+                "total_input_tokens": total_input,
+                "total_output_tokens": total_output,
+                "estimated_cost": (total_input * 3.0 + total_output * 15.0) / 1_000_000 # Example pricing
+            }
+        }
+    else:
+        result["metrics"] = {
+            "agent_calls": [],
+            "stage_metrics": [],
+            "token_summary": {
+                "total_input_tokens": 0,
+                "total_output_tokens": 0,
+                "estimated_cost": 0.0
+            }
         }
     
-    # STUB: Populate report structures if missing
+    # STUB: Populate report structures if missing (return updates)
     if "paper_citation" not in state:
-        state["paper_citation"] = {
+        result["paper_citation"] = {
             "title": state.get("paper_title", "Unknown"),
             "authors": "Unknown",
             "journal": "Unknown", 
             "year": 2023
         }
+    else:
+        result["paper_citation"] = state["paper_citation"]
         
     if "executive_summary" not in state:
-        state["executive_summary"] = {
+        result["executive_summary"] = {
             "overall_assessment": [
                 {"aspect": "Material Properties", "status": "Reproduced", "status_icon": "✅", "notes": "Validated against Palik"},
                 {"aspect": "Geometric Resonances", "status": "Partial", "status_icon": "⚠️", "notes": "Systematic red-shift"}
             ]
         }
+    else:
+        result["executive_summary"] = state["executive_summary"]
 
     # Build quantitative summary table from analysis_result_reports
     quantitative_reports = state.get("analysis_result_reports", [])
@@ -3704,13 +4085,13 @@ def generate_report_node(state: ReproState) -> ReproState:
                 "correlation": metrics.get("correlation"),
                 "n_points_compared": metrics.get("n_points_compared"),
             })
-        state["quantitative_summary"] = summary_rows
+        result["quantitative_summary"] = summary_rows
         
     # TODO: Implement report generation logic
     # - Compile figure comparisons
     # - Document assumptions
     # - Generate REPRODUCTION_REPORT.md
-    return state
+    return result
 
 
 def handle_backtrack_node(state: ReproState) -> dict:
