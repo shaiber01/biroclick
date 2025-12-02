@@ -7,8 +7,13 @@ They are marked with @pytest.mark.smoke and @pytest.mark.slow.
 Run with: pytest -m smoke tests/test_llm_smoke.py
 
 Environment Requirements:
-- OPENAI_API_KEY or ANTHROPIC_API_KEY must be set
+- ANTHROPIC_API_KEY must be set (in .env file or environment)
 - Network access required
+
+Setup:
+1. Install python-dotenv: pip install python-dotenv
+2. Create .env file in project root with: ANTHROPIC_API_KEY=your-key-here
+3. Run: pytest -m smoke tests/test_llm_smoke.py
 
 These tests:
 1. Verify LLM integration is properly configured
@@ -20,6 +25,13 @@ import json
 import os
 import pytest
 from pathlib import Path
+
+# Load .env file if present
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
 import jsonschema
 from jsonschema import validate
@@ -124,14 +136,18 @@ class TestPlannerSmoke:
         
         result = plan_node(base_state)
         
-        # Should have plan in result
-        assert "plan" in result or "ask_user_trigger" in result
+        # Check if LLM actually succeeded (not just error handling)
+        if result.get("ask_user_trigger") == "llm_error":
+            pytest.fail(f"LLM call failed: {result.get('pending_user_questions', ['Unknown error'])}")
         
-        # If plan was generated, validate structure
-        if "plan" in result:
-            plan = result["plan"]
-            assert "stages" in plan
-            assert isinstance(plan["stages"], list)
+        # Should have plan in result
+        assert "plan" in result, f"Expected 'plan' in result, got keys: {list(result.keys())}"
+        
+        # Validate plan structure
+        plan = result["plan"]
+        assert "stages" in plan, "Plan missing 'stages'"
+        assert isinstance(plan["stages"], list)
+        assert len(plan["stages"]) > 0, "Plan has no stages"
     
     def test_planner_extracts_parameters(self, base_state):
         """Planner should extract parameters from paper."""
@@ -139,18 +155,24 @@ class TestPlannerSmoke:
         
         result = plan_node(base_state)
         
-        if "plan" in result:
-            plan = result["plan"]
-            
-            # Should have extracted_parameters
-            if "extracted_parameters" in plan:
-                params = plan["extracted_parameters"]
-                assert isinstance(params, list)
-                
-                # Parameters should have required fields
-                for param in params:
-                    assert "name" in param
-                    assert "value" in param
+        # Check if LLM actually succeeded
+        if result.get("ask_user_trigger") == "llm_error":
+            pytest.fail(f"LLM call failed: {result.get('pending_user_questions', ['Unknown error'])}")
+        
+        if "plan" not in result:
+            pytest.skip("Planner didn't return plan")
+        
+        plan = result["plan"]
+        
+        # Should have extracted_parameters
+        assert "extracted_parameters" in plan, "Plan missing 'extracted_parameters'"
+        params = plan["extracted_parameters"]
+        assert isinstance(params, list)
+        
+        # Parameters should have required fields
+        for param in params:
+            assert "name" in param, f"Parameter missing 'name': {param}"
+            assert "value" in param, f"Parameter missing 'value': {param}"
 
 
 @skip_if_no_llm  
@@ -164,14 +186,22 @@ class TestReviewerSmoke:
         # First get a plan
         plan_result = plan_node(base_state)
         
+        # Check if LLM failed
+        if plan_result.get("ask_user_trigger") == "llm_error":
+            pytest.fail(f"Planner LLM call failed: {plan_result.get('pending_user_questions', ['Unknown error'])}")
+        
         if "plan" not in plan_result:
-            pytest.skip("Planner didn't return plan")
+            pytest.fail(f"Planner didn't return plan, got: {list(plan_result.keys())}")
         
         # Update state with plan
         base_state.update(plan_result)
         
         # Review the plan
         review_result = plan_reviewer_node(base_state)
+        
+        # Check if reviewer LLM failed
+        if review_result.get("ask_user_trigger") == "llm_error":
+            pytest.fail(f"Reviewer LLM call failed: {review_result.get('pending_user_questions', ['Unknown error'])}")
         
         # Should have verdict
         assert "last_plan_review_verdict" in review_result
@@ -184,7 +214,6 @@ class TestSchemaValidationSmoke:
     
     def test_planner_output_matches_schema(self, base_state):
         """Real planner output should match schema."""
-        from src.agents import plan_node
         from src.llm_client import call_agent_with_metrics
         from src.prompts import build_agent_prompt
         
@@ -199,20 +228,20 @@ class TestSchemaValidationSmoke:
                 user_content=user_content,
                 state=base_state,
             )
-            
-            # Validate against schema
-            schema = load_schema("planner_output_schema.json")
-            
-            # May need to handle partial responses
-            if raw_output:
-                # Just check required fields exist
-                required_fields = ["paper_id", "paper_domain", "title", "summary", "stages"]
-                for field in required_fields:
-                    if field not in raw_output:
-                        pytest.skip(f"LLM didn't return {field}")
-                
         except Exception as e:
-            pytest.skip(f"LLM call failed: {e}")
+            pytest.fail(f"LLM call failed: {e}")
+        
+        # Validate against schema
+        assert raw_output is not None, "LLM returned None"
+        
+        # Check required fields exist
+        required_fields = ["paper_id", "paper_domain", "title", "summary", "stages"]
+        missing = [f for f in required_fields if f not in raw_output]
+        assert not missing, f"LLM response missing required fields: {missing}"
+        
+        # Validate against full schema
+        schema = load_schema("planner_output_schema.json")
+        validate(instance=raw_output, schema=schema)
     
     def test_reviewer_output_matches_schema(self, base_state):
         """Real reviewer output should match schema."""
@@ -235,13 +264,15 @@ class TestSchemaValidationSmoke:
                 user_content=user_content,
                 state=base_state,
             )
-            
-            if raw_output and "verdict" in raw_output:
-                schema = load_schema("plan_reviewer_output_schema.json")
-                validate(instance=raw_output, schema=schema)
-                
         except Exception as e:
-            pytest.skip(f"LLM call failed: {e}")
+            pytest.fail(f"LLM call failed: {e}")
+        
+        assert raw_output is not None, "LLM returned None"
+        assert "verdict" in raw_output, f"LLM response missing 'verdict', got: {list(raw_output.keys())}"
+        
+        # Validate against full schema
+        schema = load_schema("plan_reviewer_output_schema.json")
+        validate(instance=raw_output, schema=schema)
 
 
 @skip_if_no_llm
@@ -249,7 +280,7 @@ class TestSupervisorSmoke:
     """Smoke test for supervisor agent with real LLM."""
     
     def test_supervisor_returns_verdict(self, base_state):
-        """Supervisor should return valid verdict."""
+        """Supervisor should return valid verdict from LLM (not fallback)."""
         from src.agents import supervisor_node
         
         # Setup minimal state
@@ -265,6 +296,15 @@ class TestSupervisorSmoke:
         }
         
         result = supervisor_node(base_state)
+        
+        # Check for LLM error escalation
+        if result.get("ask_user_trigger") == "llm_error":
+            pytest.fail(f"LLM call failed: {result.get('pending_user_questions', ['Unknown error'])}")
+        
+        # Check for LLM fallback (indicates LLM didn't respond properly)
+        feedback = result.get("supervisor_feedback", "")
+        if "LLM unavailable" in feedback:
+            pytest.fail(f"LLM call failed with fallback: {feedback}")
         
         assert "supervisor_verdict" in result
         valid_verdicts = ["ok_continue", "replan_needed", "change_priority", 

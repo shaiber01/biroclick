@@ -9,6 +9,11 @@ This module provides a centralized interface for making LLM calls with:
 
 All agents should use call_agent() from this module rather than
 making direct LLM calls.
+
+Environment Setup:
+    Create a .env file in the project root with:
+        ANTHROPIC_API_KEY=your-key-here
+    Or set the environment variable directly.
 """
 
 import base64
@@ -17,6 +22,13 @@ import os
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
+
+# Load environment variables from .env file if present
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # dotenv not installed, use environment variables directly
 
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage

@@ -1,0 +1,13 @@
+# LLM API Keys for ReproLab
+# 
+# Setup Instructions:
+# 1. Copy this file to .env:  cp env_example .env
+# 2. Edit .env and add your actual API key
+# 3. Run smoke tests: pytest -m smoke tests/test_llm_smoke.py
+
+# Anthropic API Key (required for Claude models)
+ANTHROPIC_API_KEY=sk-ant-xxxxx-your-key-here
+
+# OpenAI API Key (optional, for GPT models if needed)
+# OPENAI_API_KEY=sk-xxxxx-your-key-here
+
