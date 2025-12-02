@@ -1315,26 +1315,8 @@ def ask_user_node(state: ReproState) -> Dict[str, Any]:
             responses[question] = response
             print(f"✓ Response recorded")
             
-            # Log interaction immediately
-            if "progress" not in state:
-                state["progress"] = {}
-            if "user_interactions" not in state["progress"]:
-                state["progress"]["user_interactions"] = []
-                
-            state["progress"]["user_interactions"].append({
-                "id": f"U{len(state['progress']['user_interactions']) + 1}",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "interaction_type": state.get("ask_user_trigger", "unknown"),
-                "context": {
-                    "stage_id": state.get("current_stage_id"),
-                    "agent": "AskUserNode",
-                    "reason": "Direct user input"
-                },
-                "question": question,
-                "user_response": response,
-                "impact": "Response recorded",
-                "alternatives_considered": []
-            })
+            # REMOVED: Duplicate interaction logging. 
+            # SupervisorAgent/deciding node is responsible for logging the contextualized interaction.
         
         # Cancel timeout
         if hasattr(signal, 'SIGALRM'):

@@ -2929,6 +2929,10 @@ def archive_stage_outputs_to_progress(
     stages = progress.get("stages", [])
     stage_outputs = state.get("stage_outputs", {})
     
+    # Get expected outputs from plan to resolve types accurately
+    plan_stage = get_plan_stage(state, stage_id)
+    expected_outputs = plan_stage.get("expected_outputs", []) if plan_stage else []
+    
     # Build outputs list from stage_outputs files
     outputs = []
     files = stage_outputs.get("files", [])
@@ -2936,7 +2940,26 @@ def archive_stage_outputs_to_progress(
     for file_path in files:
         # Create output entry matching progress_schema.json#/definitions/output
         filename = file_path if isinstance(file_path, str) else file_path.get("path", str(file_path))
+        
+        # Default to inference
         output_type = _infer_output_type(filename)
+        
+        # Try to improve type using plan expectations
+        # We match loosely on filename pattern or exact match
+        for expected in expected_outputs:
+            pattern = expected.get("filename_pattern", "")
+            # Simple expansion of placeholders
+            expanded = pattern.replace("{paper_id}", state.get("paper_id", "")).replace("{stage_id}", stage_id)
+            
+            if filename == expanded or (pattern and pattern in filename):
+                art_type = expected.get("artifact_type", "")
+                if "plot" in art_type or "png" in art_type:
+                    output_type = "plot"
+                elif "log" in art_type:
+                    output_type = "log"
+                else:
+                    output_type = "data"
+                break
         
         output_entry = {
             "filename": filename,
@@ -2999,30 +3022,19 @@ def _infer_output_type(file_path: Any) -> str:
     Infer output type from filename extension.
     
     Maps file extensions to output types defined in progress_schema.json.
+    Returns: "data", "plot", or "log"
     """
     if isinstance(file_path, dict):
         file_path = file_path.get("path", "")
     
     path_str = str(file_path).lower()
     
-    if path_str.endswith(".csv"):
-        if "spectrum" in path_str or "flux" in path_str:
-            return "spectrum_csv"
-        elif "dispersion" in path_str or "band" in path_str:
-            return "dispersion_csv"
-        return "data_csv"
-    elif path_str.endswith(".png") or path_str.endswith(".jpg") or path_str.endswith(".jpeg"):
-        if "spectrum" in path_str or "flux" in path_str:
-            return "spectrum_plot"
-        elif "field" in path_str:
-            return "field_plot"
-        return "plot_image"
-    elif path_str.endswith(".npz") or path_str.endswith(".npy"):
-        return "field_data"
-    elif path_str.endswith(".h5") or path_str.endswith(".hdf5"):
-        return "raw_h5"
-    elif path_str.endswith(".json"):
-        return "result_json"
+    if path_str.endswith(".csv") or path_str.endswith(".h5") or path_str.endswith(".npz") or path_str.endswith(".json") or path_str.endswith(".npy") or path_str.endswith(".hdf5"):
+        return "data"
+    elif path_str.endswith(".png") or path_str.endswith(".jpg") or path_str.endswith(".jpeg") or path_str.endswith(".pdf"):
+        return "plot"
+    elif path_str.endswith(".log") or path_str.endswith(".txt"):
+        return "log"
     
-    return "other"
+    return "data"
 
