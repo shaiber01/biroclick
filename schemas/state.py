@@ -810,6 +810,7 @@ class ReproState(TypedDict, total=False):
     analysis_summary: Optional[Dict[str, Any]]  # Structured analyzer summary
     analysis_result_reports: List[Dict[str, Any]]  # Detailed per-result comparisons
     analysis_overall_classification: Optional[str]  # ResultsAnalyzer overall verdict
+    quantitative_summary: List[Dict[str, Any]]  # Aggregated quantitative metrics for reporting
     
     # ─── Agent Feedback ─────────────────────────────────────────────────
     reviewer_feedback: Optional[str]  # Last reviewer feedback for revision

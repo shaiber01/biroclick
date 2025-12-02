@@ -370,7 +370,18 @@ def _normalize_series(xs: List[float], ys: List[float]) -> Optional[Tuple[np.nda
     return x_arr, y_arr
 
 
-def _load_numeric_series(path_str: Optional[str]) -> Optional[Tuple[np.ndarray, np.ndarray]]:
+def _units_to_multiplier(header: str) -> float:
+    header_lower = header.lower()
+    if header_lower.endswith("_nm") or "(nm)" in header_lower:
+        return 1.0
+    if header_lower.endswith("_um") or "(um)" in header_lower:
+        return 1000.0
+    if header_lower.endswith("_m") or "(m)" in header_lower:
+        return 1e9
+    return 1.0
+
+
+def _load_numeric_series(path_str: Optional[str], columns: Optional[List[str]] = None) -> Optional[Tuple[np.ndarray, np.ndarray]]:
     resolved = _resolve_data_path(path_str)
     if not resolved or not resolved.exists():
         return None
@@ -382,16 +393,45 @@ def _load_numeric_series(path_str: Optional[str]) -> Optional[Tuple[np.ndarray, 
             ys: List[float] = []
             with resolved.open("r", encoding="utf-8") as f:
                 reader = csv.reader(f, delimiter=delimiter)
+                header = next(reader, None)
+                x_idx = y_idx = None
+                x_multiplier = y_multiplier = 1.0
+                if header:
+                    normalized_header = [h.strip() for h in header]
+                    if columns and len(columns) >= 2:
+                        col_x = columns[0]
+                        col_y = columns[1]
+                        for idx, field in enumerate(normalized_header):
+                            field_lower = field.lower()
+                            if col_x and col_x.lower() in field_lower and x_idx is None:
+                                x_idx = idx
+                                x_multiplier = _units_to_multiplier(field_lower)
+                            if col_y and col_y.lower() in field_lower and y_idx is None:
+                                y_idx = idx
+                                y_multiplier = _units_to_multiplier(field_lower)
+                    if x_idx is None:
+                        x_idx = next((i for i, field in enumerate(normalized_header) if "wave" in field.lower()), None)
+                        if x_idx is not None:
+                            x_multiplier = _units_to_multiplier(normalized_header[x_idx])
+                    if y_idx is None and len(normalized_header) > 1:
+                        y_idx = 1 if x_idx == 0 else 0
+                    if y_idx is None:
+                        y_idx = x_idx + 1 if x_idx is not None and x_idx + 1 < len(normalized_header) else None
                 for row in reader:
-                    numeric_cells = []
-                    for cell in row:
-                        try:
-                            numeric_cells.append(float(cell))
-                        except ValueError:
-                            continue
-                    if len(numeric_cells) >= 2:
-                        xs.append(numeric_cells[0])
-                        ys.append(numeric_cells[1])
+                    try:
+                        if x_idx is not None and y_idx is not None and len(row) > y_idx:
+                            x_val = float(row[x_idx]) * x_multiplier
+                            y_val = float(row[y_idx]) * y_multiplier
+                        else:
+                            numeric_cells = [float(cell) for cell in row]
+                            if len(numeric_cells) < 2:
+                                continue
+                            x_val = numeric_cells[0]
+                            y_val = numeric_cells[1]
+                        xs.append(x_val)
+                        ys.append(y_val)
+                    except (ValueError, IndexError):
+                        continue
             return _normalize_series(xs, ys)
         if suffix == ".json":
             data = json.loads(resolved.read_text(encoding="utf-8"))
@@ -547,10 +587,11 @@ def _classification_from_metrics(
     precision_requirement: str,
     has_reference: bool,
 ) -> str:
-    if not has_reference and precision_requirement != "qualitative":
-        return "pending_validation"
+    if not has_reference:
+        if precision_requirement == "excellent":
+            return "pending_validation"
+        return "match"
     if precision_requirement == "qualitative":
-        # Visual confirmation only
         return "match"
     
     error_percent = metrics.get("peak_position_error_percent")
@@ -566,6 +607,42 @@ def _classification_from_metrics(
         return "mismatch"
     
     return "pending_validation"
+
+
+CRITERIA_PATTERNS = [
+    ("resonance_within_percent", re.compile(r"resonance.*within\s+(\d+)%"), "peak_position_error_percent", "max"),
+    ("peak_within_percent", re.compile(r"peak.*within\s+(\d+)%"), "peak_position_error_percent", "max"),
+    ("normalized_rmse_max", re.compile(r"normalized\s*rmse.*(?:<=|less than)\s*(\d+)%"), "normalized_rmse_percent", "max"),
+    ("correlation_min", re.compile(r"correlation.*(?:>=|greater than)\s*(0\.\d+|\d+(\.\d+)?)"), "correlation", "min"),
+]
+
+
+def _evaluate_validation_criteria(metrics: Dict[str, Any], criteria: List[str]) -> Tuple[bool, List[str]]:
+    failures: List[str] = []
+    if not criteria:
+        return True, failures
+    for criterion in criteria:
+        normalized = criterion.lower()
+        matched_pattern = False
+        for pattern_name, pattern, metric_key, mode in CRITERIA_PATTERNS:
+            match = pattern.search(normalized)
+            if not match:
+                continue
+            matched_pattern = True
+            threshold = float(match.group(1))
+            metric_value = metrics.get(metric_key)
+            if metric_value is None:
+                failures.append(f"{criterion.strip()} (missing metric '{metric_key}')")
+            else:
+                if mode == "max" and metric_value > threshold:
+                    failures.append(f"{criterion.strip()} (measured {metric_value:.2f} > {threshold})")
+                if mode == "min" and metric_value < threshold:
+                    failures.append(f"{criterion.strip()} (measured {metric_value:.2f} < {threshold})")
+            break
+        if not matched_pattern:
+            # Unknown format; treat as informational
+            continue
+    return (len(failures) == 0), failures
 
 
 def _extract_targets_from_feedback(feedback: Optional[str], known_targets: List[str]) -> List[str]:
@@ -623,6 +700,20 @@ def _collect_expected_outputs(plan_stage: Optional[Dict[str, Any]], paper_id: st
             resolved = resolved.replace("{stage_id}", stage_id)
         resolved = resolved.replace("{target_id}", target.lower())
         mapping[target].append(resolved)
+    return mapping
+
+
+def _collect_expected_columns(plan_stage: Optional[Dict[str, Any]]) -> Dict[str, List[str]]:
+    """Map target_id -> ordered column names, when provided."""
+    mapping: Dict[str, List[str]] = {}
+    if not plan_stage:
+        return mapping
+    expected = plan_stage.get("expected_outputs") or []
+    for spec in expected:
+        target = spec.get("target_figure")
+        columns = spec.get("columns")
+        if target and columns:
+            mapping[target] = columns
     return mapping
 
 
@@ -815,6 +906,29 @@ def _analysis_reports_for_stage(state: ReproState, stage_id: Optional[str]) -> L
         report for report in state.get("analysis_result_reports", [])
         if report.get("stage_id") == stage_id
     ]
+
+
+def _validate_analysis_reports(reports: List[Dict[str, Any]]) -> List[str]:
+    issues: List[str] = []
+    for report in reports:
+        status = (report.get("status") or "").lower()
+        metrics = report.get("quantitative_metrics") or {}
+        precision = (report.get("precision_requirement") or "").lower()
+        target = report.get("target_figure", "unknown")
+        error = metrics.get("peak_position_error_percent")
+        if precision == "excellent" and not metrics:
+            issues.append(f"{target}: excellent precision requires quantitative metrics.")
+            continue
+        if error is not None:
+            thresholds = DISCREPANCY_THRESHOLDS["resonance_wavelength"]
+            if status == "match" and error > thresholds["acceptable"]:
+                issues.append(f"{target}: classified as match but peak error {error:.2f}% > acceptable {thresholds['acceptable']}%.")
+            if status in {"pending_validation", "partial_match"} and error > thresholds["investigate"]:
+                issues.append(f"{target}: error {error:.2f}% exceeds investigate threshold; classification should be 'mismatch'.")
+        failures = report.get("criteria_failures") or []
+        for failure in failures:
+            issues.append(f"{target}: {failure}")
+    return issues
 
 
 def _breakdown_comparison_classifications(comparisons: List[Dict[str, Any]]) -> Dict[str, List[str]]:
@@ -1115,8 +1229,6 @@ def select_stage_node(state: ReproState) -> dict:
             "stage_outputs": {},
             # CRITICAL: Clear previous run_error to prevent stale failure signals
             "run_error": None,
-            "analysis_summary": None,
-            "analysis_overall_classification": None,
         }
     
     # No more stages to run
@@ -1506,6 +1618,7 @@ def results_analyzer_node(state: ReproState) -> dict:
     output_files = stage_outputs.get("files", [])
     paper_id = state.get("paper_id", "paper")
     expected_outputs_map = _collect_expected_outputs(stage_info, paper_id, current_stage_id or "")
+    plan_stage_columns = _collect_expected_columns(stage_info)
     figure_lookup = {fig.get("id") or fig.get("figure_id"): fig for fig in figures}
     if stage_info and stage_info.get("target_details"):
         target_meta_list = stage_info["target_details"]
@@ -1558,8 +1671,9 @@ def results_analyzer_node(state: ReproState) -> dict:
                 )
             )
         else:
-            sim_series = _load_numeric_series(matched_file)
-            ref_series = _load_numeric_series(digitized_path)
+            expected_columns = plan_stage_columns.get(target_id)
+            sim_series = _load_numeric_series(matched_file, expected_columns)
+            ref_series = _load_numeric_series(digitized_path, expected_columns)
             quantitative_metrics = _quantitative_curve_metrics(sim_series, ref_series)
             has_reference = ref_series is not None
             
@@ -1654,6 +1768,29 @@ def results_analyzer_node(state: ReproState) -> dict:
             for criterion in stage_info.get("validation_criteria", []):
                 if target_id and target_id.lower() in criterion.lower():
                     target_criteria.append(criterion)
+        criteria_passed, criteria_failures = _evaluate_validation_criteria(quantitative_metrics, target_criteria)
+        if target_criteria and not criteria_failures and not quantitative_metrics:
+            criteria_failures.append("Validation criteria defined but quantitative metrics missing.")
+        if criteria_failures:
+            if target_id not in mismatch_targets:
+                mismatch_targets.append(target_id)
+            classification_label = "mismatch"
+            for failure in criteria_failures:
+                sim_value_display = json.dumps(quantitative_metrics) if quantitative_metrics else "N/A"
+                stage_discrepancies.append(
+                    _record_discrepancy(
+                        state,
+                        current_stage_id,
+                        target_id,
+                        "validation_criteria",
+                        failure,
+                        sim_value_display,
+                        classification="investigate",
+                        likely_cause="Validation criterion not satisfied",
+                        action_taken="Flagged for revision",
+                        blocking=True,
+                    )
+                )
         
         per_result_reports.append({
             "result_id": f"{current_stage_id or 'stage'}_{target_id}",
@@ -1665,6 +1802,7 @@ def results_analyzer_node(state: ReproState) -> dict:
             "digitized_data_path": digitized_path,
             "validation_criteria": target_criteria,
             "quantitative_metrics": quantitative_metrics,
+             "criteria_failures": criteria_failures,
             "notes": "Output identified." if has_output else "Output missing; requires rerun.",
         })
     
@@ -1768,6 +1906,8 @@ def comparison_validator_node(state: ReproState) -> dict:
     breakdown = _breakdown_comparison_classifications(comparisons)
     stage_info = get_plan_stage(state, stage_id) if stage_id else None
     expected_targets = (stage_info.get("targets") if stage_info else []) or []
+    analysis_reports = _analysis_reports_for_stage(state, stage_id)
+    report_issues = _validate_analysis_reports(analysis_reports)
     
     if not comparisons:
         if not expected_targets:
@@ -1785,6 +1925,15 @@ def comparison_validator_node(state: ReproState) -> dict:
     else:
         verdict = "approve"
         feedback = "All required comparisons present."
+    
+    if report_issues:
+        verdict = "needs_revision"
+        feedback = "; ".join(report_issues[:3])
+        if len(report_issues) > 3:
+            feedback += f" (+{len(report_issues)-3} more)"
+    elif expected_targets and not analysis_reports:
+        verdict = "needs_revision"
+        feedback = "Analysis reports missing; cannot verify quantitative metrics."
     
     result = {
         "workflow_phase": "comparison_validation",
