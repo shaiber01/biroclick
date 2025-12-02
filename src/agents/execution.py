@@ -35,7 +35,11 @@ from src.prompts import build_agent_prompt
 from src.llm_client import call_agent_with_metrics
 
 from .helpers.context import check_context_or_escalate
-from .base import with_context_check
+from .base import (
+    with_context_check,
+    increment_counter_with_max,
+    create_llm_error_auto_approve,
+)
 
 
 @with_context_check("execution_check")
@@ -100,11 +104,8 @@ def execution_validator_node(state: ReproState) -> dict:
             agent_output["stage_id"] = stage_id
         except Exception as e:
             logger.error(f"Execution validator LLM call failed: {e}")
-            agent_output = {
-                "verdict": "pass",
-                "stage_id": stage_id,
-                "summary": f"Execution validation LLM unavailable: {str(e)[:200]}",
-            }
+            agent_output = create_llm_error_auto_approve("execution_validator", e, default_verdict="pass")
+            agent_output["stage_id"] = stage_id
     
     result: Dict[str, Any] = {
         "workflow_phase": "execution_validation",
@@ -113,18 +114,16 @@ def execution_validator_node(state: ReproState) -> dict:
     
     # Increment failure counters if verdict is "fail"
     if agent_output["verdict"] == "fail":
-        current_count = state.get("execution_failure_count", 0)
-        runtime_config = state.get("runtime_config", {})
-        max_failures = runtime_config.get("max_execution_failures", MAX_EXECUTION_FAILURES)
-        if current_count < max_failures:
-            result["execution_failure_count"] = current_count + 1
-        else:
-            result["execution_failure_count"] = current_count
+        new_count, was_incremented = increment_counter_with_max(
+            state, "execution_failure_count", "max_execution_failures", MAX_EXECUTION_FAILURES
+        )
+        result["execution_failure_count"] = new_count
         result["total_execution_failures"] = state.get("total_execution_failures", 0) + 1
         
-        current_failures = state.get("execution_failure_count", 0)
+        runtime_config = state.get("runtime_config", {})
+        max_failures = runtime_config.get("max_execution_failures", MAX_EXECUTION_FAILURES)
         
-        if (current_failures + 1) >= max_failures:
+        if not was_incremented:
             result["ask_user_trigger"] = "execution_failure_limit"
             result["pending_user_questions"] = [
                 f"Execution failed {max_failures} times. Last error: {run_error or 'Unknown'}. "
@@ -187,12 +186,9 @@ def physics_sanity_node(state: ReproState) -> dict:
             agent_output["backtrack_suggestion"] = {"suggest_backtrack": False}
     except Exception as e:
         logger.error(f"Physics sanity LLM call failed: {e}")
-        agent_output = {
-            "verdict": "pass",
-            "stage_id": stage_id,
-            "summary": f"Physics sanity LLM unavailable: {str(e)[:200]}",
-            "backtrack_suggestion": {"suggest_backtrack": False},
-        }
+        agent_output = create_llm_error_auto_approve("physics_sanity", e, default_verdict="pass")
+        agent_output["stage_id"] = stage_id
+        agent_output["backtrack_suggestion"] = {"suggest_backtrack": False}
     
     result: Dict[str, Any] = {
         "workflow_phase": "physics_validation",
@@ -201,21 +197,15 @@ def physics_sanity_node(state: ReproState) -> dict:
     
     # Increment failure counters based on verdict type
     if agent_output["verdict"] == "fail":
-        current_count = state.get("physics_failure_count", 0)
-        runtime_config = state.get("runtime_config", {})
-        max_failures = runtime_config.get("max_physics_failures", MAX_PHYSICS_FAILURES)
-        if current_count < max_failures:
-            result["physics_failure_count"] = current_count + 1
-        else:
-            result["physics_failure_count"] = current_count
+        new_count, _ = increment_counter_with_max(
+            state, "physics_failure_count", "max_physics_failures", MAX_PHYSICS_FAILURES
+        )
+        result["physics_failure_count"] = new_count
     elif agent_output["verdict"] == "design_flaw":
-        current_count = state.get("design_revision_count", 0)
-        runtime_config = state.get("runtime_config", {})
-        max_revisions = runtime_config.get("max_design_revisions", MAX_DESIGN_REVISIONS)
-        if current_count < max_revisions:
-            result["design_revision_count"] = current_count + 1
-        else:
-            result["design_revision_count"] = current_count
+        new_count, _ = increment_counter_with_max(
+            state, "design_revision_count", "max_design_revisions", MAX_DESIGN_REVISIONS
+        )
+        result["design_revision_count"] = new_count
     
     # If agent suggests backtrack, populate backtrack_suggestion for supervisor
     if agent_output.get("backtrack_suggestion", {}).get("suggest_backtrack"):

@@ -37,7 +37,7 @@ from src.llm_client import (
 )
 
 from .helpers.context import check_context_or_escalate
-from .base import with_context_check
+from .base import with_context_check, increment_counter_with_max
 from .helpers.stubs import ensure_stub_figures
 from .helpers.numeric import load_numeric_series, quantitative_curve_metrics
 from .helpers.validation import (
@@ -584,13 +584,10 @@ def comparison_validator_node(state: ReproState) -> dict:
     }
     
     if verdict == "needs_revision":
-        current_count = state.get("analysis_revision_count", 0)
-        runtime_config = state.get("runtime_config", {})
-        max_revisions = runtime_config.get("max_analysis_revisions", MAX_ANALYSIS_REVISIONS)
-        if current_count < max_revisions:
-            result["analysis_revision_count"] = current_count + 1
-        else:
-            result["analysis_revision_count"] = current_count
+        new_count, _ = increment_counter_with_max(
+            state, "analysis_revision_count", "max_analysis_revisions", MAX_ANALYSIS_REVISIONS
+        )
+        result["analysis_revision_count"] = new_count
         result["analysis_feedback"] = feedback
     else:
         result["analysis_feedback"] = None

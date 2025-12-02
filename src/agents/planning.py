@@ -43,7 +43,11 @@ from src.llm_client import (
 
 from .helpers.context import check_context_or_escalate, validate_state_or_warn
 from .helpers.metrics import log_agent_call
-from .base import with_context_check
+from .base import (
+    with_context_check,
+    create_llm_error_auto_approve,
+    create_llm_error_escalation,
+)
 
 
 @with_context_check("adapt_prompts")
@@ -154,15 +158,7 @@ def plan_node(state: ReproState) -> dict:
         )
     except Exception as e:
         logger.error(f"Planner LLM call failed: {e}")
-        return {
-            "workflow_phase": "planning",
-            "ask_user_trigger": "llm_error",
-            "pending_user_questions": [
-                f"Planner LLM call failed with error: {str(e)[:500]}. "
-                "Please check API key and try again."
-            ],
-            "awaiting_user_input": True,
-        }
+        return create_llm_error_escalation("planner", "planning", e)
     
     # Extract results from agent output
     plan_data = {
@@ -357,11 +353,7 @@ def plan_reviewer_node(state: ReproState) -> dict:
             )
         except Exception as e:
             logger.error(f"Plan reviewer LLM call failed: {e}")
-            agent_output = {
-                "verdict": "approve",
-                "issues": [{"severity": "minor", "description": f"LLM review unavailable: {str(e)[:200]}"}],
-                "summary": "Plan auto-approved due to LLM unavailability",
-            }
+            agent_output = create_llm_error_auto_approve("plan_reviewer", e)
     
     result: Dict[str, Any] = {
         "workflow_phase": "plan_review",

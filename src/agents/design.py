@@ -38,7 +38,12 @@ from src.llm_client import (
 
 from .helpers.context import check_context_or_escalate
 from .helpers.metrics import log_agent_call
-from .base import with_context_check
+from .base import (
+    with_context_check,
+    increment_counter_with_max,
+    create_llm_error_auto_approve,
+    create_llm_error_escalation,
+)
 
 
 def simulation_designer_node(state: ReproState) -> dict:
@@ -104,14 +109,7 @@ def simulation_designer_node(state: ReproState) -> dict:
         )
     except Exception as e:
         logger.error(f"Simulation designer LLM call failed: {e}")
-        return {
-            "workflow_phase": "design",
-            "ask_user_trigger": "llm_error",
-            "pending_user_questions": [
-                f"Design generation failed: {str(e)[:500]}. Please check API and try again."
-            ],
-            "awaiting_user_input": True,
-        }
+        return create_llm_error_escalation("simulation_designer", "design", e)
     
     # Extract design description
     result: Dict[str, Any] = {
@@ -179,11 +177,7 @@ def design_reviewer_node(state: ReproState) -> dict:
         )
     except Exception as e:
         logger.error(f"Design reviewer LLM call failed: {e}")
-        agent_output = {
-            "verdict": "approve",
-            "issues": [{"severity": "minor", "description": f"LLM review unavailable: {str(e)[:200]}"}],
-            "summary": "Design auto-approved due to LLM unavailability",
-        }
+        agent_output = create_llm_error_auto_approve("design_reviewer", e)
     
     result: Dict[str, Any] = {
         "workflow_phase": "design_review",
@@ -193,13 +187,10 @@ def design_reviewer_node(state: ReproState) -> dict:
     
     # Increment design revision counter if needs_revision
     if agent_output["verdict"] == "needs_revision":
-        current_count = state.get("design_revision_count", 0)
-        runtime_config = state.get("runtime_config", {})
-        max_revisions = runtime_config.get("max_design_revisions", MAX_DESIGN_REVISIONS)
-        if current_count < max_revisions:
-            result["design_revision_count"] = current_count + 1
-        else:
-            result["design_revision_count"] = current_count
+        new_count, _ = increment_counter_with_max(
+            state, "design_revision_count", "max_design_revisions", MAX_DESIGN_REVISIONS
+        )
+        result["design_revision_count"] = new_count
         result["reviewer_feedback"] = agent_output.get("feedback", agent_output.get("summary", ""))
     
     return result

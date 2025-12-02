@@ -92,7 +92,7 @@ def mock_llm_client():
         "src.agents.code.call_agent_with_metrics",
         "src.agents.execution.call_agent_with_metrics",
         "src.agents.analysis.call_agent_with_metrics",
-        "src.agents.supervision.call_agent_with_metrics",
+        "src.agents.supervision.supervisor.call_agent_with_metrics",
         "src.agents.reporting.call_agent_with_metrics",
     ]
     

@@ -81,9 +81,9 @@ class TestGetDependentStages:
 class TestSupervisorNode:
     """Tests for supervisor_node function."""
 
-    @patch("src.agents.supervision.call_agent_with_metrics")
-    @patch("src.agents.supervision.check_context_or_escalate")
-    @patch("src.agents.supervision.build_agent_prompt")
+    @patch("src.agents.supervision.supervisor.call_agent_with_metrics")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.build_agent_prompt")
     def test_continues_workflow_on_success(self, mock_prompt, mock_context, mock_call):
         """Should continue workflow on successful stage completion."""
         mock_context.return_value = None
@@ -107,9 +107,9 @@ class TestSupervisorNode:
         
         assert result.get("supervisor_verdict") == "ok_continue"
 
-    @patch("src.agents.supervision.call_agent_with_metrics")
-    @patch("src.agents.supervision.check_context_or_escalate")
-    @patch("src.agents.supervision.build_agent_prompt")
+    @patch("src.agents.supervision.supervisor.call_agent_with_metrics")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.build_agent_prompt")
     def test_triggers_backtrack_on_failure(self, mock_prompt, mock_context, mock_call):
         """Should trigger backtrack on stage failure."""
         mock_context.return_value = None
@@ -130,9 +130,9 @@ class TestSupervisorNode:
         
         assert result["supervisor_verdict"] == "backtrack"
 
-    @patch("src.agents.supervision.call_agent_with_metrics")
-    @patch("src.agents.supervision.check_context_or_escalate")
-    @patch("src.agents.supervision.build_agent_prompt")
+    @patch("src.agents.supervision.supervisor.call_agent_with_metrics")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.build_agent_prompt")
     def test_handles_material_checkpoint(self, mock_prompt, mock_context, mock_call):
         """Should handle material checkpoint trigger."""
         mock_context.return_value = None
@@ -151,9 +151,9 @@ class TestSupervisorNode:
         
         assert result["supervisor_verdict"] == "material_checkpoint"
 
-    @patch("src.agents.supervision.call_agent_with_metrics")
-    @patch("src.agents.supervision.check_context_or_escalate")
-    @patch("src.agents.supervision.build_agent_prompt")
+    @patch("src.agents.supervision.supervisor.call_agent_with_metrics")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.build_agent_prompt")
     def test_defaults_on_llm_error(self, mock_prompt, mock_context, mock_call):
         """Should default to ok_continue on LLM error."""
         mock_context.return_value = None
@@ -169,7 +169,7 @@ class TestSupervisorNode:
         
         assert result["supervisor_verdict"] == "ok_continue"
 
-    @patch("src.agents.supervision.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_returns_escalation_on_context_overflow(self, mock_context):
         """Should return escalation when context overflow."""
         mock_context.return_value = {
@@ -183,9 +183,9 @@ class TestSupervisorNode:
         
         assert result["awaiting_user_input"] is True
 
-    @patch("src.agents.supervision.call_agent_with_metrics")
-    @patch("src.agents.supervision.check_context_or_escalate")
-    @patch("src.agents.supervision.build_agent_prompt")
+    @patch("src.agents.supervision.supervisor.call_agent_with_metrics")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.build_agent_prompt")
     def test_returns_supervisor_verdict(self, mock_prompt, mock_context, mock_call):
         """Should return supervisor verdict from LLM output."""
         mock_context.return_value = None
@@ -207,9 +207,9 @@ class TestSupervisorNode:
         # Supervisor returns verdict
         assert result.get("supervisor_verdict") == "ok_continue"
 
-    @patch("src.agents.supervision.call_agent_with_metrics")
-    @patch("src.agents.supervision.check_context_or_escalate")
-    @patch("src.agents.supervision.build_agent_prompt")
+    @patch("src.agents.supervision.supervisor.call_agent_with_metrics")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.build_agent_prompt")
     def test_handles_finish_verdict(self, mock_prompt, mock_context, mock_call):
         """Should handle finish verdict when workflow complete."""
         mock_context.return_value = None
@@ -233,9 +233,9 @@ class TestSupervisorNode:
 class TestMaterialCheckpointTrigger:
     """Tests for material_checkpoint trigger handling."""
 
-    @patch("src.agents.supervision.check_context_or_escalate")
-    @patch("src.agents.supervision.update_progress_stage_status")
-    @patch("src.agents.supervision.archive_stage_outputs_to_progress")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.trigger_handlers.update_progress_stage_status")
+    @patch("src.agents.supervision.trigger_handlers.archive_stage_outputs_to_progress")
     def test_approves_materials_on_approve(self, mock_archive, mock_update, mock_context):
         """Should approve materials when user says APPROVE."""
         mock_context.return_value = None
@@ -253,8 +253,8 @@ class TestMaterialCheckpointTrigger:
         assert result["validated_materials"] == [{"material_id": "gold", "name": "Gold"}]
         assert result["pending_validated_materials"] == []
 
-    @patch("src.agents.supervision.check_context_or_escalate")
-    @patch("src.agents.supervision.update_progress_stage_status")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.trigger_handlers.update_progress_stage_status")
     def test_handles_change_database(self, mock_update, mock_context):
         """Should trigger replan on CHANGE_DATABASE response."""
         mock_context.return_value = None
@@ -271,8 +271,8 @@ class TestMaterialCheckpointTrigger:
         assert result["supervisor_verdict"] == "replan_needed"
         assert "database" in result["planner_feedback"].lower()
 
-    @patch("src.agents.supervision.check_context_or_escalate")
-    @patch("src.agents.supervision.update_progress_stage_status")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.trigger_handlers.update_progress_stage_status")
     def test_handles_change_material(self, mock_update, mock_context):
         """Should trigger replan on CHANGE_MATERIAL response."""
         mock_context.return_value = None
@@ -288,7 +288,7 @@ class TestMaterialCheckpointTrigger:
         assert result["supervisor_verdict"] == "replan_needed"
         assert "material" in result["planner_feedback"].lower()
 
-    @patch("src.agents.supervision.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_handles_need_help(self, mock_context):
         """Should ask for more details on NEED_HELP response."""
         mock_context.return_value = None
@@ -303,7 +303,7 @@ class TestMaterialCheckpointTrigger:
         assert result["supervisor_verdict"] == "ask_user"
         assert "details" in result["pending_user_questions"][0].lower()
 
-    @patch("src.agents.supervision.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_handles_unclear_response(self, mock_context):
         """Should ask for clarification on unclear response."""
         mock_context.return_value = None
@@ -318,7 +318,7 @@ class TestMaterialCheckpointTrigger:
         assert result["supervisor_verdict"] == "ask_user"
         assert "unclear" in result["pending_user_questions"][0].lower()
 
-    @patch("src.agents.supervision.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_handles_rejection_without_specifics(self, mock_context):
         """Should ask for clarification on rejection without specifying what to change."""
         mock_context.return_value = None
@@ -332,7 +332,7 @@ class TestMaterialCheckpointTrigger:
         
         assert result["supervisor_verdict"] == "ask_user"
 
-    @patch("src.agents.supervision.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_handles_missing_pending_materials_on_approve(self, mock_context):
         """Should ask user when approving but no materials pending."""
         mock_context.return_value = None
@@ -351,7 +351,7 @@ class TestMaterialCheckpointTrigger:
 class TestCodeReviewLimitTrigger:
     """Tests for code_review_limit trigger handling."""
 
-    @patch("src.agents.supervision.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_resets_count_on_hint(self, mock_context):
         """Should reset code revision count when user provides hint."""
         mock_context.return_value = None
@@ -367,8 +367,8 @@ class TestCodeReviewLimitTrigger:
         assert result["code_revision_count"] == 0
         assert result["supervisor_verdict"] == "ok_continue"
 
-    @patch("src.agents.supervision.check_context_or_escalate")
-    @patch("src.agents.supervision.update_progress_stage_status")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.trigger_handlers.update_progress_stage_status")
     def test_skips_stage_on_skip(self, mock_update, mock_context):
         """Should skip stage when user says SKIP."""
         mock_context.return_value = None
@@ -384,7 +384,7 @@ class TestCodeReviewLimitTrigger:
         assert result["supervisor_verdict"] == "ok_continue"
         mock_update.assert_called_once()
 
-    @patch("src.agents.supervision.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_stops_on_stop(self, mock_context):
         """Should stop workflow when user says STOP."""
         mock_context.return_value = None
@@ -399,7 +399,7 @@ class TestCodeReviewLimitTrigger:
         assert result["supervisor_verdict"] == "all_complete"
         assert result["should_stop"] is True
 
-    @patch("src.agents.supervision.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_asks_clarification_on_unclear(self, mock_context):
         """Should ask for clarification on unclear response."""
         mock_context.return_value = None
@@ -417,7 +417,7 @@ class TestCodeReviewLimitTrigger:
 class TestDesignReviewLimitTrigger:
     """Tests for design_review_limit trigger handling."""
 
-    @patch("src.agents.supervision.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_resets_count_on_hint(self, mock_context):
         """Should reset design revision count when user provides hint."""
         mock_context.return_value = None
@@ -433,8 +433,8 @@ class TestDesignReviewLimitTrigger:
         assert result["design_revision_count"] == 0
         assert result["supervisor_verdict"] == "ok_continue"
 
-    @patch("src.agents.supervision.check_context_or_escalate")
-    @patch("src.agents.supervision.update_progress_stage_status")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.trigger_handlers.update_progress_stage_status")
     def test_skips_stage_on_skip(self, mock_update, mock_context):
         """Should skip stage when user says SKIP."""
         mock_context.return_value = None
@@ -450,7 +450,7 @@ class TestDesignReviewLimitTrigger:
         assert result["supervisor_verdict"] == "ok_continue"
         mock_update.assert_called_once()
 
-    @patch("src.agents.supervision.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_stops_on_stop(self, mock_context):
         """Should stop workflow when user says STOP."""
         mock_context.return_value = None
@@ -469,7 +469,7 @@ class TestDesignReviewLimitTrigger:
 class TestExecutionFailureLimitTrigger:
     """Tests for execution_failure_limit trigger handling."""
 
-    @patch("src.agents.supervision.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_resets_count_on_retry(self, mock_context):
         """Should reset execution failure count on RETRY."""
         mock_context.return_value = None
@@ -485,7 +485,7 @@ class TestExecutionFailureLimitTrigger:
         assert result["execution_failure_count"] == 0
         assert result["supervisor_verdict"] == "ok_continue"
 
-    @patch("src.agents.supervision.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_resets_count_on_guidance(self, mock_context):
         """Should reset execution failure count on GUIDANCE."""
         mock_context.return_value = None
@@ -499,8 +499,8 @@ class TestExecutionFailureLimitTrigger:
         
         assert result["execution_failure_count"] == 0
 
-    @patch("src.agents.supervision.check_context_or_escalate")
-    @patch("src.agents.supervision.update_progress_stage_status")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.trigger_handlers.update_progress_stage_status")
     def test_skips_stage_on_skip(self, mock_update, mock_context):
         """Should skip stage when user says SKIP."""
         mock_context.return_value = None
@@ -515,7 +515,7 @@ class TestExecutionFailureLimitTrigger:
         
         assert result["supervisor_verdict"] == "ok_continue"
 
-    @patch("src.agents.supervision.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_stops_on_stop(self, mock_context):
         """Should stop workflow when user says STOP."""
         mock_context.return_value = None
@@ -533,7 +533,7 @@ class TestExecutionFailureLimitTrigger:
 class TestPhysicsFailureLimitTrigger:
     """Tests for physics_failure_limit trigger handling."""
 
-    @patch("src.agents.supervision.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_resets_count_on_retry(self, mock_context):
         """Should reset physics failure count on RETRY."""
         mock_context.return_value = None
@@ -548,8 +548,8 @@ class TestPhysicsFailureLimitTrigger:
         
         assert result["physics_failure_count"] == 0
 
-    @patch("src.agents.supervision.check_context_or_escalate")
-    @patch("src.agents.supervision.update_progress_stage_status")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.trigger_handlers.update_progress_stage_status")
     def test_accepts_partial_on_accept(self, mock_update, mock_context):
         """Should accept as partial when user says ACCEPT."""
         mock_context.return_value = None
@@ -568,8 +568,8 @@ class TestPhysicsFailureLimitTrigger:
             summary="Accepted as partial by user despite physics issues"
         )
 
-    @patch("src.agents.supervision.check_context_or_escalate")
-    @patch("src.agents.supervision.update_progress_stage_status")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.trigger_handlers.update_progress_stage_status")
     def test_accepts_partial_on_partial(self, mock_update, mock_context):
         """Should accept as partial when user says PARTIAL."""
         mock_context.return_value = None
@@ -588,7 +588,7 @@ class TestPhysicsFailureLimitTrigger:
 class TestContextOverflowTrigger:
     """Tests for context_overflow trigger handling."""
 
-    @patch("src.agents.supervision.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_continues_on_summarize(self, mock_context):
         """Should continue with summarization on SUMMARIZE."""
         mock_context.return_value = None
@@ -603,7 +603,7 @@ class TestContextOverflowTrigger:
         assert result["supervisor_verdict"] == "ok_continue"
         assert "summariz" in result["supervisor_feedback"].lower()
 
-    @patch("src.agents.supervision.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_truncates_paper_on_truncate(self, mock_context):
         """Should truncate paper on TRUNCATE."""
         mock_context.return_value = None
@@ -620,7 +620,7 @@ class TestContextOverflowTrigger:
         assert "[TRUNCATED BY USER REQUEST]" in result["paper_text"]
         assert len(result["paper_text"]) < 30000
 
-    @patch("src.agents.supervision.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_handles_short_paper_on_truncate(self, mock_context):
         """Should handle short paper gracefully on TRUNCATE."""
         mock_context.return_value = None
@@ -636,8 +636,8 @@ class TestContextOverflowTrigger:
         assert result["supervisor_verdict"] == "ok_continue"
         assert "short enough" in result["supervisor_feedback"].lower()
 
-    @patch("src.agents.supervision.check_context_or_escalate")
-    @patch("src.agents.supervision.update_progress_stage_status")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.trigger_handlers.update_progress_stage_status")
     def test_skips_stage_on_skip(self, mock_update, mock_context):
         """Should skip stage on SKIP."""
         mock_context.return_value = None
@@ -652,7 +652,7 @@ class TestContextOverflowTrigger:
         
         assert result["supervisor_verdict"] == "ok_continue"
 
-    @patch("src.agents.supervision.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_stops_on_stop(self, mock_context):
         """Should stop on STOP."""
         mock_context.return_value = None
@@ -670,7 +670,7 @@ class TestContextOverflowTrigger:
 class TestReplanLimitTrigger:
     """Tests for replan_limit trigger handling."""
 
-    @patch("src.agents.supervision.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_force_accepts_plan(self, mock_context):
         """Should force accept plan on FORCE."""
         mock_context.return_value = None
@@ -685,7 +685,7 @@ class TestReplanLimitTrigger:
         assert result["supervisor_verdict"] == "ok_continue"
         assert "force" in result["supervisor_feedback"].lower()
 
-    @patch("src.agents.supervision.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_accepts_plan_on_accept(self, mock_context):
         """Should accept plan on ACCEPT."""
         mock_context.return_value = None
@@ -699,7 +699,7 @@ class TestReplanLimitTrigger:
         
         assert result["supervisor_verdict"] == "ok_continue"
 
-    @patch("src.agents.supervision.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_retries_replan_on_guidance(self, mock_context):
         """Should retry replan with guidance on GUIDANCE."""
         mock_context.return_value = None
@@ -715,7 +715,7 @@ class TestReplanLimitTrigger:
         assert result["supervisor_verdict"] == "replan_needed"
         assert result["replan_count"] == 0
 
-    @patch("src.agents.supervision.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_stops_on_stop(self, mock_context):
         """Should stop on STOP."""
         mock_context.return_value = None
@@ -733,7 +733,7 @@ class TestReplanLimitTrigger:
 class TestBacktrackApprovalTrigger:
     """Tests for backtrack_approval trigger handling."""
 
-    @patch("src.agents.supervision.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_approves_backtrack_on_approve(self, mock_context):
         """Should approve backtrack on APPROVE."""
         mock_context.return_value = None
@@ -756,7 +756,7 @@ class TestBacktrackApprovalTrigger:
         assert result["supervisor_verdict"] == "backtrack_to_stage"
         assert "stages_to_invalidate" in result["backtrack_decision"]
 
-    @patch("src.agents.supervision.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_rejects_backtrack_on_reject(self, mock_context):
         """Should reject backtrack on REJECT."""
         mock_context.return_value = None
@@ -772,7 +772,7 @@ class TestBacktrackApprovalTrigger:
         assert result["supervisor_verdict"] == "ok_continue"
         assert result["backtrack_suggestion"] is None
 
-    @patch("src.agents.supervision.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_defaults_to_continue_on_unclear(self, mock_context):
         """Should default to continue on unclear response."""
         mock_context.return_value = None
@@ -790,7 +790,7 @@ class TestBacktrackApprovalTrigger:
 class TestDeadlockTrigger:
     """Tests for deadlock_detected trigger handling."""
 
-    @patch("src.agents.supervision.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_generates_report_on_generate_report(self, mock_context):
         """Should generate report on GENERATE_REPORT."""
         mock_context.return_value = None
@@ -805,7 +805,7 @@ class TestDeadlockTrigger:
         assert result["supervisor_verdict"] == "all_complete"
         assert result["should_stop"] is True
 
-    @patch("src.agents.supervision.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_replans_on_replan(self, mock_context):
         """Should trigger replan on REPLAN."""
         mock_context.return_value = None
@@ -819,7 +819,7 @@ class TestDeadlockTrigger:
         
         assert result["supervisor_verdict"] == "replan_needed"
 
-    @patch("src.agents.supervision.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_stops_on_stop(self, mock_context):
         """Should stop on STOP."""
         mock_context.return_value = None
@@ -833,7 +833,7 @@ class TestDeadlockTrigger:
         
         assert result["supervisor_verdict"] == "all_complete"
 
-    @patch("src.agents.supervision.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_asks_clarification_on_unclear(self, mock_context):
         """Should ask clarification on unclear response."""
         mock_context.return_value = None
@@ -851,7 +851,7 @@ class TestDeadlockTrigger:
 class TestUnknownTrigger:
     """Tests for unknown trigger handling."""
 
-    @patch("src.agents.supervision.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_handles_unknown_trigger(self, mock_context):
         """Should handle unknown trigger gracefully."""
         mock_context.return_value = None
@@ -870,10 +870,10 @@ class TestUnknownTrigger:
 class TestArchiveErrorRecovery:
     """Tests for archive error recovery logic."""
 
-    @patch("src.agents.supervision.call_agent_with_metrics")
-    @patch("src.agents.supervision.check_context_or_escalate")
-    @patch("src.agents.supervision.build_agent_prompt")
-    @patch("src.agents.supervision.archive_stage_outputs_to_progress")
+    @patch("src.agents.supervision.supervisor.call_agent_with_metrics")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.build_agent_prompt")
+    @patch("src.agents.supervision.supervisor.archive_stage_outputs_to_progress")
     def test_retries_failed_archives(self, mock_archive, mock_prompt, mock_context, mock_call):
         """Should retry failed archive operations."""
         mock_context.return_value = None
@@ -892,10 +892,10 @@ class TestArchiveErrorRecovery:
         assert result["archive_errors"] == []
         mock_archive.assert_called()
 
-    @patch("src.agents.supervision.call_agent_with_metrics")
-    @patch("src.agents.supervision.check_context_or_escalate")
-    @patch("src.agents.supervision.build_agent_prompt")
-    @patch("src.agents.supervision.archive_stage_outputs_to_progress")
+    @patch("src.agents.supervision.supervisor.call_agent_with_metrics")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.build_agent_prompt")
+    @patch("src.agents.supervision.supervisor.archive_stage_outputs_to_progress")
     def test_keeps_failed_retries(self, mock_archive, mock_prompt, mock_context, mock_call):
         """Should keep archive errors that still fail on retry."""
         mock_context.return_value = None
@@ -917,7 +917,7 @@ class TestArchiveErrorRecovery:
 class TestUserInteractionLogging:
     """Tests for user interaction logging."""
 
-    @patch("src.agents.supervision.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_logs_user_interaction(self, mock_context):
         """Should log user interaction to progress."""
         mock_context.return_value = None
@@ -943,9 +943,9 @@ class TestUserInteractionLogging:
 class TestInvalidUserResponses:
     """Tests for handling invalid user_responses."""
 
-    @patch("src.agents.supervision.call_agent_with_metrics")
-    @patch("src.agents.supervision.check_context_or_escalate")
-    @patch("src.agents.supervision.build_agent_prompt")
+    @patch("src.agents.supervision.supervisor.call_agent_with_metrics")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.build_agent_prompt")
     def test_handles_non_dict_user_responses(self, mock_prompt, mock_context, mock_call):
         """Should handle non-dict user_responses gracefully."""
         mock_context.return_value = None
