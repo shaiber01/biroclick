@@ -69,7 +69,14 @@ def execution_validator_node(state: ReproState) -> dict:
     # Check fallback strategy if we are about to fail
     fallback = get_stage_design_spec(state, state.get("current_stage_id"), "fallback_strategy", "ask_user")
     
-    if run_error and "TIMEOUT_ERROR" in run_error:
+    # Check for timeout (via flag or string match)
+    stage_outputs = state.get("stage_outputs", {})
+    is_timeout = stage_outputs.get("timeout_exceeded", False)
+    if not is_timeout and run_error:
+        # Legacy/fallback check for string pattern
+        is_timeout = "exceeded timeout" in str(run_error) or "TIMEOUT_ERROR" in str(run_error)
+    
+    if is_timeout:
         if fallback == "skip_with_warning":
             agent_output = {
                 "verdict": "pass",
@@ -84,7 +91,7 @@ def execution_validator_node(state: ReproState) -> dict:
             }
     else:
         # Build user content for execution validation
-        stage_outputs = state.get("stage_outputs", {})
+        # stage_outputs already retrieved above
         stage_id = state.get("current_stage_id", "unknown")
         
         user_content = f"# EXECUTION RESULTS FOR STAGE: {stage_id}\n\n"

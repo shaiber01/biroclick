@@ -102,7 +102,7 @@ def estimate_token_cost(paper_input: Dict[str, Any]) -> Dict[str, Any]:
     planner_input_tokens = 2 * text_tokens
     
     # Per stage estimates (assume 4 stages average)
-    num_stages = max(4, len(figures))  # At least one stage per key figure
+    num_stages = max(4, total_figures)  # At least one stage per key figure
     
     # Each stage involves:
     # - Design: 1 call with ~30% of paper context

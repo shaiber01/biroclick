@@ -2068,7 +2068,7 @@ def checkpoint_name_for_stage(state: "ReproState", event: str) -> str:
         >>> checkpoint_name_for_stage(state, "user_confirm")
         'stage2_user_confirm'
     """
-    stage_id = state.get("current_stage_id", "unknown")
+    stage_id = state.get("current_stage_id") or "unknown"
     
     # Extract stage number from stage_id (e.g., "stage0_material_validation" → "0")
     match = re.match(r"stage(\d+)_", stage_id)

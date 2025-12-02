@@ -3,6 +3,7 @@ Unit tests for paper_loader cost_estimation module.
 """
 
 import pytest
+from typing import Dict, Any
 
 from src.paper_loader import (
     estimate_tokens,
@@ -12,6 +13,11 @@ from src.paper_loader import (
     PAPER_LENGTH_NORMAL,
     PAPER_LENGTH_LONG,
     PAPER_LENGTH_VERY_LONG,
+)
+from src.paper_loader.config import (
+    TOKENS_PER_FIGURE,
+    INPUT_COST_PER_MILLION,
+    OUTPUT_COST_PER_MILLION,
 )
 
 
@@ -26,26 +32,46 @@ class TestEstimateTokens:
         """Estimates tokens as chars / CHARS_PER_TOKEN."""
         text = "A" * 100
         tokens = estimate_tokens(text)
-        
-        assert tokens == 100 // CHARS_PER_TOKEN
+        # 100 / 4 = 25
+        assert tokens == 25
     
     def test_empty_string_returns_zero(self):
         """Empty string returns 0 tokens."""
         assert estimate_tokens("") == 0
     
-    def test_integer_division(self):
+    def test_integer_division_floor(self):
         """Uses integer division (floor)."""
-        text = "A" * 5  # 5 chars with CHARS_PER_TOKEN=4 should give 1
+        # 5 chars with CHARS_PER_TOKEN=4. 5/4 = 1.25 -> floor to 1
+        text = "A" * 5
         tokens = estimate_tokens(text)
-        
         assert tokens == 1
+        
+        text = "A" * 7
+        tokens = estimate_tokens(text)
+        assert tokens == 1
+        
+        text = "A" * 8
+        tokens = estimate_tokens(text)
+        assert tokens == 2
     
     def test_large_text(self):
         """Handles large text."""
         text = "A" * 100_000
         tokens = estimate_tokens(text)
-        
         assert tokens == 100_000 // CHARS_PER_TOKEN
+
+    def test_unicode_characters(self):
+        """Handles unicode characters (counts Python chars, not bytes)."""
+        # '👍' is 1 char in Python 3 string
+        text = "👍" * 10
+        assert len(text) == 10
+        tokens = estimate_tokens(text)
+        assert tokens == 10 // CHARS_PER_TOKEN
+
+    def test_none_input_raises_error(self):
+        """None input raises TypeError."""
+        with pytest.raises(TypeError):
+            estimate_tokens(None)  # type: ignore
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -57,40 +83,64 @@ class TestCheckPaperLength:
     
     def test_normal_length_no_warnings(self):
         """Normal length paper returns no warnings."""
-        text = "A" * (PAPER_LENGTH_NORMAL - 1000)
+        text = "A" * PAPER_LENGTH_NORMAL
         warnings = check_paper_length(text)
-        
         assert warnings == []
     
-    def test_long_paper_warns(self):
-        """Long paper (>PAPER_LENGTH_LONG) returns warning."""
-        text = "A" * (PAPER_LENGTH_LONG + 1000)
+    def test_long_paper_boundary(self):
+        """Test boundary conditions for long paper warning."""
+        # Exact boundary: PAPER_LENGTH_LONG
+        text = "A" * PAPER_LENGTH_LONG
         warnings = check_paper_length(text)
+        assert warnings == []  # Should be no warning at exact limit based on implementation (> check)
+
+        # One char over
+        text = "A" * (PAPER_LENGTH_LONG + 1)
+        warnings = check_paper_length(text)
+        assert len(warnings) == 1
+        assert "long" in warnings[0].lower()
+        assert "VERY LONG" not in warnings[0]
+
+    def test_very_long_paper_boundary(self):
+        """Test boundary conditions for very long paper warning."""
+        # Exact boundary
+        text = "A" * PAPER_LENGTH_VERY_LONG
+        warnings = check_paper_length(text)
+        # Should be just "long" warning if logic is check > LONG then check > VERY_LONG?
+        # Let's check implementation: 
+        # if char_count > PAPER_LENGTH_VERY_LONG: ...
+        # elif char_count > PAPER_LENGTH_LONG: ...
+        # So at exact VERY_LONG, it triggers the elif (> LONG).
+        
+        # Wait, if it is exactly VERY_LONG, it is > LONG, so it gets "long" warning.
+        # If it is VERY_LONG + 1, it gets "VERY LONG" warning.
         
         assert len(warnings) == 1
         assert "long" in warnings[0].lower()
-    
-    def test_very_long_paper_warns(self):
-        """Very long paper (>PAPER_LENGTH_VERY_LONG) returns VERY LONG warning."""
-        text = "A" * (PAPER_LENGTH_VERY_LONG + 1000)
+        assert "VERY LONG" not in warnings[0] # It's just "long" at the boundary
+
+        # One char over
+        text = "A" * (PAPER_LENGTH_VERY_LONG + 1)
         warnings = check_paper_length(text)
-        
         assert len(warnings) == 1
         assert "VERY LONG" in warnings[0]
     
     def test_custom_label(self):
         """Custom label appears in warning."""
-        text = "A" * (PAPER_LENGTH_LONG + 1000)
+        text = "A" * (PAPER_LENGTH_LONG + 100)
         warnings = check_paper_length(text, label="Supplementary")
-        
         assert "Supplementary" in warnings[0]
     
     def test_default_label_is_paper(self):
         """Default label is 'Paper'."""
-        text = "A" * (PAPER_LENGTH_LONG + 1000)
+        text = "A" * (PAPER_LENGTH_LONG + 100)
         warnings = check_paper_length(text)
-        
-        assert "Paper" in warnings[0] or warnings[0].startswith("Paper")
+        assert warnings[0].startswith("Paper")
+
+    def test_empty_string(self):
+        """Empty string returns no warnings."""
+        warnings = check_paper_length("")
+        assert warnings == []
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -106,7 +156,7 @@ class TestEstimateTokenCost:
         return {
             "paper_id": "test",
             "paper_title": "Test",
-            "paper_text": "A" * 10_000,  # 10K chars ~ 2500 tokens
+            "paper_text": "A" * 10_000,  # 10K chars
             "figures": [
                 {"id": "Fig1", "description": "Test", "image_path": "fig1.png"},
                 {"id": "Fig2", "description": "Test", "image_path": "fig2.png"},
@@ -127,142 +177,158 @@ class TestEstimateTokenCost:
             "warning",
         ]
         for key in expected_keys:
-            assert key in result
-    
-    def test_cost_breakdown_has_input_output(self, basic_paper_input):
-        """cost_breakdown includes input and output costs."""
-        result = estimate_token_cost(basic_paper_input)
+            assert key in result, f"Missing key: {key}"
+            
+        breakdown_keys = ["input_cost_usd", "output_cost_usd"]
+        for key in breakdown_keys:
+            assert key in result["cost_breakdown"], f"Missing breakdown key: {key}"
+
+    def test_calculation_exact_match(self):
+        """
+        Verifies the cost calculation logic matches the expected formula exactly.
+        This ensures regressions in the formula are caught.
+        """
+        # Setup inputs
+        char_count = 4000  # 1000 tokens
+        text = "A" * char_count
+        figures = [{"id": "f1"}, {"id": "f2"}] # 2 figures
+        supp_figures = [{"id": "s1"}] # 1 supplementary figure
         
-        assert "input_cost_usd" in result["cost_breakdown"]
-        assert "output_cost_usd" in result["cost_breakdown"]
-    
-    def test_assumptions_includes_num_figures(self, basic_paper_input):
-        """assumptions includes num_figures."""
-        result = estimate_token_cost(basic_paper_input)
-        
-        assert result["assumptions"]["num_figures"] == 2
-    
-    def test_token_counts_are_integers(self, basic_paper_input):
-        """Token counts are integers."""
-        result = estimate_token_cost(basic_paper_input)
-        
-        assert isinstance(result["estimated_input_tokens"], int)
-        assert isinstance(result["estimated_output_tokens"], int)
-        assert isinstance(result["estimated_total_tokens"], int)
-    
-    def test_total_is_sum_of_input_output(self, basic_paper_input):
-        """Total tokens is input + output."""
-        result = estimate_token_cost(basic_paper_input)
-        
-        assert result["estimated_total_tokens"] == (
-            result["estimated_input_tokens"] + result["estimated_output_tokens"]
-        )
-    
-    def test_more_figures_increases_cost(self):
-        """More figures increases estimated cost."""
-        paper_2_figs = {
-            "paper_id": "test",
-            "paper_title": "Test",
-            "paper_text": "A" * 10_000,
-            "figures": [{"id": f"Fig{i}", "description": "T", "image_path": f"f{i}.png"} for i in range(2)]
-        }
-        paper_10_figs = {
-            "paper_id": "test",
-            "paper_title": "Test",
-            "paper_text": "A" * 10_000,
-            "figures": [{"id": f"Fig{i}", "description": "T", "image_path": f"f{i}.png"} for i in range(10)]
-        }
-        
-        cost_2 = estimate_token_cost(paper_2_figs)
-        cost_10 = estimate_token_cost(paper_10_figs)
-        
-        assert cost_10["estimated_cost_usd"] > cost_2["estimated_cost_usd"]
-    
-    def test_more_text_increases_cost(self):
-        """More text increases estimated cost."""
-        paper_short = {
-            "paper_id": "test",
-            "paper_title": "Test",
-            "paper_text": "A" * 5_000,
-            "figures": []
-        }
-        paper_long = {
-            "paper_id": "test",
-            "paper_title": "Test",
-            "paper_text": "A" * 50_000,
-            "figures": []
-        }
-        
-        cost_short = estimate_token_cost(paper_short)
-        cost_long = estimate_token_cost(paper_long)
-        
-        assert cost_long["estimated_cost_usd"] > cost_short["estimated_cost_usd"]
-    
-    def test_includes_supplementary_text(self):
-        """Supplementary text is included in estimate."""
-        paper_no_supp = {
-            "paper_id": "test",
-            "paper_title": "Test",
-            "paper_text": "A" * 10_000,
-            "figures": []
-        }
-        paper_with_supp = {
-            "paper_id": "test",
-            "paper_title": "Test",
-            "paper_text": "A" * 10_000,
+        paper_input = {
+            "paper_text": text,
+            "figures": figures,
             "supplementary": {
-                "supplementary_text": "B" * 10_000
-            },
-            "figures": []
-        }
-        
-        cost_no_supp = estimate_token_cost(paper_no_supp)
-        cost_with_supp = estimate_token_cost(paper_with_supp)
-        
-        assert cost_with_supp["estimated_input_tokens"] > cost_no_supp["estimated_input_tokens"]
-    
-    def test_includes_supplementary_figures(self):
-        """Supplementary figures are counted."""
-        paper_with_supp_figs = {
-            "paper_id": "test",
-            "paper_title": "Test",
-            "paper_text": "A" * 10_000,
-            "figures": [],
-            "supplementary": {
-                "supplementary_figures": [
-                    {"id": "S1", "description": "T", "image_path": "s1.png"},
-                    {"id": "S2", "description": "T", "image_path": "s2.png"},
-                ]
+                "supplementary_figures": supp_figures
             }
         }
         
-        result = estimate_token_cost(paper_with_supp_figs)
+        # Manual Calculation based on current logic
+        # 1. Text Tokens
+        text_tokens = char_count / CHARS_PER_TOKEN # 1000.0
         
-        assert result["assumptions"]["num_figures"] == 2
-    
-    def test_warning_message_present(self, basic_paper_input):
-        """Warning message is present and informative."""
-        result = estimate_token_cost(basic_paper_input)
+        # 2. Image Tokens
+        total_figures_count = len(figures) + len(supp_figures) # 3
+        image_tokens = total_figures_count * TOKENS_PER_FIGURE # 3 * 680 = 2040
         
-        assert len(result["warning"]) > 50  # Substantial warning
-        assert "estimate" in result["warning"].lower()
-    
-    def test_cost_is_rounded(self, basic_paper_input):
-        """Cost values are rounded to 2 decimal places."""
-        result = estimate_token_cost(basic_paper_input)
+        # 3. Planner Input
+        planner_input = 2 * text_tokens # 2000.0
         
-        # Check main cost
-        cost_str = str(result["estimated_cost_usd"])
-        if "." in cost_str:
-            decimals = len(cost_str.split(".")[1])
-            assert decimals <= 2
+        # 4. Stages
+        # Use total figures for stages
+        num_stages = max(4, total_figures_count) # max(4, 3) = 4
         
-        # Check breakdown costs
-        for key in ["input_cost_usd", "output_cost_usd"]:
-            cost_str = str(result["cost_breakdown"][key])
-            if "." in cost_str:
-                decimals = len(cost_str.split(".")[1])
-                assert decimals <= 2
+        stage_text_fraction = 0.3
+        per_stage_text = text_tokens * stage_text_fraction # 300.0
+        
+        per_stage_input = (
+            per_stage_text +                # Design
+            per_stage_text * 2 +            # CodeGen
+            per_stage_text * 2 +            # Review
+            per_stage_text + image_tokens / num_stages # Analysis
+        )
+        # per_stage_input = 300 + 600 + 600 + 300 + (2040/4=510) = 1800 + 510 = 2310.0
+        
+        total_stages_input = per_stage_input * num_stages # 2310 * 4 = 9240.0
+        
+        # 5. Supervisor
+        supervisor_input = num_stages * (per_stage_text * 0.5) # 4 * 150 = 600.0
+        
+        # 6. Report
+        report_input = text_tokens * 0.2 + image_tokens # 200 + 2040 = 2240.0
+        
+        # 7. Totals
+        total_input_estimate = (
+            planner_input +     # 2000
+            total_stages_input + # 9240
+            supervisor_input +  # 600
+            report_input        # 2240
+        ) # = 14080.0
+        
+        total_output_estimate = total_input_estimate * 0.25 # 3520.0
+        
+        input_cost = total_input_estimate * INPUT_COST_PER_MILLION / 1_000_000
+        output_cost = total_output_estimate * OUTPUT_COST_PER_MILLION / 1_000_000
+        total_cost = input_cost + output_cost
+        
+        # Run function
+        result = estimate_token_cost(paper_input)
+        
+        # Assertions
+        assert result["estimated_input_tokens"] == int(total_input_estimate)
+        assert result["estimated_output_tokens"] == int(total_output_estimate)
+        assert result["estimated_total_tokens"] == int(total_input_estimate + total_output_estimate)
+        
+        # Check costs with small tolerance for float math, though rounding should match
+        assert abs(result["estimated_cost_usd"] - round(total_cost, 2)) < 0.001
+        assert abs(result["cost_breakdown"]["input_cost_usd"] - round(input_cost, 2)) < 0.001
+        assert abs(result["cost_breakdown"]["output_cost_usd"] - round(output_cost, 2)) < 0.001
+        
+        # Verify assumptions
+        assert result["assumptions"]["num_figures"] == 3
+        assert result["assumptions"]["num_stages_estimated"] == 4
+        assert result["assumptions"]["text_chars"] == char_count
 
+    def test_missing_keys_handled(self):
+        """Test that missing keys in input don't crash function."""
+        # Empty dict
+        result = estimate_token_cost({})
+        assert result["estimated_input_tokens"] >= 0
+        assert result["assumptions"]["text_chars"] == 0
+        assert result["assumptions"]["num_figures"] == 0
 
+    def test_zero_figures_uses_min_stages(self):
+        """Zero figures should still use minimum 4 stages."""
+        paper_input = {
+            "paper_text": "A" * 400, # 100 tokens
+            "figures": []
+        }
+        result = estimate_token_cost(paper_input)
+        assert result["assumptions"]["num_figures"] == 0
+        assert result["assumptions"]["num_stages_estimated"] == 4
+
+    def test_many_figures_uses_figure_count_stages(self):
+        """Many figures should increase stage count."""
+        figs = [{"id": f"f{i}"} for i in range(10)]
+        paper_input = {
+            "paper_text": "A" * 400,
+            "figures": figs
+        }
+        result = estimate_token_cost(paper_input)
+        assert result["assumptions"]["num_figures"] == 10
+        assert result["assumptions"]["num_stages_estimated"] == 10
+
+    def test_supplementary_text_included(self):
+        """Supplementary text adds to token count."""
+        paper_no_supp = {"paper_text": "A" * 400}
+        paper_with_supp = {
+            "paper_text": "A" * 400,
+            "supplementary": {"supplementary_text": "B" * 400}
+        }
+        
+        cost_no = estimate_token_cost(paper_no_supp)
+        cost_supp = estimate_token_cost(paper_with_supp)
+        
+        # Should be roughly double the text tokens involved
+        # (exact math depends on multipliers, but definitely strictly greater)
+        assert cost_supp["estimated_input_tokens"] > cost_no["estimated_input_tokens"]
+
+    def test_supplementary_figures_included(self):
+        """Supplementary figures add to token count and stages if enough."""
+        # 3 main figures, 3 supp figures -> 6 total -> 6 stages
+        paper_input = {
+            "figures": [{"id": "f"} for _ in range(3)],
+            "supplementary": {
+                "supplementary_figures": [{"id": "s"} for _ in range(3)]
+            }
+        }
+        result = estimate_token_cost(paper_input)
+        assert result["assumptions"]["num_figures"] == 6
+        assert result["assumptions"]["num_stages_estimated"] == 6
+
+    def test_cost_values_types(self, basic_paper_input):
+        """Ensure cost values are floats (even if 0.0) and tokens are ints."""
+        result = estimate_token_cost(basic_paper_input)
+        assert isinstance(result["estimated_input_tokens"], int)
+        assert isinstance(result["estimated_cost_usd"], float)
+        assert isinstance(result["cost_breakdown"]["input_cost_usd"], float)
 

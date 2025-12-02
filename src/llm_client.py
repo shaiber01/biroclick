@@ -347,9 +347,19 @@ def call_agent(
                 
                 # Try to find and parse JSON in the response
                 try:
-                    # Look for JSON object in response
                     import re
-                    json_match = re.search(r'\{[\s\S]*\}', content)
+                    # First try to find JSON within code blocks (last one takes precedence)
+                    code_block_pattern = r'```(?:json)?\s*(\{[\s\S]*?\})\s*```'
+                    code_blocks = re.findall(code_block_pattern, content)
+                    if code_blocks:
+                        for block in reversed(code_blocks):
+                            try:
+                                return json.loads(block)
+                            except json.JSONDecodeError:
+                                continue
+                    
+                    # Fallback to greedy search if no valid code blocks found
+                    json_match = re.search(r'(\{[\s\S]*\})', content)
                     if json_match:
                         return json.loads(json_match.group())
                     raise ValueError("No JSON found")
@@ -615,4 +625,3 @@ def get_images_for_analyzer(state: Dict[str, Any]) -> List[Path]:
             images.append(path)
     
     return images
-

@@ -496,6 +496,155 @@ def handle_llm_error(
         ]
 
 
+def handle_clarification(
+    state: ReproState,
+    result: Dict[str, Any],
+    user_responses: Dict[str, str],
+    current_stage_id: Optional[str] = None,
+) -> None:
+    """
+    Handle clarification trigger response.
+    
+    Free-form response from user to clarify ambiguity.
+    Adds clarification to assumptions/feedback and continues.
+    """
+    raw_response = list(user_responses.values())[-1] if user_responses else ""
+    
+    if raw_response:
+        # Append clarification to assumptions or feedback
+        # Here we append to supervisor_feedback to ensure it reaches the relevant agent
+        result["supervisor_verdict"] = "ok_continue"
+        result["supervisor_feedback"] = f"User clarification provided: {raw_response}"
+    else:
+        # If user didn't provide anything, ask again? or just continue?
+        # Usually 'ask_user' requires input, so empty might mean "no clarification"
+        result["supervisor_verdict"] = "ok_continue"
+        result["supervisor_feedback"] = "No clarification provided by user."
+
+
+def handle_critical_error_retry(
+    state: ReproState,
+    result: Dict[str, Any],
+    user_responses: Dict[str, str],
+    current_stage_id: Optional[str] = None,
+) -> None:
+    """
+    Generic handler for critical errors where user can RETRY or STOP.
+    
+    Used for:
+    - missing_paper_text
+    - missing_stage_id
+    - progress_init_failed
+    """
+    response_text = parse_user_response(user_responses)
+    
+    if "RETRY" in response_text:
+        result["supervisor_verdict"] = "ok_continue"
+        result["supervisor_feedback"] = "Retrying after critical error acknowledged by user."
+        
+    elif "STOP" in response_text:
+        result["supervisor_verdict"] = "all_complete"
+        result["should_stop"] = True
+        
+    else:
+        result["supervisor_verdict"] = "ask_user"
+        result["pending_user_questions"] = [
+            "Please clarify: RETRY or STOP?"
+        ]
+
+
+def handle_planning_error_retry(
+    state: ReproState,
+    result: Dict[str, Any],
+    user_responses: Dict[str, str],
+    current_stage_id: Optional[str] = None,
+) -> None:
+    """
+    Generic handler for planning errors where user can REPLAN or STOP.
+    
+    Used for:
+    - no_stages_available
+    - invalid_backtrack_target
+    - backtrack_target_not_found
+    """
+    response_text = parse_user_response(user_responses)
+    
+    if "REPLAN" in response_text:
+        result["supervisor_verdict"] = "replan_needed"
+        result["planner_feedback"] = f"User requested replan after error: {response_text}"
+        
+    elif "STOP" in response_text:
+        result["supervisor_verdict"] = "all_complete"
+        result["should_stop"] = True
+        
+    else:
+        result["supervisor_verdict"] = "ask_user"
+        result["pending_user_questions"] = [
+            "Please clarify: REPLAN or STOP?"
+        ]
+
+
+def handle_backtrack_limit(
+    state: ReproState,
+    result: Dict[str, Any],
+    user_responses: Dict[str, str],
+    current_stage_id: Optional[str] = None,
+) -> None:
+    """
+    Handle backtrack_limit trigger response.
+    
+    User can:
+    - STOP: Stop workflow
+    - FORCE_CONTINUE: Ignore limit and continue
+    """
+    response_text = parse_user_response(user_responses)
+    
+    if "FORCE" in response_text or "CONTINUE" in response_text:
+        result["supervisor_verdict"] = "ok_continue"
+        result["supervisor_feedback"] = "Continuing despite backtrack limit as per user request."
+        # Reset or increment limit? Logic usually handles count, we just unblock verdict.
+        
+    elif "STOP" in response_text:
+        result["supervisor_verdict"] = "all_complete"
+        result["should_stop"] = True
+        
+    else:
+        result["supervisor_verdict"] = "ask_user"
+        result["pending_user_questions"] = [
+            "Please clarify: FORCE_CONTINUE or STOP?"
+        ]
+
+
+def handle_invalid_backtrack_decision(
+    state: ReproState,
+    result: Dict[str, Any],
+    user_responses: Dict[str, str],
+    current_stage_id: Optional[str] = None,
+) -> None:
+    """
+    Handle invalid_backtrack_decision trigger response.
+    
+    User can:
+    - STOP: Stop workflow
+    - CONTINUE: Continue normally (ignoring invalid backtrack)
+    """
+    response_text = parse_user_response(user_responses)
+    
+    if "CONTINUE" in response_text:
+        result["supervisor_verdict"] = "ok_continue"
+        result["backtrack_decision"] = None  # Clear invalid decision
+        
+    elif "STOP" in response_text:
+        result["supervisor_verdict"] = "all_complete"
+        result["should_stop"] = True
+        
+    else:
+        result["supervisor_verdict"] = "ask_user"
+        result["pending_user_questions"] = [
+            "Please clarify: CONTINUE or STOP?"
+        ]
+
+
 # Registry of trigger handlers
 TRIGGER_HANDLERS: Dict[str, Callable] = {
     "material_checkpoint": handle_material_checkpoint,
@@ -508,6 +657,21 @@ TRIGGER_HANDLERS: Dict[str, Callable] = {
     "backtrack_approval": handle_backtrack_approval,
     "deadlock_detected": handle_deadlock_detected,
     "llm_error": handle_llm_error,
+    "clarification": handle_clarification,
+    
+    # Critical Errors (Retry/Stop)
+    "missing_paper_text": handle_critical_error_retry,
+    "missing_stage_id": handle_critical_error_retry,
+    "progress_init_failed": handle_critical_error_retry,
+    
+    # Planning Errors (Replan/Stop)
+    "no_stages_available": handle_planning_error_retry,
+    "invalid_backtrack_target": handle_planning_error_retry,
+    "backtrack_target_not_found": handle_planning_error_retry,
+    
+    # Specific Backtrack Errors
+    "backtrack_limit": handle_backtrack_limit,
+    "invalid_backtrack_decision": handle_invalid_backtrack_decision,
 }
 
 
@@ -545,6 +709,3 @@ def handle_trigger(
         # Unknown trigger - default to continue
         result["supervisor_verdict"] = "ok_continue"
         result["supervisor_feedback"] = f"Handled unknown trigger: {trigger}"
-
-
-

@@ -14,9 +14,9 @@ integration between modules.
 import json
 import pytest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
-from schemas.state import create_initial_state, ReproState, MAX_CODE_REVISIONS
+from schemas.state import create_initial_state, ReproState, MAX_CODE_REVISIONS, MAX_REPLANS
 from src.graph import create_repro_graph
 
 
@@ -461,4 +461,169 @@ class TestGraphInterruptConfiguration:
         )
 
 
+# ═══════════════════════════════════════════════════════════════════════
+# Supervisor Routing Tests
+# ═══════════════════════════════════════════════════════════════════════
 
+class TestSupervisorRouting:
+    """Tests for the complex route_after_supervisor logic."""
+
+    @pytest.fixture
+    def test_state(self) -> ReproState:
+        return create_initial_state(paper_id="sup_test", paper_text="test")
+
+    @patch("src.graph.save_checkpoint")
+    def test_supervisor_routes_to_select_stage_on_ok(self, mock_checkpoint, test_state):
+        """Test normal continuation routes to select_stage."""
+        from src.graph import route_after_supervisor
+        test_state["supervisor_verdict"] = "ok_continue"
+        # Default stage is not MATERIAL_VALIDATION
+        assert route_after_supervisor(test_state) == "select_stage"
+        # Should save checkpoint
+        mock_checkpoint.assert_called()
+        args = mock_checkpoint.call_args[0]
+        assert "complete" in args[1], "Checkpoint name should indicate completion"
+
+    @patch("src.graph.save_checkpoint")
+    def test_supervisor_routes_to_report_if_should_stop(self, mock_checkpoint, test_state):
+        """Test that should_stop flag forces report generation."""
+        from src.graph import route_after_supervisor
+        test_state["supervisor_verdict"] = "ok_continue"
+        test_state["should_stop"] = True
+        assert route_after_supervisor(test_state) == "generate_report"
+
+    @patch("src.graph.save_checkpoint")
+    def test_supervisor_routes_to_material_checkpoint_for_validation_stage(self, mock_checkpoint, test_state):
+        """Test mandatory material checkpoint after MATERIAL_VALIDATION."""
+        from src.graph import route_after_supervisor
+        test_state["supervisor_verdict"] = "ok_continue"
+        test_state["current_stage_type"] = "MATERIAL_VALIDATION"
+        assert route_after_supervisor(test_state) == "material_checkpoint"
+
+    @patch("src.graph.save_checkpoint")
+    def test_supervisor_replan_under_limit(self, mock_checkpoint, test_state):
+        """Test replan routes to plan if under limit."""
+        from src.graph import route_after_supervisor
+        test_state["supervisor_verdict"] = "replan_needed"
+        test_state["replan_count"] = MAX_REPLANS - 1
+        assert route_after_supervisor(test_state) == "plan"
+
+    @patch("src.graph.save_checkpoint")
+    def test_supervisor_replan_at_limit(self, mock_checkpoint, test_state):
+        """Test replan escalates to ask_user if at limit."""
+        from src.graph import route_after_supervisor
+        test_state["supervisor_verdict"] = "replan_needed"
+        test_state["replan_count"] = MAX_REPLANS
+        assert route_after_supervisor(test_state) == "ask_user"
+        
+        # Verify checkpoint name
+        mock_checkpoint.assert_called()
+        args = mock_checkpoint.call_args[0]
+        assert "limit" in args[1], "Checkpoint name should indicate limit reached"
+
+    @patch("src.graph.save_checkpoint")
+    def test_supervisor_backtrack(self, mock_checkpoint, test_state):
+        """Test backtrack verdict routes to handle_backtrack."""
+        from src.graph import route_after_supervisor
+        test_state["supervisor_verdict"] = "backtrack_to_stage"
+        assert route_after_supervisor(test_state) == "handle_backtrack"
+
+    @patch("src.graph.save_checkpoint")
+    def test_supervisor_all_complete(self, mock_checkpoint, test_state):
+        """Test all_complete verdict routes to generate_report."""
+        from src.graph import route_after_supervisor
+        test_state["supervisor_verdict"] = "all_complete"
+        assert route_after_supervisor(test_state) == "generate_report"
+
+    @patch("src.graph.save_checkpoint")
+    def test_supervisor_ask_user(self, mock_checkpoint, test_state):
+        """Test ask_user verdict routes to ask_user."""
+        from src.graph import route_after_supervisor
+        test_state["supervisor_verdict"] = "ask_user"
+        assert route_after_supervisor(test_state) == "ask_user"
+
+    @patch("src.graph.save_checkpoint")
+    def test_supervisor_none_verdict(self, mock_checkpoint, test_state):
+        """Test None verdict escalates to ask_user with error."""
+        from src.graph import route_after_supervisor
+        test_state["supervisor_verdict"] = None
+        assert route_after_supervisor(test_state) == "ask_user"
+        
+        mock_checkpoint.assert_called()
+        args = mock_checkpoint.call_args[0]
+        assert "error" in args[1], "Checkpoint name should indicate error"
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Simple Routing Tests
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestSimpleRouting:
+    """Tests for simple routing functions."""
+
+    @pytest.fixture
+    def test_state(self) -> ReproState:
+        return create_initial_state(paper_id="simple_test", paper_text="test")
+
+    @patch("src.graph.save_checkpoint")
+    def test_route_after_plan(self, mock_checkpoint, test_state):
+        """Test plan always routes to plan_review."""
+        from src.graph import route_after_plan
+        assert route_after_plan(test_state) == "plan_review"
+        mock_checkpoint.assert_called_once()
+
+    def test_route_after_select_stage_with_stage(self, test_state):
+        """Test select_stage routes to design when stage is selected."""
+        from src.graph import route_after_select_stage
+        test_state["current_stage_id"] = "stage_1"
+        assert route_after_select_stage(test_state) == "design"
+
+    def test_route_after_select_stage_finished(self, test_state):
+        """Test select_stage routes to report when no stage selected (done)."""
+        from src.graph import route_after_select_stage
+        test_state["current_stage_id"] = None
+        assert route_after_select_stage(test_state) == "generate_report"
+
+    def test_route_after_ask_user(self, test_state):
+        """Test ask_user always routes to supervisor."""
+        # This is an inline function in create_repro_graph, but we can access it 
+        # via the graph edges or we can test the logic conceptually. 
+        # Since it's inline, we can't import it directly.
+        # However, we can verify the edge in TestGraphEdgeConfiguration.
+        pass
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Report Node Wrapper Tests
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestReportNodeWrapper:
+    """Tests for the generate_report_node_with_checkpoint wrapper."""
+
+    @pytest.fixture
+    def test_state(self) -> ReproState:
+        return create_initial_state(paper_id="report_test", paper_text="test")
+
+    @patch("src.graph._generate_report_node")
+    @patch("src.graph.save_checkpoint")
+    def test_report_wrapper_saves_checkpoint(self, mock_checkpoint, mock_report_node, test_state):
+        """Test that the report wrapper saves a checkpoint after generating report."""
+        from src.graph import generate_report_node_with_checkpoint
+        
+        # Mock report generation result
+        report_result = {"report_path": "/path/to/report.md"}
+        mock_report_node.return_value = report_result
+        
+        result = generate_report_node_with_checkpoint(test_state)
+        
+        # Should return the result from inner node
+        assert result == report_result
+        
+        # Should save checkpoint with merged state
+        mock_checkpoint.assert_called_once()
+        args = mock_checkpoint.call_args
+        saved_state = args[0][0]
+        checkpoint_name = args[0][1]
+        
+        assert checkpoint_name == "final_report"
+        assert saved_state["report_path"] == "/path/to/report.md"

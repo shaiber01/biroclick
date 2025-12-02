@@ -120,12 +120,114 @@ ASK_USER_TRIGGERS: Dict[str, Dict[str, Any]] = {
             "ALTERNATIVE": "Apply user's alternative suggestion",
         }
     },
+    "deadlock_detected": {
+        "description": "Workflow deadlock detected (no progress)",
+        "source_node": "stage_selection",
+        "expected_response_keys": ["action"],
+        "valid_verdicts": ["GENERATE_REPORT", "REPLAN", "STOP"],
+        "supervisor_action": {
+            "GENERATE_REPORT": "Route to generate_report",
+            "REPLAN": "Route to plan",
+            "STOP": "Stop workflow",
+        }
+    },
+    "llm_error": {
+        "description": "LLM API error persisted after retries",
+        "source_node": "any",
+        "expected_response_keys": ["action"],
+        "valid_verdicts": ["RETRY", "SKIP_STAGE", "STOP"],
+        "supervisor_action": {
+            "RETRY": "Retry the operation",
+            "SKIP_STAGE": "Mark stage blocked, route to select_stage",
+            "STOP": "Stop workflow",
+        }
+    },
     "clarification": {
         "description": "Ambiguous paper information requires user clarification",
         "source_node": "any planning/design agent",
         "expected_response_keys": ["clarification"],
         "valid_verdicts": None,  # Free-form response
         "supervisor_action": "Add clarification to assumptions, continue from last_node_before_ask_user",
+    },
+    "missing_paper_text": {
+        "description": "Critical error: Paper text is missing from state",
+        "source_node": "planning/design",
+        "expected_response_keys": ["action"],
+        "valid_verdicts": ["RETRY", "STOP"],
+        "supervisor_action": {
+            "RETRY": "Route to select_stage (attempt to restart)",
+            "STOP": "Stop workflow",
+        }
+    },
+    "missing_stage_id": {
+        "description": "Critical error: Stage ID is missing in a context where it is required",
+        "source_node": "various",
+        "expected_response_keys": ["action"],
+        "valid_verdicts": ["RETRY", "STOP"],
+        "supervisor_action": {
+            "RETRY": "Route to select_stage (attempt to restart)",
+            "STOP": "Stop workflow",
+        }
+    },
+    "no_stages_available": {
+        "description": "Critical error: No stages available in plan",
+        "source_node": "stage_selection",
+        "expected_response_keys": ["action"],
+        "valid_verdicts": ["REPLAN", "STOP"],
+        "supervisor_action": {
+            "REPLAN": "Route to plan to create new stages",
+            "STOP": "Stop workflow",
+        }
+    },
+    "progress_init_failed": {
+        "description": "Critical error: Failed to initialize progress tracking",
+        "source_node": "stage_selection",
+        "expected_response_keys": ["action"],
+        "valid_verdicts": ["RETRY", "STOP"],
+        "supervisor_action": {
+            "RETRY": "Route to select_stage (attempt to restart)",
+            "STOP": "Stop workflow",
+        }
+    },
+    "backtrack_limit": {
+        "description": "Backtrack limit (MAX_BACKTRACKS) exceeded",
+        "source_node": "reporting/supervisor",
+        "expected_response_keys": ["action"],
+        "valid_verdicts": ["STOP", "FORCE_CONTINUE"],
+        "supervisor_action": {
+            "STOP": "Stop workflow",
+            "FORCE_CONTINUE": "Route to select_stage (ignore limit)",
+        }
+    },
+    "invalid_backtrack_target": {
+        "description": "Critical error: Backtrack target stage not found in plan",
+        "source_node": "reporting",
+        "expected_response_keys": ["action"],
+        "valid_verdicts": ["STOP", "REPLAN"],
+        "supervisor_action": {
+            "STOP": "Stop workflow",
+            "REPLAN": "Route to plan to fix dependencies",
+        }
+    },
+    "backtrack_target_not_found": {
+        "description": "Critical error: Backtrack target stage ID does not exist",
+        "source_node": "reporting",
+        "expected_response_keys": ["action"],
+        "valid_verdicts": ["STOP", "REPLAN"],
+        "supervisor_action": {
+            "STOP": "Stop workflow",
+            "REPLAN": "Route to plan",
+        }
+    },
+    "invalid_backtrack_decision": {
+        "description": "Critical error: Backtrack decision structure is invalid",
+        "source_node": "reporting",
+        "expected_response_keys": ["action"],
+        "valid_verdicts": ["STOP", "CONTINUE"],
+        "supervisor_action": {
+            "STOP": "Stop workflow",
+            "CONTINUE": "Route to select_stage (ignore invalid decision)",
+        }
     },
     "unknown": {
         "description": "Unknown trigger - fallback handling",
@@ -185,6 +287,3 @@ def get_valid_verdicts_for_trigger(trigger: str) -> Optional[List[str]]:
     """
     info = get_ask_user_trigger_info(trigger)
     return info.get("valid_verdicts")
-
-
-

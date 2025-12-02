@@ -83,6 +83,35 @@ class TestExecutionValidatorNode:
         
         assert result["execution_verdict"] == "pass"
 
+    @patch("src.agents.execution.call_agent_with_metrics")
+    @patch("src.agents.execution.check_context_or_escalate")
+    @patch("src.agents.execution.build_agent_prompt")
+    def test_handles_timeout_via_flag(self, mock_prompt, mock_context, mock_call):
+        """Should handle timeout via state flag."""
+        mock_context.return_value = None
+        mock_prompt.return_value = "prompt"
+        
+        # With skip_with_warning strategy
+        state = {
+            "current_stage_id": "stage1",
+            "stage_outputs": {"timeout_exceeded": True},
+            "plan": {
+                "stages": [
+                    {"stage_id": "stage1", "fallback_strategy": "skip_with_warning"}
+                ]
+            }
+        }
+        
+        result = execution_validator_node(state)
+        # The node returns a dict with execution_verdict, but not necessarily summary in top level
+        # We need to verify the verdict is "pass"
+        assert result["execution_verdict"] == "pass"
+
+        # With default strategy (fail)
+        state["plan"]["stages"][0]["fallback_strategy"] = "ask_user"
+        result = execution_validator_node(state)
+        assert result["execution_verdict"] == "fail"
+
     @patch("src.agents.base.check_context_or_escalate")
     def test_returns_escalation_on_context_overflow(self, mock_context):
         """Should return escalation when context overflow.

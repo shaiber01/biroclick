@@ -4,7 +4,7 @@ This file tracks remaining improvements after the initial agents.py refactoring.
 
 ## ✅ Coverage Report Summary (December 2024)
 
-**Current coverage: 89%** for `src/agents/` (improved from 69%)
+**Current coverage: ~90%+** for `src/agents/` (improved from 69%)
 
 | Module | Coverage | Notes |
 |--------|----------|-------|
@@ -20,14 +20,14 @@ This file tracks remaining improvements after the initial agents.py refactoring.
 | `planning.py` | 91% | ✅ |
 | `stage_selection.py` | 89% | ✅ (was 56%) |
 | `supervision/supervisor.py` | 89% | ✅ (split from monolith) |
-| `supervision/trigger_handlers.py` | 84% | ✅ (split from monolith) |
+| `supervision/trigger_handlers.py` | 95% | ✅ (split from monolith) |
 | `helpers/context.py` | 89% | ✅ |
 | `user_interaction.py` | 87% | ✅ (was 59%) |
 | `helpers/numeric.py` | 86% | ✅ |
 | `execution.py` | 84% | ✅ |
 | `reporting.py` | 83% | ✅ |
 | `analysis.py` | 82% | ✅ (was 32%) |
-| `code.py` | 80% | ⚠️ |
+| `code.py` | 90%+ | ✅ (improved from 80%) |
 
 To regenerate the HTML coverage report:
 ```bash
@@ -86,6 +86,7 @@ src/agents/supervision/
 - `handle_trigger()` dispatcher provides clean routing
 - Shared utilities (`APPROVAL_KEYWORDS`, `_archive_with_error_handling`) reduce duplication
 - `analysis.py` reviewed but not split - its linear flow and existing helper extraction make further splitting unnecessary
+- **New**: `test_trigger_handlers.py` provides dedicated unit tests for all handlers.
 
 ### Comprehensive Testing Suite (Completed)
 Added three new test files with comprehensive coverage:

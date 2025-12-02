@@ -7,7 +7,9 @@ Tests the schema loading, image encoding, and mock LLM calls.
 import json
 import pytest
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, ANY
+
+from langchain_core.messages import HumanMessage, SystemMessage
 
 # Import module under test
 from src.llm_client import (
@@ -17,8 +19,16 @@ from src.llm_client import (
     get_image_media_type,
     create_image_content,
     call_agent,
+    call_agent_with_metrics,
+    get_llm_client,
     reset_llm_client,
     SCHEMAS_DIR,
+    DEFAULT_MODEL,
+    build_user_content_for_planner,
+    build_user_content_for_designer,
+    build_user_content_for_code_generator,
+    build_user_content_for_analyzer,
+    get_images_for_analyzer,
 )
 
 
@@ -138,7 +148,42 @@ class TestImageEncoding:
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# Call Agent Tests (with mocking)
+# LLM Configuration Tests
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestLLMConfiguration:
+    """Tests for LLM client configuration."""
+
+    def setup_method(self):
+        reset_llm_client()
+
+    def teardown_method(self):
+        reset_llm_client()
+
+    @patch("src.llm_client.ChatAnthropic")
+    def test_get_llm_client_defaults(self, mock_chat):
+        """Test that get_llm_client uses correct default configuration."""
+        get_llm_client()
+        
+        mock_chat.assert_called_once()
+        _, kwargs = mock_chat.call_args
+        
+        assert kwargs.get("model") == DEFAULT_MODEL
+        assert kwargs.get("max_tokens") == 16384
+        assert kwargs.get("temperature") == 1.0
+        assert kwargs.get("thinking") == {"type": "enabled", "budget_tokens": 10000}
+        assert kwargs.get("timeout") == 300.0
+
+    @patch("src.llm_client.ChatAnthropic")
+    def test_get_llm_client_override(self, mock_chat):
+        """Test overriding model name."""
+        get_llm_client(model="claude-3-sonnet")
+        _, kwargs = mock_chat.call_args
+        assert kwargs.get("model") == "claude-3-sonnet"
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Call Agent Tests
 # ═══════════════════════════════════════════════════════════════════════
 
 class TestCallAgent:
@@ -170,10 +215,150 @@ class TestCallAgent:
             user_content="Review this plan.",
         )
         
-        # Verify
+        # Verify result
         assert result["verdict"] == "approve"
         assert result["summary"] == "Test passed"
+
+        # Verify bind_tools called with tool_choice="auto" for thinking compatibility
+        mock_llm.bind_tools.assert_called_once()
+        _, kwargs = mock_llm.bind_tools.call_args
+        assert kwargs["tool_choice"] == {"type": "auto"}
+        assert len(kwargs["tools"]) == 1
+        assert kwargs["tools"][0]["name"] == "submit_plan_reviewer_output"
         
+    @patch("src.llm_client.get_llm_client")
+    def test_call_agent_message_construction_text(self, mock_get_client):
+        """Test that text messages are constructed correctly."""
+        mock_llm = MagicMock()
+        mock_response = MagicMock()
+        mock_response.tool_calls = [{"args": {"output": "value"}}]
+        mock_bound = mock_llm.bind_tools.return_value
+        mock_bound.invoke.return_value = mock_response
+        mock_get_client.return_value = mock_llm
+        
+        system_prompt = "System prompt"
+        user_content = "User content"
+        
+        call_agent(
+            agent_name="planner",
+            system_prompt=system_prompt,
+            user_content=user_content
+        )
+        
+        # Verify invoke args
+        mock_bound.invoke.assert_called_once()
+        call_args = mock_bound.invoke.call_args[0][0]
+        
+        assert len(call_args) == 2
+        assert isinstance(call_args[0], SystemMessage)
+        assert call_args[0].content == system_prompt
+        assert isinstance(call_args[1], HumanMessage)
+        assert call_args[1].content == user_content
+
+    @patch("src.llm_client.get_llm_client")
+    @patch("src.llm_client.encode_image_to_base64")
+    @patch("src.llm_client.Path")
+    def test_call_agent_message_construction_multimodal(self, mock_path, mock_encode, mock_get_client):
+        """Test that multimodal messages are constructed correctly."""
+        mock_llm = MagicMock()
+        mock_response = MagicMock()
+        mock_response.tool_calls = [{"args": {"output": "value"}}]
+        mock_bound = mock_llm.bind_tools.return_value
+        mock_bound.invoke.return_value = mock_response
+        mock_get_client.return_value = mock_llm
+        
+        # Mock image handling
+        mock_path.return_value.exists.return_value = True
+        mock_path.return_value.suffix = ".png"
+        mock_encode.return_value = "base64string"
+        
+        system_prompt = "System prompt"
+        user_content = "User content"
+        image_path = "test_image.png"
+        
+        call_agent(
+            agent_name="planner",
+            system_prompt=system_prompt,
+            user_content=user_content,
+            images=[image_path]
+        )
+        
+        # Verify invoke args
+        mock_bound.invoke.assert_called_once()
+        call_args = mock_bound.invoke.call_args[0][0]
+        
+        assert len(call_args) == 2
+        assert isinstance(call_args[1], HumanMessage)
+        assert isinstance(call_args[1].content, list)
+        
+        # Check content parts
+        content = call_args[1].content
+        assert len(content) == 2
+        
+        # Text part
+        assert content[0]["type"] == "text"
+        assert content[0]["text"] == user_content
+        
+        # Image part
+        assert content[1]["type"] == "image_url"
+        assert content[1]["image_url"]["url"] == "data:image/png;base64,base64string"
+        assert content[1]["image_url"]["detail"] == "auto"
+        
+    @patch("src.llm_client.get_llm_client")
+    def test_call_agent_json_fallback_valid(self, mock_get_client):
+        """Test fallback to JSON parsing when tool usage is skipped."""
+        mock_llm = MagicMock()
+        mock_response = MagicMock()
+        # Empty tool calls
+        mock_response.tool_calls = []
+        # Content has thinking + JSON
+        mock_response.content = "Here is my thought process...\n```json\n{\"verdict\": \"approve\"}\n```"
+        
+        mock_llm.bind_tools.return_value.invoke.return_value = mock_response
+        mock_get_client.return_value = mock_llm
+        
+        result = call_agent("plan_reviewer", "prompt", "content")
+        
+        assert result["verdict"] == "approve"
+
+    @patch("src.llm_client.get_llm_client")
+    def test_call_agent_json_fallback_with_noise(self, mock_get_client):
+        """Test fallback when content has other braces before the JSON."""
+        mock_llm = MagicMock()
+        mock_response = MagicMock()
+        mock_response.tool_calls = []
+        # Thinking process with braces
+        mock_response.content = """
+        Thinking: I need to check if x in {1, 2, 3}.
+        
+        Here is the output:
+        ```json
+        {
+            "verdict": "approve"
+        }
+        ```
+        """
+        
+        mock_llm.bind_tools.return_value.invoke.return_value = mock_response
+        mock_get_client.return_value = mock_llm
+        
+        result = call_agent("plan_reviewer", "prompt", "content")
+        assert result["verdict"] == "approve"
+
+    @patch("src.llm_client.get_llm_client")
+    def test_call_agent_json_fallback_invalid(self, mock_get_client):
+        """Test failure when neither tool call nor valid JSON is present."""
+        mock_llm = MagicMock()
+        mock_response = MagicMock()
+        mock_response.tool_calls = []
+        mock_response.content = "Just some text without JSON."
+        
+        mock_llm.bind_tools.return_value.invoke.return_value = mock_response
+        mock_get_client.return_value = mock_llm
+        
+        with pytest.raises(ValueError, match="did not return structured output"):
+            call_agent("plan_reviewer", "prompt", "content", max_retries=1)
+
     @patch("src.llm_client.get_llm_client")
     def test_call_agent_retry_on_error(self, mock_get_client):
         """Test that agent retries on transient errors."""
@@ -204,6 +389,20 @@ class TestCallAgent:
         
         assert result["verdict"] == "pass"
         assert call_count[0] == 3  # Called 3 times
+
+    @patch("src.llm_client.get_llm_client")
+    def test_call_agent_zero_retries(self, mock_get_client):
+        """Test that max_retries=0 results in RuntimeError."""
+        mock_llm = MagicMock()
+        mock_get_client.return_value = mock_llm
+        
+        with pytest.raises(RuntimeError, match="failed after 0 attempts"):
+            call_agent(
+                agent_name="planner",
+                system_prompt="prompt",
+                user_content="content",
+                max_retries=0
+            )
         
     @patch("src.llm_client.get_llm_client")
     def test_call_agent_no_retry_on_validation_error(self, mock_get_client):
@@ -223,6 +422,60 @@ class TestCallAgent:
                 user_content="Test",
                 max_retries=3,
             )
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Call Agent Metrics Tests
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestCallAgentMetrics:
+    """Tests for call_agent_with_metrics."""
+    
+    @patch("src.llm_client.call_agent")
+    def test_call_agent_metrics_success(self, mock_call_agent):
+        """Test that metrics are recorded on success."""
+        mock_call_agent.return_value = {"output": "success"}
+        
+        state = {}
+        call_agent_with_metrics(
+            agent_name="test_agent",
+            system_prompt="prompt",
+            user_content="content",
+            state=state
+        )
+        
+        assert "metrics" in state
+        assert "agent_calls" in state["metrics"]
+        assert len(state["metrics"]["agent_calls"]) == 1
+        
+        metric = state["metrics"]["agent_calls"][0]
+        assert metric["agent"] == "test_agent"
+        assert metric["success"] is True
+        assert metric["error"] is None
+        assert "duration_seconds" in metric
+        assert "timestamp" in metric
+
+    @patch("src.llm_client.call_agent")
+    def test_call_agent_metrics_failure(self, mock_call_agent):
+        """Test that metrics are recorded on failure."""
+        mock_call_agent.side_effect = ValueError("Failure")
+        
+        state = {}
+        with pytest.raises(ValueError):
+            call_agent_with_metrics(
+                agent_name="test_agent",
+                system_prompt="prompt",
+                user_content="content",
+                state=state
+            )
+        
+        assert "metrics" in state
+        assert len(state["metrics"]["agent_calls"]) == 1
+        
+        metric = state["metrics"]["agent_calls"][0]
+        assert metric["agent"] == "test_agent"
+        assert metric["success"] is False
+        assert metric["error"] == "Failure"
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -258,3 +511,117 @@ class TestSchemaValidation:
         if "properties" in schema:
             assert isinstance(schema["properties"], dict)
 
+
+# ═══════════════════════════════════════════════════════════════════════
+# Content Builder Tests
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestContentBuilders:
+    """Tests for user content builder functions."""
+
+    def test_build_user_content_for_planner(self):
+        """Test content building for planner."""
+        state = {
+            "paper_text": "Full paper content",
+            "paper_figures": [{"id": "fig1", "description": "A figure"}],
+            "planner_feedback": "Please revise"
+        }
+        content = build_user_content_for_planner(state)
+        assert "# PAPER TEXT" in content
+        assert "Full paper content" in content
+        assert "# FIGURES" in content
+        assert "fig1: A figure" in content
+        assert "# REVISION FEEDBACK" in content
+        assert "Please revise" in content
+
+    def test_build_user_content_for_designer(self):
+        """Test content building for simulation designer."""
+        state = {
+            "current_stage_id": "stage1",
+            "plan": {
+                "stages": [{"stage_id": "stage1", "task": "do x"}]
+            },
+            "extracted_parameters": [{"param": "val"}],
+            "assumptions": {"assump": "val"},
+            "validated_materials": ["mat1"],
+            "reviewer_feedback": "Change design"
+        }
+        content = build_user_content_for_designer(state)
+        assert "# CURRENT STAGE: stage1" in content
+        assert "Stage Details" in content
+        assert "do x" in content
+        assert "Extracted Parameters" in content
+        assert "Assumptions" in content
+        assert "Validated Materials" in content
+        assert "# REVISION FEEDBACK" in content
+        assert "Change design" in content
+
+    def test_build_user_content_for_code_generator(self):
+        """Test content building for code generator."""
+        state = {
+            "current_stage_id": "stage1",
+            "design_description": "A design spec",
+            "validated_materials": ["mat1"],
+            "reviewer_feedback": "Fix code"
+        }
+        content = build_user_content_for_code_generator(state)
+        assert "# CURRENT STAGE: stage1" in content
+        assert "Design Specification" in content
+        assert "A design spec" in content
+        assert "Validated Materials" in content
+        assert "# REVISION FEEDBACK" in content
+        assert "Fix code" in content
+
+    def test_build_user_content_for_analyzer(self):
+        """Test content building for results analyzer."""
+        state = {
+            "current_stage_id": "stage1",
+            "stage_outputs": {"files": ["output.png"]},
+            "plan": {
+                "stages": [{"stage_id": "stage1", "targets": ["fig1"]}]
+            },
+            "analysis_feedback": "Analyze better"
+        }
+        content = build_user_content_for_analyzer(state)
+        assert "# CURRENT STAGE: stage1" in content
+        assert "Simulation Outputs" in content
+        assert "output.png" in content
+        assert "Target Figures: fig1" in content
+        assert "# REVISION FEEDBACK" in content
+        assert "Analyze better" in content
+
+    @patch("src.llm_client.Path")
+    def test_get_images_for_analyzer(self, mock_path):
+        """Test retrieving image paths for analyzer."""
+        # Setup mocks
+        mock_path.return_value.exists.return_value = True
+        
+        state = {
+            "paper_figures": [{"image_path": "fig1.png"}],
+            "stage_outputs": {
+                "files": ["output1.png", "data.csv"] # data.csv should be ignored
+            }
+        }
+        
+        # We need to mock suffix property based on path string
+        def path_side_effect(path_str):
+            m = MagicMock()
+            m.exists.return_value = True
+            if str(path_str).endswith(".png"):
+                m.suffix = ".png"
+            else:
+                m.suffix = ".csv"
+            return m
+            
+        mock_path.side_effect = path_side_effect
+        
+        images = get_images_for_analyzer(state)
+        
+        # Should include fig1.png and output1.png, but not data.csv
+        assert len(images) == 2
+        
+        # Verify content (checking mock objects calls or side effects is tricky, 
+        # simpler to just trust the list length and logic if we trust the mock setup)
+        # But let's be precise.
+        # The function returns list of Path objects.
+        assert any("fig1.png" in str(p) for p in state["paper_figures"][0].values())

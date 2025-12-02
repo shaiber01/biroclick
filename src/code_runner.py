@@ -417,8 +417,10 @@ def run_simulation(
             stderr_lower = result.stderr.lower()
             if "memoryerror" in stderr_lower or "cannot allocate" in stderr_lower:
                 error_msg = "Memory limit exceeded"
-            elif "killed" in stderr_lower:
-                error_msg = "Process killed (likely resource limit)"
+            elif "killed" in stderr_lower or result.returncode < 0:
+                # Negative return code means terminated by signal
+                # -9 = SIGKILL, -15 = SIGTERM, etc.
+                error_msg = f"Process killed (signal {-result.returncode}) - likely resource limit"
             else:
                 error_msg = f"Simulation failed with exit code {result.returncode}"
         else:
@@ -577,6 +579,7 @@ def validate_code(code: str) -> List[str]:
         ("os.system", "Potential shell command execution"),
         ("subprocess.call", "Potential subprocess execution"),
         ("subprocess.run", "Potential subprocess execution"),
+        ("subprocess.Popen", "Potential subprocess execution"),
         ("eval(", "Potential code injection via eval"),
         ("exec(", "Potential code injection via exec"),
         ("__import__", "Dynamic import detected"),
@@ -741,6 +744,8 @@ def run_code_node(state: Dict[str, Any]) -> Dict[str, Any]:
             "files": result["output_files"],
             "runtime_seconds": result["runtime_seconds"],
             "validation_warnings": warnings,
+            "timeout_exceeded": result["timeout_exceeded"],
+            "memory_exceeded": result["memory_exceeded"],
         },
         "run_error": result["error"],
     }

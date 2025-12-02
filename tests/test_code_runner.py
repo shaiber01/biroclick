@@ -7,6 +7,8 @@ error result helper function.
 
 import os
 import pytest
+import shutil
+import time
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
@@ -16,6 +18,8 @@ from src.code_runner import (
     validate_code,
     estimate_runtime,
     _make_error_result,
+    run_simulation,
+    run_code_node,
     PlatformCapabilities,
     ExecutionResult,
 )
@@ -93,6 +97,12 @@ subprocess.run(["whoami"])
 """
         warnings = validate_code(code)
         
+        assert any("subprocess" in w for w in warnings)
+
+    def test_validate_code_detects_popen(self):
+        """Test that subprocess.Popen is flagged."""
+        code = "subprocess.Popen(['ls'])"
+        warnings = validate_code(code)
         assert any("subprocess" in w for w in warnings)
     
     def test_validate_code_detects_eval(self):
@@ -302,6 +312,264 @@ class TestMakeErrorResult:
         ]
         for key in required_keys:
             assert key in result, f"Missing key: {key}"
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Execution Tests
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestRunSimulation:
+    """Tests for run_simulation function."""
+    
+    def test_run_simulation_executes_code(self, tmp_path):
+        """Test that it actually runs python code."""
+        # Use a simple script that prints something and writes a file
+        code = """
+import sys
+print("Hello stdout")
+print("Hello stderr", file=sys.stderr)
+with open("output.txt", "w") as f:
+    f.write("content")
+"""
+        result = run_simulation(
+            code=code,
+            stage_id="test_exec",
+            output_dir=tmp_path,
+            config={"timeout_seconds": 10}
+        )
+        
+        assert result["exit_code"] == 0
+        assert "Hello stdout" in result["stdout"]
+        assert "Hello stderr" in result["stderr"]
+        assert "output.txt" in result["output_files"]
+        assert (tmp_path / "output.txt").exists()
+        assert (tmp_path / "output.txt").read_text() == "content"
+        assert result["error"] is None
+
+    def test_run_simulation_timeout(self, tmp_path):
+        """Test timeout handling with actual subprocess."""
+        # A script that sleeps longer than timeout
+        code = """
+import time
+time.sleep(2)
+"""
+        # Set timeout to 1 second
+        result = run_simulation(
+            code=code,
+            stage_id="test_timeout",
+            output_dir=tmp_path,
+            config={"timeout_seconds": 1}
+        )
+        
+        assert result["timeout_exceeded"] is True
+        assert "exceeded timeout" in result["error"]
+        
+    def test_run_simulation_cleanup_script(self, tmp_path):
+        """Test that script is deleted if keep_script is False."""
+        code = "print('hello')"
+        run_simulation(
+            code=code,
+            stage_id="cleanup_test",
+            output_dir=tmp_path,
+            config={"keep_script": False}
+        )
+        
+        script_path = tmp_path / "simulation_cleanup_test.py"
+        assert not script_path.exists()
+
+    def test_run_simulation_keep_script(self, tmp_path):
+        """Test that script is kept if keep_script is True."""
+        code = "print('hello')"
+        run_simulation(
+            code=code,
+            stage_id="keep_test",
+            output_dir=tmp_path,
+            config={"keep_script": True}
+        )
+        
+        script_path = tmp_path / "simulation_keep_test.py"
+        assert script_path.exists()
+        assert "print('hello')" in script_path.read_text(encoding='utf-8')
+
+    @patch("src.code_runner.subprocess.run")
+    def test_run_simulation_memory_error_detection(self, mock_run, tmp_path):
+        """Test detection of memory errors from stderr."""
+        # Mock a failed run with MemoryError in stderr
+        mock_result = MagicMock()
+        mock_result.returncode = 1
+        mock_result.stdout = ""
+        mock_result.stderr = "Traceback... MemoryError: cannot allocate..."
+        mock_run.return_value = mock_result
+        
+        code = "print('memory')"
+        result = run_simulation(
+            code=code,
+            stage_id="mem_test",
+            output_dir=tmp_path
+        )
+        
+        assert result["memory_exceeded"] is True
+        assert "Memory limit exceeded" in result["error"]
+
+    @patch("src.code_runner.subprocess.run")
+    def test_run_simulation_divergence_detection(self, mock_run, tmp_path):
+        """Test detection of divergence (NaN/Inf)."""
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = "some output nan values detected"
+        mock_result.stderr = ""
+        mock_run.return_value = mock_result
+        
+        code = "print('nan')"
+        result = run_simulation(
+            code=code,
+            stage_id="div_test",
+            output_dir=tmp_path
+        )
+        
+        assert result["error"] is not None
+        assert "diverged" in result["error"].lower()
+
+    def test_run_simulation_symlink_materials(self, tmp_path):
+        """Test that materials directory is symlinked if present in cwd."""
+        # Create dummy materials dir in cwd (which we mock by changing cwd or creating it)
+        # Since we can't easily change cwd for the whole process safely without side effects,
+        # we can mock os.getcwd or ensure we run in a controlled env.
+        # Instead, let's use a temp dir as the "project root" and mock os.getcwd
+        
+        project_root = tmp_path / "project"
+        project_root.mkdir()
+        (project_root / "materials").mkdir()
+        (project_root / "materials" / "mat.csv").touch()
+        
+        output_dir = tmp_path / "output"
+        output_dir.mkdir()
+        
+        with patch("os.getcwd", return_value=str(project_root)):
+            run_simulation(
+                code="print('sim')",
+                stage_id="symlink_test",
+                output_dir=output_dir
+            )
+            
+        # Check if materials link exists in output_dir
+        assert (output_dir / "materials").exists()
+        assert (output_dir / "materials" / "mat.csv").exists()
+
+
+class TestRunCodeNode:
+    """Tests for run_code_node integration."""
+    
+    @patch("src.code_runner.run_simulation")
+    def test_run_code_node_extracts_config(self, mock_run):
+        """Test that config is extracted correctly from state."""
+        mock_run.return_value = {
+            "stdout": "", "stderr": "", "exit_code": 0, 
+            "output_files": [], "runtime_seconds": 1.0, 
+            "error": None, "memory_exceeded": False, "timeout_exceeded": False
+        }
+        
+        state = {
+            "code": "import meep",
+            "current_stage_id": "stage1",
+            "paper_id": "paper1",
+            "plan": {
+                "stages": [
+                    {"stage_id": "stage1", "runtime_budget_minutes": 10}
+                ]
+            },
+            "runtime_config": {
+                "max_memory_gb": 16.0,
+                "max_cpu_cores": 8
+            }
+        }
+        
+        run_code_node(state)
+        
+        # Check call args
+        mock_run.assert_called_once()
+        call_args = mock_run.call_args
+        kwargs = call_args.kwargs
+        
+        assert kwargs["code"] == "import meep"
+        assert kwargs["stage_id"] == "stage1"
+        assert kwargs["config"]["timeout_seconds"] == 600  # 10 * 60
+        assert kwargs["config"]["max_memory_gb"] == 16.0
+        assert kwargs["config"]["max_cpu_cores"] == 8
+
+    def test_run_code_node_missing_code(self):
+        """Test that missing code returns error."""
+        state = {"current_stage_id": "test"} # no 'code' key
+        result = run_code_node(state)
+        assert "No simulation code provided" in result["run_error"]
+
+    def test_run_code_node_blocking_validation(self):
+        """Test that blocking code validation prevents execution."""
+        state = {
+            "code": "input('block')",
+            "current_stage_id": "stage1"
+        }
+        
+        result = run_code_node(state)
+        
+        assert "Code contains blocking patterns" in result["run_error"]
+        assert "validation_warnings" in result["stage_outputs"]
+
+    def test_run_code_node_propagates_run_error(self):
+        """Test that execution errors are propagated to state."""
+        state = {
+            "code": "raise Exception('fail')",
+            "current_stage_id": "stage1"
+        }
+        
+        # Should run actual simulation which fails
+        result = run_code_node(state)
+        
+        assert result["run_error"] is not None
+        assert "Execution failed" in result["run_error"] or "exit code" in result["run_error"]
+
+    def test_run_code_node_propagates_flags(self):
+        """Test that memory_exceeded and timeout_exceeded flags are propagated."""
+        with patch("src.code_runner.run_simulation") as mock_run:
+            mock_run.return_value = {
+                "stdout": "", "stderr": "", "exit_code": -1,
+                "output_files": [], "runtime_seconds": 10.0,
+                "error": "Timeout",
+                "memory_exceeded": False, 
+                "timeout_exceeded": True
+            }
+            
+            state = {
+                "code": "import meep",
+                "current_stage_id": "stage1"
+            }
+            
+            result = run_code_node(state)
+            
+            assert result["stage_outputs"]["timeout_exceeded"] is True
+            assert result["stage_outputs"]["memory_exceeded"] is False
+
+    def test_run_simulation_detects_signal_kill(self, tmp_path):
+        """Test detection of process killed by signal (e.g. OOM killer)."""
+        # We can't easily force a signal kill in a cross-platform way reliably in a unit test
+        # without external tools, so we'll use a mock to verify the logic handles negative return codes.
+        
+        with patch("src.code_runner.subprocess.run") as mock_run:
+            mock_result = MagicMock()
+            mock_result.returncode = -9  # SIGKILL
+            mock_result.stdout = ""
+            mock_result.stderr = "" # No "Killed" message usually
+            mock_run.return_value = mock_result
+            
+            result = run_simulation(
+                code="print('running')",
+                stage_id="kill_test",
+                output_dir=tmp_path
+            )
+            
+            # The current implementation checks stderr for "killed", so this MIGHT fail if logic is buggy
+            # This test asserts what SHOULD happen
+            assert "killed" in str(result["error"]).lower() or "signal" in str(result["error"]).lower()
 
 
 
