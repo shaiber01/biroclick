@@ -1,0 +1,6 @@
+{
+  "paper_title": "Paper Without ID",
+  "paper_text": "This paper is missing the required paper_id field which should cause validation to fail.",
+  "figures": []
+}
+

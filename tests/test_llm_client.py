@@ -70,6 +70,44 @@ class TestSchemaLoading:
         """Test that unknown agent raises error."""
         with pytest.raises(ValueError, match="Unknown agent"):
             get_agent_schema("unknown_agent")
+    
+    def test_get_agent_schema_auto_discovery(self):
+        """Test that auto-discovery works for all standard agent schemas."""
+        # These agents should be auto-discovered via {name}_output_schema.json
+        auto_discovered_agents = [
+            "planner",
+            "plan_reviewer",
+            "simulation_designer",
+            "design_reviewer",
+            "code_generator",
+            "code_reviewer",
+            "execution_validator",
+            "physics_sanity",
+            "results_analyzer",
+            "comparison_validator",
+            "supervisor",
+            "prompt_adaptor",
+        ]
+        
+        for agent_name in auto_discovered_agents:
+            schema = get_agent_schema(agent_name)
+            assert schema is not None, f"Failed to auto-discover schema for {agent_name}"
+            assert isinstance(schema, dict), f"Schema for {agent_name} should be dict"
+    
+    def test_get_agent_schema_special_case_report(self):
+        """Test that 'report' agent uses special-case mapping."""
+        # 'report' maps to 'report_schema' (not 'report_output_schema')
+        schema = get_agent_schema("report")
+        assert schema is not None
+        assert isinstance(schema, dict)
+    
+    def test_get_agent_schema_error_includes_path(self):
+        """Test that unknown agent error message includes expected path."""
+        with pytest.raises(ValueError) as exc_info:
+            get_agent_schema("nonexistent_agent")
+        
+        # Error should mention the expected path
+        assert "nonexistent_agent_output_schema" in str(exc_info.value)
 
 
 # ═══════════════════════════════════════════════════════════════════════

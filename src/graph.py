@@ -1,3 +1,28 @@
+"""
+LangGraph State Machine for ReproLab
+
+This module constructs the LangGraph state graph for the ReproLab
+paper reproduction system. It defines the workflow nodes and edges.
+
+═══════════════════════════════════════════════════════════════════════════════
+ROUTING FUNCTIONS
+═══════════════════════════════════════════════════════════════════════════════
+
+Most verdict-based routing functions are defined in src/routing.py using a
+factory pattern to eliminate code duplication. This module imports:
+- route_after_plan_review
+- route_after_design_review
+- route_after_code_review
+- route_after_execution_check
+- route_after_physics_check
+- route_after_comparison_check
+
+The following routers are defined locally because they have unique logic:
+- route_after_plan: Simple checkpoint, always routes to plan_review
+- route_after_select_stage: Checks current_stage_id, not a verdict
+- route_after_supervisor: Complex multi-verdict with special cases
+- route_after_ask_user: Always routes to supervisor (defined inline)
+"""
 
 import os
 from typing import Literal, Dict, Any
@@ -8,12 +33,6 @@ from schemas.state import (
     ReproState, 
     save_checkpoint, 
     checkpoint_name_for_stage,
-    get_validation_hierarchy,
-    MAX_DESIGN_REVISIONS,
-    MAX_CODE_REVISIONS,
-    MAX_EXECUTION_FAILURES,
-    MAX_PHYSICS_FAILURES,
-    MAX_ANALYSIS_REVISIONS,
     MAX_REPLANS,
 )
 from src.agents import (
@@ -35,9 +54,22 @@ from src.agents import (
     handle_backtrack_node,
     material_checkpoint_node,
 )
-# Assuming run_code_node is in code_runner.py as per docs/workflow.md
 from src.code_runner import run_code_node
 
+# Import factory-generated routing functions
+from src.routing import (
+    route_after_plan_review,
+    route_after_design_review,
+    route_after_code_review,
+    route_after_execution_check,
+    route_after_physics_check,
+    route_after_comparison_check,
+)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Report Node Wrapper
+# ═══════════════════════════════════════════════════════════════════════
 
 def generate_report_node_with_checkpoint(state: ReproState) -> Dict[str, Any]:
     """
@@ -56,6 +88,11 @@ def generate_report_node_with_checkpoint(state: ReproState) -> Dict[str, Any]:
     
     return result
 
+
+# ═══════════════════════════════════════════════════════════════════════
+# Simple Routing Functions (not verdict-based)
+# ═══════════════════════════════════════════════════════════════════════
+
 def route_after_plan(state: ReproState) -> Literal["plan_review"]:
     """Route after planning to dedicated plan review.
     
@@ -67,230 +104,36 @@ def route_after_plan(state: ReproState) -> Literal["plan_review"]:
     return "plan_review"
 
 
-def route_after_plan_review(state: ReproState) -> Literal["select_stage", "plan", "ask_user"]:
-    """Route after plan review based on verdict.
-    
-    Plan review has its own verdict field: last_plan_review_verdict
-    """
-    verdict = state.get("last_plan_review_verdict")
-    runtime_config = state.get("runtime_config", {})
-    replan_count = state.get("replan_count", 0)
-    max_replans = runtime_config.get("max_replans", MAX_REPLANS)
-    
-    if verdict == "approve":
-        return "select_stage"
-    elif verdict == "needs_revision":
-        if replan_count < max_replans:
-            return "plan"
-        else:
-            # Save checkpoint before escalating to ensure state is preserved
-            save_checkpoint(state, "before_ask_user_replan_limit")
-            return "ask_user"
-    
-    # Fallback: save checkpoint before escalating
-    save_checkpoint(state, "before_ask_user_plan_review_fallback")
-    return "ask_user"
-
-
-def route_after_design_review(state: ReproState) -> Literal["generate_code", "design", "ask_user"]:
-    """Route after design review based on verdict.
-    
-    Design review has its own verdict field: last_design_review_verdict
-    """
-    verdict = state.get("last_design_review_verdict")
-    runtime_config = state.get("runtime_config", {})
-    revision_count = state.get("design_revision_count", 0)
-    max_design = runtime_config.get("max_design_revisions", MAX_DESIGN_REVISIONS)
-    
-    if verdict == "approve":
-        return "generate_code"
-    elif verdict == "needs_revision":
-        if revision_count < max_design:
-            return "design"
-        else:
-            # Save checkpoint before escalating to ensure state is preserved
-            save_checkpoint(state, "before_ask_user_design_review_limit")
-            return "ask_user"
-    
-    # Fallback: save checkpoint before escalating
-    save_checkpoint(state, "before_ask_user_design_review_fallback")
-    return "ask_user"
-
-
-def route_after_code_review(state: ReproState) -> Literal["run_code", "generate_code", "ask_user"]:
-    """Route after code review based on verdict.
-    
-    Code review has its own verdict field: last_code_review_verdict
-    This is now a focused code-only review (no plan/design review).
-    """
-    verdict = state.get("last_code_review_verdict")
-    runtime_config = state.get("runtime_config", {})
-    revision_count = state.get("code_revision_count", 0)
-    max_code = runtime_config.get("max_code_revisions", MAX_CODE_REVISIONS)
-    
-    if verdict == "approve":
-        return "run_code"
-    elif verdict == "needs_revision":
-        if revision_count < max_code:
-            return "generate_code"
-        else:
-            # Save checkpoint before escalating to ensure state is preserved
-            save_checkpoint(state, "before_ask_user_code_review_limit")
-            return "ask_user"
-    
-    # Fallback: save checkpoint before escalating
-    save_checkpoint(state, "before_ask_user_code_review_fallback")
-    return "ask_user"
-
 def route_after_select_stage(state: ReproState) -> Literal["design", "generate_report"]:
     """
     Route based on next stage selection.
     If a stage is selected, go to design.
-    If no stage returned (None), generation report.
+    If no stage returned (None), generate report.
     """
-    # The select_stage_node should set current_stage_id in state
-    # If it returns None or doesn't set it, we assume done.
-    # Note: state updates in langgraph are merged, so we check state keys.
-    # But select_stage_node logic in docs returns the stage_id.
-    # In this implementation, select_stage_node updates state["current_stage_id"].
-    
     if state.get("current_stage_id"):
         return "design"
     return "generate_report"
 
-def route_after_execution_check(state: ReproState) -> Literal["physics_check", "generate_code", "ask_user"]:
-    """
-    Route based on execution validator verdict.
-    
-    Uses execution_failure_count (not code_revision_count) to track runtime failures.
-    These are distinct: code revision is for code review feedback, execution failure
-    is for simulation crashes/timeouts.
-    """
-    verdict = state.get("execution_verdict")
-    runtime_config = state.get("runtime_config", {})
-    max_failures = runtime_config.get("max_execution_failures", MAX_EXECUTION_FAILURES)
-    
-    # ═══════════════════════════════════════════════════════════════════════
-    # VALIDATE VERDICT EXISTS: Handle None or missing verdict
-    # ═══════════════════════════════════════════════════════════════════════
-    if verdict is None:
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.error(
-            "execution_verdict is None - execution_validator_node may not have run or failed. "
-            "Escalating to user for guidance."
-        )
-        # Save checkpoint before escalating to ensure state is preserved
-        save_checkpoint(state, "before_ask_user_execution_error")
-        # Set ask_user fields to handle missing verdict
-        return "ask_user"
-    
-    if verdict in ["pass", "warning"]:
-        return "physics_check"
-    elif verdict == "fail":
-        # Use execution_failure_count for runtime failures, not code_revision_count
-        if state.get("execution_failure_count", 0) < max_failures:
-            return "generate_code"
-        else:
-            # Save checkpoint before escalating to ensure state is preserved
-            save_checkpoint(state, "before_ask_user_execution_limit")
-            return "ask_user"
-    # Fallback: save checkpoint before escalating
-    save_checkpoint(state, "before_ask_user_execution_fallback")
-    return "ask_user"
 
-def route_after_physics_check(state: ReproState) -> Literal["analyze", "generate_code", "design", "ask_user"]:
-    """
-    Route based on physics sanity check verdict.
-    
-    Uses physics_failure_count to track physics validation failures.
-    This is distinct from execution_failure_count (runtime crashes) and
-    code_revision_count (code review feedback).
-    
-    New: design_flaw verdict routes to design (not code) for fundamental
-    geometry/physics issues that cannot be fixed by tweaking code.
-    """
-    verdict = state.get("physics_verdict")
-    runtime_config = state.get("runtime_config", {})
-    max_failures = runtime_config.get("max_physics_failures", MAX_PHYSICS_FAILURES)
-    max_design = runtime_config.get("max_design_revisions", MAX_DESIGN_REVISIONS)
-    
-    # ═══════════════════════════════════════════════════════════════════════
-    # VALIDATE VERDICT EXISTS: Handle None or missing verdict
-    # ═══════════════════════════════════════════════════════════════════════
-    if verdict is None:
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.error(
-            "physics_verdict is None - physics_sanity_node may not have run or failed. "
-            "Escalating to user for guidance."
-        )
-        # Save checkpoint before escalating to ensure state is preserved
-        save_checkpoint(state, "before_ask_user_physics_error")
-        # Set ask_user fields to handle missing verdict
-        return "ask_user"
-    
-    if verdict in ["pass", "warning"]:
-        return "analyze"
-    elif verdict == "fail":
-        # Code/numerics issue - route to code generator
-        if state.get("physics_failure_count", 0) < max_failures:
-            return "generate_code"
-        else:
-            # Save checkpoint before escalating to ensure state is preserved
-            save_checkpoint(state, "before_ask_user_physics_limit")
-            return "ask_user"
-    elif verdict == "design_flaw":
-        # Fundamental design issue - route to design, NOT code
-        # Use design_revision_count to prevent infinite loops
-        if state.get("design_revision_count", 0) < max_design:
-            return "design"
-        else:
-            # Save checkpoint before escalating to ensure state is preserved
-            save_checkpoint(state, "before_ask_user_design_limit")
-            return "ask_user"
-    # Fallback: save checkpoint before escalating
-    save_checkpoint(state, "before_ask_user_physics_fallback")
-    return "ask_user"
-
-def route_after_comparison_check(state: ReproState) -> Literal["supervisor", "analyze"]:
-    """
-    Route based on comparison validator verdict.
-    
-    Uses analysis_revision_count with configurable limit.
-    """
-    verdict = state.get("comparison_verdict")
-    runtime_config = state.get("runtime_config", {})
-    max_analysis = runtime_config.get("max_analysis_revisions", MAX_ANALYSIS_REVISIONS)
-    
-    # ═══════════════════════════════════════════════════════════════════════
-    # VALIDATE VERDICT EXISTS: Handle None or missing verdict
-    # ═══════════════════════════════════════════════════════════════════════
-    if verdict is None:
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.warning(
-            "comparison_verdict is None - comparison_validator_node may not have run or failed. "
-            "Proceeding to supervisor for decision."
-        )
-        # Route to supervisor who can handle missing verdict
-        return "supervisor"
-    
-    if verdict == "approve":
-        return "supervisor"
-    elif verdict == "needs_revision":
-        if state.get("analysis_revision_count", 0) < max_analysis:
-            return "analyze"
-        else:
-            return "supervisor"  # Proceed with flag
-    return "supervisor"
+# ═══════════════════════════════════════════════════════════════════════
+# Complex Routing Function (too many special cases for factory)
+# ═══════════════════════════════════════════════════════════════════════
 
 def route_after_supervisor(state: ReproState) -> Literal["select_stage", "plan", "ask_user", "handle_backtrack", "generate_report", "material_checkpoint"]:
     """
     Route after supervisor decision.
     
+    This function has complex logic that doesn't fit the factory pattern:
+    - Multiple verdict types with different behaviors
+    - Special handling for MATERIAL_VALIDATION stage type
+    - should_stop flag checking
+    - Checkpoint naming using stage context
+    
     Includes mandatory material checkpoint after Stage 0 completes.
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    
     verdict = state.get("supervisor_verdict")
     current_stage_type = state.get("current_stage_type", "")
     
@@ -298,15 +141,11 @@ def route_after_supervisor(state: ReproState) -> Literal["select_stage", "plan",
     # VALIDATE VERDICT EXISTS: Handle None or missing verdict
     # ═══════════════════════════════════════════════════════════════════════
     if verdict is None:
-        import logging
-        logger = logging.getLogger(__name__)
         logger.warning(
             "supervisor_verdict is None - supervisor may not have run or failed. "
             "Escalating to user for guidance."
         )
-        # Save checkpoint before escalating to ensure state is preserved
         save_checkpoint(state, "before_ask_user_supervisor_error")
-        # Set ask_user fields to handle missing verdict
         return "ask_user"
     
     if verdict == "ok_continue" or verdict == "change_priority":
@@ -318,7 +157,6 @@ def route_after_supervisor(state: ReproState) -> Literal["select_stage", "plan",
         save_checkpoint(state, checkpoint_name)
         
         # MANDATORY: Material checkpoint after Stage 0 completes
-        # Check if current stage was material validation
         if current_stage_type == "MATERIAL_VALIDATION":
             return "material_checkpoint"
         
@@ -328,7 +166,6 @@ def route_after_supervisor(state: ReproState) -> Literal["select_stage", "plan",
         if state.get("replan_count", 0) < MAX_REPLANS:
             return "plan"
         else:
-            # Save checkpoint before escalating to ensure state is preserved
             save_checkpoint(state, "before_ask_user_replan_limit")
             return "ask_user"
             
@@ -341,7 +178,12 @@ def route_after_supervisor(state: ReproState) -> Literal["select_stage", "plan",
     elif verdict == "all_complete":
         return "generate_report"
         
-    return "ask_user" # Fallback
+    return "ask_user"  # Fallback
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Graph Construction
+# ═══════════════════════════════════════════════════════════════════════
 
 def create_repro_graph():
     """
@@ -490,9 +332,6 @@ def create_repro_graph():
     # The Supervisor will use these fields (via resume_context) to understand:
     #   1. What the user was responding to
     #   2. Where to route next based on user's answer
-    #
-    # Example: If code_review triggered ask_user due to revision limit, and user provides
-    # a fix hint, Supervisor can route back to generate_code with the hint in supervisor_feedback.
     
     def route_after_ask_user(state: ReproState) -> str:
         """
@@ -526,4 +365,3 @@ def create_repro_graph():
         checkpointer=checkpointer,
         interrupt_before=["ask_user"]
     )
-

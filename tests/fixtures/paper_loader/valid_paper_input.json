@@ -1,0 +1,19 @@
+{
+  "paper_id": "test_valid_paper",
+  "paper_title": "A Valid Test Paper for Unit Testing",
+  "paper_text": "This is a valid paper text that is long enough to pass validation. It contains sufficient content to represent a real scientific paper. The methods section describes the simulation setup. The results section presents the findings. This text must be at least 100 characters to pass the minimum length validation check.",
+  "paper_domain": "plasmonics",
+  "figures": [
+    {
+      "id": "Fig1",
+      "description": "Test figure 1 - extinction spectrum",
+      "image_path": "tests/fixtures/paper_loader/sample_images/test_figure.png"
+    },
+    {
+      "id": "Fig2",
+      "description": "Test figure 2 - near-field map",
+      "image_path": "tests/fixtures/paper_loader/sample_images/test_figure.png"
+    }
+  ]
+}
+

@@ -364,136 +364,16 @@ def validate_placeholders_substituted(prompt: str) -> List[str]:
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# ASK_USER Trigger Documentation
+# ASK_USER Trigger Documentation (MOVED)
 # ═══════════════════════════════════════════════════════════════════════
 #
-# This section documents all valid ask_user_trigger values for the system.
-# The SupervisorAgent must handle each of these triggers appropriately.
+# ASK_USER_TRIGGERS has been moved to schemas/ask_user_triggers.py
+# for better separation of concerns.
 #
-# See: supervisor_agent.md and agents.py:supervisor_node
-#
+# These imports are provided for backward compatibility.
 # ═══════════════════════════════════════════════════════════════════════
 
-ASK_USER_TRIGGERS = {
-    "material_checkpoint": {
-        "description": "Mandatory Stage 0 material validation requires user confirmation",
-        "source_node": "material_checkpoint",
-        "expected_response_keys": ["verdict", "notes"],
-        "valid_verdicts": ["APPROVE", "CHANGE_DATABASE", "CHANGE_MATERIAL", "NEED_HELP"],
-        "supervisor_action": {
-            "APPROVE": "Set supervisor_verdict='ok_continue', proceed to select_stage",
-            "CHANGE_DATABASE": "Invalidate Stage 0, update assumptions, rerun Stage 0",
-            "CHANGE_MATERIAL": "Route to plan with supervisor_feedback about material change",
-            "NEED_HELP": "Route back to ask_user with additional context",
-        }
-    },
-    "code_review_limit": {
-        "description": "Code review revision limit (MAX_CODE_REVISIONS) exceeded",
-        "source_node": "code_review",
-        "expected_response_keys": ["action", "hint"],
-        "valid_verdicts": ["PROVIDE_HINT", "SKIP_STAGE", "STOP"],
-        "supervisor_action": {
-            "PROVIDE_HINT": "Reset code_revision_count=0, add hint to reviewer_feedback, route to generate_code",
-            "SKIP_STAGE": "Mark stage as blocked, route to select_stage",
-            "STOP": "Route to generate_report",
-        }
-    },
-    "design_review_limit": {
-        "description": "Design review revision limit (MAX_DESIGN_REVISIONS) exceeded",
-        "source_node": "design_review",
-        "expected_response_keys": ["action", "hint"],
-        "valid_verdicts": ["PROVIDE_HINT", "SKIP_STAGE", "STOP"],
-        "supervisor_action": {
-            "PROVIDE_HINT": "Reset design_revision_count=0, add hint to reviewer_feedback, route to design",
-            "SKIP_STAGE": "Mark stage as blocked, route to select_stage",
-            "STOP": "Route to generate_report",
-        }
-    },
-    "execution_failure_limit": {
-        "description": "Execution failure limit (MAX_EXECUTION_FAILURES) exceeded",
-        "source_node": "execution_check",
-        "expected_response_keys": ["action", "guidance"],
-        "valid_verdicts": ["RETRY_WITH_GUIDANCE", "SKIP_STAGE", "STOP"],
-        "supervisor_action": {
-            "RETRY_WITH_GUIDANCE": "Reset execution_failure_count=0, add guidance to supervisor_feedback, route to generate_code",
-            "SKIP_STAGE": "Mark stage as blocked, route to select_stage",
-            "STOP": "Route to generate_report",
-        }
-    },
-    "physics_failure_limit": {
-        "description": "Physics sanity check failure limit (MAX_PHYSICS_FAILURES) exceeded",
-        "source_node": "physics_check",
-        "expected_response_keys": ["action", "guidance"],
-        "valid_verdicts": ["RETRY_WITH_GUIDANCE", "ACCEPT_PARTIAL", "SKIP_STAGE", "STOP"],
-        "supervisor_action": {
-            "RETRY_WITH_GUIDANCE": "Reset physics_failure_count=0, add guidance, route to generate_code or design",
-            "ACCEPT_PARTIAL": "Mark stage completed_partial, proceed to analyze",
-            "SKIP_STAGE": "Mark stage as blocked, route to select_stage",
-            "STOP": "Route to generate_report",
-        }
-    },
-    "context_overflow": {
-        "description": "LLM context window would overflow, recovery options needed",
-        "source_node": "any (detected by check_context_before_node)",
-        "expected_response_keys": ["action"],
-        "valid_verdicts": ["SUMMARIZE_FEEDBACK", "TRUNCATE_PAPER", "SKIP_STAGE", "STOP"],
-        "supervisor_action": {
-            "SUMMARIZE_FEEDBACK": "Apply summarize_feedback recovery action",
-            "TRUNCATE_PAPER": "Apply truncate_paper_to_methods recovery action",
-            "SKIP_STAGE": "Mark stage as blocked, route to select_stage",
-            "STOP": "Route to generate_report",
-        }
-    },
-    "replan_limit": {
-        "description": "Replan limit (MAX_REPLANS) exceeded",
-        "source_node": "plan_review",
-        "expected_response_keys": ["action", "guidance"],
-        "valid_verdicts": ["FORCE_ACCEPT", "PROVIDE_GUIDANCE", "STOP"],
-        "supervisor_action": {
-            "FORCE_ACCEPT": "Accept plan as-is, route to select_stage",
-            "PROVIDE_GUIDANCE": "Reset replan_count=0, add guidance, route to plan",
-            "STOP": "Route to generate_report",
-        }
-    },
-    "backtrack_approval": {
-        "description": "Backtrack suggestion requires user confirmation",
-        "source_node": "supervisor",
-        "expected_response_keys": ["approve", "alternative"],
-        "valid_verdicts": ["APPROVE_BACKTRACK", "REJECT_BACKTRACK", "ALTERNATIVE"],
-        "supervisor_action": {
-            "APPROVE_BACKTRACK": "Route to handle_backtrack",
-            "REJECT_BACKTRACK": "Clear backtrack_suggestion, continue normally",
-            "ALTERNATIVE": "Apply user's alternative suggestion",
-        }
-    },
-    "clarification": {
-        "description": "Ambiguous paper information requires user clarification",
-        "source_node": "any planning/design agent",
-        "expected_response_keys": ["clarification"],
-        "valid_verdicts": None,  # Free-form response
-        "supervisor_action": "Add clarification to assumptions, continue from last_node_before_ask_user",
-    },
-    "unknown": {
-        "description": "Unknown trigger - fallback handling",
-        "source_node": "unknown",
-        "expected_response_keys": ["action"],
-        "valid_verdicts": ["CONTINUE", "STOP"],
-        "supervisor_action": {
-            "CONTINUE": "Route to select_stage",
-            "STOP": "Route to generate_report",
-        }
-    },
-}
-
-
-def get_ask_user_trigger_info(trigger: str) -> Dict[str, Any]:
-    """
-    Get documentation for an ask_user trigger.
-    
-    Args:
-        trigger: The ask_user_trigger value
-        
-    Returns:
-        Dict with trigger documentation (or unknown trigger info)
-    """
-    return ASK_USER_TRIGGERS.get(trigger, ASK_USER_TRIGGERS["unknown"])
+from schemas.ask_user_triggers import (
+    ASK_USER_TRIGGERS,
+    get_ask_user_trigger_info,
+)

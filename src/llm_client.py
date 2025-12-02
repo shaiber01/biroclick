@@ -78,34 +78,38 @@ def get_agent_schema(agent_name: str) -> dict:
     """
     Get the output schema for a specific agent.
     
+    Uses auto-discovery: looks for {agent_name}_output_schema.json in the schemas
+    directory. Falls back to special-case mapping for exceptions (e.g., "report").
+    
     Args:
         agent_name: Agent name (e.g., "planner", "simulation_designer")
         
     Returns:
         Agent's output schema
+        
+    Raises:
+        ValueError: If no schema found for the agent
     """
-    # Map agent names to schema files
-    schema_mapping = {
-        "prompt_adaptor": "prompt_adaptor_output_schema",
-        "planner": "planner_output_schema",
-        "plan_reviewer": "plan_reviewer_output_schema",
-        "simulation_designer": "simulation_designer_output_schema",
-        "design_reviewer": "design_reviewer_output_schema",
-        "code_generator": "code_generator_output_schema",
-        "code_reviewer": "code_reviewer_output_schema",
-        "execution_validator": "execution_validator_output_schema",
-        "physics_sanity": "physics_sanity_output_schema",
-        "results_analyzer": "results_analyzer_output_schema",
-        "comparison_validator": "comparison_validator_output_schema",
-        "supervisor": "supervisor_output_schema",
+    # Special cases that don't follow the standard naming convention
+    special_mapping = {
         "report": "report_schema",
     }
     
-    schema_name = schema_mapping.get(agent_name)
-    if not schema_name:
-        raise ValueError(f"Unknown agent: {agent_name}")
+    # Check special cases first
+    if agent_name in special_mapping:
+        return load_schema(special_mapping[agent_name])
     
-    return load_schema(schema_name)
+    # Auto-discover: try {agent_name}_output_schema.json
+    auto_schema_name = f"{agent_name}_output_schema"
+    auto_schema_path = SCHEMAS_DIR / f"{auto_schema_name}.json"
+    
+    if auto_schema_path.exists():
+        return load_schema(auto_schema_name)
+    
+    raise ValueError(
+        f"Unknown agent: {agent_name}. "
+        f"Expected schema at: {auto_schema_path}"
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════

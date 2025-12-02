@@ -50,14 +50,67 @@ def create_test_state() -> ReproState:
 # Mock LLM Client Fixture
 # ═══════════════════════════════════════════════════════════════════════
 
+class MultiPatchMock:
+    """Helper that applies return_value and side_effect to multiple mocks."""
+    def __init__(self, mocks):
+        self._mocks = mocks
+        self._return_value = {"verdict": "approve"}
+        self._side_effect = None
+    
+    @property
+    def return_value(self):
+        return self._return_value
+    
+    @return_value.setter
+    def return_value(self, value):
+        self._return_value = value
+        for mock in self._mocks:
+            mock.return_value = value
+            mock.side_effect = None  # Clear side_effect when setting return_value
+    
+    @property
+    def side_effect(self):
+        return self._side_effect
+    
+    @side_effect.setter
+    def side_effect(self, value):
+        self._side_effect = value
+        for mock in self._mocks:
+            mock.side_effect = value
+
+
 @pytest.fixture
 def mock_llm_client():
-    """Fixture that provides a mock LLM client for agents module."""
-    # Patch where call_agent_with_metrics is imported in agents module
-    with patch("src.agents.call_agent_with_metrics") as mock_call:
-        # Configure default behavior
-        mock_call.return_value = {"verdict": "approve"}
-        yield mock_call
+    """Fixture that provides a mock LLM client for agents module.
+    
+    Must patch where the function is USED (in each submodule), not just where it's defined.
+    """
+    # Patch all modules that import call_agent_with_metrics
+    patch_targets = [
+        "src.agents.planning.call_agent_with_metrics",
+        "src.agents.design.call_agent_with_metrics",
+        "src.agents.code.call_agent_with_metrics",
+        "src.agents.execution.call_agent_with_metrics",
+        "src.agents.analysis.call_agent_with_metrics",
+        "src.agents.supervision.call_agent_with_metrics",
+        "src.agents.reporting.call_agent_with_metrics",
+    ]
+    
+    patches = []
+    mocks = []
+    for patch_target in patch_targets:
+        p = patch(patch_target)
+        mock = p.start()
+        mock.return_value = {"verdict": "approve"}
+        patches.append(p)
+        mocks.append(mock)
+    
+    # Yield a helper that updates all mocks when return_value is set
+    yield MultiPatchMock(mocks)
+    
+    # Stop all patches
+    for p in patches:
+        p.stop()
 
 
 # ═══════════════════════════════════════════════════════════════════════

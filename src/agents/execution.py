@@ -1,0 +1,216 @@
+"""
+Execution agent nodes: execution_validator_node, physics_sanity_node.
+
+These nodes handle execution validation and physics sanity checking.
+"""
+
+import json
+import logging
+from typing import Dict, Any
+
+from schemas.state import (
+    ReproState,
+    get_stage_design_spec,
+    MAX_EXECUTION_FAILURES,
+    MAX_PHYSICS_FAILURES,
+    MAX_DESIGN_REVISIONS,
+)
+from src.prompts import build_agent_prompt
+from src.llm_client import call_agent_with_metrics
+
+from .helpers.context import check_context_or_escalate
+
+
+def execution_validator_node(state: ReproState) -> dict:
+    """
+    ExecutionValidatorAgent: Validate simulation ran correctly.
+    
+    Returns dict with state updates (LangGraph merges this into state).
+    
+    IMPORTANT: 
+    - Sets `execution_verdict` state field from agent output's `verdict`.
+    - Increments `execution_failure_count` when verdict is "fail".
+    - Increments `total_execution_failures` for metrics tracking.
+    """
+    logger = logging.getLogger(__name__)
+    
+    # Context check
+    context_update = check_context_or_escalate(state, "execution_check")
+    if context_update:
+        if context_update.get("awaiting_user_input"):
+            return context_update
+        state = {**state, **context_update}
+
+    # Connect prompt adaptation
+    system_prompt = build_agent_prompt("execution_validator", state)
+    
+    # Inject run_error into prompt if present
+    run_error = state.get("run_error")
+    if run_error:
+        system_prompt += f"\n\nCONTEXT: The previous execution failed with error:\n{run_error}\nAnalyze this error and suggest fixes."
+    
+    # Check fallback strategy if we are about to fail
+    fallback = get_stage_design_spec(state, state.get("current_stage_id"), "fallback_strategy", "ask_user")
+    
+    if run_error and "TIMEOUT_ERROR" in run_error:
+        if fallback == "skip_with_warning":
+            agent_output = {
+                "verdict": "pass",
+                "stage_id": state.get("current_stage_id"),
+                "summary": f"Execution timed out (skip_with_warning): {run_error}",
+            }
+        else:
+            agent_output = {
+                "verdict": "fail",
+                "stage_id": state.get("current_stage_id"),
+                "summary": f"Execution timed out: {run_error}",
+            }
+    else:
+        # Build user content for execution validation
+        stage_outputs = state.get("stage_outputs", {})
+        stage_id = state.get("current_stage_id", "unknown")
+        
+        user_content = f"# EXECUTION RESULTS FOR STAGE: {stage_id}\n\n"
+        user_content += f"## Stage Outputs\n```json\n{json.dumps(stage_outputs, indent=2, default=str)}\n```"
+        
+        if run_error:
+            user_content += f"\n\n## Run Error\n\n```\n{run_error}\n```"
+        
+        # Call LLM for execution validation
+        try:
+            agent_output = call_agent_with_metrics(
+                agent_name="execution_validator",
+                system_prompt=system_prompt,
+                user_content=user_content,
+                state=state,
+            )
+            agent_output["stage_id"] = stage_id
+        except Exception as e:
+            logger.error(f"Execution validator LLM call failed: {e}")
+            agent_output = {
+                "verdict": "pass",
+                "stage_id": stage_id,
+                "summary": f"Execution validation LLM unavailable: {str(e)[:200]}",
+            }
+    
+    result: Dict[str, Any] = {
+        "workflow_phase": "execution_validation",
+        "execution_verdict": agent_output["verdict"],
+    }
+    
+    # Increment failure counters if verdict is "fail"
+    if agent_output["verdict"] == "fail":
+        current_count = state.get("execution_failure_count", 0)
+        runtime_config = state.get("runtime_config", {})
+        max_failures = runtime_config.get("max_execution_failures", MAX_EXECUTION_FAILURES)
+        if current_count < max_failures:
+            result["execution_failure_count"] = current_count + 1
+        else:
+            result["execution_failure_count"] = current_count
+        result["total_execution_failures"] = state.get("total_execution_failures", 0) + 1
+        
+        current_failures = state.get("execution_failure_count", 0)
+        
+        if (current_failures + 1) >= max_failures:
+            result["ask_user_trigger"] = "execution_failure_limit"
+            result["pending_user_questions"] = [
+                f"Execution failed {max_failures} times. Last error: {run_error or 'Unknown'}. "
+                "Options: RETRY_WITH_GUIDANCE (provide hint), SKIP_STAGE, or STOP?"
+            ]
+    
+    return result
+
+
+def physics_sanity_node(state: ReproState) -> dict:
+    """
+    PhysicsSanityAgent: Validate physics of results.
+    
+    Returns dict with state updates (LangGraph merges this into state).
+    
+    IMPORTANT: 
+    - Sets `physics_verdict` state field from agent output's `verdict`.
+    - Increments `physics_failure_count` when verdict is "fail".
+    - Increments `design_revision_count` when verdict is "design_flaw".
+    
+    Verdict options:
+    - "pass": Physics looks good, proceed to analysis
+    - "warning": Minor concerns but proceed
+    - "fail": Code/numerics issue, route to code generator
+    - "design_flaw": Fundamental design problem, route to simulation designer
+    """
+    logger = logging.getLogger(__name__)
+    
+    # Context check
+    context_update = check_context_or_escalate(state, "physics_check")
+    if context_update:
+        if context_update.get("awaiting_user_input"):
+            return context_update
+        state = {**state, **context_update}
+
+    # Connect prompt adaptation
+    system_prompt = build_agent_prompt("physics_sanity", state)
+    
+    # Build user content for physics sanity check
+    stage_outputs = state.get("stage_outputs", {})
+    stage_id = state.get("current_stage_id", "unknown")
+    design = state.get("design_description", {})
+    
+    user_content = f"# PHYSICS SANITY CHECK FOR STAGE: {stage_id}\n\n"
+    user_content += f"## Stage Outputs\n```json\n{json.dumps(stage_outputs, indent=2, default=str)}\n```"
+    
+    # Add design spec for physics reference
+    if design:
+        if isinstance(design, dict):
+            user_content += f"\n\n## Design Spec\n```json\n{json.dumps(design, indent=2)}\n```"
+        else:
+            user_content += f"\n\n## Design Spec\n{design}"
+    
+    # Call LLM for physics sanity check
+    try:
+        agent_output = call_agent_with_metrics(
+            agent_name="physics_sanity",
+            system_prompt=system_prompt,
+            user_content=user_content,
+            state=state,
+        )
+        agent_output["stage_id"] = stage_id
+        if "backtrack_suggestion" not in agent_output:
+            agent_output["backtrack_suggestion"] = {"suggest_backtrack": False}
+    except Exception as e:
+        logger.error(f"Physics sanity LLM call failed: {e}")
+        agent_output = {
+            "verdict": "pass",
+            "stage_id": stage_id,
+            "summary": f"Physics sanity LLM unavailable: {str(e)[:200]}",
+            "backtrack_suggestion": {"suggest_backtrack": False},
+        }
+    
+    result: Dict[str, Any] = {
+        "workflow_phase": "physics_validation",
+        "physics_verdict": agent_output["verdict"],
+    }
+    
+    # Increment failure counters based on verdict type
+    if agent_output["verdict"] == "fail":
+        current_count = state.get("physics_failure_count", 0)
+        runtime_config = state.get("runtime_config", {})
+        max_failures = runtime_config.get("max_physics_failures", MAX_PHYSICS_FAILURES)
+        if current_count < max_failures:
+            result["physics_failure_count"] = current_count + 1
+        else:
+            result["physics_failure_count"] = current_count
+    elif agent_output["verdict"] == "design_flaw":
+        current_count = state.get("design_revision_count", 0)
+        runtime_config = state.get("runtime_config", {})
+        max_revisions = runtime_config.get("max_design_revisions", MAX_DESIGN_REVISIONS)
+        if current_count < max_revisions:
+            result["design_revision_count"] = current_count + 1
+        else:
+            result["design_revision_count"] = current_count
+    
+    # If agent suggests backtrack, populate backtrack_suggestion for supervisor
+    if agent_output.get("backtrack_suggestion", {}).get("suggest_backtrack"):
+        result["backtrack_suggestion"] = agent_output["backtrack_suggestion"]
+    
+    return result
+

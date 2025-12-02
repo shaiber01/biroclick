@@ -381,15 +381,9 @@ def run_simulation(
                     print(f"Warning: Could not link/copy materials: {copy_err}")
                     
     except Exception as e:
-        return ExecutionResult(
-            stdout="",
-            stderr=f"Failed to write script: {e}",
-            exit_code=-1,
-            output_files=[],
-            runtime_seconds=0.0,
+        return _make_error_result(
             error=f"Script write failed: {e}",
-            memory_exceeded=False,
-            timeout_exceeded=False
+            stderr=f"Failed to write script: {e}",
         )
     
     # Setup execution
@@ -453,43 +447,37 @@ def run_simulation(
     except subprocess.TimeoutExpired as e:
         runtime_seconds = time.time() - start_time
         
-        return ExecutionResult(
+        return _make_error_result(
+            error=f"Simulation exceeded timeout ({cfg['timeout_seconds']}s)",
             stdout=e.stdout.decode() if e.stdout else "",
             stderr=e.stderr.decode() if e.stderr else "",
-            exit_code=-1,
-            output_files=_list_output_files(output_dir, exclude=[script_name]),
+            output_dir=output_dir,
+            exclude_files=[script_name],
             runtime_seconds=runtime_seconds,
-            error=f"Simulation exceeded timeout ({cfg['timeout_seconds']}s)",
-            memory_exceeded=False,
-            timeout_exceeded=True
+            timeout_exceeded=True,
         )
         
     except MemoryError:
         runtime_seconds = time.time() - start_time
         
-        return ExecutionResult(
-            stdout="",
-            stderr="MemoryError in subprocess management",
-            exit_code=-1,
-            output_files=_list_output_files(output_dir, exclude=[script_name]),
-            runtime_seconds=runtime_seconds,
+        return _make_error_result(
             error=f"Memory limit exceeded ({cfg['max_memory_gb']}GB)",
+            stderr="MemoryError in subprocess management",
+            output_dir=output_dir,
+            exclude_files=[script_name],
+            runtime_seconds=runtime_seconds,
             memory_exceeded=True,
-            timeout_exceeded=False
         )
         
     except Exception as e:
         runtime_seconds = time.time() - start_time
         
-        return ExecutionResult(
-            stdout="",
-            stderr=str(e),
-            exit_code=-1,
-            output_files=_list_output_files(output_dir, exclude=[script_name]),
-            runtime_seconds=runtime_seconds,
+        return _make_error_result(
             error=f"Execution failed: {e}",
-            memory_exceeded=False,
-            timeout_exceeded=False
+            stderr=str(e),
+            output_dir=output_dir,
+            exclude_files=[script_name],
+            runtime_seconds=runtime_seconds,
         )
     
     finally:
@@ -523,6 +511,53 @@ def _list_output_files(
         return sorted(files)
     except Exception:
         return []
+
+
+def _make_error_result(
+    error: str,
+    stdout: str = "",
+    stderr: str = "",
+    exit_code: int = -1,
+    output_dir: Optional[Path] = None,
+    exclude_files: Optional[List[str]] = None,
+    runtime_seconds: float = 0.0,
+    memory_exceeded: bool = False,
+    timeout_exceeded: bool = False,
+) -> ExecutionResult:
+    """
+    Construct an ExecutionResult for error cases.
+    
+    This helper reduces boilerplate in exception handlers by providing
+    sensible defaults for error scenarios.
+    
+    Args:
+        error: Error message describing what went wrong
+        stdout: Captured stdout (default: empty)
+        stderr: Captured stderr (default: empty)
+        exit_code: Process exit code (default: -1)
+        output_dir: Directory to scan for output files (default: None)
+        exclude_files: Files to exclude from output listing
+        runtime_seconds: How long execution ran before error
+        memory_exceeded: Whether this was a memory limit error
+        timeout_exceeded: Whether this was a timeout error
+        
+    Returns:
+        ExecutionResult with appropriate fields set
+    """
+    output_files = []
+    if output_dir is not None:
+        output_files = _list_output_files(output_dir, exclude=exclude_files)
+    
+    return ExecutionResult(
+        stdout=stdout,
+        stderr=stderr,
+        exit_code=exit_code,
+        output_files=output_files,
+        runtime_seconds=runtime_seconds,
+        error=error,
+        memory_exceeded=memory_exceeded,
+        timeout_exceeded=timeout_exceeded,
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════
