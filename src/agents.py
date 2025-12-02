@@ -1394,16 +1394,19 @@ def select_stage_node(state: ReproState) -> dict:
                 # This stage will be selected once dependencies complete
                 continue
             
-            return {
+            # ═══════════════════════════════════════════════════════════════════════
+            # RESET COUNTERS: Only reset if switching to a different stage
+            # ═══════════════════════════════════════════════════════════════════════
+            selected_stage_id = stage.get("stage_id")
+            current_stage_id = state.get("current_stage_id")
+            
+            # Only reset counters if this is a different stage (not re-entering same stage)
+            reset_counters = selected_stage_id != current_stage_id
+            
+            result_updates = {
                 "workflow_phase": "stage_selection",
-                "current_stage_id": stage.get("stage_id"),
+                "current_stage_id": selected_stage_id,
                 "current_stage_type": stage.get("stage_type"),
-                # Reset per-stage counters when entering a new stage
-                "design_revision_count": 0,
-                "code_revision_count": 0,
-                "execution_failure_count": 0,
-                "physics_failure_count": 0,
-                "analysis_revision_count": 0,
                 # Reset per-stage outputs (prevent stale data from previous stage)
                 "stage_outputs": {},
                 # CRITICAL: Clear previous run_error to prevent stale failure signals
@@ -1411,6 +1414,18 @@ def select_stage_node(state: ReproState) -> dict:
                 "analysis_summary": None,
                 "analysis_overall_classification": None,
             }
+            
+            # Only reset counters when switching to a different stage
+            if reset_counters:
+                result_updates.update({
+                    "design_revision_count": 0,
+                    "code_revision_count": 0,
+                    "execution_failure_count": 0,
+                    "physics_failure_count": 0,
+                    "analysis_revision_count": 0,
+                })
+            
+            return result_updates
     
     # Priority 2: Find not_started stages with satisfied dependencies
     for stage in stages:
@@ -1537,22 +1552,37 @@ def select_stage_node(state: ReproState) -> dict:
                     continue
         
         # This stage is eligible
-        return {
+        # ═══════════════════════════════════════════════════════════════════════
+        # RESET COUNTERS: Only reset if switching to a different stage
+        # ═══════════════════════════════════════════════════════════════════════
+        selected_stage_id = stage.get("stage_id")
+        current_stage_id = state.get("current_stage_id")
+        
+        # Only reset counters if this is a different stage (not re-entering same stage)
+        reset_counters = selected_stage_id != current_stage_id
+        
+        result_updates = {
             "workflow_phase": "stage_selection",
-            "current_stage_id": stage.get("stage_id"),
+            "current_stage_id": selected_stage_id,
             "current_stage_type": stage_type,
             "stage_start_time": datetime.now(timezone.utc).isoformat(),
-            # Reset per-stage counters when entering a new stage
-            "design_revision_count": 0,
-            "code_revision_count": 0,
-            "execution_failure_count": 0,
-            "physics_failure_count": 0,
-            "analysis_revision_count": 0,
             # Reset per-stage outputs (prevent stale data from previous stage)
             "stage_outputs": {},
             # CRITICAL: Clear previous run_error to prevent stale failure signals
             "run_error": None,
         }
+        
+        # Only reset counters when switching to a different stage
+        if reset_counters:
+            result_updates.update({
+                "design_revision_count": 0,
+                "code_revision_count": 0,
+                "execution_failure_count": 0,
+                "physics_failure_count": 0,
+                "analysis_revision_count": 0,
+            })
+        
+        return result_updates
     
     # ═══════════════════════════════════════════════════════════════════════
     # DEADLOCK DETECTION: Check if all remaining stages are permanently blocked
@@ -1622,12 +1652,33 @@ def simulation_designer_node(state: ReproState) -> dict:
         # Context overflow - return escalation state updates
         return escalation
     
+    # ═══════════════════════════════════════════════════════════════════════
+    # VALIDATE CURRENT_STAGE_ID: Ensure stage is selected before design
+    # ═══════════════════════════════════════════════════════════════════════
+    current_stage_id = state.get("current_stage_id")
+    if not current_stage_id:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(
+            "current_stage_id is None - cannot design without a selected stage. "
+            "This indicates select_stage_node did not run or returned None."
+        )
+        return {
+            "workflow_phase": "design",
+            "ask_user_trigger": "missing_stage_id",
+            "pending_user_questions": [
+                "ERROR: No stage selected for design. This indicates a workflow error. "
+                "Please check stage selection or restart the workflow."
+            ],
+            "awaiting_user_input": True,
+        }
+    
     # Connect prompt adaptation
     system_prompt = build_agent_prompt("simulation_designer", state)
     
     # Inject complexity class from plan
     from schemas.state import get_stage_design_spec
-    complexity_class = get_stage_design_spec(state, state.get("current_stage_id"), "complexity_class", "unknown")
+    complexity_class = get_stage_design_spec(state, current_stage_id, "complexity_class", "unknown")
     
     # TODO: Implement design logic
     # - Interpret geometry from plan
@@ -1775,6 +1826,53 @@ def code_generator_node(state: ReproState) -> dict:
     if escalation is not None:
         # Context overflow - return escalation state updates
         return escalation
+    
+    # ═══════════════════════════════════════════════════════════════════════
+    # VALIDATE CURRENT_STAGE_ID: Ensure stage is selected before code generation
+    # ═══════════════════════════════════════════════════════════════════════
+    current_stage_id = state.get("current_stage_id")
+    if not current_stage_id:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(
+            "current_stage_id is None - cannot generate code without a selected stage. "
+            "This indicates select_stage_node did not run or returned None."
+        )
+        return {
+            "workflow_phase": "code_generation",
+            "ask_user_trigger": "missing_stage_id",
+            "pending_user_questions": [
+                "ERROR: No stage selected for code generation. This indicates a workflow error. "
+                "Please check stage selection or restart the workflow."
+            ],
+            "awaiting_user_input": True,
+        }
+    
+    # ═══════════════════════════════════════════════════════════════════════
+    # VALIDATE DESIGN_DESCRIPTION: Ensure design exists before code generation
+    # ═══════════════════════════════════════════════════════════════════════
+    design_description = state.get("design_description", "")
+    stub_markers = ["STUB", "TODO", "PLACEHOLDER", "would be generated"]
+    is_stub = any(marker in design_description.upper() for marker in stub_markers) if design_description else True
+    is_empty = not design_description or not design_description.strip() or len(design_description.strip()) < 50
+    
+    if is_stub or is_empty:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(
+            f"design_description is stub or empty (stub={is_stub}, empty={is_empty}). "
+            "Code generation requires an approved design description."
+        )
+        return {
+            "workflow_phase": "code_generation",
+            "design_revision_count": state.get("design_revision_count", 0) + 1,
+            "reviewer_feedback": (
+                "ERROR: Design description is missing or contains stub markers. "
+                "Code generation requires an approved design description. "
+                "Please ensure design review completed successfully."
+            ),
+            "supervisor_verdict": "ok_continue",  # Route back to design
+        }
     
     # Connect prompt adaptation
     system_prompt = build_agent_prompt("code_generator", state)
@@ -2016,8 +2114,28 @@ def results_analyzer_node(state: ReproState) -> dict:
             return context_update  # type: ignore[return-value]
         state = {**state, **context_update}
     
-    state["workflow_phase"] = "analysis"
+    # ═══════════════════════════════════════════════════════════════════════
+    # VALIDATE CURRENT_STAGE_ID: Ensure stage is selected before analysis
+    # ═══════════════════════════════════════════════════════════════════════
     current_stage_id = state.get("current_stage_id")
+    if not current_stage_id:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(
+            "current_stage_id is None - cannot analyze without a selected stage. "
+            "This indicates select_stage_node did not run or returned None."
+        )
+        return {
+            "workflow_phase": "analysis",
+            "ask_user_trigger": "missing_stage_id",
+            "pending_user_questions": [
+                "ERROR: No stage selected for analysis. This indicates a workflow error. "
+                "Please check stage selection or restart the workflow."
+            ],
+            "awaiting_user_input": True,
+        }
+    
+    state["workflow_phase"] = "analysis"
     stage_info = get_plan_stage(state, current_stage_id) if current_stage_id else None
     figures = _ensure_stub_figures(state)
     target_ids = []
@@ -2907,6 +3025,63 @@ def supervisor_node(state: ReproState) -> dict:
             else:
                 result["supervisor_verdict"] = "ok_continue"
         
+        # ─── MISSING STAGE ID ─────────────────────────────────────────────────────
+        elif ask_user_trigger == "missing_stage_id":
+            response_text = ""
+            for q, r in user_responses.items():
+                response_text = r.upper() if isinstance(r, str) else str(r)
+            
+            if "RESTART" in response_text or "RESELECT" in response_text:
+                # Route back to stage selection
+                result["supervisor_verdict"] = "ok_continue"
+                result["supervisor_feedback"] = "Routing back to stage selection."
+            elif "STOP" in response_text:
+                result["supervisor_verdict"] = "all_complete"
+                result["should_stop"] = True
+            else:
+                result["supervisor_verdict"] = "ok_continue"
+                result["supervisor_feedback"] = "Attempting to recover by routing to stage selection."
+        
+        # ─── INVALID BACKTRACK DECISION ──────────────────────────────────────────
+        elif ask_user_trigger == "invalid_backtrack_decision":
+            response_text = ""
+            for q, r in user_responses.items():
+                response_text = r.upper() if isinstance(r, str) else str(r)
+            
+            if "CONTINUE" in response_text or "IGNORE" in response_text:
+                # Clear backtrack decision and continue
+                result["backtrack_decision"] = None
+                result["supervisor_verdict"] = "ok_continue"
+                result["supervisor_feedback"] = "Clearing invalid backtrack decision and continuing."
+            elif "STOP" in response_text:
+                result["supervisor_verdict"] = "all_complete"
+                result["should_stop"] = True
+            else:
+                result["supervisor_verdict"] = "ask_user"
+                result["pending_user_questions"] = [
+                    "Please clarify: CONTINUE (ignore backtrack), or STOP?"
+                ]
+        
+        # ─── INVALID BACKTRACK TARGET ────────────────────────────────────────────
+        elif ask_user_trigger in ["invalid_backtrack_target", "backtrack_target_not_found"]:
+            response_text = ""
+            for q, r in user_responses.items():
+                response_text = r.upper() if isinstance(r, str) else str(r)
+            
+            if "CLEAR" in response_text or "CONTINUE" in response_text:
+                # Clear backtrack decision and continue
+                result["backtrack_decision"] = None
+                result["supervisor_verdict"] = "ok_continue"
+                result["supervisor_feedback"] = "Clearing invalid backtrack target and continuing."
+            elif "STOP" in response_text:
+                result["supervisor_verdict"] = "all_complete"
+                result["should_stop"] = True
+            else:
+                result["supervisor_verdict"] = "ask_user"
+                result["pending_user_questions"] = [
+                    "Please clarify: CLEAR (clear backtrack and continue), or STOP?"
+                ]
+        
         # ─── MISSING PAPER TEXT ───────────────────────────────────────────────────
         elif ask_user_trigger == "missing_paper_text":
             response_text = ""
@@ -3523,14 +3698,65 @@ def handle_backtrack_node(state: ReproState) -> dict:
     decision = state.get("backtrack_decision", {})
     if not decision or not decision.get("accepted"):
         # No valid backtrack decision - shouldn't happen, but handle gracefully
-        return {"workflow_phase": "backtracking"}
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(
+            "handle_backtrack_node called but backtrack_decision is missing or not accepted. "
+            "This indicates a workflow error."
+        )
+        return {
+            "workflow_phase": "backtracking",
+            "ask_user_trigger": "invalid_backtrack_decision",
+            "pending_user_questions": [
+                "ERROR: Backtrack decision is missing or invalid. Cannot proceed with backtracking. "
+                "Please check workflow state or restart."
+            ],
+            "awaiting_user_input": True,
+        }
     
     target_id = decision.get("target_stage_id", "")
     stages_to_invalidate = decision.get("stages_to_invalidate", [])
     
+    # ═══════════════════════════════════════════════════════════════════════
+    # VALIDATE TARGET_STAGE_ID: Ensure target exists and is valid
+    # ═══════════════════════════════════════════════════════════════════════
+    if not target_id:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(
+            "backtrack_decision has empty target_stage_id. Cannot proceed with backtracking."
+        )
+        return {
+            "workflow_phase": "backtracking",
+            "ask_user_trigger": "invalid_backtrack_target",
+            "pending_user_questions": [
+                "ERROR: Backtrack target stage ID is empty. Cannot proceed with backtracking."
+            ],
+            "awaiting_user_input": True,
+        }
+    
     # Deep copy progress to avoid mutating original
     progress = copy.deepcopy(state.get("progress", {}))
     stages = progress.get("stages", [])
+    
+    # Validate target stage exists in progress
+    target_stage_exists = any(s.get("stage_id") == target_id for s in stages)
+    if not target_stage_exists:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(
+            f"Backtrack target stage '{target_id}' does not exist in progress stages. "
+            "Cannot proceed with backtracking."
+        )
+        return {
+            "workflow_phase": "backtracking",
+            "ask_user_trigger": "backtrack_target_not_found",
+            "pending_user_questions": [
+                f"ERROR: Backtrack target stage '{target_id}' not found in progress. "
+                "Cannot proceed with backtracking."
+            ],
+            "awaiting_user_input": True,
+        }
     
     # Update stage statuses
     for stage in stages:
@@ -3564,12 +3790,11 @@ def handle_backtrack_node(state: ReproState) -> dict:
         "last_design_review_verdict": None,
         "last_code_review_verdict": None,
         "supervisor_verdict": None,
-        # Reset per-stage counters
-        "design_revision_count": 0,
-        "code_revision_count": 0,
-        "execution_failure_count": 0,
-        "physics_failure_count": 0,
-        "analysis_revision_count": 0,
+        # ═══════════════════════════════════════════════════════════════════════
+        # COUNTER RESET: Don't reset counters here - let select_stage handle it
+        # Counters will be reset when select_stage selects the backtracked stage
+        # This prevents double-reset and preserves counter state correctly
+        # ═══════════════════════════════════════════════════════════════════════
     }
     
     # Guard clause: Check if max backtracks exceeded

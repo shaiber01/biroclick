@@ -240,6 +240,19 @@ def route_after_comparison_check(state: ReproState) -> Literal["supervisor", "an
     runtime_config = state.get("runtime_config", {})
     max_analysis = runtime_config.get("max_analysis_revisions", MAX_ANALYSIS_REVISIONS)
     
+    # ═══════════════════════════════════════════════════════════════════════
+    # VALIDATE VERDICT EXISTS: Handle None or missing verdict
+    # ═══════════════════════════════════════════════════════════════════════
+    if verdict is None:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(
+            "comparison_verdict is None - comparison_validator_node may not have run or failed. "
+            "Proceeding to supervisor for decision."
+        )
+        # Route to supervisor who can handle missing verdict
+        return "supervisor"
+    
     if verdict == "approve":
         return "supervisor"
     elif verdict == "needs_revision":
