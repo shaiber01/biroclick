@@ -289,3 +289,4 @@ def sample_analysis_result() -> Dict[str, Any]:
         "explanation": "Simulation matches reference data within acceptable tolerance.",
     }
 
+

@@ -323,3 +323,4 @@ class TestGetFileExtension:
         ext = get_file_extension("modern.webp")
         assert ext == ".webp"
 
+

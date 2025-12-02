@@ -186,3 +186,4 @@ def get_valid_verdicts_for_trigger(trigger: str) -> Optional[List[str]]:
     info = get_ask_user_trigger_info(trigger)
     return info.get("valid_verdicts")
 
+

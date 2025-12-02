@@ -95,3 +95,4 @@ def download_figure(
     except OSError as e:
         raise FigureDownloadError(f"Failed to save figure to {output_path}: {e}")
 
+

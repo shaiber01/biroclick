@@ -191,3 +191,4 @@ def validate_figure_image(image_path: str) -> List[str]:
     
     return warnings
 
+

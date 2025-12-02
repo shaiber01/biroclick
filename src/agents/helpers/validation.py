@@ -262,3 +262,4 @@ def breakdown_comparison_classifications(comparisons: List[Dict[str, Any]]) -> D
             breakdown["matches"].append(figure_id)
     return breakdown
 
+

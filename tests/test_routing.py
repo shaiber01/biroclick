@@ -356,3 +356,4 @@ class TestNoneVerdictHandling:
         assert result == "ask_user"
         mock_save_checkpoint.assert_called_once()
 
+

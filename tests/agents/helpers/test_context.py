@@ -241,3 +241,4 @@ class TestValidateStateOrWarn:
         assert len(result) == 2
         assert "Issue 1" in result
 
+

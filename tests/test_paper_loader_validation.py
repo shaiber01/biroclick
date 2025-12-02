@@ -227,3 +227,4 @@ class TestValidateFigureImage:
         warnings = validate_figure_image("/any/path.png")
         assert isinstance(warnings, list)
 
+

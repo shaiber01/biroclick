@@ -303,3 +303,4 @@ class TestMakeErrorResult:
         for key in required_keys:
             assert key in result, f"Missing key: {key}"
 
+

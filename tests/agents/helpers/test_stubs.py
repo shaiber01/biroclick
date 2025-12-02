@@ -220,3 +220,4 @@ class TestBuildStubPlan:
         assert scope["reproducible_figures"] == 2
         assert scope["coverage_percent"] == 100.0
 
+

@@ -180,3 +180,4 @@ class TestRecordDiscrepancy:
         assert len(result["discrepancies_log"]) == 1
         assert result["discrepancy"]["id"] == "D1"
 
+

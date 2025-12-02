@@ -406,3 +406,4 @@ class TestBreakdownComparisonClassifications:
         assert "Fig3" in result["missing"]
         assert "Fig4" in result["pending"]
 
+

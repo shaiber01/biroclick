@@ -171,3 +171,4 @@ class TestEnumImports:
         assert SupervisorVerdict.OK_CONTINUE == "ok_continue"
         assert WorkflowPhase.PLANNING == "planning"
 
+
