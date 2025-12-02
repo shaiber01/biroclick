@@ -165,10 +165,13 @@ class TestOutputStructure:
         
         mock_response = {
             "paper_id": "test",
+            "paper_domain": "plasmonics",
             "title": "Test Plan",
             "stages": [{"stage_id": "s1", "stage_type": "MATERIAL_VALIDATION", "targets": ["Fig1"], "dependencies": []}],
             "targets": [{"figure_id": "Fig1"}],
-            "extracted_parameters": [],
+            "extracted_parameters": [{"name": "p1", "value": 10}],
+            "planned_materials": ["Au"],
+            "assumptions": {"a1": "test assumption"}
         }
         
         with patch("src.agents.planning.call_agent_with_metrics", return_value=mock_response):
@@ -184,6 +187,25 @@ class TestOutputStructure:
         # Plan must have stages
         assert "stages" in result["plan"], "Plan missing stages"
         assert len(result["plan"]["stages"]) > 0, "Plan has no stages"
+
+        # Check extracting other fields
+        assert "planned_materials" in result, "Missing planned_materials"
+        assert result["planned_materials"] == mock_response["planned_materials"]
+
+        assert "assumptions" in result, "Missing assumptions"
+        assert result["assumptions"] == mock_response["assumptions"]
+
+        assert "paper_domain" in result, "Missing paper_domain"
+        assert result["paper_domain"] == mock_response["paper_domain"]
+
+        assert "extracted_parameters" in result, "Missing extracted_parameters"
+        assert len(result["extracted_parameters"]) > 0, "extracted_parameters should be populated"
+
+        # Progress should be initialized
+        assert "progress" in result, "Missing progress initialization"
+        assert result["progress"] is not None
+        assert len(result["progress"]["stages"]) == 1
+        assert result["progress"]["stages"][0]["stage_id"] == "s1"
     
     def test_reviewer_output_has_verdict(self, base_state, valid_plan):
         """All reviewer nodes must return a verdict."""
@@ -459,6 +481,7 @@ class TestMissingNodeCoverage:
             "sources": [{"type": "gaussian", "wavelength_range": [400, 800]}],
             "monitors": [{"type": "flux", "name": "transmission"}],
             "materials": [{"material_id": "gold", "source": "Johnson-Christy"}],
+            "new_assumptions": {"sim_a1": "assuming periodic boundary"},
         }
         
         base_state["plan"] = valid_plan
@@ -501,6 +524,17 @@ class TestMissingNodeCoverage:
         
         # Verify monitors have content  
         assert len(design.get("monitors", [])) > 0, "Design should have at least one monitor"
+
+        # Verify materials pass-through
+        assert "materials" in design, "Design should have materials"
+        assert design["materials"] == mock_response["materials"]
+
+        # Verify assumptions update
+        assert "assumptions" in result, "Should update assumptions"
+        assert "global_assumptions" in result["assumptions"]
+        assert "sim_a1" in str(result["assumptions"]["global_assumptions"]) or \
+               {"sim_a1": "assuming periodic boundary"} in result["assumptions"]["global_assumptions"], \
+               f"New assumptions should be added: {result['assumptions']}"
     
     def test_code_generator_node_creates_code(self, base_state, valid_plan):
         """code_generator_node should generate code with all required fields."""
@@ -2777,6 +2811,143 @@ class TestRegressionPrevention:
         # Should not crash, should escalate
         assert result.get("ask_user_trigger") or result.get("awaiting_user_input"), \
             "Should escalate when current_stage_id is missing"
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Test: Comparison Validator Logic
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestComparisonValidatorLogic:
+    """Verify comparison_validator_node logic for approvals and rejections."""
+    
+    def test_comparison_validator_approves_valid_comparisons(self, base_state, valid_plan):
+        """Should approve when all targets match and reports are present."""
+        from src.agents.analysis import comparison_validator_node
+        
+        base_state["plan"] = valid_plan
+        base_state["current_stage_id"] = "stage_0"
+        
+        # Mock matching comparisons for 'material_gold' (target of stage_0)
+        base_state["figure_comparisons"] = [{
+            "stage_id": "stage_0",
+            "figure_id": "material_gold",
+            "classification": "match"
+        }]
+        
+        # Mock analysis reports
+        base_state["analysis_result_reports"] = [{
+            "stage_id": "stage_0",
+            "target_figure": "material_gold",
+            "status": "match",
+            "criteria_failures": []
+        }]
+        
+        result = comparison_validator_node(base_state)
+        
+        assert result["comparison_verdict"] == "approve", \
+            f"Should approve valid comparisons. Feedback: {result.get('comparison_feedback')}"
+        assert result["workflow_phase"] == "comparison_validation"
+
+    def test_comparison_validator_rejects_missing_reports(self, base_state, valid_plan):
+        """Should reject when comparisons exist but quantitative reports are missing."""
+        from src.agents.analysis import comparison_validator_node
+        
+        base_state["plan"] = valid_plan
+        base_state["current_stage_id"] = "stage_0"
+        
+        # Comparisons exist for material_gold
+        base_state["figure_comparisons"] = [{
+            "stage_id": "stage_0",
+            "figure_id": "material_gold",
+            "classification": "match"
+        }]
+        
+        # BUT reports are empty
+        base_state["analysis_result_reports"] = []
+        
+        result = comparison_validator_node(base_state)
+        
+        assert result["comparison_verdict"] == "needs_revision", \
+            "Should reject when quantitative reports are missing"
+        assert "Missing quantitative reports" in result["comparison_feedback"]
+
+    def test_comparison_validator_rejects_missing_comparisons(self, base_state, valid_plan):
+        """Should reject when targets are defined but no comparisons produced."""
+        from src.agents.analysis import comparison_validator_node
+        
+        base_state["plan"] = valid_plan # Has target material_gold for stage_0
+        base_state["current_stage_id"] = "stage_0"
+        base_state["figure_comparisons"] = []
+        
+        result = comparison_validator_node(base_state)
+        
+        assert result["comparison_verdict"] == "needs_revision"
+        # Feedback might mention missing reports OR missing comparisons, but "Results analyzer did not produce figure comparisons"
+        # is specific to missing comparisons.
+        # Note: logic accumulates feedback. Check if "Results analyzer did not produce figure comparisons" is present.
+        assert "Results analyzer did not produce figure comparisons" in result["comparison_feedback"] or \
+               "Missing quantitative reports" in result["comparison_feedback"], \
+               f"Feedback should mention missing comparisons/reports. Got: {result.get('comparison_feedback')}"
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Test: Results Analyzer Logic
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestResultsAnalyzerLogic:
+    """Verify results_analyzer_node logic."""
+
+    def test_results_analyzer_analyzes_existing_files(self, base_state, valid_plan):
+        """Should perform analysis when files exist, even if no images for LLM."""
+        from src.agents.analysis import results_analyzer_node
+        
+        base_state["plan"] = valid_plan
+        base_state["current_stage_id"] = "stage_0"
+        base_state["stage_outputs"] = {"files": ["output.csv"]}
+        
+        # Mock file system and numeric helpers
+        with patch("pathlib.Path.exists", return_value=True), \
+             patch("pathlib.Path.is_file", return_value=True), \
+             patch("src.agents.analysis.load_numeric_series", return_value=[1, 2, 3]), \
+             patch("src.agents.analysis.quantitative_curve_metrics", return_value={"peak_position_error_percent": 5.0}):
+             
+            # Mock no images for LLM -> no LLM call expected for vision
+            with patch("src.agents.analysis.get_images_for_analyzer", return_value=[]):
+                result = results_analyzer_node(base_state)
+                
+        assert result["workflow_phase"] == "analysis"
+        assert "analysis_summary" in result
+        assert result["analysis_summary"]["totals"]["targets"] > 0
+        
+        # Should produce comparisons even without LLM
+        assert len(result["figure_comparisons"]) > 0
+        assert result["figure_comparisons"][0]["figure_id"] == "material_gold"
+        
+        # Should produce reports
+        assert len(result["analysis_result_reports"]) > 0
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Test: Plan Node Edge Cases
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestPlanNodeEdgeCases:
+    """Verify plan_node robustness."""
+    
+    def test_plan_node_handles_progress_init_failure(self, base_state):
+        """Should mark plan as needs_revision if progress initialization fails."""
+        from src.agents.planning import plan_node
+        
+        mock_response = {
+            "stages": [{"stage_id": "s1"}], # minimal
+        }
+        
+        with patch("src.agents.planning.call_agent_with_metrics", return_value=mock_response):
+            with patch("src.agents.planning.initialize_progress_from_plan", side_effect=ValueError("Init failed")):
+                result = plan_node(base_state)
+                
+        assert result["last_plan_review_verdict"] == "needs_revision"
+        assert "Progress initialization failed" in result["planner_feedback"]
 
 
 if __name__ == "__main__":
