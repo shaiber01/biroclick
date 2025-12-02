@@ -400,6 +400,167 @@ class TestStateMutations:
         assert result["design_revision_count"] == 1, "Counter should increment on needs_revision"
 
 
+# ═══════════════════════════════════════════════════════════════════════
+# Test: File Validation in Analysis (Real Code Paths)
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestFileValidation:
+    """
+    Test file handling in analysis nodes.
+    
+    These tests exercise REAL file validation code, not mocked.
+    They use temporary files to test actual file handling logic.
+    """
+    
+    @pytest.fixture
+    def analysis_state(self):
+        """Create state ready for analysis."""
+        state = create_initial_state(
+            paper_id="test_file_validation",
+            paper_text="Gold nanorod optical simulation study." * 20,
+            paper_domain="plasmonics"
+        )
+        state["plan"] = {
+            "paper_id": "test_file_validation",
+            "title": "File Validation Test",
+            "stages": [{
+                "stage_id": "stage_0",
+                "stage_type": "SINGLE_STRUCTURE",
+                "description": "Test stage",
+                "targets": ["Fig1"],
+                "dependencies": [],
+            }],
+            "targets": [{"figure_id": "Fig1", "description": "Test spectrum"}],
+        }
+        state["progress"] = {
+            "stages": [{
+                "stage_id": "stage_0",
+                "stage_type": "SINGLE_STRUCTURE",
+                "status": "running",
+                "dependencies": [],
+            }]
+        }
+        state["current_stage_id"] = "stage_0"
+        state["current_stage_type"] = "SINGLE_STRUCTURE"
+        return state
+    
+    def test_results_analyzer_handles_missing_files(self, analysis_state):
+        """results_analyzer should handle missing output files gracefully."""
+        from src.agents.analysis import results_analyzer_node
+        
+        # Set up stage_outputs with non-existent files
+        analysis_state["stage_outputs"] = {
+            "files": ["/nonexistent/path/spectrum.csv"],
+            "stdout": "Simulation completed",
+            "stderr": "",
+        }
+        
+        # Mock only the LLM call, let file validation run
+        mock_response = {
+            "overall_classification": "PARTIAL_MATCH",
+            "figure_comparisons": [],
+            "summary": "Analysis complete",
+        }
+        
+        with patch("src.agents.analysis.call_agent_with_metrics", return_value=mock_response):
+            result = results_analyzer_node(analysis_state)
+        
+        # Should detect the file validation issue
+        # Either returns error or proceeds with empty files
+        assert result is not None
+        assert "workflow_phase" in result
+    
+    def test_results_analyzer_with_real_csv_file(self, analysis_state, tmp_path):
+        """results_analyzer should successfully process real CSV files."""
+        from src.agents.analysis import results_analyzer_node
+        
+        # Create actual CSV file with test data
+        csv_file = tmp_path / "extinction_spectrum.csv"
+        csv_file.write_text(
+            "wavelength_nm,extinction\n"
+            "400,0.1\n"
+            "500,0.3\n"
+            "600,0.8\n"
+            "700,1.0\n"
+            "800,0.5\n"
+        )
+        
+        analysis_state["stage_outputs"] = {
+            "files": [str(csv_file)],
+            "stdout": "Simulation completed",
+            "stderr": "",
+            "runtime_seconds": 10,
+        }
+        
+        mock_response = {
+            "overall_classification": "ACCEPTABLE_MATCH",
+            "figure_comparisons": [
+                {
+                    "figure_id": "Fig1",
+                    "classification": "partial_match",
+                    "shape_comparison": ["Peak shape matches"],
+                    "reason_for_difference": "Minor numerical differences",
+                }
+            ],
+            "summary": "Results analyzed successfully",
+        }
+        
+        with patch("src.agents.analysis.call_agent_with_metrics", return_value=mock_response):
+            result = results_analyzer_node(analysis_state)
+        
+        # Should successfully process the file
+        assert result is not None
+        assert result.get("workflow_phase") == "analysis"
+    
+    def test_results_analyzer_empty_stage_outputs(self, analysis_state):
+        """results_analyzer should handle empty stage_outputs."""
+        from src.agents.analysis import results_analyzer_node
+        
+        # Empty stage_outputs - common error case
+        analysis_state["stage_outputs"] = {}
+        
+        result = results_analyzer_node(analysis_state)
+        
+        # Should return error state, not crash
+        assert result is not None
+        # Should indicate failure
+        assert result.get("execution_verdict") == "fail" or "error" in str(result).lower()
+
+
+class TestMaterialValidation:
+    """Test material validation with real file paths."""
+    
+    def test_material_file_resolution(self):
+        """Material files should resolve correctly from the materials directory."""
+        from pathlib import Path
+        
+        materials_dir = Path(__file__).parent.parent / "materials"
+        
+        # Common material files that should exist
+        expected_materials = [
+            "palik_gold.csv",
+            "palik_silver.csv",
+            "johnson_christy_gold.csv",
+        ]
+        
+        existing = []
+        for mat in expected_materials:
+            mat_file = materials_dir / mat
+            if mat_file.exists():
+                existing.append(mat)
+                # Verify it's actually a valid CSV
+                content = mat_file.read_text()
+                assert "," in content, f"{mat} doesn't look like a CSV"
+                lines = content.strip().split("\n")
+                assert len(lines) > 1, f"{mat} has no data rows"
+        
+        # At least some material files should exist
+        assert len(existing) > 0, (
+            f"No material files found in {materials_dir}. "
+            f"Expected at least one of: {expected_materials}"
+        )
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
 

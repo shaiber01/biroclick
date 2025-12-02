@@ -783,7 +783,8 @@ class ReproState(TypedDict, total=False):
     # ─── Current Control ────────────────────────────────────────────────
     current_stage_id: Optional[str]
     current_stage_type: Optional[str]  # MATERIAL_VALIDATION | SINGLE_STRUCTURE | etc.
-    workflow_phase: str  # planning | design | pre_run_review | running | analysis | post_run_review | supervision
+    workflow_phase: str  # planning | design | pre_run_review | running | analysis | post_run_review | supervision | reporting
+    workflow_complete: bool  # True when all stages complete and report generated
     # NOTE: review_context removed - now using separate review nodes (plan_review, design_review, code_review)
     
     # ─── Revision Tracking ──────────────────────────────────────────────

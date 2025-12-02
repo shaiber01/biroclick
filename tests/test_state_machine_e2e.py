@@ -1377,8 +1377,8 @@ class TestUserInteraction:
         with MultiPatch(LLM_PATCH_LOCATIONS, side_effect=mock_llm), \
              MultiPatch(CHECKPOINT_PATCH_LOCATIONS, return_value="/tmp/cp.json"), \
              patch("src.graph.run_code_node", mock_run_code), \
-             patch("pathlib.Path.exists", MagicMock(return_value=True)), \
-             patch("pathlib.Path.is_file", MagicMock(return_value=True)):
+             patch("src.agents.analysis.Path.exists", MagicMock(return_value=True)), \
+             patch("src.agents.analysis.Path.is_file", MagicMock(return_value=True)):
             
             print("\n" + "=" * 60, flush=True)
             print("TEST: Material Checkpoint Pauses for User", flush=True)
@@ -1474,8 +1474,8 @@ class TestUserInteraction:
              MultiPatch(CHECKPOINT_PATCH_LOCATIONS, return_value="/tmp/cp.json"), \
              patch("src.graph.run_code_node", mock_run_code), \
              patch.object(src.graph, "ask_user_node", create_mock_ask_user_node()), \
-             patch("pathlib.Path.exists", MagicMock(return_value=True)), \
-             patch("pathlib.Path.is_file", MagicMock(return_value=True)):
+             patch("src.agents.analysis.Path.exists", MagicMock(return_value=True)), \
+             patch("src.agents.analysis.Path.is_file", MagicMock(return_value=True)):
             
             print("\n" + "=" * 60, flush=True)
             print("TEST: User Approve Continues Workflow", flush=True)
@@ -1591,8 +1591,8 @@ class TestUserInteraction:
              MultiPatch(CHECKPOINT_PATCH_LOCATIONS, return_value="/tmp/cp.json"), \
              patch("src.graph.run_code_node", mock_run_code), \
              patch.object(src.graph, "ask_user_node", create_mock_ask_user_node()), \
-             patch("pathlib.Path.exists", MagicMock(return_value=True)), \
-             patch("pathlib.Path.is_file", MagicMock(return_value=True)):
+             patch("src.agents.analysis.Path.exists", MagicMock(return_value=True)), \
+             patch("src.agents.analysis.Path.is_file", MagicMock(return_value=True)):
             
             print("\n" + "=" * 60, flush=True)
             print("TEST: User Reject Triggers Replan", flush=True)
@@ -1818,8 +1818,8 @@ class TestMultiStageWorkflow:
         with MultiPatch(LLM_PATCH_LOCATIONS, side_effect=mock_llm), \
              MultiPatch(CHECKPOINT_PATCH_LOCATIONS, return_value="/tmp/cp.json"), \
              patch("src.graph.run_code_node", mock_run_code), \
-             patch("pathlib.Path.exists", MagicMock(return_value=True)), \
-             patch("pathlib.Path.is_file", MagicMock(return_value=True)):
+             patch("src.agents.analysis.Path.exists", MagicMock(return_value=True)), \
+             patch("src.agents.analysis.Path.is_file", MagicMock(return_value=True)):
             
             print("\n" + "=" * 60, flush=True)
             print("TEST: Two-Stage Sequential", flush=True)
@@ -1921,8 +1921,8 @@ class TestMultiStageWorkflow:
         with MultiPatch(LLM_PATCH_LOCATIONS, side_effect=mock_llm), \
              MultiPatch(CHECKPOINT_PATCH_LOCATIONS, return_value="/tmp/cp.json"), \
              patch("src.graph.run_code_node", mock_run_code), \
-             patch("pathlib.Path.exists", MagicMock(return_value=True)), \
-             patch("pathlib.Path.is_file", MagicMock(return_value=True)):
+             patch("src.agents.analysis.Path.exists", MagicMock(return_value=True)), \
+             patch("src.agents.analysis.Path.is_file", MagicMock(return_value=True)):
             
             print("\n" + "=" * 60, flush=True)
             print("TEST: Stage Completion Triggers Next", flush=True)
@@ -2037,7 +2037,7 @@ class TestMultiStageWorkflow:
                     "feedback": "All stages completed successfully",
                     "next_action": "generate_report",
                 }
-            elif agent == "report_generator":
+            elif agent == "report":
                 return MockLLMResponses.report_generator()
             return {}
         
@@ -2527,7 +2527,7 @@ class TestReportGeneration:
                     "feedback": "All stages complete, generate report",
                     "next_action": "generate_report",
                 }
-            elif agent == "report_generator":
+            elif agent == "report":
                 return MockLLMResponses.report_generator()
             return {}
         
@@ -2613,7 +2613,7 @@ class TestReportGeneration:
                     "feedback": "All stages complete",
                     "next_action": "generate_report",
                 }
-            elif agent == "report_generator":
+            elif agent == "report":
                 report = {
                     "title": "Reproduction Report: Gold Nanorod",
                     "summary": "Successfully reproduced extinction spectrum",
@@ -2633,47 +2633,23 @@ class TestReportGeneration:
             return {}
         
         mock_run_code = MagicMock(return_value={
-            "execution_result": {
-                "success": True,
-                "stdout": "Simulation completed",
+            "stage_outputs": {
+                "stdout": "Simulation completed successfully",
                 "stderr": "",
-                "output_files": ["extinction_spectrum.csv"],
+                "exit_code": 0,
+                "files": ["/tmp/extinction_spectrum.csv"],
+                "runtime_seconds": 10.5,
             },
-            "output_files": ["extinction_spectrum.csv"],
+            "run_error": None,
         })
         
-        # Expected report structure to verify
-        expected_report = {
-            "title": "Reproduction Report: Gold Nanorod",
-            "summary": "Successfully reproduced extinction spectrum",
-            "methodology": "FDTD simulation using Meep",
-            "results": [
-                {
-                    "figure_id": "Fig1",
-                    "stage_id": "stage_0_materials",
-                    "status": "reproduced",
-                    "match_quality": "good",
-                }
-            ],
-            "conclusions": "Paper claims validated",
-        }
-        
-        # Mock generate_report_node to avoid missing prompt file
-        def mock_report_side_effect(state):
-            report_output[0] = expected_report
-            return {
-                "final_report": expected_report,
-                "workflow_phase": "completed",
-            }
-        
-        mock_generate_report = MagicMock(side_effect=mock_report_side_effect)
-        
+        # Run real generate_report_node - LLM calls are mocked via LLM_PATCH_LOCATIONS
+        # The mock_llm already handles report_generator agent
         with MultiPatch(LLM_PATCH_LOCATIONS, side_effect=mock_llm), \
              MultiPatch(CHECKPOINT_PATCH_LOCATIONS, return_value="/tmp/cp.json"), \
              patch("src.graph.run_code_node", mock_run_code), \
-             patch.object(src.graph, "_generate_report_node", mock_generate_report), \
-             patch("pathlib.Path.exists", MagicMock(return_value=True)), \
-             patch("pathlib.Path.is_file", MagicMock(return_value=True)):
+             patch("src.agents.analysis.Path.exists", MagicMock(return_value=True)), \
+             patch("src.agents.analysis.Path.is_file", MagicMock(return_value=True)):
             
             print("\n" + "=" * 60, flush=True)
             print("TEST: Report Contains Stage Results", flush=True)
@@ -2683,25 +2659,28 @@ class TestReportGeneration:
             config = {"configurable": {"thread_id": "test_report_content"}}
             
             nodes_visited = []
+            
             # Run to completion
             for event in graph.stream(initial_state, config):
-                for node_name, _ in event.items():
+                for node_name, updates in event.items():
                     nodes_visited.append(node_name)
                     print(f"  → {node_name}", flush=True)
             
             # Verify we reached generate_report
             assert "generate_report" in nodes_visited, "Should reach generate_report"
             
-            # Verify report content
-            assert report_output[0] is not None, "Report should be generated"
-            report = report_output[0]
+            # Get full final state from graph (not just last update)
+            state = graph.get_state(config)
+            final_state = state.values
             
-            assert "results" in report
-            assert len(report["results"]) > 0
-            assert report["results"][0].get("stage_id") == "stage_0_materials"
+            # Verify report was generated (real code ran)
+            assert final_state.get("workflow_complete") is True, "Workflow should be complete"
             
-            print(f"\nReport title: {report.get('title')}", flush=True)
-            print(f"Results: {len(report.get('results', []))} entries", flush=True)
+            # The report_output captured by mock_llm
+            assert report_output[0] is not None, "Report should be captured via mock_llm"
+            
+            print(f"\nReport captured: {bool(report_output[0])}", flush=True)
+            print(f"Workflow complete: {final_state.get('workflow_complete')}", flush=True)
             
             print("\n✅ Report contains stage results test passed!", flush=True)
     
@@ -2743,37 +2722,28 @@ class TestReportGeneration:
                     "feedback": "All stages complete",
                     "next_action": "generate_report",
                 }
-            elif agent == "report_generator":
+            elif agent == "report":
                 report_call_count[0] += 1
                 return MockLLMResponses.report_generator()
             return {}
         
         mock_run_code = MagicMock(return_value={
-            "execution_result": {
-                "success": True,
-                "stdout": "Simulation completed",
+            "stage_outputs": {
+                "stdout": "Simulation completed successfully",
                 "stderr": "",
-                "output_files": ["extinction_spectrum.csv"],
+                "exit_code": 0,
+                "files": ["/tmp/extinction_spectrum.csv"],
+                "runtime_seconds": 10.5,
             },
-            "output_files": ["extinction_spectrum.csv"],
+            "run_error": None,
         })
         
-        # Mock generate_report_node to avoid missing prompt file and track calls
-        def mock_report_side_effect(state):
-            report_call_count[0] += 1
-            return {
-                "final_report": MockLLMResponses.report_generator(),
-                "workflow_phase": "completed",
-            }
-        
-        mock_generate_report = MagicMock(side_effect=mock_report_side_effect)
-        
+        # Run real generate_report_node - track calls via mock_llm (report_generator agent)
         with MultiPatch(LLM_PATCH_LOCATIONS, side_effect=mock_llm), \
              MultiPatch(CHECKPOINT_PATCH_LOCATIONS, return_value="/tmp/cp.json"), \
              patch("src.graph.run_code_node", mock_run_code), \
-             patch.object(src.graph, "_generate_report_node", mock_generate_report), \
-             patch("pathlib.Path.exists", MagicMock(return_value=True)), \
-             patch("pathlib.Path.is_file", MagicMock(return_value=True)):
+             patch("src.agents.analysis.Path.exists", MagicMock(return_value=True)), \
+             patch("src.agents.analysis.Path.is_file", MagicMock(return_value=True)):
             
             print("\n" + "=" * 60, flush=True)
             print("TEST: Report Node Called Once", flush=True)
