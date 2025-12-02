@@ -24,6 +24,45 @@ from schemas.state import (
     validate_state_for_node,
 )
 from src.prompts import build_agent_prompt
+from datetime import datetime, timezone
+
+# ═══════════════════════════════════════════════════════════════════════
+# Metrics Logging
+# ═══════════════════════════════════════════════════════════════════════
+
+def log_agent_call(agent_name: str, node_name: str, start_time: datetime):
+    """
+    Decorator to log agent calls to state['metrics'].
+    
+    Note: This is a simplified version. Ideally this would be a proper decorator,
+    but for state-passing functions, we can just call a helper at the end.
+    """
+    def record_metric(state: ReproState, result_dict: Dict[str, Any] = None):
+        if "metrics" not in state:
+            state["metrics"] = {"agent_calls": [], "stage_metrics": []}
+            
+        duration = (datetime.now(timezone.utc) - start_time).total_seconds()
+        
+        metric = {
+            "agent": agent_name,
+            "node": node_name,
+            "stage_id": state.get("current_stage_id"),
+            "timestamp": start_time.isoformat(),
+            "duration_seconds": duration,
+            "verdict": result_dict.get("execution_verdict") or 
+                       result_dict.get("physics_verdict") or 
+                       result_dict.get("supervisor_verdict") or
+                       result_dict.get("last_plan_review_verdict") or
+                       None,
+            "error": result_dict.get("run_error") if result_dict else None
+        }
+        
+        if "agent_calls" not in state["metrics"]:
+            state["metrics"]["agent_calls"] = []
+            
+        state["metrics"]["agent_calls"].append(metric)
+        
+    return record_metric
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -111,6 +150,8 @@ def plan_node(state: ReproState) -> dict:
     IMPORTANT: This node makes LLM calls with full paper text, so it must 
     check context first. The planner receives the largest context of any node.
     """
+    start_time = datetime.now(timezone.utc)
+    
     # ═══════════════════════════════════════════════════════════════════════
     # CONTEXT CHECK: CRITICAL for planner - receives full paper text
     # ═══════════════════════════════════════════════════════════════════════
@@ -149,6 +190,9 @@ def plan_node(state: ReproState) -> dict:
         state_with_plan = sync_extracted_parameters(state_with_plan)
         result["progress"] = state_with_plan.get("progress")
         result["extracted_parameters"] = state_with_plan.get("extracted_parameters")
+    
+    # Log metrics
+    log_agent_call("PlannerAgent", "plan", start_time)(state, result)
     
     return result
 
@@ -346,6 +390,8 @@ def simulation_designer_node(state: ReproState) -> dict:
     
     IMPORTANT: This node makes LLM calls, so it must check context first.
     """
+    start_time = datetime.now(timezone.utc)
+    
     # ═══════════════════════════════════════════════════════════════════════
     # CONTEXT CHECK: Required for all nodes that make LLM calls
     # ═══════════════════════════════════════════════════════════════════════
@@ -366,10 +412,13 @@ def simulation_designer_node(state: ReproState) -> dict:
     # - Parse agent output per simulation_designer_output_schema.json
     
     # STUB: Replace with actual LLM call
-    return {
+    result = {
         "workflow_phase": "design",
         # agent_output fields would go here
     }
+    
+    log_agent_call("SimulationDesignerAgent", "design", start_time)(state, result)
+    return result
 
 
 def design_reviewer_node(state: ReproState) -> dict:
@@ -471,6 +520,8 @@ def code_generator_node(state: ReproState) -> dict:
     state["validated_materials"], NOT hardcode paths. validated_materials 
     is populated after Stage 0 + user approval.
     """
+    start_time = datetime.now(timezone.utc)
+    
     # ═══════════════════════════════════════════════════════════════════════
     # CONTEXT CHECK: Required for all nodes that make LLM calls
     # ═══════════════════════════════════════════════════════════════════════
@@ -491,10 +542,13 @@ def code_generator_node(state: ReproState) -> dict:
     # - Parse agent output per code_generator_output_schema.json
     
     # STUB: Replace with actual LLM call
-    return {
+    result = {
         "workflow_phase": "code_generation",
         # agent_output fields would go here (simulation_code, etc.)
     }
+    
+    log_agent_call("CodeGeneratorAgent", "generate_code", start_time)(state, result)
+    return result
 
 
 def execution_validator_node(state: ReproState) -> dict:
@@ -691,7 +745,11 @@ def supervisor_node(state: ReproState) -> dict:
        Always use get_validation_hierarchy(state) to check hierarchy status.
        Never store validation_hierarchy in state directly - it's computed.
     """
-    from schemas.state import get_validation_hierarchy, update_progress_stage_status
+    from schemas.state import (
+        get_validation_hierarchy, 
+        update_progress_stage_status,
+        archive_stage_outputs_to_progress
+    )
     
     # Connect prompt adaptation
     system_prompt = build_agent_prompt("supervisor", state)
@@ -732,16 +790,28 @@ def supervisor_node(state: ReproState) -> dict:
                 if pending_materials:
                     result["validated_materials"] = pending_materials
                     result["pending_validated_materials"] = []  # Clear pending
+                
+                # Archive outputs before moving on
+                if current_stage_id:
+                    archive_stage_outputs_to_progress(state, current_stage_id)
+                    update_progress_stage_status(state, current_stage_id, "completed_success")
+                    
             elif "CHANGE_DATABASE" in response_text:
-                # Invalidate Stage 0, will re-run with new database
-                result["supervisor_verdict"] = "backtrack_to_stage"
-                result["backtrack_decision"] = {
-                    "accepted": True,
-                    "target_stage_id": "stage0_material_validation",
-                    "stages_to_invalidate": [],
-                    "reason": "User requested different material database"
-                }
-                result["supervisor_feedback"] = f"User requested database change: {response_text}"
+                # User requested database change - requires REPLAN to update assumptions
+                result["supervisor_verdict"] = "replan_needed"
+                result["planner_feedback"] = (
+                    f"User rejected material validation and requested database change: {response_text}. "
+                    "Please update the plan and assumptions to use the specified database/material, "
+                    "then re-run Stage 0."
+                )
+                # Mark stage 0 as invalid
+                if current_stage_id:
+                    update_progress_stage_status(
+                        state, 
+                        current_stage_id, 
+                        "invalidated", 
+                        invalidation_reason="User requested material change"
+                    )
             elif "CHANGE_MATERIAL" in response_text:
                 # Need to replan with different material
                 result["supervisor_verdict"] = "replan_needed"
@@ -940,6 +1010,13 @@ def supervisor_node(state: ReproState) -> dict:
         # TODO: Implement actual LLM-based supervision logic
         # For now, default to continue
         result["supervisor_verdict"] = "ok_continue"
+        
+        # If completing a stage, archive outputs
+        if current_stage_id:
+            archive_stage_outputs_to_progress(state, current_stage_id)
+            # NOTE: In full implementation, LLM decides status. 
+            # For stub, assume success if we got here without issues.
+            update_progress_stage_status(state, current_stage_id, "completed_success")
     
     return result
 

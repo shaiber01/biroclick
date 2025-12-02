@@ -362,6 +362,24 @@ def run_simulation(
     
     try:
         script_path.write_text(code, encoding='utf-8')
+        
+        # Symlink materials directory if it exists in project root
+        # This allows code to reference "materials/file.csv" naturally
+        project_root = Path(os.getcwd())
+        materials_src = project_root / "materials"
+        materials_dst = output_dir / "materials"
+        
+        if materials_src.exists() and not materials_dst.exists():
+            try:
+                os.symlink(materials_src, materials_dst)
+            except OSError as e:
+                # Fallback for Windows or permissions issues: copy directory
+                import shutil
+                try:
+                    shutil.copytree(materials_src, materials_dst)
+                except Exception as copy_err:
+                    print(f"Warning: Could not link/copy materials: {copy_err}")
+                    
     except Exception as e:
         return ExecutionResult(
             stdout="",
