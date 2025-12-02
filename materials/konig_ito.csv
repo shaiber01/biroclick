@@ -1,0 +1,56 @@
+# Indium Tin Oxide (ITO) optical constants
+# Source: T.A.F. König et al., ACS Appl. Mater. Interfaces 6, 6503-6510 (2014)
+# DOI: 10.1021/am405100n
+# Data compiled from: https://refractiveindex.info/?shelf=other&book=In2O3-SnO2&page=Konig
+# Format: wavelength_nm, n (real part of refractive index), k (imaginary part)
+#
+# Note: ITO is a transparent conducting oxide (TCO). Properties depend strongly
+# on deposition conditions and doping level. This is typical sputtered ITO.
+# Used for transparent electrodes, touchscreens, and electrochromic devices.
+# Shows plasmonic behavior in near-IR due to free carriers.
+#
+wavelength_nm,n,k
+300,2.22,0.102
+320,2.15,0.078
+340,2.10,0.061
+360,2.05,0.048
+380,2.02,0.038
+400,1.99,0.030
+420,1.96,0.024
+440,1.94,0.019
+460,1.92,0.015
+480,1.91,0.012
+500,1.89,0.010
+520,1.88,0.008
+540,1.87,0.006
+560,1.86,0.005
+580,1.85,0.004
+600,1.84,0.003
+620,1.84,0.003
+640,1.83,0.002
+660,1.83,0.002
+680,1.82,0.002
+700,1.82,0.002
+750,1.81,0.002
+800,1.80,0.003
+850,1.80,0.004
+900,1.79,0.006
+950,1.78,0.009
+1000,1.78,0.014
+1050,1.77,0.020
+1100,1.76,0.029
+1150,1.75,0.041
+1200,1.74,0.056
+1250,1.72,0.076
+1300,1.70,0.101
+1350,1.68,0.132
+1400,1.65,0.170
+1450,1.61,0.216
+1500,1.56,0.272
+1550,1.50,0.340
+1600,1.42,0.421
+1700,1.22,0.620
+1800,0.96,0.880
+1900,0.70,1.180
+2000,0.52,1.500
+

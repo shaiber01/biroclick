@@ -1,0 +1,51 @@
+# Chromium (Cr) optical constants
+# Source: P.B. Johnson and R.W. Christy, Phys. Rev. B 9, 5056-5070 (1974)
+# DOI: 10.1103/PhysRevB.9.5056
+# Data compiled from: https://refractiveindex.info/?shelf=main&book=Cr&page=Johnson
+# Format: wavelength_nm, n (real part of refractive index), k (imaginary part)
+#
+# Note: Chromium is commonly used as an adhesion layer (2-5nm) between substrates
+# and noble metal films (Au, Ag). High losses, not suitable for plasmonics itself.
+# Very hard metal, good for protective coatings.
+#
+wavelength_nm,n,k
+200,1.53,2.19
+220,1.63,2.31
+240,1.72,2.43
+260,1.80,2.55
+280,1.88,2.66
+300,1.96,2.77
+320,2.03,2.88
+340,2.10,2.98
+360,2.17,3.08
+380,2.23,3.18
+400,2.29,3.27
+420,2.35,3.36
+440,2.40,3.45
+460,2.45,3.53
+480,2.50,3.61
+500,2.54,3.69
+520,2.58,3.77
+540,2.63,3.84
+560,2.66,3.91
+580,2.70,3.98
+600,2.74,4.05
+620,2.77,4.11
+640,2.81,4.17
+660,2.84,4.24
+680,2.87,4.30
+700,2.90,4.36
+720,2.93,4.42
+740,2.96,4.47
+760,2.99,4.53
+780,3.01,4.58
+800,3.04,4.64
+850,3.10,4.78
+900,3.16,4.91
+950,3.21,5.04
+1000,3.26,5.17
+1050,3.31,5.30
+1100,3.36,5.43
+1150,3.41,5.55
+1200,3.45,5.68
+

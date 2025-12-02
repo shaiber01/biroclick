@@ -1,0 +1,56 @@
+# Silicon Nitride (Si3N4) optical constants
+# Source: H.R. Philipp, J. Electrochem. Soc. 120, 295-300 (1973)
+# DOI: 10.1149/1.2403440
+# Data compiled from: https://refractiveindex.info/?shelf=main&book=Si3N4&page=Philipp
+# Format: wavelength_nm, n (real part of refractive index), k (imaginary part)
+#
+# Note: Stoichiometric silicon nitride (Si3N4). Low-loss dielectric with n~2.0.
+# Standard material for photonic waveguides and integrated photonics.
+# LPCVD and PECVD films may have slightly different properties due to H content.
+#
+wavelength_nm,n,k
+200,2.66,0.33
+210,2.55,0.23
+220,2.47,0.16
+230,2.41,0.11
+240,2.36,0.07
+250,2.32,0.04
+260,2.28,0.02
+270,2.25,0.01
+280,2.22,0.005
+290,2.20,0.002
+300,2.18,0.00
+320,2.15,0.00
+340,2.12,0.00
+360,2.10,0.00
+380,2.08,0.00
+400,2.07,0.00
+420,2.06,0.00
+440,2.05,0.00
+460,2.04,0.00
+480,2.03,0.00
+500,2.02,0.00
+520,2.02,0.00
+540,2.01,0.00
+560,2.01,0.00
+580,2.00,0.00
+600,2.00,0.00
+650,1.99,0.00
+700,1.99,0.00
+750,1.98,0.00
+800,1.98,0.00
+850,1.97,0.00
+900,1.97,0.00
+950,1.97,0.00
+1000,1.96,0.00
+1100,1.96,0.00
+1200,1.96,0.00
+1300,1.95,0.00
+1400,1.95,0.00
+1500,1.95,0.00
+1600,1.95,0.00
+1700,1.94,0.00
+1800,1.94,0.00
+1900,1.94,0.00
+2000,1.94,0.00
+

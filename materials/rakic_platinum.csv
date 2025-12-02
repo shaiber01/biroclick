@@ -1,0 +1,51 @@
+# Platinum (Pt) optical constants
+# Source: A.D. Rakic et al., Applied Optics 37, 5271-5283 (1998)
+# DOI: 10.1364/AO.37.005271
+# Data compiled from: https://refractiveindex.info/?shelf=main&book=Pt&page=Rakic
+# Format: wavelength_nm, n (real part of refractive index), k (imaginary part)
+#
+# Note: Platinum is a noble metal with high chemical stability and catalytic
+# activity. Higher losses than Au/Ag in visible. Used for high-temperature
+# applications, catalysis, and electrochemistry. Does not oxidize in air.
+#
+wavelength_nm,n,k
+200,1.30,1.62
+220,1.38,1.74
+240,1.45,1.86
+260,1.52,1.98
+280,1.58,2.09
+300,1.64,2.20
+320,1.69,2.31
+340,1.74,2.42
+360,1.79,2.52
+380,1.83,2.62
+400,1.87,2.72
+420,1.91,2.82
+440,1.95,2.91
+460,1.98,3.00
+480,2.01,3.10
+500,2.04,3.19
+520,2.07,3.28
+540,2.10,3.36
+560,2.12,3.45
+580,2.15,3.54
+600,2.17,3.62
+620,2.20,3.71
+640,2.22,3.79
+660,2.24,3.88
+680,2.27,3.96
+700,2.29,4.04
+720,2.31,4.12
+740,2.33,4.21
+760,2.35,4.29
+780,2.37,4.37
+800,2.39,4.45
+850,2.44,4.65
+900,2.48,4.85
+950,2.53,5.04
+1000,2.57,5.24
+1050,2.61,5.43
+1100,2.66,5.62
+1150,2.70,5.81
+1200,2.74,5.99
+

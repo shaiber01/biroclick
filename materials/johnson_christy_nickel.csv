@@ -1,0 +1,51 @@
+# Nickel (Ni) optical constants
+# Source: P.B. Johnson and R.W. Christy, Phys. Rev. B 9, 5056-5070 (1974)
+# DOI: 10.1103/PhysRevB.9.5056
+# Data compiled from: https://refractiveindex.info/?shelf=main&book=Ni&page=Johnson
+# Format: wavelength_nm, n (real part of refractive index), k (imaginary part)
+#
+# Note: Nickel is a ferromagnetic metal. Used for magneto-optical applications
+# and magnetic plasmonics. Higher losses than noble metals, but enables
+# magnetic field control of optical properties.
+#
+wavelength_nm,n,k
+200,1.22,2.14
+220,1.32,2.28
+240,1.42,2.42
+260,1.52,2.56
+280,1.62,2.70
+300,1.72,2.84
+320,1.81,2.97
+340,1.90,3.10
+360,1.98,3.23
+380,2.06,3.35
+400,2.14,3.47
+420,2.21,3.59
+440,2.28,3.70
+460,2.34,3.81
+480,2.40,3.92
+500,2.46,4.02
+520,2.51,4.12
+540,2.56,4.22
+560,2.61,4.32
+580,2.66,4.41
+600,2.70,4.51
+620,2.74,4.60
+640,2.78,4.69
+660,2.82,4.78
+680,2.86,4.87
+700,2.89,4.95
+720,2.93,5.04
+740,2.96,5.12
+760,2.99,5.20
+780,3.03,5.29
+800,3.06,5.37
+850,3.13,5.57
+900,3.20,5.77
+950,3.27,5.96
+1000,3.33,6.15
+1050,3.40,6.34
+1100,3.46,6.53
+1150,3.52,6.71
+1200,3.58,6.89
+

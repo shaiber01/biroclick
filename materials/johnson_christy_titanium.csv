@@ -1,0 +1,51 @@
+# Titanium (Ti) optical constants
+# Source: P.B. Johnson and R.W. Christy, Phys. Rev. B 9, 5056-5070 (1974)
+# DOI: 10.1103/PhysRevB.9.5056
+# Data compiled from: https://refractiveindex.info/?shelf=main&book=Ti&page=Johnson
+# Format: wavelength_nm, n (real part of refractive index), k (imaginary part)
+#
+# Note: Titanium is used as an adhesion layer (2-5nm) for aluminum films.
+# Forms native oxide (TiO2) when exposed to air. High losses in visible range.
+# Important for aerospace and biomedical applications.
+#
+wavelength_nm,n,k
+200,1.08,1.68
+220,1.20,1.82
+240,1.32,1.95
+260,1.44,2.08
+280,1.56,2.20
+300,1.68,2.32
+320,1.79,2.44
+340,1.90,2.55
+360,2.01,2.66
+380,2.11,2.76
+400,2.21,2.86
+420,2.30,2.96
+440,2.39,3.05
+460,2.48,3.14
+480,2.56,3.23
+500,2.63,3.32
+520,2.70,3.40
+540,2.77,3.48
+560,2.84,3.56
+580,2.90,3.64
+600,2.96,3.71
+620,3.02,3.79
+640,3.07,3.86
+660,3.12,3.93
+680,3.18,4.00
+700,3.22,4.07
+720,3.27,4.14
+740,3.32,4.20
+760,3.36,4.27
+780,3.40,4.33
+800,3.45,4.39
+850,3.54,4.55
+900,3.63,4.70
+950,3.71,4.85
+1000,3.79,4.99
+1050,3.87,5.13
+1100,3.95,5.27
+1150,4.02,5.41
+1200,4.09,5.54
+
