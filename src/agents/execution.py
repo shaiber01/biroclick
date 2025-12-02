@@ -35,8 +35,10 @@ from src.prompts import build_agent_prompt
 from src.llm_client import call_agent_with_metrics
 
 from .helpers.context import check_context_or_escalate
+from .base import with_context_check
 
 
+@with_context_check("execution_check")
 def execution_validator_node(state: ReproState) -> dict:
     """
     ExecutionValidatorAgent: Validate simulation ran correctly.
@@ -47,15 +49,10 @@ def execution_validator_node(state: ReproState) -> dict:
     - Sets `execution_verdict` state field from agent output's `verdict`.
     - Increments `execution_failure_count` when verdict is "fail".
     - Increments `total_execution_failures` for metrics tracking.
+    
+    Note: Context check is handled by @with_context_check decorator.
     """
     logger = logging.getLogger(__name__)
-    
-    # Context check
-    context_update = check_context_or_escalate(state, "execution_check")
-    if context_update:
-        if context_update.get("awaiting_user_input"):
-            return context_update
-        state = {**state, **context_update}
 
     # Connect prompt adaptation
     system_prompt = build_agent_prompt("execution_validator", state)
@@ -137,6 +134,7 @@ def execution_validator_node(state: ReproState) -> dict:
     return result
 
 
+@with_context_check("physics_check")
 def physics_sanity_node(state: ReproState) -> dict:
     """
     PhysicsSanityAgent: Validate physics of results.
@@ -153,15 +151,10 @@ def physics_sanity_node(state: ReproState) -> dict:
     - "warning": Minor concerns but proceed
     - "fail": Code/numerics issue, route to code generator
     - "design_flaw": Fundamental design problem, route to simulation designer
+    
+    Note: Context check is handled by @with_context_check decorator.
     """
     logger = logging.getLogger(__name__)
-    
-    # Context check
-    context_update = check_context_or_escalate(state, "physics_check")
-    if context_update:
-        if context_update.get("awaiting_user_input"):
-            return context_update
-        state = {**state, **context_update}
 
     # Connect prompt adaptation
     system_prompt = build_agent_prompt("physics_sanity", state)

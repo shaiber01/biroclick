@@ -14,10 +14,13 @@ class TestAdaptPromptsNode:
     """Tests for adapt_prompts_node function."""
 
     @patch("src.agents.planning.call_agent_with_metrics")
-    @patch("src.agents.planning.check_context_or_escalate")
+    @patch("src.agents.base.check_context_or_escalate")
     @patch("src.agents.planning.build_agent_prompt")
     def test_returns_adaptations_on_success(self, mock_prompt, mock_context, mock_call):
-        """Should return adaptations from LLM output."""
+        """Should return adaptations from LLM output.
+        
+        Note: Patches base.py because adapt_prompts_node uses @with_context_check decorator.
+        """
         mock_context.return_value = None
         mock_prompt.return_value = "system prompt"
         mock_call.return_value = {
@@ -34,10 +37,13 @@ class TestAdaptPromptsNode:
         assert result["paper_domain"] == "plasmonics"
 
     @patch("src.agents.planning.call_agent_with_metrics")
-    @patch("src.agents.planning.check_context_or_escalate")
+    @patch("src.agents.base.check_context_or_escalate")
     @patch("src.agents.planning.build_agent_prompt")
     def test_returns_empty_on_llm_error(self, mock_prompt, mock_context, mock_call):
-        """Should return empty adaptations on LLM error."""
+        """Should return empty adaptations on LLM error.
+        
+        Note: Patches base.py because adapt_prompts_node uses @with_context_check decorator.
+        """
         mock_context.return_value = None
         mock_prompt.return_value = "prompt"
         mock_call.side_effect = Exception("API error")
@@ -48,9 +54,12 @@ class TestAdaptPromptsNode:
         
         assert result["prompt_adaptations"] == []
 
-    @patch("src.agents.planning.check_context_or_escalate")
+    @patch("src.agents.base.check_context_or_escalate")
     def test_returns_escalation_on_context_overflow(self, mock_context):
-        """Should return escalation when context overflow."""
+        """Should return escalation when context overflow.
+        
+        Note: Patches base.py because adapt_prompts_node uses @with_context_check decorator.
+        """
         mock_context.return_value = {
             "awaiting_user_input": True,
             "pending_user_questions": ["Context overflow"],
@@ -155,11 +164,14 @@ class TestPlanReviewerNode:
     """Tests for plan_reviewer_node function."""
 
     @patch("src.agents.planning.call_agent_with_metrics")
-    @patch("src.agents.planning.check_context_or_escalate")
+    @patch("src.agents.base.check_context_or_escalate")
     @patch("src.agents.planning.validate_state_or_warn")
     @patch("src.agents.planning.build_agent_prompt")
     def test_approves_valid_plan(self, mock_prompt, mock_validate, mock_context, mock_call):
-        """Should approve a valid plan."""
+        """Should approve a valid plan.
+        
+        Note: Patches base.py because plan_reviewer_node uses @with_context_check decorator.
+        """
         mock_context.return_value = None
         mock_validate.return_value = []
         mock_prompt.return_value = "system prompt"
@@ -182,10 +194,13 @@ class TestPlanReviewerNode:
         assert result["workflow_phase"] == "plan_review"
         assert result["last_plan_review_verdict"] == "approve"
 
-    @patch("src.agents.planning.check_context_or_escalate")
+    @patch("src.agents.base.check_context_or_escalate")
     @patch("src.agents.planning.validate_state_or_warn")
     def test_rejects_empty_stages(self, mock_validate, mock_context):
-        """Should reject plan with no stages."""
+        """Should reject plan with no stages.
+        
+        Note: Patches base.py because plan_reviewer_node uses @with_context_check decorator.
+        """
         mock_context.return_value = None
         mock_validate.return_value = []
         
@@ -195,10 +210,13 @@ class TestPlanReviewerNode:
         
         assert result["last_plan_review_verdict"] == "needs_revision"
 
-    @patch("src.agents.planning.check_context_or_escalate")
+    @patch("src.agents.base.check_context_or_escalate")
     @patch("src.agents.planning.validate_state_or_warn")
     def test_rejects_stage_without_targets(self, mock_validate, mock_context):
-        """Should reject stage without targets."""
+        """Should reject stage without targets.
+        
+        Note: Patches base.py because plan_reviewer_node uses @with_context_check decorator.
+        """
         mock_context.return_value = None
         mock_validate.return_value = []
         
@@ -214,10 +232,13 @@ class TestPlanReviewerNode:
         
         assert result["last_plan_review_verdict"] == "needs_revision"
 
-    @patch("src.agents.planning.check_context_or_escalate")
+    @patch("src.agents.base.check_context_or_escalate")
     @patch("src.agents.planning.validate_state_or_warn")
     def test_detects_self_dependency(self, mock_validate, mock_context):
-        """Should detect self-dependency in stages."""
+        """Should detect self-dependency in stages.
+        
+        Note: Patches base.py because plan_reviewer_node uses @with_context_check decorator.
+        """
         mock_context.return_value = None
         mock_validate.return_value = []
         
@@ -233,10 +254,13 @@ class TestPlanReviewerNode:
         
         assert result["last_plan_review_verdict"] == "needs_revision"
 
-    @patch("src.agents.planning.check_context_or_escalate")
+    @patch("src.agents.base.check_context_or_escalate")
     @patch("src.agents.planning.validate_state_or_warn")
     def test_detects_circular_dependencies(self, mock_validate, mock_context):
-        """Should detect circular dependencies."""
+        """Should detect circular dependencies.
+        
+        Note: Patches base.py because plan_reviewer_node uses @with_context_check decorator.
+        """
         mock_context.return_value = None
         mock_validate.return_value = []
         
@@ -254,12 +278,13 @@ class TestPlanReviewerNode:
         assert result["last_plan_review_verdict"] == "needs_revision"
 
     @patch("src.agents.planning.call_agent_with_metrics")
-    @patch("src.agents.planning.check_context_or_escalate")
+    @patch("src.agents.base.check_context_or_escalate")
     @patch("src.agents.planning.validate_state_or_warn")
     @patch("src.agents.planning.build_agent_prompt")
     def test_increments_replan_count_on_rejection(
         self, mock_prompt, mock_validate, mock_context, mock_call
     ):
+        """Note: Patches base.py because plan_reviewer_node uses @with_context_check decorator."""
         """Should increment replan_count when verdict is needs_revision."""
         mock_context.return_value = None
         mock_validate.return_value = []
@@ -287,12 +312,13 @@ class TestPlanReviewerNode:
         assert "planner_feedback" in result
 
     @patch("src.agents.planning.call_agent_with_metrics")
-    @patch("src.agents.planning.check_context_or_escalate")
+    @patch("src.agents.base.check_context_or_escalate")
     @patch("src.agents.planning.validate_state_or_warn")
     @patch("src.agents.planning.build_agent_prompt")
     def test_auto_approves_on_llm_error(
         self, mock_prompt, mock_validate, mock_context, mock_call
     ):
+        """Note: Patches base.py because plan_reviewer_node uses @with_context_check decorator."""
         """Should auto-approve when LLM call fails."""
         mock_context.return_value = None
         mock_validate.return_value = []

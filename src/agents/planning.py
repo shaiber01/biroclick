@@ -43,16 +43,15 @@ from src.llm_client import (
 
 from .helpers.context import check_context_or_escalate, validate_state_or_warn
 from .helpers.metrics import log_agent_call
+from .base import with_context_check
 
 
+@with_context_check("adapt_prompts")
 def adapt_prompts_node(state: ReproState) -> Dict[str, Any]:
-    """PromptAdaptorAgent: Customize prompts for paper-specific needs."""
-    context_update = check_context_or_escalate(state, "adapt_prompts")
-    if context_update:
-        if context_update.get("awaiting_user_input"):
-            return context_update
-        state = {**state, **context_update}
-
+    """PromptAdaptorAgent: Customize prompts for paper-specific needs.
+    
+    Note: Context check is handled by @with_context_check decorator.
+    """
     # Build system prompt for prompt adaptor
     system_prompt = build_agent_prompt("prompt_adaptor", state)
     
@@ -225,6 +224,7 @@ def plan_node(state: ReproState) -> dict:
     return result
 
 
+@with_context_check("plan_review")
 def plan_reviewer_node(state: ReproState) -> dict:
     """
     PlanReviewerAgent: Review reproduction plan before stage execution.
@@ -234,15 +234,10 @@ def plan_reviewer_node(state: ReproState) -> dict:
     IMPORTANT:
     - Sets `last_plan_review_verdict` state field.
     - Increments `replan_count` when verdict is "needs_revision".
+    
+    Note: Context check is handled by @with_context_check decorator.
     """
     logger = logging.getLogger(__name__)
-    
-    # Context check
-    context_update = check_context_or_escalate(state, "plan_review")
-    if context_update:
-        if context_update.get("awaiting_user_input"):
-            return context_update
-        state = {**state, **context_update}
 
     # State validation
     validation_issues = validate_state_or_warn(state, "plan_review")

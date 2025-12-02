@@ -165,9 +165,12 @@ class TestCodeReviewerNode:
         
         assert result["last_code_review_verdict"] == "approve"
 
-    @patch("src.agents.code.check_context_or_escalate")
+    @patch("src.agents.base.check_context_or_escalate")
     def test_returns_escalation_on_context_overflow(self, mock_context):
-        """Should return escalation when context overflow."""
+        """Should return escalation when context overflow.
+        
+        Note: Patches base.py because code_reviewer_node uses @with_context_check decorator.
+        """
         mock_context.return_value = {
             "awaiting_user_input": True,
             "pending_user_questions": ["Context overflow"],

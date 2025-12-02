@@ -37,8 +37,10 @@ from src.llm_client import (
 
 from .helpers.context import check_context_or_escalate
 from .helpers.metrics import log_agent_call
+from .base import with_context_check
 
 
+@with_context_check("code_review")
 def code_reviewer_node(state: ReproState) -> dict:
     """
     CodeReviewerAgent: Review generated code before execution.
@@ -48,15 +50,10 @@ def code_reviewer_node(state: ReproState) -> dict:
     IMPORTANT:
     - Sets `last_code_review_verdict` state field.
     - Increments `code_revision_count` when verdict is "needs_revision".
+    
+    Note: Context check is handled by @with_context_check decorator.
     """
     logger = logging.getLogger(__name__)
-    
-    # Context check
-    context_update = check_context_or_escalate(state, "code_review")
-    if context_update:
-        if context_update.get("awaiting_user_input"):
-            return context_update
-        state = {**state, **context_update}
 
     # Connect prompt adaptation
     system_prompt = build_agent_prompt("code_reviewer", state)

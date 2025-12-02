@@ -37,6 +37,7 @@ from src.llm_client import (
 )
 
 from .helpers.context import check_context_or_escalate
+from .base import with_context_check
 from .helpers.stubs import ensure_stub_figures
 from .helpers.numeric import load_numeric_series, quantitative_curve_metrics
 from .helpers.validation import (
@@ -510,6 +511,7 @@ def results_analyzer_node(state: ReproState) -> dict:
     }
 
 
+@with_context_check("comparison_check")
 def comparison_validator_node(state: ReproState) -> dict:
     """
     ComparisonValidatorAgent: Validate comparison accuracy.
@@ -519,13 +521,9 @@ def comparison_validator_node(state: ReproState) -> dict:
     IMPORTANT: 
     - Sets `comparison_verdict` state field from agent output's `verdict`.
     - Increments `analysis_revision_count` when verdict is "needs_revision".
+    
+    Note: Context check is handled by @with_context_check decorator.
     """
-    # Context check
-    context_update = check_context_or_escalate(state, "comparison_check")
-    if context_update:
-        if context_update.get("awaiting_user_input"):
-            return context_update
-        state = {**state, **context_update}
 
     stage_id = state.get("current_stage_id")
     comparisons = stage_comparisons_for_stage(state, stage_id)

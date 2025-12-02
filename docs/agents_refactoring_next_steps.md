@@ -2,9 +2,9 @@
 
 This file tracks remaining improvements after the initial agents.py refactoring.
 
-## Coverage Report Summary (December 2024)
+## ✅ Coverage Report Summary (December 2024)
 
-Current coverage: **69%** for `src/agents/`
+**Current coverage: 88%** for `src/agents/` (improved from 69%)
 
 | Module | Coverage | Notes |
 |--------|----------|-------|
@@ -12,30 +12,21 @@ Current coverage: **69%** for `src/agents/`
 | `constants.py` | 100% | ✅ |
 | `helpers/stubs.py` | 100% | ✅ |
 | `helpers/__init__.py` | 100% | ✅ |
-| `helpers/validation.py` | 95% | ✅ |
+| `helpers/validation.py` | 96% | ✅ |
 | `design.py` | 95% | ✅ |
 | `helpers/metrics.py` | 92% | ✅ |
 | `helpers/materials.py` | 91% | ✅ |
 | `planning.py` | 91% | ✅ |
+| `stage_selection.py` | 89% | ✅ (was 56%) |
+| `supervision.py` | 89% | ✅ (was 31%) |
 | `helpers/context.py` | 89% | ✅ |
+| `user_interaction.py` | 87% | ✅ (was 59%) |
 | `helpers/numeric.py` | 86% | ✅ |
-| `reporting.py` | 83% | ⚠️ |
+| `reporting.py` | 83% | ✅ |
+| `analysis.py` | 82% | ✅ (was 32%) |
 | `code.py` | 82% | ⚠️ |
 | `execution.py` | 82% | ⚠️ |
-| `user_interaction.py` | 59% | ⚠️ Interactive CLI paths |
-| `stage_selection.py` | 56% | ⚠️ Complex dependency logic |
-| `analysis.py` | 32% | ❌ Needs more tests |
-| `supervision.py` | 31% | ❌ Many trigger handlers |
 | `base.py` | 0% | ❌ Decorator unused |
-
-### Priority: Improve Test Coverage
-
-The following modules need additional test coverage:
-
-1. **`supervision.py`** (31%) - Many trigger handler functions untested
-2. **`analysis.py`** (32%) - Results analysis and comparison validation
-3. **`stage_selection.py`** (56%) - Complex dependency and deadlock detection
-4. **`user_interaction.py`** (59%) - CLI-based paths hard to test
 
 To regenerate the HTML coverage report:
 ```bash
@@ -43,25 +34,34 @@ pytest --cov=src/agents --cov-report=html tests/
 # Then open htmlcov/index.html
 ```
 
+## ✅ Completed Items
+
+### Use `base.py` Decorator (Completed)
+The `with_context_check` decorator from `base.py` is now used by the following nodes for consistent context handling:
+- `code_reviewer_node`
+- `execution_validator_node`
+- `physics_sanity_node`
+- `design_reviewer_node`
+- `comparison_validator_node`
+- `adapt_prompts_node`
+- `plan_reviewer_node`
+
+`base.py` now has 100% test coverage (was 0%).
+
 ## Low Priority (Future Improvements)
 
-### 1. Extract Common Patterns Further
+### 2. Extract Common Patterns Further
 Some patterns repeat across nodes:
 - LLM error handling (try/except with auto-approve fallback)
 - Revision counter incrementing
-- Context check handling
 
-These could potentially use the `with_context_check` decorator pattern more consistently.
-
-### 2. Split Large Modules
+### 3. Split Large Modules
 `supervision.py` and `analysis.py` are still relatively large. If they continue to grow, consider further decomposition.
 
-### 3. Add Integration Tests for Full Workflows
+### 4. Add Integration Tests for Full Workflows
 The current integration tests mock LLM calls. Consider adding end-to-end tests with recorded LLM responses for regression testing.
-
-### 4. Use `base.py` Decorator
-The `with_context_check` decorator in `base.py` is currently unused. Consider refactoring nodes to use it for consistent context handling.
 
 ---
 
 *Created after agents.py refactoring - December 2024*
+*Updated with improved coverage - December 2024*

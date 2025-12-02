@@ -83,9 +83,12 @@ class TestExecutionValidatorNode:
         
         assert result["execution_verdict"] == "pass"
 
-    @patch("src.agents.execution.check_context_or_escalate")
+    @patch("src.agents.base.check_context_or_escalate")
     def test_returns_escalation_on_context_overflow(self, mock_context):
-        """Should return escalation when context overflow."""
+        """Should return escalation when context overflow.
+        
+        Note: Patches base.py because execution_validator_node uses @with_context_check decorator.
+        """
         mock_context.return_value = {
             "awaiting_user_input": True,
             "pending_user_questions": ["Context overflow"],
@@ -170,9 +173,12 @@ class TestPhysicsSanityNode:
         
         assert result["physics_verdict"] == "pass"
 
-    @patch("src.agents.execution.check_context_or_escalate")
+    @patch("src.agents.base.check_context_or_escalate")
     def test_returns_escalation_on_context_overflow(self, mock_context):
-        """Should return escalation when context overflow."""
+        """Should return escalation when context overflow.
+        
+        Note: Patches base.py because physics_sanity_node uses @with_context_check decorator.
+        """
         mock_context.return_value = {
             "awaiting_user_input": True,
             "pending_user_questions": ["Context overflow"],

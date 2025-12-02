@@ -38,6 +38,7 @@ from src.llm_client import (
 
 from .helpers.context import check_context_or_escalate
 from .helpers.metrics import log_agent_call
+from .base import with_context_check
 
 
 def simulation_designer_node(state: ReproState) -> dict:
@@ -130,6 +131,7 @@ def simulation_designer_node(state: ReproState) -> dict:
     return result
 
 
+@with_context_check("design_review")
 def design_reviewer_node(state: ReproState) -> dict:
     """
     DesignReviewerAgent: Review simulation design before code generation.
@@ -139,15 +141,10 @@ def design_reviewer_node(state: ReproState) -> dict:
     IMPORTANT:
     - Sets `last_design_review_verdict` state field.
     - Increments `design_revision_count` when verdict is "needs_revision".
+    
+    Note: Context check is handled by @with_context_check decorator.
     """
     logger = logging.getLogger(__name__)
-    
-    # Context check
-    context_update = check_context_or_escalate(state, "design_review")
-    if context_update:
-        if context_update.get("awaiting_user_input"):
-            return context_update
-        state = {**state, **context_update}
 
     # Connect prompt adaptation
     system_prompt = build_agent_prompt("design_reviewer", state)
