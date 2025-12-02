@@ -2672,6 +2672,15 @@ def initialize_progress_from_plan(state: ReproState) -> ReproState:
             },
             "user_interactions": []
         }
+        
+    # Initialize metrics if not present
+    if "metrics" not in state:
+        state["metrics"] = {
+            "paper_id": paper_id,
+            "started_at": datetime.now().isoformat(),
+            "agent_calls": [],
+            "stage_metrics": []
+        }
     
     # Convert plan stages to progress stages
     # Only store EXECUTION STATE fields - design specs stay in plan

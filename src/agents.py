@@ -611,6 +611,11 @@ def execution_validator_node(state: ReproState) -> dict:
     # Connect prompt adaptation
     system_prompt = build_agent_prompt("execution_validator", state)
     
+    # Inject run_error into prompt if present
+    run_error = state.get("run_error")
+    if run_error:
+        system_prompt += f"\n\nCONTEXT: The previous execution failed with error:\n{run_error}\nAnalyze this error and suggest fixes."
+    
     # TODO: Implement execution validation logic
     # - Check completion status
     # - Verify output files exist
@@ -646,6 +651,20 @@ def execution_validator_node(state: ReproState) -> dict:
             "stage_id": state.get("current_stage_id"),
             "summary": "Execution validation stub - implement with LLM call",
         }
+    
+    # Check limits and prepare user question if needed
+    runtime_config = state.get("runtime_config", {})
+    max_failures = runtime_config.get("max_execution_failures", MAX_EXECUTION_FAILURES)
+    current_failures = state.get("execution_failure_count", 0)
+    
+    # If we are about to fail (verdict="fail") and will hit the limit
+    if agent_output["verdict"] == "fail" and (current_failures + 1) >= max_failures:
+        # Prepare for escalation
+        result["ask_user_trigger"] = "execution_failure_limit"
+        result["pending_user_questions"] = [
+            f"Execution failed {max_failures} times. Last error: {run_error or 'Unknown'}. "
+            "Options: RETRY_WITH_GUIDANCE (provide hint), SKIP_STAGE, or STOP?"
+        ]
     
     result = {
         "workflow_phase": "execution_validation",
@@ -1077,6 +1096,33 @@ def supervisor_node(state: ReproState) -> dict:
             else:
                 result["supervisor_verdict"] = "ok_continue"
         
+        # ─── BACKTRACK LIMIT ──────────────────────────────────────────────────
+        elif ask_user_trigger == "backtrack_limit":
+            response_text = ""
+            for q, r in user_responses.items():
+                response_text = r.upper() if isinstance(r, str) else str(r)
+                
+            if "STOP" in response_text:
+                result["supervisor_verdict"] = "all_complete"
+                result["should_stop"] = True
+            elif "SKIP" in response_text:
+                result["supervisor_verdict"] = "ok_continue"
+                if current_stage_id:
+                    update_progress_stage_status(state, current_stage_id, "blocked", 
+                                                summary="Skipped due to backtrack limit")
+            else:
+                # Default or FORCE_CONTINUE
+                # Reset backtrack count to give more tries? Or just proceed?
+                # If we proceed without resetting, we'll hit the limit again next time.
+                # So we must reset or bump the limit.
+                state["backtrack_count"] = 0 # Reset for this stage/context
+                result["supervisor_verdict"] = "backtrack_to_stage" # Try again?
+                # Actually, if we are here, we just finished handle_backtrack.
+                # If we want to continue backtracking, we need to allow it.
+                # But handle_backtrack already did the work.
+                # We just need to route to select_stage.
+                result["supervisor_verdict"] = "select_stage"
+                
         # ─── UNKNOWN/DEFAULT ──────────────────────────────────────────────────
         else:
             # Unknown trigger - default to continue
@@ -1551,6 +1597,23 @@ Please respond with your choice and any notes.
 def generate_report_node(state: ReproState) -> ReproState:
     """Generate final reproduction report."""
     state["workflow_phase"] = "reporting"
+    
+    # Compute token summary
+    if "metrics" in state:
+        total_input = 0
+        total_output = 0
+        for call in state["metrics"].get("agent_calls", []):
+            # Note: agent calls might not have token counts yet in stub, 
+            # but this logic prepares for it.
+            total_input += call.get("input_tokens", 0) or 0
+            total_output += call.get("output_tokens", 0) or 0
+            
+        state["metrics"]["token_summary"] = {
+            "total_input_tokens": total_input,
+            "total_output_tokens": total_output,
+            "estimated_cost": (total_input * 3.0 + total_output * 15.0) / 1_000_000 # Example pricing
+        }
+        
     # TODO: Implement report generation logic
     # - Compile figure comparisons
     # - Document assumptions
