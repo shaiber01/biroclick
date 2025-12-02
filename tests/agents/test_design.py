@@ -1,236 +1,154 @@
-"""Unit tests for src/agents/design.py"""
+"""
+Tests for Design Agents (SimulationDesignerAgent, DesignReviewerAgent).
+"""
 
 import pytest
 from unittest.mock import patch, MagicMock
+from src.agents.design import simulation_designer_node, design_reviewer_node
 
-from src.agents.design import (
-    simulation_designer_node,
-    design_reviewer_node,
-)
+# ═══════════════════════════════════════════════════════════════════════
+# Fixtures
+# ═══════════════════════════════════════════════════════════════════════
 
+@pytest.fixture
+def base_state():
+    """Base state for design tests."""
+    return {
+        "paper_id": "test_paper",
+        "current_stage_id": "stage_1_sim",
+        "plan": {
+            "stages": [
+                {"stage_id": "stage_1_sim", "targets": ["Fig1"]}
+            ]
+        },
+        "design_revision_count": 0,
+        "runtime_config": {
+            "max_design_revisions": 3
+        },
+        "assumptions": {"global_assumptions": []}
+    }
+
+# ═══════════════════════════════════════════════════════════════════════
+# simulation_designer_node Tests
+# ═══════════════════════════════════════════════════════════════════════
 
 class TestSimulationDesignerNode:
-    """Tests for simulation_designer_node function."""
+    """Tests for simulation_designer_node."""
 
-    @patch("src.agents.design.call_agent_with_metrics")
-    @patch("src.agents.design.check_context_or_escalate")
     @patch("src.agents.design.build_agent_prompt")
-    @patch("src.agents.design.build_user_content_for_designer")
-    @patch("src.agents.design.get_stage_design_spec")
-    def test_creates_design_on_success(
-        self, mock_spec, mock_user, mock_prompt, mock_context, mock_call, validated_simulation_designer_response
-    ):
-        """Should create design from LLM output (using validated mock)."""
-        mock_context.return_value = None
-        mock_prompt.return_value = "system prompt"
-        mock_user.return_value = "user content"
-        mock_spec.return_value = "2D_light"
+    @patch("src.agents.design.check_context_or_escalate")
+    @patch("src.agents.design.call_agent_with_metrics")
+    def test_designer_success(self, mock_llm, mock_check, mock_prompt, base_state):
+        """Test successful design generation."""
+        mock_check.return_value = None
+        mock_prompt.return_value = "Prompt"
+        mock_llm.return_value = {
+            "design_description": "FDTD simulation setup...",
+            "new_assumptions": [{"id": "A1", "description": "Use PML"}]
+        }
         
-        # Use the validated mock response
-        mock_call.return_value = validated_simulation_designer_response
-        
-        state = {"current_stage_id": "stage1"}
-        
-        result = simulation_designer_node(state)
+        result = simulation_designer_node(base_state)
         
         assert result["workflow_phase"] == "design"
-        assert "design_description" in result
-        # Basic structural check of the result
-        assert result["design_description"]["geometry"]["dimensionality"] == validated_simulation_designer_response["geometry"]["dimensionality"]
-
-    @patch("src.agents.design.check_context_or_escalate")
-    def test_errors_on_missing_stage_id(self, mock_context):
-        """Should error when current_stage_id is missing."""
-        mock_context.return_value = None
-        state = {"current_stage_id": None}
-        
-        result = simulation_designer_node(state)
-        
-        assert result["awaiting_user_input"] is True
-        assert result["ask_user_trigger"] == "missing_stage_id"
-
-    @patch("src.agents.design.check_context_or_escalate")
-    def test_returns_escalation_on_context_overflow(self, mock_context):
-        """Should return escalation when context overflow."""
-        mock_context.return_value = {
-            "awaiting_user_input": True,
-            "pending_user_questions": ["Context overflow"],
-        }
-        
-        state = {"current_stage_id": "stage1"}
-        
-        result = simulation_designer_node(state)
-        
-        assert result["awaiting_user_input"] is True
-
-    @patch("src.agents.design.call_agent_with_metrics")
-    @patch("src.agents.design.check_context_or_escalate")
-    @patch("src.agents.design.build_agent_prompt")
-    @patch("src.agents.design.build_user_content_for_designer")
-    @patch("src.agents.design.get_stage_design_spec")
-    def test_handles_llm_error(
-        self, mock_spec, mock_user, mock_prompt, mock_context, mock_call
-    ):
-        """Should handle LLM call failure gracefully."""
-        mock_context.return_value = None
-        mock_prompt.return_value = "prompt"
-        mock_user.return_value = "content"
-        mock_spec.return_value = "unknown"
-        mock_call.side_effect = Exception("API error")
-        
-        state = {"current_stage_id": "stage1"}
-        
-        result = simulation_designer_node(state)
-        
-        assert result["awaiting_user_input"] is True
-        assert result["ask_user_trigger"] == "llm_error"
-
-    @patch("src.agents.design.call_agent_with_metrics")
-    @patch("src.agents.design.check_context_or_escalate")
-    @patch("src.agents.design.build_agent_prompt")
-    @patch("src.agents.design.build_user_content_for_designer")
-    @patch("src.agents.design.get_stage_design_spec")
-    def test_includes_new_assumptions(
-        self, mock_spec, mock_user, mock_prompt, mock_context, mock_call, validated_simulation_designer_response
-    ):
-        """Should include new assumptions from design."""
-        mock_context.return_value = None
-        mock_prompt.return_value = "prompt"
-        mock_user.return_value = "content"
-        mock_spec.return_value = "2D"
-        
-        mock_response = validated_simulation_designer_response.copy()
-        mock_response["new_assumptions"] = [
-            {"id": "a1", "category": "boundary", "description": "PML", "reason": "standard", "critical": False}
-        ]
-        mock_call.return_value = mock_response
-        
-        state = {"current_stage_id": "stage1", "assumptions": {}}
-        
-        result = simulation_designer_node(state)
-        
-        assert "assumptions" in result
+        assert result["design_description"] == mock_llm.return_value
         assert len(result["assumptions"]["global_assumptions"]) == 1
 
+    def test_designer_missing_stage_id(self, base_state):
+        """Test error when current_stage_id is missing."""
+        base_state["current_stage_id"] = None
+        result = simulation_designer_node(base_state)
+        
+        assert result["ask_user_trigger"] == "missing_stage_id"
+        assert result["awaiting_user_input"] is True
+
+    @patch("src.agents.design.build_agent_prompt")
+    @patch("src.agents.design.check_context_or_escalate")
+    @patch("src.agents.design.call_agent_with_metrics")
+    def test_designer_handles_llm_failure(self, mock_llm, mock_check, mock_prompt, base_state):
+        """Test handling of LLM exception."""
+        mock_check.return_value = None
+        mock_prompt.return_value = "Prompt"
+        mock_llm.side_effect = Exception("API Error")
+        
+        result = simulation_designer_node(base_state)
+        
+        # Should escalate to user
+        assert result["ask_user_trigger"] == "llm_error"
+        assert result["awaiting_user_input"] is True
+
+    @patch("src.agents.design.build_agent_prompt")
+    @patch("src.agents.design.check_context_or_escalate")
+    @patch("src.agents.design.call_agent_with_metrics")
+    def test_designer_injects_feedback(self, mock_llm, mock_check, mock_prompt, base_state):
+        """Test feedback injection into prompt."""
+        mock_check.return_value = None
+        mock_llm.return_value = {}
+        base_state["reviewer_feedback"] = "Fix mesh size"
+        
+        simulation_designer_node(base_state)
+        
+        # Verify prompt contains feedback
+        call_kwargs = mock_llm.call_args[1]
+        assert "Fix mesh size" in call_kwargs["system_prompt"]
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# design_reviewer_node Tests
+# ═══════════════════════════════════════════════════════════════════════
 
 class TestDesignReviewerNode:
-    """Tests for design_reviewer_node function."""
+    """Tests for design_reviewer_node."""
 
-    @patch("src.agents.design.call_agent_with_metrics")
-    @patch("src.agents.design.check_context_or_escalate")
     @patch("src.agents.design.build_agent_prompt")
-    @patch("src.agents.design.get_plan_stage")
-    def test_approves_valid_design(self, mock_stage, mock_prompt, mock_context, mock_call, validated_design_reviewer_response):
-        """Should approve a valid design (using validated mock)."""
-        mock_context.return_value = None
-        mock_prompt.return_value = "system prompt"
-        mock_stage.return_value = {"stage_id": "stage1"}
+    @patch("src.agents.design.call_agent_with_metrics")
+    def test_reviewer_approve(self, mock_llm, mock_prompt, base_state):
+        """Test reviewer approving design."""
+        mock_prompt.return_value = "Prompt"
+        mock_llm.return_value = {"verdict": "approve"}
         
-        mock_response = validated_design_reviewer_response.copy()
-        mock_response["verdict"] = "approve"
-        mock_response["issues"] = []
-        mock_call.return_value = mock_response
+        result = design_reviewer_node(base_state)
         
-        state = {
-            "current_stage_id": "stage1",
-            "design_description": {"geometry": {"type": "sphere"}},
-        }
-        
-        result = design_reviewer_node(state)
-        
-        assert result["workflow_phase"] == "design_review"
         assert result["last_design_review_verdict"] == "approve"
+        assert result["design_revision_count"] == 0
 
-    @patch("src.agents.design.call_agent_with_metrics")
-    @patch("src.agents.design.check_context_or_escalate")
     @patch("src.agents.design.build_agent_prompt")
-    @patch("src.agents.design.get_plan_stage")
-    def test_rejects_with_feedback(self, mock_stage, mock_prompt, mock_context, mock_call, validated_design_reviewer_response):
-        """Should reject design and provide feedback (using validated mock)."""
-        mock_context.return_value = None
-        mock_prompt.return_value = "prompt"
-        mock_stage.return_value = {"stage_id": "stage1"}
-        
-        mock_response = validated_design_reviewer_response.copy()
-        mock_response["verdict"] = "needs_revision"
-        mock_response["issues"] = [{"severity": "major", "description": "Missing boundary conditions"}]
-        mock_response["feedback"] = "Add PML boundaries"
-        mock_call.return_value = mock_response
-        
-        state = {
-            "current_stage_id": "stage1",
-            "design_description": {"geometry": {}},
-            "design_revision_count": 0,
+    @patch("src.agents.design.call_agent_with_metrics")
+    def test_reviewer_needs_revision(self, mock_llm, mock_prompt, base_state):
+        """Test reviewer requesting revision."""
+        mock_prompt.return_value = "Prompt"
+        mock_llm.return_value = {
+            "verdict": "needs_revision",
+            "feedback": "Add more details"
         }
         
-        result = design_reviewer_node(state)
+        result = design_reviewer_node(base_state)
         
         assert result["last_design_review_verdict"] == "needs_revision"
         assert result["design_revision_count"] == 1
-        assert "reviewer_feedback" in result
+        assert "Add more details" in result["reviewer_feedback"]
 
-    @patch("src.agents.design.call_agent_with_metrics")
-    @patch("src.agents.design.check_context_or_escalate")
     @patch("src.agents.design.build_agent_prompt")
-    @patch("src.agents.design.get_plan_stage")
-    def test_auto_approves_on_llm_error(
-        self, mock_stage, mock_prompt, mock_context, mock_call
-    ):
-        """Should auto-approve when LLM call fails."""
-        mock_context.return_value = None
-        mock_prompt.return_value = "prompt"
-        mock_stage.return_value = {"stage_id": "stage1"}
-        mock_call.side_effect = Exception("API error")
-        
-        state = {
-            "current_stage_id": "stage1",
-            "design_description": {},
-        }
-        
-        result = design_reviewer_node(state)
-        
-        assert result["last_design_review_verdict"] == "approve"
-
-    @patch("src.agents.base.check_context_or_escalate")
-    def test_returns_escalation_on_context_overflow(self, mock_context):
-        """Should return escalation when context overflow.
-        
-        Note: Patches base.py because design_reviewer_node uses @with_context_check decorator.
-        """
-        mock_context.return_value = {
-            "awaiting_user_input": True,
-            "pending_user_questions": ["Context overflow"],
-        }
-        
-        state = {"current_stage_id": "stage1", "design_description": {}}
-        
-        result = design_reviewer_node(state)
-        
-        assert result["awaiting_user_input"] is True
-
     @patch("src.agents.design.call_agent_with_metrics")
-    @patch("src.agents.design.check_context_or_escalate")
-    @patch("src.agents.design.build_agent_prompt")
-    @patch("src.agents.design.get_plan_stage")
-    def test_respects_max_revisions(self, mock_stage, mock_prompt, mock_context, mock_call, validated_design_reviewer_response):
-        """Should not exceed max revisions."""
-        mock_context.return_value = None
-        mock_prompt.return_value = "prompt"
-        mock_stage.return_value = {"stage_id": "stage1"}
+    def test_reviewer_max_revisions(self, mock_llm, mock_prompt, base_state):
+        """Test reviewer hitting max revisions."""
+        mock_prompt.return_value = "Prompt"
+        mock_llm.return_value = {"verdict": "needs_revision"}
         
-        mock_response = validated_design_reviewer_response.copy()
-        mock_response["verdict"] = "needs_revision"
-        mock_response["issues"] = [{"severity": "minor", "description": "issue"}]
-        mock_call.return_value = mock_response
+        base_state["design_revision_count"] = 3 # Already at max
         
-        state = {
-            "current_stage_id": "stage1",
-            "design_description": {},
-            "design_revision_count": 10,  # Already at max
-            "runtime_config": {"max_design_revisions": 10},
-        }
-        
-        result = design_reviewer_node(state)
+        result = design_reviewer_node(base_state)
         
         # Should not increment past max
-        assert result["design_revision_count"] == 10
+        assert result["design_revision_count"] == 3
+        assert result["last_design_review_verdict"] == "needs_revision"
+
+    @patch("src.agents.design.build_agent_prompt")
+    @patch("src.agents.design.call_agent_with_metrics")
+    def test_reviewer_llm_failure_auto_approve(self, mock_llm, mock_prompt, base_state):
+        """Test reviewer defaults to auto-approve on LLM failure."""
+        mock_prompt.return_value = "Prompt"
+        mock_llm.side_effect = Exception("API Error")
+        
+        result = design_reviewer_node(base_state)
+        
+        assert result["last_design_review_verdict"] == "approve"

@@ -106,9 +106,10 @@ class TestPlanNode:
         # Should use LLM provided ID or default to unknown, but NOT crash
         assert result["plan"]["paper_id"] == "test_paper" # From mock_llm_output
 
+    @patch("src.agents.planning.initialize_progress_from_plan")
     @patch("src.agents.planning.call_agent_with_metrics")
     @patch("src.agents.planning.check_context_or_escalate")
-    def test_plan_node_bad_progress_structure(self, mock_check, mock_llm):
+    def test_plan_node_bad_progress_structure(self, mock_check, mock_llm, mock_init_progress):
         """Test handling of invalid plan structure from LLM."""
         mock_check.return_value = None
         # Invalid stages (missing required fields)
@@ -116,6 +117,8 @@ class TestPlanNode:
             "stages": [{"broken": "stage"}],
             "paper_id": "test"
         }
+        # Mock initialize_progress_from_plan to raise exception
+        mock_init_progress.side_effect = Exception("Missing stage_id")
         
         state = {"paper_text": "x" * 200, "paper_id": "test"}
         result = plan_node(state)

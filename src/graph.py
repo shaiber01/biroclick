@@ -157,7 +157,13 @@ def route_after_supervisor(state: ReproState) -> Literal["select_stage", "plan",
         save_checkpoint(state, checkpoint_name)
         
         # MANDATORY: Material checkpoint after Stage 0 completes
+        # IMPORTANT: Check if we just finished material validation checkpoint to prevent loop
         if current_stage_type == "MATERIAL_VALIDATION":
+            # If we just came from material checkpoint (verified by user responses), 
+            # proceed to select_stage instead of looping back to checkpoint.
+            user_responses = state.get("user_responses", {})
+            if "material_checkpoint" in user_responses:
+                return "select_stage"
             return "material_checkpoint"
         
         return "select_stage"
