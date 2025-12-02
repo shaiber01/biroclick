@@ -188,7 +188,8 @@ def plan_node(state: ReproState) -> dict:
             "reproducible_figure_ids": [], # Initialize empty list to satisfy schema
             "expected_outputs": [],        # Initialize empty list for outputs
             # ... other plan fields would be populated by LLM ...
-        }
+        },
+        "planned_materials": [], # Populated by PlannerAgent, used by Stage 0
         # state["plan"] = generated_plan
         # state["assumptions"] = generated_assumptions
         # state["planned_materials"] = extracted_materials
@@ -408,6 +409,7 @@ def select_stage_node(state: ReproState) -> dict:
             "workflow_phase": "stage_selection",
             "current_stage_id": stage.get("stage_id"),
             "current_stage_type": stage_type,
+            "stage_start_time": datetime.now(timezone.utc).isoformat(),
             # Reset per-stage counters when entering a new stage
             "design_revision_count": 0,
             "code_revision_count": 0,
@@ -757,6 +759,15 @@ def results_analyzer_node(state: ReproState) -> ReproState:
     from schemas.state import get_stage_design_spec
     criteria = get_stage_design_spec(state, state.get("current_stage_id"), "validation_criteria", [])
     ref_data = get_stage_design_spec(state, state.get("current_stage_id"), "reference_data_path", None)
+    
+    # Get files to analyze
+    output_files = state.get("stage_outputs", {}).get("files", [])
+    system_prompt += f"\n\nFILES_TO_ANALYZE: {output_files}"
+    
+    # Check for previous feedback if this is a revision
+    feedback = state.get("analysis_feedback")
+    if feedback:
+        system_prompt += f"\n\nNOTE: This is a revision. Previous analysis was rejected: {feedback}"
     
     # TODO: Implement analysis logic
     # - Compare simulation outputs to paper figures

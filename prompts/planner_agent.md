@@ -310,6 +310,14 @@ You must output a JSON object with these sections:
     }
   ],
   
+  "planned_materials": [
+    {
+      "material_id": "string (unique)",
+      "name": "string (human readable)",
+      "path": "string (path to csv or null)"
+    }
+  ],
+  
   "targets": [
     {
       "figure_id": "Fig3a",

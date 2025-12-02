@@ -2995,6 +2995,9 @@ def archive_stage_outputs_to_progress(
                 stage["runtime_seconds"] = stage_outputs["runtime_seconds"]
                 actual_runtime = stage_outputs["runtime_seconds"]
             
+            # Update global total runtime
+            state["total_runtime_seconds"] = state.get("total_runtime_seconds", 0.0) + actual_runtime
+            
             # Also record to metrics
             if "metrics" in state and "stage_metrics" in state["metrics"]:
                 # Check if metric exists for this stage to avoid dupes
