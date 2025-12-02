@@ -82,6 +82,7 @@ class TestSimulationDesignerNode:
     def test_designer_injects_feedback(self, mock_llm, mock_check, mock_prompt, base_state):
         """Test feedback injection into prompt."""
         mock_check.return_value = None
+        mock_prompt.return_value = "Prompt" # Ensure it returns a string
         mock_llm.return_value = {}
         base_state["reviewer_feedback"] = "Fix mesh size"
         
