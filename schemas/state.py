@@ -196,18 +196,38 @@ def get_validation_hierarchy(state: dict) -> "ValidationHierarchyStatus":
         return hierarchy
     
     # Compute hierarchy from stage statuses
+    # Aggregation logic:
+    # - If ANY stage of a type is "failed", "blocked", "invalidated", or "needs_rerun" -> type is "failed" (blocking)
+    # - If ALL stages of a type are "completed_success" -> type is "passed"
+    # - If stages are mixed "completed_success"/"completed_partial" -> type is "partial"
+    # - If ANY stage is "not_started"/"in_progress" -> type is "not_done"
+    
+    # First, collect all statuses for each hierarchy key
+    status_map = {k: [] for k in hierarchy.keys()}
+    
     for stage in stages:
         stage_type = stage.get("stage_type")
         stage_status = stage.get("status", "not_started")
         
-        # Get hierarchy key for this stage type
         hierarchy_key = STAGE_TYPE_TO_HIERARCHY_KEY.get(stage_type)
-        if not hierarchy_key:
-            continue  # Not a validation stage (e.g., COMPLEX_PHYSICS)
-        
-        # Get hierarchy value for this status
-        hierarchy_value = STAGE_STATUS_TO_HIERARCHY_MAPPING.get(stage_status, "not_done")
-        hierarchy[hierarchy_key] = hierarchy_value
+        if hierarchy_key and hierarchy_key in status_map:
+            status_map[hierarchy_key].append(stage_status)
+            
+    # Now compute aggregate status for each key
+    for key, statuses in status_map.items():
+        if not statuses:
+            hierarchy[key] = "not_done" # No stages of this type exist/planned yet
+            continue
+            
+        if any(s in ["completed_failed", "blocked", "invalidated", "needs_rerun"] for s in statuses):
+            hierarchy[key] = "failed"
+        elif any(s in ["not_started", "in_progress"] for s in statuses):
+            hierarchy[key] = "not_done"
+        elif all(s == "completed_success" for s in statuses):
+            hierarchy[key] = "passed"
+        else:
+            # Mixed success/partial implies partial
+            hierarchy[key] = "partial"
     
     return hierarchy
 

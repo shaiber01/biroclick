@@ -195,6 +195,11 @@ def plan_node(state: ReproState) -> dict:
     # ═══════════════════════════════════════════════════════════════════════
     if result.get("plan") and result["plan"].get("stages"):
         state_with_plan = {**state, **result}
+        # Force reset of progress on replan to ensure sync
+        if "progress" in state_with_plan:
+            # Backup old progress for history if needed, but clear active progress
+            state_with_plan["progress"] = None 
+            
         state_with_plan = initialize_progress_from_plan(state_with_plan)
         state_with_plan = sync_extracted_parameters(state_with_plan)
         result["progress"] = state_with_plan.get("progress")
@@ -437,8 +442,13 @@ def simulation_designer_node(state: ReproState) -> dict:
     # Connect prompt adaptation
     system_prompt = build_agent_prompt("simulation_designer", state)
     
+    # Inject complexity class from plan
+    from schemas.state import get_stage_design_spec
+    complexity_class = get_stage_design_spec(state, state.get("current_stage_id"), "complexity_class", "unknown")
+    
     # TODO: Implement design logic
     # - Interpret geometry from plan
+    # - Use complexity_class ({complexity_class}) to determine resolution/dimensions
     # - Select materials from validated_materials (Stage 1+) or planned_materials (Stage 0)
     # - Configure sources, BCs, monitors
     # - Estimate performance
@@ -609,13 +619,25 @@ def execution_validator_node(state: ReproState) -> dict:
     # - Parse agent output per execution_validator_output_schema.json
     
     run_error = state.get("run_error")
+    
+    # Check fallback strategy if we are about to fail
+    from schemas.state import get_stage_design_spec
+    fallback = get_stage_design_spec(state, state.get("current_stage_id"), "fallback_strategy", "ask_user")
+    
     if run_error and "TIMEOUT_ERROR" in run_error:
-        # Auto-fail on timeout if not handled by LLM
-        agent_output = {
-            "verdict": "fail",
-            "stage_id": state.get("current_stage_id"),
-            "summary": f"Execution timed out: {run_error}",
-        }
+        if fallback == "skip_with_warning":
+             agent_output = {
+                "verdict": "pass", # Technically pass to move on, but status will be blocked/partial
+                "stage_id": state.get("current_stage_id"),
+                "summary": f"Execution timed out (skip_with_warning): {run_error}",
+            }
+        else:
+            # Auto-fail on timeout if not handled by LLM
+            agent_output = {
+                "verdict": "fail",
+                "stage_id": state.get("current_stage_id"),
+                "summary": f"Execution timed out: {run_error}",
+            }
     else:
         # STUB: Replace with actual LLM call
         agent_output = {
@@ -706,9 +728,11 @@ def results_analyzer_node(state: ReproState) -> ReproState:
     # Fetch specific validation criteria for this stage
     from schemas.state import get_stage_design_spec
     criteria = get_stage_design_spec(state, state.get("current_stage_id"), "validation_criteria", [])
+    ref_data = get_stage_design_spec(state, state.get("current_stage_id"), "reference_data_path", None)
     
     # TODO: Implement analysis logic
     # - Compare simulation outputs to paper figures
+    # - Use reference_data_path ({ref_data}) for quantitative comparison if available
     # - Evaluate against validation_criteria
     # - Compute discrepancies
     # - Classify reproduction quality
