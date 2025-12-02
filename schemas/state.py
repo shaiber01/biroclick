@@ -996,14 +996,39 @@ def create_initial_state(
         # Metrics tracking
         metrics={
             "paper_id": paper_id,
-            "started_at": datetime.now().isoformat(),
+            "started_at": datetime.now(timezone.utc).isoformat(),
             "completed_at": None,
+            "total_duration_seconds": None,
             "final_status": "in_progress",
             "agent_calls": [],
             "stage_metrics": [],
-            "total_input_tokens": 0,
-            "total_output_tokens": 0,
-            "prompt_adaptations_count": 0
+            "revision_summary": {
+                "total_design_revisions": 0,
+                "total_code_revisions": 0,
+                "total_analysis_revisions": 0,
+                "replans": 0,
+                "user_interventions": 0,
+                "revision_reasons": []
+            },
+            "token_summary": {
+                "total_input_tokens": 0,
+                "total_output_tokens": 0,
+                "by_agent": {},
+                "by_model": {}
+            },
+            "prompt_adaptations": {
+                "adaptations_count": 0,
+                "agents_modified": [],
+                "adaptation_types": {}
+            },
+            "reproduction_quality": {
+                "figures_targeted": 0,
+                "figures_reproduced": 0,
+                "success_count": 0,
+                "partial_count": 0,
+                "failure_count": 0,
+                "success_rate": 0.0
+            }
         },
         
         # Paper figures (populated from PaperInput)
@@ -2939,12 +2964,33 @@ def archive_stage_outputs_to_progress(
             stage["last_updated"] = datetime.now(timezone.utc).isoformat()
             
             # Record runtime if available
+            actual_runtime = 0.0
             if runtime_seconds is not None:
                 stage["runtime_seconds"] = runtime_seconds
+                actual_runtime = runtime_seconds
             elif "runtime_seconds" in stage_outputs:
                 stage["runtime_seconds"] = stage_outputs["runtime_seconds"]
+                actual_runtime = stage_outputs["runtime_seconds"]
+            
+            # Also record to metrics
+            if "metrics" in state and "stage_metrics" in state["metrics"]:
+                # Check if metric exists for this stage to avoid dupes
+                existing = next((m for m in state["metrics"]["stage_metrics"] if m["stage_id"] == stage_id), None)
+                if not existing:
+                    metric_entry = {
+                        "stage_id": stage_id,
+                        "stage_type": stage.get("stage_type", "unknown"),
+                        "simulation_runtime_seconds": actual_runtime,
+                        "completed_at": datetime.now(timezone.utc).isoformat(),
+                        "final_status": "success" # Assumed, updated by logic
+                    }
+                    state["metrics"]["stage_metrics"].append(metric_entry)
+                else:
+                    # Update existing
+                    existing["simulation_runtime_seconds"] = actual_runtime
+                    existing["completed_at"] = datetime.now(timezone.utc).isoformat()
             break
-    
+            
     return state
 
 

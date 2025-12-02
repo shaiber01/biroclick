@@ -427,6 +427,14 @@ def run_simulation(
                 error_msg = "Process killed (likely resource limit)"
             else:
                 error_msg = f"Simulation failed with exit code {result.returncode}"
+        else:
+            # Check for divergence or NaN even if exit code is 0
+            stdout_lower = result.stdout.lower()
+            stderr_lower = result.stderr.lower()
+            if "nan" in stdout_lower or "inf" in stdout_lower or "diverged" in stdout_lower:
+                 error_msg = "Simulation diverged (NaN/Inf detected)"
+            if "nan" in stderr_lower or "inf" in stderr_lower:
+                 error_msg = "Simulation diverged (NaN/Inf detected in stderr)"
         
         # List output files (excluding the script itself)
         output_files = _list_output_files(output_dir, exclude=[script_name])

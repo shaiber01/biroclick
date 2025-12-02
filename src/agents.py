@@ -186,6 +186,7 @@ def plan_node(state: ReproState) -> dict:
         "workflow_phase": "planning",
         "plan": {
             "reproducible_figure_ids": [], # Initialize empty list to satisfy schema
+            "expected_outputs": [],        # Initialize empty list for outputs
             # ... other plan fields would be populated by LLM ...
         }
         # state["plan"] = generated_plan
@@ -1287,6 +1288,8 @@ def ask_user_node(state: ReproState) -> Dict[str, Any]:
         if hasattr(signal, 'SIGALRM'):
             old_handler = signal.signal(signal.SIGALRM, timeout_handler)
             signal.alarm(timeout_seconds)
+        else:
+            print(f"NOTE: Timeout of {timeout_seconds}s disabled (Windows/non-Unix detected).")
         
         for i, question in enumerate(questions, 1):
             print(f"\n--- Question {i}/{len(questions)} ---")
