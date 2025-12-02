@@ -2,7 +2,7 @@
   "$schema": "./material_schema.json",
   "title": "Materials Index",
   "description": "Index of available optical material data for Meep simulations",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "last_updated": "2024-12-02",
   
   "status": {
@@ -34,8 +34,14 @@
       "segura_hbn.csv",
       "li_mos2.csv"
     ],
-    "planned_csv_files": [],
-    "note": "Comprehensive material library for plasmonics, photonics, and metasurfaces. Data sourced from refractiveindex.info which compiles standard references."
+    "features": {
+      "temperature_corrections": true,
+      "thin_film_corrections": true,
+      "uncertainty_estimates": true,
+      "alternative_fits": true,
+      "validation_script": "validate_materials.py"
+    },
+    "note": "Comprehensive material library for plasmonics, photonics, and metasurfaces. Includes temperature and thin-film corrections for metals."
   },
   
   "materials": [
@@ -61,7 +67,59 @@
         "fit_quality": "good",
         "fit_wavelength_range_nm": [300, 1000]
       },
-      "notes": "Lowest optical losses among noble metals. Excellent for high-Q plasmonic resonances. Tarnishes in air.",
+      "alternative_fits": {
+        "visible_only": {
+          "description": "Optimized for visible range (400-700nm)",
+          "fit_wavelength_range_nm": [400, 700],
+          "eps_inf": 1.0,
+          "drude_terms": [{"omega_p_eV": 9.17, "gamma_eV": 0.021}],
+          "lorentz_terms": [],
+          "fit_quality": "excellent"
+        },
+        "nir_extended": {
+          "description": "Extended to NIR with better accuracy above 800nm",
+          "fit_wavelength_range_nm": [600, 1200],
+          "eps_inf": 1.0,
+          "drude_terms": [{"omega_p_eV": 9.01, "gamma_eV": 0.048}],
+          "lorentz_terms": [],
+          "fit_quality": "good"
+        }
+      },
+      "temperature_correction": {
+        "reference_temperature_K": 300,
+        "valid_temperature_range_K": [77, 600],
+        "drude_gamma_coefficient": 0.003,
+        "model": "linear_gamma",
+        "thermal_expansion_coefficient": 1.89e-5,
+        "notes": "Damping increases ~0.3% per K. At cryogenic temps (77K), gamma reduces to ~0.016 eV."
+      },
+      "thin_film_correction": {
+        "bulk_data": true,
+        "critical_thickness_nm": 20,
+        "gamma_multiplier": 2.5,
+        "mean_free_path_nm": 52,
+        "surface_scattering_model": "fuchs-sondheimer",
+        "grain_boundary_reflection": 0.3,
+        "notes": "For films <20nm, multiply Drude gamma by 2-3x. Single-crystal films have lower losses."
+      },
+      "uncertainty": {
+        "n_uncertainty_percent": 3,
+        "k_uncertainty_percent": 5,
+        "uncertainty_source": "Comparison of J&C 1972 vs Palik vs McPeak 2015 data",
+        "wavelength_dependent": true,
+        "high_uncertainty_regions": [
+          {
+            "wavelength_range_nm": [300, 350],
+            "uncertainty_percent": 15,
+            "reason": "Interband transition region - sample dependent"
+          }
+        ]
+      },
+      "comparison_references": [
+        {"reference": "Palik Handbook (1998)", "agreement": "excellent"},
+        {"reference": "McPeak et al., ACS Photonics 2, 326 (2015)", "doi": "10.1021/ph5004237", "agreement": "good", "notes": "Single-crystal shows ~20% lower losses"}
+      ],
+      "notes": "Lowest optical losses among noble metals. Excellent for high-Q plasmonic resonances. Tarnishes in air - use protective layer or work in inert atmosphere.",
       "csv_available": true
     },
     
@@ -85,6 +143,61 @@
         "fit_quality": "good",
         "fit_wavelength_range_nm": [500, 1500]
       },
+      "alternative_fits": {
+        "nir_only": {
+          "description": "NIR range avoiding interband transitions",
+          "fit_wavelength_range_nm": [700, 2000],
+          "eps_inf": 1.0,
+          "drude_terms": [{"omega_p_eV": 9.03, "gamma_eV": 0.053}],
+          "lorentz_terms": [],
+          "fit_quality": "excellent"
+        },
+        "full_visible": {
+          "description": "Full visible including interband region",
+          "fit_wavelength_range_nm": [400, 800],
+          "eps_inf": 6.0,
+          "drude_terms": [{"omega_p_eV": 8.45, "gamma_eV": 0.065}],
+          "lorentz_terms": [
+            {"omega_0_eV": 2.70, "gamma_eV": 0.50, "sigma": 1.1},
+            {"omega_0_eV": 3.35, "gamma_eV": 0.80, "sigma": 0.9}
+          ],
+          "fit_quality": "good"
+        }
+      },
+      "temperature_correction": {
+        "reference_temperature_K": 300,
+        "valid_temperature_range_K": [77, 800],
+        "drude_gamma_coefficient": 0.0028,
+        "model": "linear_gamma",
+        "thermal_expansion_coefficient": 1.42e-5,
+        "notes": "Gold is more temperature-stable than Ag. Interband transitions shift slightly with T."
+      },
+      "thin_film_correction": {
+        "bulk_data": true,
+        "critical_thickness_nm": 15,
+        "gamma_multiplier": 2.0,
+        "mean_free_path_nm": 38,
+        "surface_scattering_model": "fuchs-sondheimer",
+        "grain_boundary_reflection": 0.25,
+        "notes": "Template-stripped gold films can approach bulk values even at ~50nm thickness."
+      },
+      "uncertainty": {
+        "n_uncertainty_percent": 3,
+        "k_uncertainty_percent": 5,
+        "uncertainty_source": "Comparison of Palik vs J&C vs Olmon data",
+        "wavelength_dependent": true,
+        "high_uncertainty_regions": [
+          {
+            "wavelength_range_nm": [450, 550],
+            "uncertainty_percent": 10,
+            "reason": "Interband transition onset - sensitive to sample quality"
+          }
+        ]
+      },
+      "comparison_references": [
+        {"reference": "Johnson & Christy, PRB 6, 4370 (1972)", "doi": "10.1103/PhysRevB.6.4370", "agreement": "excellent"},
+        {"reference": "Olmon et al., PRB 86, 235147 (2012)", "doi": "10.1103/PhysRevB.86.235147", "agreement": "good", "notes": "Template-stripped single-crystal data"}
+      ],
       "notes": "Chemically stable, biocompatible. Strong interband transitions below 500nm. Best for resonances >500nm.",
       "csv_available": true
     },
@@ -110,7 +223,46 @@
         "fit_quality": "good",
         "fit_wavelength_range_nm": [600, 1000]
       },
-      "notes": "Cheaper than Au/Ag with good plasmonic properties above 600nm. Interband transitions ~590nm cause reddish color. Oxidizes in air.",
+      "alternative_fits": {
+        "nir_only": {
+          "description": "NIR avoiding interband region",
+          "fit_wavelength_range_nm": [650, 1200],
+          "eps_inf": 1.0,
+          "drude_terms": [{"omega_p_eV": 10.83, "gamma_eV": 0.047}],
+          "lorentz_terms": [],
+          "fit_quality": "excellent"
+        }
+      },
+      "temperature_correction": {
+        "reference_temperature_K": 300,
+        "valid_temperature_range_K": [77, 500],
+        "drude_gamma_coefficient": 0.0035,
+        "model": "linear_gamma",
+        "thermal_expansion_coefficient": 1.65e-5,
+        "notes": "Similar T-dependence to Au. Interband transition at 590nm shifts slightly with T."
+      },
+      "thin_film_correction": {
+        "bulk_data": true,
+        "critical_thickness_nm": 20,
+        "gamma_multiplier": 2.2,
+        "mean_free_path_nm": 40,
+        "surface_scattering_model": "fuchs-sondheimer",
+        "notes": "Oxidizes rapidly - freshly deposited or protected films required."
+      },
+      "uncertainty": {
+        "n_uncertainty_percent": 4,
+        "k_uncertainty_percent": 6,
+        "uncertainty_source": "J&C 1972 is primary reference",
+        "wavelength_dependent": true,
+        "high_uncertainty_regions": [
+          {
+            "wavelength_range_nm": [550, 620],
+            "uncertainty_percent": 12,
+            "reason": "Interband transition - sample oxidation affects this region"
+          }
+        ]
+      },
+      "notes": "Cheaper than Au/Ag with good plasmonic properties above 600nm. Interband transitions ~590nm cause reddish color. Oxidizes rapidly in air.",
       "csv_available": true
     },
     
@@ -136,7 +288,50 @@
         "fit_quality": "excellent",
         "fit_wavelength_range_nm": [200, 1000]
       },
-      "notes": "Preferred for UV plasmonics due to high plasma frequency. Native oxide layer (Al2O3, ~2-3nm) may shift resonances.",
+      "alternative_fits": {
+        "uv_optimized": {
+          "description": "Optimized for UV range",
+          "fit_wavelength_range_nm": [200, 400],
+          "eps_inf": 1.0,
+          "drude_terms": [{"omega_p_eV": 15.3, "gamma_eV": 0.058}],
+          "lorentz_terms": [{"omega_0_eV": 1.5, "gamma_eV": 0.32, "sigma": 0.22}],
+          "fit_quality": "excellent"
+        }
+      },
+      "temperature_correction": {
+        "reference_temperature_K": 300,
+        "valid_temperature_range_K": [77, 500],
+        "drude_gamma_coefficient": 0.004,
+        "model": "linear_gamma",
+        "thermal_expansion_coefficient": 2.31e-5,
+        "notes": "High plasma frequency makes Al good for UV even at elevated T."
+      },
+      "thin_film_correction": {
+        "bulk_data": true,
+        "critical_thickness_nm": 15,
+        "gamma_multiplier": 2.5,
+        "mean_free_path_nm": 16,
+        "surface_scattering_model": "fuchs-sondheimer",
+        "notes": "Native oxide (2-3nm Al2O3) always present. Include oxide layer in simulations."
+      },
+      "uncertainty": {
+        "n_uncertainty_percent": 5,
+        "k_uncertainty_percent": 8,
+        "uncertainty_source": "Rakic BB model fit uncertainty",
+        "wavelength_dependent": true,
+        "high_uncertainty_regions": [
+          {
+            "wavelength_range_nm": [780, 850],
+            "uncertainty_percent": 15,
+            "reason": "Interband transition region with anomalous dispersion"
+          }
+        ]
+      },
+      "comparison_references": [
+        {"reference": "Palik Handbook (1998)", "agreement": "good"},
+        {"reference": "McPeak et al., ACS Photonics (2015)", "agreement": "good"}
+      ],
+      "notes": "Best for UV plasmonics due to high plasma frequency. Native oxide (Al2O3, ~2-3nm) always present and may shift resonances.",
       "csv_available": true
     },
     
@@ -159,7 +354,26 @@
         "fit_quality": "moderate",
         "fit_wavelength_range_nm": [600, 2000]
       },
-      "notes": "Refractory plasmonic material - stable at high temperatures where Au/Ag melt. CMOS compatible. Gold-like color. Properties depend on stoichiometry.",
+      "temperature_correction": {
+        "reference_temperature_K": 300,
+        "valid_temperature_range_K": [300, 1500],
+        "drude_gamma_coefficient": 0.001,
+        "model": "linear_gamma",
+        "notes": "TiN is refractory - maintains plasmonic properties up to 1200°C. Much more stable than Au/Ag."
+      },
+      "thin_film_correction": {
+        "bulk_data": false,
+        "critical_thickness_nm": 50,
+        "gamma_multiplier": 1.5,
+        "notes": "Properties vary significantly with deposition conditions (sputtering vs ALD vs epitaxial)."
+      },
+      "uncertainty": {
+        "n_uncertainty_percent": 15,
+        "k_uncertainty_percent": 20,
+        "uncertainty_source": "Strong dependence on stoichiometry and deposition",
+        "notes": "TiN properties vary widely - use data specific to your deposition method if available."
+      },
+      "notes": "Refractory plasmonic material - stable at high temps where Au/Ag melt. CMOS compatible. Properties depend strongly on stoichiometry.",
       "csv_available": true
     },
     
@@ -175,14 +389,23 @@
       "common_applications": ["adhesion layers", "protective coatings", "absorbers"],
       "drude_lorentz_fit": {
         "eps_inf": 1.0,
-        "drude_terms": [
-          {"omega_p_eV": 10.75, "gamma_eV": 0.47}
-        ],
+        "drude_terms": [{"omega_p_eV": 10.75, "gamma_eV": 0.47}],
         "lorentz_terms": [],
         "fit_quality": "moderate",
         "fit_wavelength_range_nm": [400, 1000]
       },
-      "notes": "Common adhesion layer (2-5nm) between substrates and Au/Ag films. High optical losses. Very hard metal.",
+      "thin_film_correction": {
+        "bulk_data": true,
+        "critical_thickness_nm": 5,
+        "gamma_multiplier": 1.5,
+        "notes": "Typically used as 2-5nm adhesion layer. Thin films have similar properties to bulk."
+      },
+      "uncertainty": {
+        "n_uncertainty_percent": 5,
+        "k_uncertainty_percent": 8,
+        "uncertainty_source": "J&C 1974"
+      },
+      "notes": "Common adhesion layer (2-5nm) between substrates and Au/Ag films. High optical losses - avoid for plasmonics.",
       "csv_available": true
     },
     
@@ -198,12 +421,21 @@
       "common_applications": ["adhesion layers", "biomedical", "aerospace"],
       "drude_lorentz_fit": {
         "eps_inf": 1.0,
-        "drude_terms": [
-          {"omega_p_eV": 7.29, "gamma_eV": 0.38}
-        ],
+        "drude_terms": [{"omega_p_eV": 7.29, "gamma_eV": 0.38}],
         "lorentz_terms": [],
         "fit_quality": "moderate",
         "fit_wavelength_range_nm": [400, 1000]
+      },
+      "thin_film_correction": {
+        "bulk_data": true,
+        "critical_thickness_nm": 5,
+        "gamma_multiplier": 1.3,
+        "notes": "Forms native TiO2 layer (~2nm). Used as adhesion layer for Al."
+      },
+      "uncertainty": {
+        "n_uncertainty_percent": 5,
+        "k_uncertainty_percent": 8,
+        "uncertainty_source": "J&C 1974"
       },
       "notes": "Used as adhesion layer for Al films. Forms native TiO2 oxide. High losses, not for plasmonics.",
       "csv_available": true
@@ -221,12 +453,15 @@
       "common_applications": ["magneto-optics", "magnetic plasmonics", "catalysis"],
       "drude_lorentz_fit": {
         "eps_inf": 1.0,
-        "drude_terms": [
-          {"omega_p_eV": 15.92, "gamma_eV": 0.048}
-        ],
+        "drude_terms": [{"omega_p_eV": 15.92, "gamma_eV": 0.048}],
         "lorentz_terms": [],
         "fit_quality": "moderate",
         "fit_wavelength_range_nm": [400, 1000]
+      },
+      "uncertainty": {
+        "n_uncertainty_percent": 5,
+        "k_uncertainty_percent": 8,
+        "uncertainty_source": "J&C 1974"
       },
       "notes": "Ferromagnetic metal for magneto-optical applications. Higher losses than noble metals but enables magnetic control.",
       "csv_available": true
@@ -244,12 +479,15 @@
       "common_applications": ["catalysis", "electrochemistry", "high-temperature"],
       "drude_lorentz_fit": {
         "eps_inf": 1.0,
-        "drude_terms": [
-          {"omega_p_eV": 9.59, "gamma_eV": 0.08}
-        ],
+        "drude_terms": [{"omega_p_eV": 9.59, "gamma_eV": 0.08}],
         "lorentz_terms": [],
         "fit_quality": "moderate",
         "fit_wavelength_range_nm": [400, 1000]
+      },
+      "uncertainty": {
+        "n_uncertainty_percent": 5,
+        "k_uncertainty_percent": 8,
+        "uncertainty_source": "Rakic 1998"
       },
       "notes": "Noble metal with excellent chemical stability and catalytic activity. Does not oxidize. Higher losses than Au/Ag.",
       "csv_available": true
@@ -267,12 +505,44 @@
       "drude_lorentz_fit": {
         "eps_inf": 11.7,
         "drude_terms": [],
-        "lorentz_terms": [
-          {"omega_0_eV": 3.4, "gamma_eV": 0.1, "sigma": 3.0}
-        ],
+        "lorentz_terms": [{"omega_0_eV": 3.4, "gamma_eV": 0.1, "sigma": 3.0}],
         "fit_quality": "good",
         "fit_wavelength_range_nm": [500, 2000]
       },
+      "alternative_fits": {
+        "transparent_region": {
+          "description": "Below bandgap (λ > 1100nm)",
+          "fit_wavelength_range_nm": [1100, 2500],
+          "eps_inf": 11.7,
+          "drude_terms": [],
+          "lorentz_terms": [],
+          "fit_quality": "excellent"
+        }
+      },
+      "temperature_correction": {
+        "reference_temperature_K": 300,
+        "valid_temperature_range_K": [77, 500],
+        "bandgap_coefficient_eV_per_K": -2.7e-4,
+        "model": "varshni",
+        "notes": "Bandgap decreases with T: Eg(T) ≈ 1.17 - 4.73e-4*T²/(T+636) eV. Absorption edge redshifts."
+      },
+      "uncertainty": {
+        "n_uncertainty_percent": 1,
+        "k_uncertainty_percent": 10,
+        "uncertainty_source": "Silicon is extremely well-characterized",
+        "wavelength_dependent": true,
+        "high_uncertainty_regions": [
+          {
+            "wavelength_range_nm": [300, 400],
+            "uncertainty_percent": 5,
+            "reason": "Strong absorption - sensitive to surface preparation"
+          }
+        ]
+      },
+      "comparison_references": [
+        {"reference": "Aspnes & Studna, PRB 27, 985 (1983)", "agreement": "excellent"},
+        {"reference": "Green, Solar Energy Materials 92, 1305 (2008)", "agreement": "excellent"}
+      ],
       "notes": "High-index semiconductor (n~3.5 in NIR). Strong absorption above bandgap (~1100nm). Below ~400nm, absorption very strong.",
       "csv_available": true
     },
@@ -290,11 +560,21 @@
       "drude_lorentz_fit": {
         "eps_inf": 16.2,
         "drude_terms": [],
-        "lorentz_terms": [
-          {"omega_0_eV": 2.1, "gamma_eV": 0.3, "sigma": 6.0}
-        ],
+        "lorentz_terms": [{"omega_0_eV": 2.1, "gamma_eV": 0.3, "sigma": 6.0}],
         "fit_quality": "good",
         "fit_wavelength_range_nm": [1200, 2000]
+      },
+      "temperature_correction": {
+        "reference_temperature_K": 300,
+        "valid_temperature_range_K": [77, 400],
+        "bandgap_coefficient_eV_per_K": -3.7e-4,
+        "model": "varshni",
+        "notes": "Indirect gap (0.66eV) and direct gap (0.8eV) both shift with T."
+      },
+      "uncertainty": {
+        "n_uncertainty_percent": 2,
+        "k_uncertainty_percent": 5,
+        "uncertainty_source": "Aspnes 1983"
       },
       "notes": "Very high index semiconductor (n~4-5). Indirect bandgap 0.66eV (~1880nm), direct gap 0.8eV (~1550nm). Strong absorption in visible.",
       "csv_available": true
@@ -313,11 +593,21 @@
       "drude_lorentz_fit": {
         "eps_inf": 10.9,
         "drude_terms": [],
-        "lorentz_terms": [
-          {"omega_0_eV": 2.9, "gamma_eV": 0.2, "sigma": 4.0}
-        ],
+        "lorentz_terms": [{"omega_0_eV": 2.9, "gamma_eV": 0.2, "sigma": 4.0}],
         "fit_quality": "good",
         "fit_wavelength_range_nm": [900, 2000]
+      },
+      "temperature_correction": {
+        "reference_temperature_K": 300,
+        "valid_temperature_range_K": [77, 400],
+        "bandgap_coefficient_eV_per_K": -4.5e-4,
+        "model": "varshni",
+        "notes": "Eg(300K) = 1.42 eV (~870nm). Eg increases at cryogenic temps."
+      },
+      "uncertainty": {
+        "n_uncertainty_percent": 2,
+        "k_uncertainty_percent": 5,
+        "uncertainty_source": "Aspnes 1983"
       },
       "notes": "Direct bandgap III-V semiconductor (Eg=1.42eV, ~870nm). High index (n~3.5). Absorbs strongly above bandgap.",
       "csv_available": true
@@ -336,11 +626,21 @@
       "drude_lorentz_fit": {
         "eps_inf": 9.6,
         "drude_terms": [],
-        "lorentz_terms": [
-          {"omega_0_eV": 3.2, "gamma_eV": 0.3, "sigma": 3.5}
-        ],
+        "lorentz_terms": [{"omega_0_eV": 3.2, "gamma_eV": 0.3, "sigma": 3.5}],
         "fit_quality": "good",
         "fit_wavelength_range_nm": [950, 2000]
+      },
+      "temperature_correction": {
+        "reference_temperature_K": 300,
+        "valid_temperature_range_K": [77, 400],
+        "bandgap_coefficient_eV_per_K": -4.1e-4,
+        "model": "varshni",
+        "notes": "Eg(300K) = 1.34 eV (~925nm). Transparent at telecom wavelengths."
+      },
+      "uncertainty": {
+        "n_uncertainty_percent": 2,
+        "k_uncertainty_percent": 5,
+        "uncertainty_source": "Aspnes 1983"
       },
       "notes": "III-V semiconductor, direct bandgap 1.34eV (~925nm). Key material for telecom photonics at 1550nm. Substrate for InGaAsP devices.",
       "csv_available": true
@@ -363,6 +663,12 @@
         "fit_quality": "excellent",
         "fit_wavelength_range_nm": [200, 2000]
       },
+      "uncertainty": {
+        "n_uncertainty_percent": 0.1,
+        "k_uncertainty_percent": 50,
+        "uncertainty_source": "Malitson 1965 - highly accurate for n, k essentially zero",
+        "notes": "n is extremely well known. k is essentially zero in this range."
+      },
       "notes": "Fused silica (amorphous SiO2). Transparent (k≈0). n varies ~1.55 at 200nm to ~1.44 at 2000nm. Standard substrate.",
       "csv_available": true
     },
@@ -383,6 +689,12 @@
         "lorentz_terms": [],
         "fit_quality": "good",
         "fit_wavelength_range_nm": [430, 2000]
+      },
+      "uncertainty": {
+        "n_uncertainty_percent": 2,
+        "k_uncertainty_percent": 50,
+        "uncertainty_source": "Phase (rutile vs anatase) and crystallinity affect values",
+        "notes": "ALD TiO2 may have different n than bulk rutile."
       },
       "notes": "High-index dielectric (n~2.4-2.9). Rutile phase, ordinary ray. Transparent in visible. Anatase has slightly different properties.",
       "csv_available": true
@@ -405,6 +717,12 @@
         "fit_quality": "good",
         "fit_wavelength_range_nm": [300, 2000]
       },
+      "uncertainty": {
+        "n_uncertainty_percent": 3,
+        "k_uncertainty_percent": 50,
+        "uncertainty_source": "LPCVD vs PECVD films differ",
+        "notes": "Stoichiometry (Si3N4 vs SiNx:H) significantly affects n."
+      },
       "notes": "Low-loss dielectric (n~2.0). Standard for photonic waveguides. LPCVD vs PECVD films may differ due to H content.",
       "csv_available": true
     },
@@ -426,7 +744,13 @@
         "fit_quality": "excellent",
         "fit_wavelength_range_nm": [200, 3000]
       },
-      "notes": "Crystalline sapphire (alpha-Al2O3), ordinary ray. Native oxide on Al (~2-3nm). Very hard, chemically resistant.",
+      "uncertainty": {
+        "n_uncertainty_percent": 0.2,
+        "k_uncertainty_percent": 50,
+        "uncertainty_source": "Malitson 1962 - highly accurate",
+        "notes": "Native oxide on Al is amorphous, not crystalline sapphire."
+      },
+      "notes": "Crystalline sapphire (alpha-Al2O3), ordinary ray. Native oxide on Al (~2-3nm) is amorphous. Very hard, chemically resistant.",
       "csv_available": true
     },
     
@@ -446,6 +770,11 @@
         "lorentz_terms": [],
         "fit_quality": "good",
         "fit_wavelength_range_nm": [300, 2000]
+      },
+      "uncertainty": {
+        "n_uncertainty_percent": 3,
+        "k_uncertainty_percent": 30,
+        "uncertainty_source": "Deposition method and crystallinity dependent"
       },
       "notes": "Amorphous HfO2, high-k dielectric (k~25). Standard gate oxide in modern transistors. Transparent in visible/NIR.",
       "csv_available": true
@@ -468,6 +797,11 @@
         "fit_quality": "good",
         "fit_wavelength_range_nm": [400, 2000]
       },
+      "uncertainty": {
+        "n_uncertainty_percent": 2,
+        "k_uncertainty_percent": 30,
+        "uncertainty_source": "Doping and crystallinity affect values"
+      },
       "notes": "Wurtzite ZnO, ordinary ray. Wide bandgap 3.37eV (~368nm). Piezoelectric. Can be doped (AZO) for conductivity.",
       "csv_available": true
     },
@@ -489,6 +823,11 @@
         "fit_quality": "excellent",
         "fit_wavelength_range_nm": [200, 2000]
       },
+      "uncertainty": {
+        "n_uncertainty_percent": 0.2,
+        "k_uncertainty_percent": 50,
+        "uncertainty_source": "Dodge 1984 - high accuracy"
+      },
       "notes": "Low-index material (n~1.38), ideal for AR coatings. Transparent UV to mid-IR. Commonly paired with high-index materials.",
       "csv_available": true
     },
@@ -505,12 +844,16 @@
       "common_applications": ["transparent electrodes", "touchscreens", "electrochromic devices", "NIR plasmonics"],
       "drude_lorentz_fit": {
         "eps_inf": 3.8,
-        "drude_terms": [
-          {"omega_p_eV": 1.78, "gamma_eV": 0.15}
-        ],
+        "drude_terms": [{"omega_p_eV": 1.78, "gamma_eV": 0.15}],
         "lorentz_terms": [],
         "fit_quality": "good",
         "fit_wavelength_range_nm": [400, 1500]
+      },
+      "uncertainty": {
+        "n_uncertainty_percent": 10,
+        "k_uncertainty_percent": 20,
+        "uncertainty_source": "Strong dependence on doping and deposition",
+        "notes": "Carrier concentration varies with deposition - affects plasma frequency."
       },
       "notes": "Transparent conducting oxide (TCO). Properties depend on deposition and doping. Plasmonic behavior in NIR due to free carriers.",
       "csv_available": true
@@ -533,6 +876,16 @@
         "fit_quality": "good",
         "fit_wavelength_range_nm": [400, 1600]
       },
+      "temperature_correction": {
+        "reference_temperature_K": 300,
+        "valid_temperature_range_K": [250, 350],
+        "notes": "n decreases slightly with T. Tg ~ 105°C limits high-T use."
+      },
+      "uncertainty": {
+        "n_uncertainty_percent": 1,
+        "k_uncertainty_percent": 50,
+        "uncertainty_source": "Molecular weight and processing affect properties"
+      },
       "notes": "Common optical polymer (n~1.49). Trade names: Plexiglas, Lucite, Perspex. E-beam lithography resist.",
       "csv_available": true
     },
@@ -553,6 +906,12 @@
         "lorentz_terms": [],
         "fit_quality": "approximate",
         "fit_wavelength_range_nm": [400, 2000]
+      },
+      "uncertainty": {
+        "n_uncertainty_percent": 10,
+        "k_uncertainty_percent": 10,
+        "uncertainty_source": "2D material - effective 3D constants depend on assumed thickness",
+        "notes": "Use sheet conductivity σ = πe²/2h for more accurate modeling."
       },
       "notes": "EFFECTIVE optical constants assuming 0.34nm thickness. 2D material - better described by sheet conductivity. ~2.3% absorption per layer.",
       "csv_available": true
@@ -575,6 +934,11 @@
         "fit_quality": "good",
         "fit_wavelength_range_nm": [300, 2000]
       },
+      "uncertainty": {
+        "n_uncertainty_percent": 3,
+        "k_uncertainty_percent": 20,
+        "uncertainty_source": "Crystal quality and stacking affect values"
+      },
       "notes": "In-plane (ordinary ray) constants. Layered insulator similar to graphite. Supports phonon polaritons in mid-IR. Strong UV exciton ~215nm.",
       "csv_available": true
     },
@@ -596,6 +960,12 @@
         "fit_quality": "approximate",
         "fit_wavelength_range_nm": [500, 2000]
       },
+      "uncertainty": {
+        "n_uncertainty_percent": 15,
+        "k_uncertainty_percent": 20,
+        "uncertainty_source": "2D material - layer number significantly affects properties",
+        "notes": "Monolayer has direct gap ~1.9eV; multilayer has indirect gap ~1.3eV."
+      },
       "notes": "EFFECTIVE constants for monolayer (0.65nm thickness). TMD with direct bandgap ~1.9eV in monolayer. Strong A,B excitons ~620-660nm. Valley-selective.",
       "csv_available": true
     },
@@ -615,6 +985,11 @@
         "lorentz_terms": [],
         "fit_quality": "approximate",
         "fit_wavelength_range_nm": [300, 2000]
+      },
+      "uncertainty": {
+        "n_uncertainty_percent": 5,
+        "k_uncertainty_percent": 100,
+        "notes": "Constant approximation - use malitson_sio2 for accuracy"
       },
       "notes": "Constant n=1.51 approximation for generic glass substrate. For accurate results, use malitson_sio2 instead.",
       "csv_available": false
@@ -656,18 +1031,70 @@
         "fit_quality": "good",
         "fit_wavelength_range_nm": [400, 800]
       },
+      "temperature_correction": {
+        "reference_temperature_K": 300,
+        "valid_temperature_range_K": [273, 373],
+        "notes": "n decreases ~0.0001 per K. dn/dT = -1e-4 /K"
+      },
+      "uncertainty": {
+        "n_uncertainty_percent": 1,
+        "k_uncertainty_percent": 100,
+        "notes": "n~1.33 is good approximation for visible. IR absorption not included."
+      },
       "notes": "Constant n=1.33 approximation for water in visible range. Has absorption in IR.",
       "csv_available": false
     }
   ],
   
+  "correction_models": {
+    "temperature": {
+      "linear_gamma": {
+        "description": "Linear scaling of Drude damping with temperature",
+        "formula": "gamma(T) = gamma_ref * (1 + coeff * (T - T_ref))",
+        "applicable_to": ["metals"],
+        "notes": "Simple model valid near room temperature"
+      },
+      "holstein": {
+        "description": "Holstein model for electron-phonon scattering",
+        "formula": "gamma(T) = gamma_0 + A*T^5 * integral(x^5/(e^x-1)/(1-e^-x), 0, Theta_D/T)",
+        "applicable_to": ["metals"],
+        "notes": "More accurate over wide T range"
+      },
+      "varshni": {
+        "description": "Varshni equation for semiconductor bandgap",
+        "formula": "Eg(T) = Eg(0) - alpha*T^2/(T + beta)",
+        "applicable_to": ["semiconductors"],
+        "notes": "Standard model for temperature-dependent bandgap"
+      }
+    },
+    "thin_film": {
+      "fuchs-sondheimer": {
+        "description": "Surface scattering model for thin films",
+        "formula": "rho_film/rho_bulk = 1 + (3/8)*(1-p)*l/d for d >> l",
+        "parameters": ["mean_free_path", "specularity_parameter", "thickness"],
+        "applicable_to": ["metals"],
+        "notes": "p=0 diffuse scattering, p=1 specular"
+      },
+      "mayadas-shatzkes": {
+        "description": "Grain boundary scattering model",
+        "formula": "rho_film/rho_bulk depends on grain size and reflection coefficient",
+        "parameters": ["grain_size", "grain_boundary_reflection"],
+        "applicable_to": ["metals"],
+        "notes": "Important for polycrystalline films"
+      }
+    }
+  },
+  
   "usage": {
-    "description": "How agents should use this material database",
+    "description": "How to use this material database",
     "lookup_by_id": "Load materials/index.json, find material by material_id",
     "tabulated_data": "If csv_available is true, load the CSV for tabulated n,k values",
     "meep_model": "Use drude_lorentz_fit parameters to construct mp.Medium with E_susceptibilities",
-    "validation": "Compare computed ε(λ) from fit to tabulated data in Stage 0 (Material Validation)",
-    "preference": "Prefer tabulated data (csv_available=true) over constant approximations for accuracy"
+    "validation": "Run python validate_materials.py to check data quality",
+    "temperature_correction": "Apply temperature_correction formulas for non-room-temperature simulations",
+    "thin_film_correction": "For films < critical_thickness_nm, multiply Drude gamma by gamma_multiplier",
+    "alternative_fits": "Use wavelength-range-specific fits from alternative_fits for better accuracy",
+    "uncertainty": "Consider uncertainty when comparing simulation to experiment"
   },
   
   "adding_materials": {
@@ -676,9 +1103,11 @@
       "1. Find tabulated n,k data from refractiveindex.info or literature",
       "2. Create CSV file with columns: wavelength_nm, n, k",
       "3. Include header comments with source citation",
-      "4. (Optional) Fit Drude-Lorentz model using scipy.optimize",
+      "4. Fit Drude-Lorentz model using scipy.optimize",
       "5. Add entry to index.json following material_schema.json",
-      "6. Set csv_available: true if CSV provided"
+      "6. Add uncertainty estimates based on literature comparison",
+      "7. Add temperature/thin-film corrections if data available",
+      "8. Run validate_materials.py to verify data quality"
     ],
     "data_sources": [
       "https://refractiveindex.info - Comprehensive database with citations",

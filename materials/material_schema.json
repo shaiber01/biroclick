@@ -43,13 +43,35 @@
     },
     
     "data_file": {
-      "type": "string",
+      "type": ["string", "null"],
       "description": "Path to CSV data file relative to materials/ directory"
+    },
+    
+    "csv_available": {
+      "type": "boolean",
+      "description": "Whether CSV tabulated data is available"
+    },
+    
+    "material_type": {
+      "type": "string",
+      "enum": ["metal", "dielectric", "semiconductor", "2d_material", "organic", "other"],
+      "description": "Material category"
+    },
+    
+    "common_applications": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Common applications (e.g., ['plasmonics', 'nanoantennas'])"
+    },
+    
+    "notes": {
+      "type": "string",
+      "description": "Additional notes about data or usage"
     },
     
     "drude_lorentz_fit": {
       "type": "object",
-      "description": "Pre-fitted Drude-Lorentz parameters for Meep",
+      "description": "Primary Drude-Lorentz fit parameters for Meep",
       "properties": {
         "eps_inf": {
           "type": "number",
@@ -95,27 +117,185 @@
       }
     },
     
-    "material_type": {
-      "type": "string",
-      "enum": ["metal", "dielectric", "semiconductor", "2d_material", "organic", "other"],
-      "description": "Material category"
+    "alternative_fits": {
+      "type": "object",
+      "description": "Alternative Drude-Lorentz fits optimized for specific wavelength ranges",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "description": { "type": "string" },
+          "fit_wavelength_range_nm": {
+            "type": "array",
+            "items": { "type": "number" },
+            "minItems": 2,
+            "maxItems": 2
+          },
+          "eps_inf": { "type": "number" },
+          "drude_terms": { "type": "array" },
+          "lorentz_terms": { "type": "array" },
+          "fit_quality": { "type": "string" }
+        }
+      }
     },
     
-    "common_applications": {
+    "temperature_correction": {
+      "type": "object",
+      "description": "Temperature-dependent corrections for optical constants",
+      "properties": {
+        "reference_temperature_K": {
+          "type": "number",
+          "description": "Temperature at which tabulated data was measured (typically 300K)"
+        },
+        "valid_temperature_range_K": {
+          "type": "array",
+          "items": { "type": "number" },
+          "minItems": 2,
+          "maxItems": 2,
+          "description": "Temperature range where correction is valid [T_min, T_max]"
+        },
+        "drude_gamma_coefficient": {
+          "type": "number",
+          "description": "Temperature coefficient for Drude damping: gamma(T) = gamma_ref * (1 + coeff * (T - T_ref))"
+        },
+        "bandgap_coefficient_eV_per_K": {
+          "type": "number",
+          "description": "Temperature coefficient for bandgap shift (semiconductors): Eg(T) = Eg_ref + coeff * (T - T_ref)"
+        },
+        "thermal_expansion_coefficient": {
+          "type": "number",
+          "description": "Linear thermal expansion coefficient (1/K) affecting plasma frequency"
+        },
+        "model": {
+          "type": "string",
+          "enum": ["linear_gamma", "holstein", "varshni", "none"],
+          "description": "Temperature correction model type"
+        },
+        "notes": {
+          "type": "string",
+          "description": "Additional notes about temperature dependence"
+        }
+      }
+    },
+    
+    "thin_film_correction": {
+      "type": "object",
+      "description": "Corrections for thin film vs bulk optical constants",
+      "properties": {
+        "bulk_data": {
+          "type": "boolean",
+          "description": "Whether tabulated data is for bulk material (true) or thin film (false)"
+        },
+        "critical_thickness_nm": {
+          "type": "number",
+          "description": "Thickness below which thin-film corrections become significant"
+        },
+        "gamma_multiplier": {
+          "type": "number",
+          "description": "Damping multiplier for very thin films: gamma_film = gamma_bulk * multiplier"
+        },
+        "mean_free_path_nm": {
+          "type": "number",
+          "description": "Electron mean free path in bulk material"
+        },
+        "surface_scattering_model": {
+          "type": "string",
+          "enum": ["fuchs-sondheimer", "mayadas-shatzkes", "empirical", "none"],
+          "description": "Model for surface/grain boundary scattering"
+        },
+        "grain_boundary_reflection": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Grain boundary reflection coefficient (0-1) for Mayadas-Shatzkes model"
+        },
+        "notes": {
+          "type": "string",
+          "description": "Additional notes about thin film effects"
+        }
+      }
+    },
+    
+    "uncertainty": {
+      "type": "object",
+      "description": "Uncertainty estimates for optical constants",
+      "properties": {
+        "n_uncertainty_percent": {
+          "type": "number",
+          "description": "Estimated uncertainty in n (percent)"
+        },
+        "k_uncertainty_percent": {
+          "type": "number",
+          "description": "Estimated uncertainty in k (percent)"
+        },
+        "eps1_uncertainty_percent": {
+          "type": "number",
+          "description": "Estimated uncertainty in ε₁ (percent)"
+        },
+        "eps2_uncertainty_percent": {
+          "type": "number",
+          "description": "Estimated uncertainty in ε₂ (percent)"
+        },
+        "uncertainty_source": {
+          "type": "string",
+          "description": "How uncertainty was estimated (e.g., 'comparison with J&C data', 'reported in paper')"
+        },
+        "wavelength_dependent": {
+          "type": "boolean",
+          "description": "Whether uncertainty varies significantly with wavelength"
+        },
+        "high_uncertainty_regions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "wavelength_range_nm": { "type": "array", "items": { "type": "number" } },
+              "uncertainty_percent": { "type": "number" },
+              "reason": { "type": "string" }
+            }
+          },
+          "description": "Wavelength regions with higher-than-average uncertainty"
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    
+    "comparison_references": {
       "type": "array",
-      "items": { "type": "string" },
-      "description": "Common applications (e.g., ['plasmonics', 'nanoantennas'])"
-    },
-    
-    "notes": {
-      "type": "string",
-      "description": "Additional notes about data or usage"
+      "description": "Other data sources for comparison/validation",
+      "items": {
+        "type": "object",
+        "properties": {
+          "reference": { "type": "string", "description": "Citation" },
+          "doi": { "type": "string" },
+          "agreement": {
+            "type": "string",
+            "enum": ["excellent", "good", "moderate", "poor"],
+            "description": "Level of agreement with this data"
+          },
+          "notes": { "type": "string" }
+        }
+      }
     },
     
     "last_updated": {
       "type": "string",
       "format": "date",
       "description": "Date of last update"
+    },
+    
+    "validation_status": {
+      "type": "object",
+      "description": "Results of automated validation",
+      "properties": {
+        "validated": { "type": "boolean" },
+        "validation_date": { "type": "string", "format": "date" },
+        "kramers_kronig_consistent": { "type": "boolean" },
+        "physical_bounds_ok": { "type": "boolean" },
+        "fit_quality_verified": { "type": "boolean" },
+        "issues": { "type": "array", "items": { "type": "string" } }
+      }
     }
   },
   
@@ -141,9 +321,57 @@
         "fit_quality": "good",
         "fit_wavelength_range_nm": [300, 1200]
       },
+      "alternative_fits": {
+        "visible": {
+          "description": "Optimized for visible range",
+          "fit_wavelength_range_nm": [400, 700],
+          "eps_inf": 1.0,
+          "drude_terms": [{"omega_p_eV": 9.17, "gamma_eV": 0.021}],
+          "lorentz_terms": [],
+          "fit_quality": "excellent"
+        }
+      },
+      "temperature_correction": {
+        "reference_temperature_K": 300,
+        "valid_temperature_range_K": [200, 500],
+        "drude_gamma_coefficient": 0.003,
+        "model": "linear_gamma",
+        "notes": "Damping increases ~0.3% per K above 300K"
+      },
+      "thin_film_correction": {
+        "bulk_data": true,
+        "critical_thickness_nm": 20,
+        "gamma_multiplier": 2.5,
+        "mean_free_path_nm": 52,
+        "surface_scattering_model": "fuchs-sondheimer",
+        "notes": "For films <20nm, use increased damping"
+      },
+      "uncertainty": {
+        "n_uncertainty_percent": 3,
+        "k_uncertainty_percent": 5,
+        "uncertainty_source": "Comparison of J&C 1972 vs Palik compilation",
+        "wavelength_dependent": true,
+        "high_uncertainty_regions": [
+          {
+            "wavelength_range_nm": [300, 350],
+            "uncertainty_percent": 15,
+            "reason": "Interband transition region with sample-dependent features"
+          }
+        ]
+      },
+      "comparison_references": [
+        {
+          "reference": "Johnson & Christy, PRB 6, 4370 (1972)",
+          "doi": "10.1103/PhysRevB.6.4370",
+          "agreement": "excellent"
+        },
+        {
+          "reference": "Yang et al., PRB 91, 235137 (2015)",
+          "agreement": "good",
+          "notes": "Single-crystal data shows slightly lower losses"
+        }
+      ],
       "notes": "Standard silver data for visible-NIR plasmonics"
     }
   ]
 }
-
-
