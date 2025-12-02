@@ -155,9 +155,13 @@ def select_stage_node(state: ReproState) -> dict:
     
     # Priority 2: Find not_started stages with satisfied dependencies
     for stage in stages:
+        stage_id = stage.get("stage_id")
         status = stage.get("status", "not_started")
         
         if status in ["completed_success", "completed_partial", "completed_failed", "in_progress"]:
+            continue
+        
+        # Re-check blocked stages
             continue
         
         # Re-check blocked stages
@@ -294,10 +298,10 @@ def select_stage_node(state: ReproState) -> dict:
             elif stage_type == "PARAMETER_SWEEP":
                 if hierarchy.get(SINGLE_STRUCT_KEY) not in ["passed", "partial"]:
                     continue
-            elif stage_type == "COMPLEX_PHYSICS":
-                if hierarchy.get(PARAM_SWEEP_KEY) not in ["passed", "partial"] and \
-                   hierarchy.get(ARRAY_SYS_KEY) not in ["passed", "partial"]:
-                    continue
+        elif stage_type == "COMPLEX_PHYSICS":
+            if hierarchy.get(PARAM_SWEEP_KEY) not in ["passed", "partial"] and \
+               hierarchy.get(ARRAY_SYS_KEY) not in ["passed", "partial"]:
+                continue
         
         # Type order enforcement
         if stage_type and stage_type in STAGE_TYPE_ORDER:

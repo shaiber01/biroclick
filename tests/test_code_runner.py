@@ -9,6 +9,7 @@ import os
 import pytest
 import shutil
 import time
+import sys
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
@@ -456,6 +457,95 @@ time.sleep(2)
         assert (output_dir / "materials").exists()
         assert (output_dir / "materials" / "mat.csv").exists()
 
+    def test_run_simulation_capture_large_output(self, tmp_path):
+        """Test correct capturing of large stdout/stderr without hanging."""
+        # Script generates ~100KB of output
+        code = """
+import sys
+for i in range(1000):
+    print(f"stdout line {i} " * 5)
+    print(f"stderr line {i} " * 5, file=sys.stderr)
+"""
+        result = run_simulation(
+            code=code,
+            stage_id="large_out",
+            output_dir=tmp_path,
+            config={"timeout_seconds": 5}
+        )
+        
+        assert result["exit_code"] == 0
+        assert len(result["stdout"]) > 50000
+        assert len(result["stderr"]) > 50000
+        assert "stdout line 999" in result["stdout"]
+        assert "stderr line 999" in result["stderr"]
+
+    def test_run_simulation_unicode_output(self, tmp_path):
+        """Test correct handling of unicode in output."""
+        code = """
+print("Hello 🌍")
+print("Euro: €")
+"""
+        result = run_simulation(
+            code=code,
+            stage_id="unicode",
+            output_dir=tmp_path
+        )
+        
+        assert result["exit_code"] == 0
+        assert "Hello 🌍" in result["stdout"]
+        assert "Euro: €" in result["stdout"]
+
+    def test_run_simulation_syntax_error(self, tmp_path):
+        """Test handling of syntax errors in code."""
+        code = """
+def broken_function()
+    print("Missing colon above")
+"""
+        result = run_simulation(
+            code=code,
+            stage_id="syntax_err",
+            output_dir=tmp_path
+        )
+        
+        assert result["exit_code"] != 0
+        assert "SyntaxError" in result["stderr"]
+        assert "Simulation failed" in result["error"]
+
+    def test_run_simulation_runtime_error(self, tmp_path):
+        """Test handling of runtime exceptions."""
+        code = """
+raise ValueError("Something went wrong")
+"""
+        result = run_simulation(
+            code=code,
+            stage_id="runtime_err",
+            output_dir=tmp_path
+        )
+        
+        assert result["exit_code"] != 0
+        assert "ValueError: Something went wrong" in result["stderr"]
+        assert "Simulation failed" in result["error"]
+
+    def test_run_simulation_env_vars(self, tmp_path):
+        """Test that env_vars from config are passed to subprocess."""
+        code = """
+import os
+print(f"MY_VAR={os.environ.get('MY_VAR')}")
+"""
+        result = run_simulation(
+            code=code,
+            stage_id="env_test",
+            output_dir=tmp_path,
+            config={"env_vars": {"MY_VAR": "test_value"}}
+        )
+        
+        assert result["exit_code"] == 0
+        assert "MY_VAR=test_value" in result["stdout"]
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Node Integration Tests
+# ═══════════════════════════════════════════════════════════════════════
 
 class TestRunCodeNode:
     """Tests for run_code_node integration."""
@@ -496,12 +586,14 @@ class TestRunCodeNode:
         assert kwargs["config"]["timeout_seconds"] == 600  # 10 * 60
         assert kwargs["config"]["max_memory_gb"] == 16.0
         assert kwargs["config"]["max_cpu_cores"] == 8
+        assert kwargs["config"]["env_vars"] is None # Default should be None
 
     def test_run_code_node_missing_code(self):
         """Test that missing code returns error."""
         state = {"current_stage_id": "test"} # no 'code' key
         result = run_code_node(state)
         assert "No simulation code provided" in result["run_error"]
+        assert result["stage_outputs"] == {}
 
     def test_run_code_node_blocking_validation(self):
         """Test that blocking code validation prevents execution."""
@@ -570,6 +662,3 @@ class TestRunCodeNode:
             # The current implementation checks stderr for "killed", so this MIGHT fail if logic is buggy
             # This test asserts what SHOULD happen
             assert "killed" in str(result["error"]).lower() or "signal" in str(result["error"]).lower()
-
-
-

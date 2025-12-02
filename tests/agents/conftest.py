@@ -1,9 +1,72 @@
 """Shared fixtures for agent tests."""
 
+import json
 import pytest
+from pathlib import Path
 from typing import Any, Dict, Optional
 from unittest.mock import MagicMock, patch
 
+
+# ═══════════════════════════════════════════════════════════════════════
+# Validated Mock Response Loading
+# ═══════════════════════════════════════════════════════════════════════
+
+# Path to the mock responses that are validated by tests/test_llm_contracts.py
+MOCK_RESPONSES_DIR = Path(__file__).parent.parent / "fixtures" / "mock_responses"
+
+def load_validated_mock(agent_name: str) -> Dict[str, Any]:
+    """Load a validated mock response from the fixtures directory."""
+    path = MOCK_RESPONSES_DIR / f"{agent_name}_response.json"
+    if not path.exists():
+        # Fallback or error if mock doesn't exist yet
+        raise FileNotFoundError(f"Validated mock not found for {agent_name} at {path}")
+    with open(path, "r") as f:
+        return json.load(f)
+
+@pytest.fixture
+def validated_planner_response():
+    return load_validated_mock("planner")
+
+@pytest.fixture
+def validated_plan_reviewer_response():
+    return load_validated_mock("plan_reviewer")
+
+@pytest.fixture
+def validated_simulation_designer_response():
+    return load_validated_mock("simulation_designer")
+
+@pytest.fixture
+def validated_design_reviewer_response():
+    return load_validated_mock("design_reviewer")
+
+@pytest.fixture
+def validated_code_generator_response():
+    return load_validated_mock("code_generator")
+
+@pytest.fixture
+def validated_code_reviewer_response():
+    return load_validated_mock("code_reviewer")
+
+@pytest.fixture
+def validated_execution_validator_response():
+    return load_validated_mock("execution_validator")
+
+@pytest.fixture
+def validated_physics_sanity_response():
+    return load_validated_mock("physics_sanity")
+
+@pytest.fixture
+def validated_results_analyzer_response():
+    return load_validated_mock("results_analyzer")
+
+@pytest.fixture
+def validated_supervisor_response():
+    return load_validated_mock("supervisor")
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Existing Fixtures (Preserved)
+# ═══════════════════════════════════════════════════════════════════════
 
 @pytest.fixture
 def minimal_state() -> Dict[str, Any]:
@@ -51,10 +114,12 @@ def state_with_plan(minimal_state) -> Dict[str, Any]:
         "title": "Test Plan",
         "stages": [
             {
+                "stage_id": "stage_1",
+                "stage_type": "MATERIAL_VALIDATION",
                 "name": "Stage 1",
-                "goal": "Test goal",
+                "description": "Test goal",
                 "dependencies": [],
-                "target_figures": ["Figure 1"],
+                "targets": ["Figure 1"],
             }
         ],
         "assumptions": {},
@@ -66,9 +131,9 @@ def state_with_plan(minimal_state) -> Dict[str, Any]:
 @pytest.fixture
 def state_with_stage(state_with_plan) -> Dict[str, Any]:
     """State with a current stage selected."""
-    state_with_plan["current_stage"] = "Stage 1"
+    state_with_plan["current_stage"] = "stage_1"
     state_with_plan["stage_results"] = {
-        "Stage 1": {
+        "stage_1": {
             "design": None,
             "code": None,
             "execution_result": None,
@@ -178,20 +243,24 @@ def sample_plan() -> Dict[str, Any]:
         "title": "Reproduce Figure 1: Gold Nanoparticle Absorption",
         "stages": [
             {
+                "stage_id": "stage_1_spherical_particle",
+                "stage_type": "SINGLE_STRUCTURE",
                 "name": "stage_1_spherical_particle",
-                "goal": "Simulate absorption spectrum of 50nm gold sphere",
+                "description": "Simulate absorption spectrum of 50nm gold sphere",
                 "dependencies": [],
-                "target_figures": ["Figure 1a"],
+                "targets": ["Figure 1a"],
                 "parameters": {
                     "particle_radius": "50nm",
                     "wavelength_range": "400-800nm",
                 },
             },
             {
+                "stage_id": "stage_2_ellipsoidal_particle",
+                "stage_type": "SINGLE_STRUCTURE",
                 "name": "stage_2_ellipsoidal_particle",
-                "goal": "Simulate absorption spectrum of ellipsoidal gold particle",
+                "description": "Simulate absorption spectrum of ellipsoidal gold particle",
                 "dependencies": ["stage_1_spherical_particle"],
-                "target_figures": ["Figure 1b"],
+                "targets": ["Figure 1b"],
                 "parameters": {
                     "major_axis": "75nm",
                     "minor_axis": "25nm",
@@ -288,6 +357,3 @@ def sample_analysis_result() -> Dict[str, Any]:
         },
         "explanation": "Simulation matches reference data within acceptable tolerance.",
     }
-
-
-

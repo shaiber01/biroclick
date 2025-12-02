@@ -195,6 +195,38 @@ class TestCodeGeneratorNode:
         assert "ERROR: Generated code is empty or contains stub markers" in result["reviewer_feedback"]
         assert result["code_revision_count"] == 1
 
+    @patch("src.agents.code.call_agent_with_metrics")
+    @patch("src.agents.code.check_context_or_escalate")
+    @patch("src.agents.code.build_agent_prompt")
+    @patch("src.agents.code.build_user_content_for_code_generator")
+    def test_returns_generated_code_on_fallback(self, mock_user, mock_prompt, mock_context, mock_call):
+        """Should return code even if fallback to JSON dump is used."""
+        mock_context.return_value = None
+        mock_prompt.return_value = "system prompt"
+        mock_user.return_value = "user content"
+        
+        # Return dict without code field
+        mock_call.return_value = {"something_else": "value", "key": "data"}
+        
+        state = {
+            "current_stage_id": "stage1",
+            "current_stage_type": "MATERIAL_VALIDATION",
+            "design_description": "Valid design description > 50 chars long............................."
+        }
+        
+        result = code_generator_node(state)
+        
+        # Should use JSON dump
+        assert "something_else" in result["code"]
+        # But since it's just a JSON dump of random dict, it might be flagged as stub/empty if validation is strict
+        # The current validation logic checks length < 50.
+        # {"something_else": "value", "key": "data"} is < 50 chars.
+        # So let's make it longer.
+        mock_call.return_value = {"long_key": "x" * 60}
+        result = code_generator_node(state)
+        assert result["workflow_phase"] == "code_generation"
+        assert "long_key" in result["code"]
+
 
 class TestCodeReviewerNode:
     """Tests for code_reviewer_node function."""

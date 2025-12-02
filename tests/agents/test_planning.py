@@ -82,23 +82,16 @@ class TestPlanNode:
     @patch("src.agents.planning.initialize_progress_from_plan")
     @patch("src.agents.planning.sync_extracted_parameters")
     def test_creates_plan_on_success(
-        self, mock_sync, mock_progress, mock_user, mock_prompt, mock_context, mock_call
+        self, mock_sync, mock_progress, mock_user, mock_prompt, mock_context, mock_call, validated_planner_response
     ):
-        """Should create plan from LLM output."""
+        """Should create plan from LLM output (using validated mock)."""
         mock_context.return_value = None
         mock_prompt.return_value = "system prompt"
         mock_user.return_value = "user content"
-        mock_call.return_value = {
-            "paper_id": "test_paper",
-            "paper_domain": "plasmonics",
-            "title": "Test Plan",
-            "summary": "Plan summary",
-            "stages": [{"stage_id": "stage1", "targets": ["Fig1"]}],
-            "targets": [{"figure_id": "Fig1"}],
-            "extracted_parameters": [],
-            "planned_materials": [],
-            "assumptions": {},
-        }
+        
+        # Use the validated mock response
+        mock_call.return_value = validated_planner_response
+        
         mock_progress.return_value = {"progress": {"stages": []}}
         mock_sync.return_value = {"extracted_parameters": []}
         
@@ -107,8 +100,9 @@ class TestPlanNode:
         result = plan_node(state)
         
         assert result["workflow_phase"] == "planning"
-        assert result["plan"]["title"] == "Test Plan"
-        assert result["paper_domain"] == "plasmonics"
+        assert result["plan"]["title"] == validated_planner_response["title"]
+        assert result["paper_domain"] == validated_planner_response["paper_domain"]
+        assert len(result["plan"]["stages"]) > 0
 
     def test_errors_on_missing_paper_text(self):
         """Should error when paper_text is missing."""
@@ -167,19 +161,18 @@ class TestPlanReviewerNode:
     @patch("src.agents.base.check_context_or_escalate")
     @patch("src.agents.planning.validate_state_or_warn")
     @patch("src.agents.planning.build_agent_prompt")
-    def test_approves_valid_plan(self, mock_prompt, mock_validate, mock_context, mock_call):
-        """Should approve a valid plan.
-        
-        Note: Patches base.py because plan_reviewer_node uses @with_context_check decorator.
-        """
+    def test_approves_valid_plan(self, mock_prompt, mock_validate, mock_context, mock_call, validated_plan_reviewer_response):
+        """Should approve a valid plan (using validated mock)."""
         mock_context.return_value = None
         mock_validate.return_value = []
         mock_prompt.return_value = "system prompt"
-        mock_call.return_value = {
-            "verdict": "approve",
-            "issues": [],
-            "summary": "Plan looks good",
-        }
+        
+        # Ensure the validated mock is an "approve" case
+        mock_response = validated_plan_reviewer_response.copy()
+        mock_response["verdict"] = "approve"
+        mock_response["issues"] = []
+        
+        mock_call.return_value = mock_response
         
         state = {
             "plan": {
@@ -282,19 +275,22 @@ class TestPlanReviewerNode:
     @patch("src.agents.planning.validate_state_or_warn")
     @patch("src.agents.planning.build_agent_prompt")
     def test_increments_replan_count_on_rejection(
-        self, mock_prompt, mock_validate, mock_context, mock_call
+        self, mock_prompt, mock_validate, mock_context, mock_call, validated_plan_reviewer_response
     ):
-        """Note: Patches base.py because plan_reviewer_node uses @with_context_check decorator."""
         """Should increment replan_count when verdict is needs_revision."""
         mock_context.return_value = None
         mock_validate.return_value = []
         mock_prompt.return_value = "prompt"
-        mock_call.return_value = {
-            "verdict": "needs_revision",
-            "issues": [{"severity": "major", "description": "Issue"}],
-            "summary": "Needs work",
-            "feedback": "Please fix X",
-        }
+        
+        # Create a validated needs_revision response
+        # We can reuse the schema-validated structure but enforce the verdict we want
+        mock_response = validated_plan_reviewer_response.copy()
+        mock_response["verdict"] = "needs_revision"
+        # Ensure it has issues as per strict contract
+        mock_response["issues"] = [{"severity": "major", "description": "Issue"}]
+        mock_response["feedback"] = "Please fix X"
+        
+        mock_call.return_value = mock_response
         
         state = {
             "plan": {
@@ -318,7 +314,6 @@ class TestPlanReviewerNode:
     def test_auto_approves_on_llm_error(
         self, mock_prompt, mock_validate, mock_context, mock_call
     ):
-        """Note: Patches base.py because plan_reviewer_node uses @with_context_check decorator."""
         """Should auto-approve when LLM call fails."""
         mock_context.return_value = None
         mock_validate.return_value = []
@@ -336,4 +331,3 @@ class TestPlanReviewerNode:
         result = plan_reviewer_node(state)
         
         assert result["last_plan_review_verdict"] == "approve"
-

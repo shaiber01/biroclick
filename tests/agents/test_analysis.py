@@ -275,6 +275,144 @@ class TestResultsAnalyzerNode:
         # Should still return analysis results despite LLM failure
         assert result["workflow_phase"] == "analysis"
 
+    @patch("src.agents.analysis.Path")
+    @patch("src.agents.analysis.get_plan_stage")
+    @patch("src.agents.analysis.check_context_or_escalate")
+    @patch("src.agents.analysis.build_agent_prompt")
+    @patch("src.agents.analysis.ensure_stub_figures")
+    def test_handles_missing_output_files_on_disk(
+        self, mock_stub, mock_prompt, mock_context, mock_plan_stage, mock_path
+    ):
+        """Should fail when output files in state are missing from disk."""
+        mock_context.return_value = None
+        mock_prompt.return_value = "prompt"
+        mock_stub.return_value = [{"id": "Fig1"}]
+        mock_plan_stage.return_value = {"stage_id": "stage1", "targets": ["Fig1"]}
+        
+        # Mock path to simulate MISSING file
+        mock_file = MagicMock()
+        mock_file.exists.return_value = False # File missing
+        mock_file.is_absolute.return_value = False
+        mock_file.__str__.return_value = "missing.csv"
+        mock_path.return_value = mock_file
+        mock_path.return_value.__truediv__.return_value = mock_file # Handle path joins
+        
+        state = {
+            "current_stage_id": "stage1",
+            "paper_id": "test_paper",
+            "stage_outputs": {"files": ["missing.csv"]},
+            "plan": {"stages": []},
+        }
+        
+        result = results_analyzer_node(state)
+        
+        assert result["execution_verdict"] == "fail"
+        assert "do not exist on disk" in result["run_error"]
+
+    @patch("src.agents.analysis.Path")
+    @patch("src.agents.analysis.get_plan_stage")
+    @patch("src.agents.analysis.check_context_or_escalate")
+    @patch("src.agents.analysis.build_agent_prompt")
+    @patch("src.agents.analysis.ensure_stub_figures")
+    @patch("src.agents.analysis.load_numeric_series")
+    @patch("src.agents.analysis.quantitative_curve_metrics")
+    @patch("src.agents.analysis.match_output_file")
+    def test_handles_missing_reference_image(
+        self, mock_match, mock_metrics, mock_load, mock_stub, mock_prompt,
+        mock_context, mock_plan_stage, mock_path
+    ):
+        """Should warn but proceed when reference image is missing."""
+        mock_context.return_value = None
+        mock_prompt.return_value = "prompt"
+        # Figure has image path
+        mock_stub.return_value = [{"id": "Fig1", "image_path": "missing_fig.png"}]
+        mock_plan_stage.return_value = {"stage_id": "stage1", "targets": ["Fig1"]}
+        mock_load.return_value = None
+        mock_metrics.return_value = {}
+        mock_match.return_value = "output.csv"
+        
+        # Mock path behavior:
+        # 1. Output file exists
+        # 2. Image file missing
+        def path_side_effect(path_str):
+            m = MagicMock()
+            if "output.csv" in str(path_str):
+                m.exists.return_value = True
+                m.is_file.return_value = True
+                m.resolve.return_value = str(path_str)
+            elif "missing_fig.png" in str(path_str):
+                m.exists.return_value = False # Missing image
+            return m
+            
+        mock_path.side_effect = path_side_effect
+        
+        state = {
+            "current_stage_id": "stage1",
+            "paper_id": "test_paper",
+            "stage_outputs": {"files": ["output.csv"]},
+            "plan": {"stages": []},
+        }
+        
+        # Should not crash
+        result = results_analyzer_node(state)
+        assert result["workflow_phase"] == "analysis"
+        # Image path should be None in comparison because it was missing
+        comp = result["figure_comparisons"][0]
+        assert comp["paper_image_path"] is None
+
+    @patch("src.agents.analysis.evaluate_validation_criteria")
+    @patch("src.agents.analysis.record_discrepancy")
+    @patch("src.agents.analysis.Path")
+    @patch("src.agents.analysis.get_plan_stage")
+    @patch("src.agents.analysis.check_context_or_escalate")
+    @patch("src.agents.analysis.build_agent_prompt")
+    @patch("src.agents.analysis.ensure_stub_figures")
+    @patch("src.agents.analysis.load_numeric_series")
+    @patch("src.agents.analysis.quantitative_curve_metrics")
+    @patch("src.agents.analysis.match_output_file")
+    def test_handles_validation_criteria_failure(
+        self, mock_match, mock_metrics, mock_load, mock_stub, mock_prompt,
+        mock_context, mock_plan_stage, mock_path, mock_record, mock_eval
+    ):
+        """Should handle validation criteria failures."""
+        mock_context.return_value = None
+        mock_prompt.return_value = "prompt"
+        mock_stub.return_value = [{"id": "Fig1"}]
+        mock_plan_stage.return_value = {
+            "stage_id": "stage1", 
+            "targets": ["Fig1"],
+            "validation_criteria": ["peak error < 1%"]
+        }
+        mock_load.return_value = None
+        mock_metrics.return_value = {"peak_error": 5.0}
+        mock_match.return_value = "output.csv"
+        
+        # Criteria failure
+        mock_eval.return_value = (False, ["peak error too high"])
+        
+        # Mock file exists
+        mock_file = MagicMock()
+        mock_file.exists.return_value = True
+        mock_file.is_file.return_value = True
+        mock_file.resolve.return_value = "output.csv"
+        mock_path.return_value = mock_file
+        
+        state = {
+            "current_stage_id": "stage1",
+            "paper_id": "test_paper",
+            "stage_outputs": {"files": ["output.csv"]},
+            "plan": {"stages": []},
+        }
+        
+        result = results_analyzer_node(state)
+        
+        assert result["workflow_phase"] == "analysis"
+        # Should be classified as mismatch due to criteria failure
+        summary = result["analysis_summary"]
+        assert "Fig1" in summary["mismatch_targets"]
+        # Should record discrepancy
+        mock_record.assert_called()
+
 
 class TestComparisonValidatorNode:
     """Tests for comparison_validator_node function."""
