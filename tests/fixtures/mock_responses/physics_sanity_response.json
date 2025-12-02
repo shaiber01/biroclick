@@ -1,16 +1,55 @@
 {
-  "verdict": "pass",
   "stage_id": "stage_1_extinction",
-  "summary": "Physics results are reasonable - extinction values and spectral shape consistent with plasmonic response",
-  "checks": {
-    "value_ranges": "pass",
-    "spectral_shape": "pass",
-    "energy_conservation": "pass"
+  "verdict": "pass",
+  "conservation_checks": [
+    {
+      "law": "energy: T+R+A=1",
+      "status": "pass",
+      "expected_value": 1.0,
+      "actual_value": 0.98,
+      "deviation_percent": 2.0,
+      "threshold_percent": 5.0,
+      "notes": "Energy conservation within tolerance"
+    }
+  ],
+  "value_range_checks": [
+    {
+      "quantity": "extinction_peak_wavelength",
+      "status": "pass",
+      "value": 702,
+      "expected_range": {
+        "min": 600,
+        "max": 800
+      },
+      "notes": "Peak in expected range for gold nanorod"
+    },
+    {
+      "quantity": "extinction_magnitude",
+      "status": "pass",
+      "value": 2.5,
+      "expected_range": {
+        "min": 0.1,
+        "max": 10
+      },
+      "notes": "Extinction values physically reasonable"
+    }
+  ],
+  "numerical_quality": {
+    "field_decay_achieved": true,
+    "convergence_observed": true,
+    "artifacts_detected": [],
+    "notes": "Clean simulation with proper field decay"
   },
+  "physical_plausibility": {
+    "resonance_positions_reasonable": true,
+    "linewidths_reasonable": true,
+    "magnitude_scale_reasonable": true,
+    "spectral_features_expected": true,
+    "concerns": []
+  },
+  "concerns": [],
   "backtrack_suggestion": {
     "suggest_backtrack": false
   },
-  "issues": []
+  "summary": "Physics results are reasonable. Energy conservation satisfied within 2%. Extinction peak at 702nm is consistent with gold nanorod plasmon resonance. Spectral shape and magnitude are physically plausible."
 }
-
-

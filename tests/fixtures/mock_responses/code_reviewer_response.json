@@ -1,14 +1,74 @@
 {
+  "stage_id": "stage_1_extinction",
   "verdict": "approve",
-  "summary": "Code follows Meep best practices and matches design specification",
+  "checklist_results": {
+    "unit_normalization": {
+      "status": "pass",
+      "a_unit_value": 1e-9,
+      "design_a_unit": 1e-9,
+      "match": true,
+      "notes": "Unit system matches design specification"
+    },
+    "numerics": {
+      "status": "pass",
+      "notes": "Resolution 2 pts/nm adequate for optical wavelengths"
+    },
+    "source": {
+      "status": "pass",
+      "notes": "Gaussian source correctly configured for broadband excitation"
+    },
+    "domain": {
+      "status": "pass",
+      "notes": "Cell size and PML adequate for nanorod simulation"
+    },
+    "monitors": {
+      "status": "pass",
+      "notes": "Flux monitor correctly positioned for extinction measurement"
+    },
+    "visualization": {
+      "status": "pass",
+      "notes": "Plot saved with plt.savefig and plt.close"
+    },
+    "code_quality": {
+      "status": "pass",
+      "has_plt_show": false,
+      "has_input": false,
+      "notes": "No blocking calls, proper file handling"
+    },
+    "runtime": {
+      "status": "pass",
+      "estimated_minutes": 30,
+      "budget_minutes": 60,
+      "notes": "Within runtime budget"
+    },
+    "meep_api": {
+      "status": "pass",
+      "notes": "Correct Meep API usage for FDTD simulation"
+    },
+    "expected_outputs": {
+      "status": "pass",
+      "outputs_checked": [
+        {
+          "artifact_type": "spectrum_csv",
+          "expected_filename": "extinction_spectrum.csv",
+          "code_produces_file": true,
+          "columns_match": true
+        },
+        {
+          "artifact_type": "spectrum_plot_png",
+          "expected_filename": "extinction_spectrum.png",
+          "code_produces_file": true
+        }
+      ],
+      "all_outputs_accounted": true,
+      "notes": "All expected outputs are produced by code"
+    }
+  },
+  "strengths": [
+    "Correct unit system from design",
+    "Proper flux measurement setup",
+    "Clean code with progress markers"
+  ],
   "issues": [],
-  "feedback": "",
-  "checks_passed": [
-    "a_unit_consistent",
-    "no_plt_show",
-    "outputs_saved_correctly",
-    "meep_api_correct"
-  ]
+  "summary": "Code follows Meep best practices and matches design specification. All checklist items pass."
 }
-
-

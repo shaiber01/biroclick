@@ -1,15 +1,41 @@
 {
   "verdict": "ok_continue",
-  "reasoning": "Stage 1 analysis shows acceptable match with paper figures. Peak position within 5% tolerance. Proceeding to next stage.",
   "validation_hierarchy_status": {
     "material_validation": "passed",
-    "single_structure": "in_progress",
-    "array_systems": "not_applicable",
-    "parameter_sweep": "not_applicable"
+    "single_structure": "passed",
+    "arrays_systems": "not_done",
+    "parameter_sweeps": "not_done"
   },
-  "next_action": "Continue to next stage or complete if all stages done",
-  "blocking_issues": [],
-  "recommendations": []
+  "main_physics_assessment": {
+    "physics_plausible": true,
+    "conservation_satisfied": true,
+    "value_ranges_reasonable": true,
+    "systematic_issues": [],
+    "notes": "Extinction peak matches paper within tolerance"
+  },
+  "error_analysis": {
+    "error_type": "none",
+    "error_persistence": "not_applicable",
+    "root_cause_hypothesis": "",
+    "confidence": "high"
+  },
+  "recommendations": [
+    {
+      "action": "Proceed to next stage if available",
+      "priority": "medium",
+      "rationale": "Current stage completed successfully"
+    }
+  ],
+  "progress_summary": {
+    "stages_completed": 2,
+    "stages_remaining": 0,
+    "overall_confidence": "high",
+    "key_achievements": [
+      "Material validation passed",
+      "Extinction spectrum matches paper Fig1"
+    ],
+    "key_blockers": []
+  },
+  "should_stop": false,
+  "summary": "Stage 1 analysis shows acceptable match with paper figures. Peak position at 702nm vs 700nm in paper (0.3% error). Validation hierarchy progressing well. Proceeding to completion."
 }
-
-

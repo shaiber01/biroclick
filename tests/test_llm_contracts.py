@@ -524,6 +524,46 @@ class TestMalformedResponses:
 
 
 # ═══════════════════════════════════════════════════════════════════════
+# Strict Mock Response Validation Tests
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestMockResponsesFullSchemaValidation:
+    """Strict validation: mock responses MUST fully conform to their schemas.
+    
+    Unlike the type-only tests above, these tests validate:
+    - All required fields are present
+    - Field values match enum constraints
+    - Nested object structures are correct
+    
+    If these tests fail, either the mock or the schema needs updating.
+    """
+    
+    @pytest.mark.parametrize("agent_name,schema_file", [
+        ("planner", "planner_output_schema.json"),
+        ("plan_reviewer", "plan_reviewer_output_schema.json"),
+        ("simulation_designer", "simulation_designer_output_schema.json"),
+        ("design_reviewer", "design_reviewer_output_schema.json"),
+        ("code_generator", "code_generator_output_schema.json"),
+        ("code_reviewer", "code_reviewer_output_schema.json"),
+        ("execution_validator", "execution_validator_output_schema.json"),
+        ("physics_sanity", "physics_sanity_output_schema.json"),
+        ("results_analyzer", "results_analyzer_output_schema.json"),
+        ("supervisor", "supervisor_output_schema.json"),
+    ])
+    def test_mock_response_fully_validates(self, agent_name, schema_file):
+        """Mock response must fully validate against its schema."""
+        try:
+            response = load_mock_response(agent_name)
+            schema = load_schema(schema_file)
+            
+            # This will raise ValidationError if response doesn't match schema
+            validate(instance=response, schema=schema)
+            
+        except FileNotFoundError as e:
+            pytest.skip(f"File not found: {e}")
+
+
+# ═══════════════════════════════════════════════════════════════════════
 # Schema Completeness Tests
 # ═══════════════════════════════════════════════════════════════════════
 

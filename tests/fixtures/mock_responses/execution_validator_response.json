@@ -1,10 +1,48 @@
 {
-  "verdict": "pass",
   "stage_id": "stage_1_extinction",
-  "summary": "Simulation completed successfully, output files generated",
-  "output_files_verified": ["extinction_spectrum.csv"],
-  "runtime_seconds": 1800,
-  "issues": []
+  "verdict": "pass",
+  "execution_status": {
+    "completed": true,
+    "exit_code": 0,
+    "runtime_seconds": 1800,
+    "memory_peak_mb": 2500,
+    "timed_out": false
+  },
+  "files_check": {
+    "expected_files": ["extinction_spectrum.csv", "extinction_spectrum.png"],
+    "found_files": ["extinction_spectrum.csv", "extinction_spectrum.png"],
+    "missing_files": [],
+    "all_present": true,
+    "spec_compliance": [
+      {
+        "artifact_type": "spectrum_csv",
+        "expected_filename": "extinction_spectrum.csv",
+        "actual_filename": "extinction_spectrum.csv",
+        "exists": true,
+        "non_empty": true,
+        "valid_format": true,
+        "columns_match": true,
+        "issues": []
+      },
+      {
+        "artifact_type": "spectrum_plot_png",
+        "expected_filename": "extinction_spectrum.png",
+        "actual_filename": "extinction_spectrum.png",
+        "exists": true,
+        "non_empty": true,
+        "valid_format": true,
+        "issues": []
+      }
+    ]
+  },
+  "data_quality": {
+    "nan_detected": false,
+    "inf_detected": false,
+    "negative_where_unexpected": false,
+    "suspicious_values": []
+  },
+  "errors_detected": [],
+  "warnings": [],
+  "stdout_summary": "Starting FDTD simulation... Simulation complete. Saving extinction_spectrum.csv",
+  "summary": "Simulation completed successfully. All expected output files generated with valid data. Runtime 30 minutes, within budget."
 }
-
-

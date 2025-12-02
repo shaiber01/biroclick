@@ -3,35 +3,42 @@
   "paper_domain": "plasmonics",
   "title": "Gold Nanorod Optical Properties Reproduction",
   "summary": "Reproduce extinction spectrum and near-field enhancement of gold nanorod in water",
+  "main_system": "Gold nanorod in aqueous environment",
+  "main_claims": ["Longitudinal plasmon resonance at ~700nm", "Extinction cross-section enhancement"],
+  "simulation_approach": "FDTD with Meep",
   "stages": [
     {
       "stage_id": "stage_0_materials",
       "stage_type": "MATERIAL_VALIDATION",
+      "name": "Gold Material Validation",
       "description": "Validate gold optical properties from Johnson & Christy database",
       "targets": ["material_gold"],
       "dependencies": [],
-      "priority": 1,
-      "target_details": [
+      "runtime_budget_minutes": 5,
+      "expected_outputs": [
         {
-          "figure_id": "material_gold",
-          "description": "Gold optical constants validation",
-          "precision_requirement": "acceptable"
+          "artifact_type": "spectrum_csv",
+          "filename_pattern": "{paper_id}_{stage_id}_permittivity.csv",
+          "description": "Gold permittivity vs wavelength",
+          "columns": ["wavelength_nm", "epsilon_real", "epsilon_imag"]
         }
       ]
     },
     {
       "stage_id": "stage_1_extinction",
       "stage_type": "SINGLE_STRUCTURE",
+      "name": "Extinction Spectrum",
       "description": "Simulate gold nanorod extinction spectrum",
       "targets": ["Fig1"],
       "dependencies": ["stage_0_materials"],
-      "priority": 2,
-      "target_details": [
+      "runtime_budget_minutes": 30,
+      "expected_outputs": [
         {
-          "figure_id": "Fig1",
-          "description": "Extinction spectrum 400-900nm",
-          "precision_requirement": "acceptable",
-          "digitized_data_path": "papers/test_gold_nanorod/fig1_extinction.csv"
+          "artifact_type": "spectrum_csv",
+          "filename_pattern": "{paper_id}_{stage_id}_extinction.csv",
+          "description": "Extinction cross-section vs wavelength",
+          "columns": ["wavelength_nm", "extinction"],
+          "target_figure": "Fig1"
         }
       ]
     }
@@ -50,43 +57,63 @@
       "name": "nanorod_length",
       "value": 100,
       "unit": "nm",
-      "source": "paper_text",
-      "confidence": 0.95
+      "source": "text",
+      "location": "Section 2, paragraph 1"
     },
     {
       "name": "nanorod_diameter",
       "value": 40,
       "unit": "nm",
-      "source": "paper_text",
-      "confidence": 0.95
+      "source": "text",
+      "location": "Section 2, paragraph 1"
     },
     {
       "name": "medium_refractive_index",
       "value": 1.33,
       "unit": "",
-      "source": "paper_text",
-      "confidence": 0.9
+      "source": "text",
+      "location": "Section 2, Methods"
     }
   ],
   "planned_materials": [
     {
-      "material_name": "gold",
-      "database": "johnson_christy",
-      "path": "materials/johnson_christy/Au.csv",
-      "wavelength_range": "400-900nm"
+      "material_id": "gold_jc",
+      "name": "Gold (Johnson-Christy)",
+      "suggested_source": "johnson_christy",
+      "path": "materials/johnson_christy/Au.csv"
     }
   ],
   "assumptions": {
     "global_assumptions": [
       {
         "id": "A1",
-        "description": "Gold properties from Johnson & Christy 1972",
-        "source": "standard_database",
-        "confidence": "high",
-        "impact_if_wrong": "Peak position shift"
+        "category": "material",
+        "description": "Gold properties from Johnson & Christy 1972 database",
+        "reason": "Standard reference for gold optical constants",
+        "source": "literature_default",
+        "critical": true,
+        "validated": false,
+        "validation_stage": "stage_0_materials"
       }
     ]
-  }
+  },
+  "reproduction_scope": {
+    "total_figures": 3,
+    "reproducible_figures": 1,
+    "attempted_figures": ["Fig1"],
+    "skipped_figures": [
+      {
+        "figure_id": "Fig2",
+        "reason": "TEM image - not simulation reproducible",
+        "classification": "not_reproducible"
+      }
+    ]
+  },
+  "progress": {
+    "stages": [
+      {"stage_id": "stage_0_materials", "status": "not_started", "summary": ""},
+      {"stage_id": "stage_1_extinction", "status": "not_started", "summary": ""}
+    ]
+  },
+  "staging_rationale": "Material validation first to ensure accurate gold optical constants, then single nanorod simulation for extinction spectrum."
 }
-
-
