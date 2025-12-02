@@ -42,6 +42,7 @@ AGENT_PROMPTS = {
     "results_analyzer": "results_analyzer_agent",
     "comparison_validator": "comparison_validator_agent",
     "supervisor": "supervisor_agent",
+    "report_generator": "report_generator_agent",
 }
 
 # Placeholder tokens and their generators

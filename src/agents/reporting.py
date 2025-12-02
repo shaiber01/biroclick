@@ -141,14 +141,21 @@ def generate_report_node(state: ReproState) -> Dict[str, Any]:
             schema_name="report_schema",
         )
         
+        # Extract schema-compliant fields from LLM output
+        # Field names match ReproState fields (see schemas/state.py)
         if agent_output.get("executive_summary"):
             result["executive_summary"] = agent_output["executive_summary"]
-        if agent_output.get("key_findings"):
-            result["key_findings"] = agent_output["key_findings"]
-        if agent_output.get("recommendations"):
-            result["recommendations"] = agent_output["recommendations"]
-        if agent_output.get("lessons_learned"):
-            result["lessons_learned"] = agent_output["lessons_learned"]
+        if agent_output.get("paper_citation"):
+            result["paper_citation"] = agent_output["paper_citation"]
+        if agent_output.get("assumptions"):
+            result["assumptions"] = agent_output["assumptions"]
+        if agent_output.get("figure_comparisons"):
+            result["figure_comparisons"] = agent_output["figure_comparisons"]
+        if agent_output.get("systematic_discrepancies"):
+            # State uses systematic_discrepancies_identified
+            result["systematic_discrepancies_identified"] = agent_output["systematic_discrepancies"]
+        if agent_output.get("conclusions"):
+            result["report_conclusions"] = agent_output["conclusions"]
             
     except Exception as e:
         logger.warning(f"Report generator LLM call failed: {e}. Using stub report.")
