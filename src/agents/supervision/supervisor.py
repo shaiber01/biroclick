@@ -237,6 +237,10 @@ def _log_user_interaction(
     progress = state.get("progress", {})
     user_interactions = progress.get("user_interactions", [])
     
+    # Safely get question text (may be empty after ask_user clears it)
+    pending_questions = state.get("pending_user_questions", [])
+    question_text = str(pending_questions[0]) if pending_questions else "(question cleared)"
+    
     interaction_entry = {
         "id": f"U{len(user_interactions) + 1}",
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -246,8 +250,8 @@ def _log_user_interaction(
             "agent": "SupervisorAgent",
             "reason": ask_user_trigger
         },
-        "question": str(state.get("pending_user_questions", [""])[0]),
-        "user_response": str(list(user_responses.values())[-1]),
+        "question": question_text,
+        "user_response": str(list(user_responses.values())[-1]) if user_responses else "",
         "impact": result.get("supervisor_feedback", "User decision processed"),
         "alternatives_considered": []
     }
