@@ -565,14 +565,15 @@ See `docs/guidelines.md` Section 14 for sandboxing details and future Docker sup
 - [ ] No boundary artifacts
 
 **Outputs**:
-- `physics_verdict`: "pass" | "warning" | "fail"
+- `physics_verdict`: "pass" | "warning" | "fail" | "design_flaw"
 - `physics_validation`: Conservation, value ranges, numerical quality
 - `proceed_to_analysis`: Boolean
 
 **Transitions**:
 - → analyze (pass or warning)
-- → generate_code (fail, suggests code issue)
-- → ask_user (fail, unknown cause)
+- → generate_code (fail, suggests code issue; retries until `max_physics_failures`)
+- → design (design_flaw, fundamental design issue requiring redesign)
+- → ask_user (limit reached for fail or design_flaw)
 
 ---
 
@@ -1206,85 +1207,77 @@ The checkpoint contains full state, so resumption continues exactly where paused
                      │        │                   │                 │
                      │        ▼                   │                 │
                      │  ┌─────────────┐           │                 │
-                     │  │generate_code│◄──────┐   │                 │
-                     │  │(CodeGenerator)│     │   │                 │
-                     │  └──────┬──────┘       │   │                 │
-                     │         │              │   │                 │
-                     │         ▼              │   │                 │
-                     │  ┌─────────────┐       │   │                 │
-                     │  │ code_review │       │   │                 │
-                     │  │  (code QA)  │       │   │                 │
-                     │  └──────┬──────┘       │   │                 │
-                     │         │              │   │                 │
-                     │    ┌────┼────┐         │   │                 │
-                     │    │    │    │         │   │                 │
-                     │    ▼    ▼    ▼         │   │                 │
-                     │ [ok] [rev] [limit]     │   │                 │
-                     │    │    │    │         │   │                 │
-                     │    │    └────┼─────────┘   │                 │
-                     │    │         │             │                 │
-                     │    ▼         ▼             │                 │
+                     │  │generate_code│◄───────────────────────┐    │
+                     │  └──────┬──────┘           │             │    │
+                     │         │                  │             │    │
+                     │         ▼                  │             │    │
+                     │  ┌─────────────┐           │             │    │
+                     │  │ code_review │           │             │    │
+                     │  └──────┬──────┘           │             │    │
+                     │         │                  │             │    │
+                     │    ┌────┴────┐             │             │    │
+                     │    ▼         ▼             │             │    │
+                     │  [ok]     [rev]────────────┼─────────────┘    │
+                     │    │         └──► ask_user (if limit)────────┤
+                     │    ▼                       │                 │
                      │  ┌─────────────┐    ┌─────────────┐          │
-                     │  │  run_code   │    │  ask_user   │◄─────┐   │
-                     │  └──────┬──────┘    └──────┬──────┘      │   │
-                     │         │                  │             │   │
-                     │         ▼                  │             │   │
-                     │  ┌─────────────┐           │             │   │
-                     │  │EXEC_CHECK   │           │             │   │
-                     │  │(ExecValidator)│         │             │   │
-                     │  └──────┬──────┘           │             │   │
-                     │         │                  │             │   │
-                     │    ┌────┴────┐             │             │   │
-                     │    │         │             │             │   │
-                     │    ▼         ▼             │             │   │
-                     │  [pass]   [fail]           │             │   │
-                     │    │         │             │             │   │
-                     │    │         └─────────────┼─────────────┤   │
-                     │    │                       │             │   │
-                     │    ▼                       │             │   │
-                     │  ┌─────────────┐           │             │   │
-                     │  │physics_check│           │             │   │
-                     │  │(PhysSanity) │           │             │   │
-                     │  └──────┬──────┘           │             │   │
-                     │         │                  │             │   │
-                     │    ┌────┴────┐             │             │   │
-                     │    │         │             │             │   │
-                     │    ▼         ▼             │             │   │
-                     │  [pass]   [fail]           │             │   │
-                     │    │         │             │             │   │
-                     │    │         └─────────────┼─────────────┤   │
-                     │    │                       │             │   │
-                     │    ▼                       │             │   │
-                     │  ┌─────────────┐           │             │   │
-                     │  │  analyze    │◄──────────┼─────┐       │   │
-                     │  │(ResultsAnalyzer)│       │     │       │   │
-                     │  └──────┬──────┘           │     │       │   │
-                     │         │                  │     │       │   │
-                     │         ▼                  │     │       │   │
-                     │  ┌─────────────┐           │     │       │   │
-                     │  │compare_CHECK│           │     │       │   │
-                     │  │(CompValidator)│         │     │       │   │
-                     │  └──────┬──────┘           │     │       │   │
-                     │         │                  │     │       │   │
-                     │    ┌────┴────┐             │     │       │   │
-                     │    │         │             │     │       │   │
-                     │    ▼         ▼             │     │       │   │
-                     │ [approve] [revise]         │     │       │   │
-                     │    │         │             │     │       │   │
-                     │    │         └─────────────┼─────┘       │   │
-                     │    │                       │             │   │
-                     │    ▼                       │             │   │
-                     │  ┌─────────────┐           │             │   │
-                     │  │ supervisor  │───────────┴─────────────┘   │
+                     │  │  run_code   │    │  ask_user   │◄─────────┤
+                     │  └──────┬──────┘    └──────┬──────┘          │
+                     │         │                  │                 │
+                     │         ▼                  │                 │
+                     │  ┌─────────────┐           │                 │
+                     │  │EXEC_CHECK   │           │                 │
+                     │  └──────┬──────┘           │                 │
+                     │         │                  │                 │
+                     │    ┌────┴────┐             │                 │
+                     │    ▼         ▼             │                 │
+                     │  [pass]   [fail]──► generate_code (retry)    │
+                     │    │         └──► ask_user (if limit)────────┤
+                     │    ▼                       │                 │
+                     │  ┌─────────────┐           │                 │
+                     │  │physics_check│           │                 │
+                     │  └──────┬──────┘           │                 │
+                     │         │                  │                 │
+                     │    ┌────┴────┐             │                 │
+                     │    ▼         ▼             │                 │
+                     │  [pass]   [fail]──► generate_code (retry)    │
+                     │    │         └──► ask_user (if limit)────────┤
+                     │    ▼                       │                 │
+                     │  ┌─────────────┐           │                 │
+                     │  │  analyze    │◄──────────┼─────┐           │
+                     │  └──────┬──────┘           │     │           │
+                     │         │                  │     │           │
+                     │         ▼                  │     │           │
+                     │  ┌─────────────┐           │     │           │
+                     │  │compare_CHECK│           │     │           │
+                     │  └──────┬──────┘           │     │           │
+                     │         │                  │     │           │
+                     │    ┌────┴────┐             │     │           │
+                     │    ▼         ▼             │     │           │
+                     │ [approve] [revise]──► analyze (retry)        │
+                     │    │         └──► supervisor (if limit)      │
+                     │    │                       │                 │
+                     │    ▼                       │                 │
+                     │  ┌─────────────┐           │                 │
+                     │  │ supervisor  │◄──────────┘                 │
                      │  └──────┬──────┘                             │
                      │         │                                    │
                      │    ┌────┴────────────┐                       │
-                     │    │         │       │                       │
                      │    ▼         ▼       ▼                       │
-                     │ [continue] [replan] [ask]                    │
-                     │    │         │       │                       │
-                     └────┘         └───────┴───────────────────────┘
+                     │ [continue] [replan] [ask]────────────────────┘
+                     │    │         │                                
+                     └────┘         └────────────────────────────────┘
 ```
+
+**Retry Behavior Summary:**
+
+| Node | Verdict | First Route | After Limit | Limit Default |
+|------|---------|-------------|-------------|---------------|
+| code_review | [rev] | generate_code | ask_user | 3 |
+| EXEC_CHECK | [fail] | generate_code | ask_user | 2 |
+| physics_check | [fail] | generate_code | ask_user | 2 |
+| physics_check | [design_flaw] | design | ask_user | 3 |
+| compare_CHECK | [revise] | analyze | supervisor | 2 |
 
 ## State Mutation Contract
 
@@ -1750,7 +1743,7 @@ This matrix defines the system behavior for various error scenarios and edge cas
 |----------|----------|-------|------------|
 | **Simulation execution fails (crash/timeout)** | Increment `execution_failure_count`. Regenerate code with error context. After limit, escalate to user. | `max_execution_failures` (default: 2) | ask_user |
 | **Code review rejects code** | Increment `code_revision_count`. Regenerate with reviewer feedback. After limit, escalate. | `MAX_CODE_REVISIONS` (3) | ask_user |
-| **physics_check fails repeatedly** | After 2 failures at same stage, escalate to supervisor with `physics_stuck` flag. Supervisor can try alternative approach or ask user. | 2 per stage | supervisor → ask_user |
+| **physics_check fails repeatedly** | Increment `physics_failure_count`. Regenerate code with physics feedback. After limit, escalate to user. | `max_physics_failures` (default: 2) | ask_user |
 | **User doesn't respond to ask_user** | Timeout after configurable period (default: 24 hours). Auto-save checkpoint, pause workflow. Can be resumed later. | 24 hours (default) | Checkpoint + Pause |
 | **Total runtime exceeded** | Hard abort after `max_total_runtime_hours`. Save checkpoint, generate partial report with whatever results are available. | 8 hours (default) | Partial report |
 | **Consecutive stage failures** | After 2 consecutive stage failures (different stages), trigger replanning via supervisor | 2 consecutive | supervisor → plan |
@@ -1875,24 +1868,33 @@ Which option should we use?
 
 ### Recovery Implementation
 
+Physics and execution failures are handled by the `create_verdict_router` factory in `routing.py`.
+The pattern is consistent across all validation nodes:
+
 ```python
-def handle_physics_stuck(state):
-    """Handle repeated physics validation failures."""
-    physics_failures = state.get("physics_failure_count", 0)
-    
-    if physics_failures >= 2:
-        # Escalate to supervisor with flag
-        state["physics_stuck"] = True
-        state["supervisor_hint"] = (
-            f"Physics validation has failed {physics_failures} times for stage "
-            f"{state['current_stage_id']}. Consider: (1) simplifying geometry, "
-            f"(2) checking material models, (3) asking user for guidance."
-        )
-        return "supervisor"
-    
-    # Otherwise, increment and retry
-    state["physics_failure_count"] = physics_failures + 1
-    return "generate_code"
+# Example: Physics check failure routing (from routing.py)
+# Actual implementation uses create_verdict_router factory
+route_after_physics_check = create_verdict_router(
+    verdict_field="physics_verdict",
+    routes={
+        "pass": {"route": "analyze"},
+        "warning": {"route": "analyze"},
+        "fail": {
+            "route": "generate_code",  # Retry with physics feedback
+            "count_limit": {
+                "count_field": "physics_failure_count",
+                "max_count_key": "max_physics_failures",
+                "default_max": MAX_PHYSICS_FAILURES,  # 2
+                # route_on_limit defaults to "ask_user"
+            }
+        },
+        "design_flaw": {
+            "route": "design",  # Fundamental issue requires redesign
+            "count_limit": {...}
+        },
+    },
+)
+# When physics_failure_count >= max_physics_failures, routes to ask_user
 
 
 def handle_timeout(state, config):
