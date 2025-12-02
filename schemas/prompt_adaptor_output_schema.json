@@ -65,14 +65,17 @@
             "type": "string",
             "enum": [
               "PlannerAgent",
+              "PlanReviewerAgent",
               "SimulationDesignerAgent",
+              "DesignReviewerAgent",
               "CodeGeneratorAgent",
               "CodeReviewerAgent",
               "ExecutionValidatorAgent",
               "PhysicsSanityAgent",
               "ResultsAnalyzerAgent",
               "ComparisonValidatorAgent",
-              "SupervisorAgent"
+              "SupervisorAgent",
+              "ReportGeneratorAgent"
             ],
             "description": "Which agent's prompt to modify"
           },

@@ -211,6 +211,7 @@ class MockLLMResponses:
                 {
                     "stage_id": "stage_0_materials",
                     "stage_type": "MATERIAL_VALIDATION",
+                    "name": "Material Validation",
                     "description": "Validate gold optical constants",
                     "targets": ["Fig1"],
                     "dependencies": [],
@@ -223,6 +224,11 @@ class MockLLMResponses:
                 "reproducible_figures": 1,
                 "attempted_figures": ["Fig1"],
                 "skipped_figures": [],
+            },
+            "progress": {
+                "stages": [
+                    {"stage_id": "stage_0_materials", "status": "not_started", "summary": ""}
+                ]
             },
         }
     
@@ -259,7 +265,7 @@ class MockLLMResponses:
                 "material_validation_setup": {"status": "fail", "materials_covered": [], "materials_missing": ["gold"], "validation_criteria_clear": False, "notes": "Missing material source"},
                 "output_specifications": {"status": "pass", "all_stages_have_outputs": True, "figure_mappings_complete": True, "notes": "OK"}
             },
-            "issues": [{"severity": "blocking", "category": "materials", "description": "Missing material source", "suggested_fix": "Add material database reference"}],
+            "issues": [{"severity": "blocking", "category": "material_validation", "description": "Missing material source", "suggested_fix": "Add material database reference"}],
             "strengths": [],
             "summary": "Plan needs work",
         }

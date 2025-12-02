@@ -4,108 +4,154 @@
   "title": "PlanReviewerAgentOutput",
   "description": "Output schema for PlanReviewerAgent - reproduction plan quality review",
   "type": "object",
-  "required": ["verdict", "coverage_check", "digitized_data_check", "staging_check", "parameter_check", "assumptions_check", "performance_check", "issues", "summary"],
+  "required": ["verdict", "checklist_results", "summary"],
   "properties": {
     "verdict": {
       "type": "string",
       "enum": ["approve", "needs_revision"],
       "description": "Overall verdict on the reproduction plan"
     },
-    "coverage_check": {
+    "checklist_results": {
       "type": "object",
-      "description": "Assessment of figure coverage",
+      "description": "Results of plan review checklist by category",
+      "required": ["coverage", "digitized_data", "staging", "parameter_extraction", "assumptions", "performance"],
       "properties": {
-        "status": { "type": "string", "enum": ["pass", "fail", "warning"] },
-        "figures_covered": {
-          "type": "array",
-          "items": { "type": "string" }
+        "coverage": {
+          "type": "object",
+          "description": "Assessment of figure coverage",
+          "properties": {
+            "status": { "type": "string", "enum": ["pass", "fail", "warning"] },
+            "figures_covered": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "figures_missing": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Figures that appear reproducible but are not staged"
+            },
+            "notes": { "type": "string" }
+          },
+          "required": ["status"]
         },
-        "figures_missing": {
-          "type": "array",
-          "items": { "type": "string" },
-          "description": "Figures that appear reproducible but are not staged"
+        "digitized_data": {
+          "type": "object",
+          "description": "Assessment of digitized data availability for quantitative comparison",
+          "properties": {
+            "status": { "type": "string", "enum": ["pass", "fail", "warning"] },
+            "excellent_targets": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Targets requiring <2% precision (excellent)"
+            },
+            "have_digitized": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Excellent targets that have digitized_data_path"
+            },
+            "missing_digitized": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Targets that require excellent precision but lack digitized_data_path"
+            },
+            "notes": { "type": "string" }
+          },
+          "required": ["status"]
         },
-        "notes": { "type": "string" }
-      },
-      "required": ["status", "figures_covered", "figures_missing"]
-    },
-    "digitized_data_check": {
-      "type": "object",
-      "description": "Assessment of digitized data availability for quantitative comparison",
-      "properties": {
-        "status": { "type": "string", "enum": ["pass", "fail", "warning"] },
-        "excellent_targets": {
-          "type": "array",
-          "items": { "type": "string" },
-          "description": "Targets requiring <2% precision (excellent)"
+        "staging": {
+          "type": "object",
+          "description": "Assessment of stage structure and dependencies",
+          "properties": {
+            "status": { "type": "string", "enum": ["pass", "fail", "warning"] },
+            "stage_0_present": { "type": "boolean" },
+            "stage_1_present": { "type": "boolean" },
+            "validation_hierarchy_followed": { "type": "boolean" },
+            "dependency_issues": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "notes": { "type": "string" }
+          },
+          "required": ["status"]
         },
-        "missing_digitized": {
-          "type": "array",
-          "items": { "type": "string" },
-          "description": "Targets that require excellent precision but lack digitized_data_path"
+        "parameter_extraction": {
+          "type": "object",
+          "description": "Assessment of parameter extraction quality",
+          "properties": {
+            "status": { "type": "string", "enum": ["pass", "fail", "warning"] },
+            "extracted_count": { "type": "integer" },
+            "cross_checked_count": { "type": "integer" },
+            "missing_critical": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "notes": { "type": "string" }
+          },
+          "required": ["status"]
         },
-        "notes": { "type": "string" }
-      },
-      "required": ["status", "excellent_targets", "missing_digitized"]
-    },
-    "staging_check": {
-      "type": "object",
-      "description": "Assessment of stage structure and dependencies",
-      "properties": {
-        "status": { "type": "string", "enum": ["pass", "fail", "warning"] },
-        "stage_0_present": { "type": "boolean" },
-        "stage_1_present": { "type": "boolean" },
-        "dependency_issues": {
-          "type": "array",
-          "items": { "type": "string" }
+        "assumptions": {
+          "type": "object",
+          "description": "Assessment of assumption quality",
+          "properties": {
+            "status": { "type": "string", "enum": ["pass", "fail", "warning"] },
+            "assumption_count": { "type": "integer" },
+            "risky_assumptions": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "undocumented_gaps": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "notes": { "type": "string" }
+          },
+          "required": ["status"]
         },
-        "notes": { "type": "string" }
-      },
-      "required": ["status", "stage_0_present", "stage_1_present"]
-    },
-    "parameter_check": {
-      "type": "object",
-      "description": "Assessment of parameter extraction quality",
-      "properties": {
-        "status": { "type": "string", "enum": ["pass", "fail", "warning"] },
-        "extracted_count": { "type": "integer" },
-        "cross_checked_count": { "type": "integer" },
-        "missing_critical": {
-          "type": "array",
-          "items": { "type": "string" }
+        "performance": {
+          "type": "object",
+          "description": "Assessment of runtime and performance feasibility",
+          "properties": {
+            "status": { "type": "string", "enum": ["pass", "fail", "warning"] },
+            "total_estimated_runtime_min": { "type": "number" },
+            "budget_min": { "type": "number" },
+            "risky_stages": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "notes": { "type": "string" }
+          },
+          "required": ["status"]
         },
-        "notes": { "type": "string" }
-      },
-      "required": ["status", "extracted_count", "cross_checked_count"]
-    },
-    "assumptions_check": {
-      "type": "object",
-      "description": "Assessment of assumption quality",
-      "properties": {
-        "status": { "type": "string", "enum": ["pass", "fail", "warning"] },
-        "assumption_count": { "type": "integer" },
-        "risky_assumptions": {
-          "type": "array",
-          "items": { "type": "string" }
+        "material_validation_setup": {
+          "type": "object",
+          "description": "Assessment of Stage 0 material validation completeness",
+          "properties": {
+            "status": { "type": "string", "enum": ["pass", "fail", "warning"] },
+            "materials_covered": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "materials_missing": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "validation_criteria_clear": { "type": "boolean" },
+            "notes": { "type": "string" }
+          },
+          "required": ["status"]
         },
-        "notes": { "type": "string" }
-      },
-      "required": ["status", "assumption_count"]
-    },
-    "performance_check": {
-      "type": "object",
-      "description": "Assessment of runtime and performance feasibility",
-      "properties": {
-        "status": { "type": "string", "enum": ["pass", "fail", "warning"] },
-        "total_estimated_runtime_min": { "type": "number" },
-        "budget_min": { "type": "number" },
-        "risky_stages": {
-          "type": "array",
-          "items": { "type": "string" }
-        },
-        "notes": { "type": "string" }
-      },
-      "required": ["status", "total_estimated_runtime_min", "budget_min"]
+        "output_specifications": {
+          "type": "object",
+          "description": "Assessment of output file specifications",
+          "properties": {
+            "status": { "type": "string", "enum": ["pass", "fail", "warning"] },
+            "all_stages_have_outputs": { "type": "boolean" },
+            "figure_mappings_complete": { "type": "boolean" },
+            "notes": { "type": "string" }
+          },
+          "required": ["status"]
+        }
+      }
     },
     "issues": {
       "type": "array",
@@ -114,7 +160,7 @@
         "type": "object",
         "properties": {
           "severity": { "type": "string", "enum": ["blocking", "major", "minor"] },
-          "category": { "type": "string", "enum": ["coverage", "staging", "parameters", "assumptions", "performance", "digitized_data"] },
+          "category": { "type": "string", "enum": ["coverage", "staging", "parameters", "assumptions", "performance", "digitized_data", "material_validation", "output_specifications"] },
           "description": { "type": "string" },
           "suggested_fix": { "type": "string" }
         },
@@ -143,4 +189,3 @@
     }
   }
 }
-
