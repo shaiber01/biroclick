@@ -765,6 +765,7 @@ def comparison_validator_node(state: ReproState) -> dict:
         "verdict": "approve",  # "approve" | "needs_revision"
         "stage_id": state.get("current_stage_id"),
         "summary": "Comparison validation stub - implement with LLM call",
+        "feedback": "Analysis looks correct." # Added feedback field
     }
     
     result = {
@@ -774,9 +775,12 @@ def comparison_validator_node(state: ReproState) -> dict:
     }
     
     # Increment analysis revision counter if needs_revision
-    # This happens BEFORE routing function reads the count
     if agent_output["verdict"] == "needs_revision":
         result["analysis_revision_count"] = state.get("analysis_revision_count", 0) + 1
+        result["analysis_feedback"] = agent_output.get("feedback")
+    else:
+        # Clear feedback on success
+        result["analysis_feedback"] = None
     
     return result
 
@@ -1308,8 +1312,18 @@ def material_checkpoint_node(state: ReproState) -> dict:
     # Extract materials from plan parameters - stored as PENDING until user approves
     pending_materials = _extract_validated_materials(state)
     
+    # Guard against empty materials
+    warning_msg = ""
+    if not pending_materials:
+        warning_msg = (
+            "\n\n⚠️ WARNING: No materials were automatically detected! "
+            "Code generation will FAIL without materials. "
+            "Please select 'CHANGE_MATERIAL' or 'CHANGE_DATABASE' to specify them manually."
+        )
+    
     # Build the checkpoint question per global_rules.md RULE 0A format
     question = _format_material_checkpoint_question(state, stage0_info, plot_files, pending_materials)
+    question += warning_msg
     
     return {
         "workflow_phase": "material_checkpoint",

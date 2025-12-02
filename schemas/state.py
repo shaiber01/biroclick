@@ -2901,10 +2901,26 @@ def archive_stage_outputs_to_progress(
     
     for file_path in files:
         # Create output entry matching progress_schema.json#/definitions/output
+        filename = file_path if isinstance(file_path, str) else file_path.get("path", str(file_path))
+        output_type = _infer_output_type(filename)
+        
         output_entry = {
-            "filename": file_path if isinstance(file_path, str) else file_path.get("path", str(file_path)),
-            "type": _infer_output_type(file_path),
+            "filename": filename,
+            "type": output_type,
         }
+        
+        # Try to link to figure comparison data if available
+        # Check state["figure_comparisons"] for matches with this file or stage
+        comparisons = state.get("figure_comparisons", [])
+        for comp in comparisons:
+            if comp.get("stage_id") == stage_id:
+                # If this output is a plot for a specific figure, try to match
+                target_fig = comp.get("figure_id")
+                if target_fig and target_fig in filename:
+                    output_entry["target_figure"] = target_fig
+                    output_entry["result_status"] = comp.get("classification", "unknown")
+                    output_entry["comparison_notes"] = comp.get("summary", "")
+                    
         outputs.append(output_entry)
     
     # Find and update the stage
