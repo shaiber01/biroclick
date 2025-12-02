@@ -13,6 +13,7 @@ See prompts/*.md for the corresponding agent system prompts.
 
 import os
 import signal
+from collections import defaultdict
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Tuple
 
@@ -24,6 +25,7 @@ from schemas.state import (
     sync_extracted_parameters,
     validate_state_for_node,
     get_plan_stage,
+    get_progress_stage,
 )
 from src.prompts import build_agent_prompt
 from datetime import datetime, timezone
@@ -205,8 +207,17 @@ def _build_stub_expected_outputs(paper_id: str, stage_id: str, target_ids: List[
 
 
 def _build_stub_stages(paper_id: str, targets: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    if not targets:
+        targets = [{
+            "figure_id": "FigStub",
+            "description": "Placeholder simulation target",
+            "type": "spectrum",
+            "simulation_class": "FDTD_DIRECT",
+            "precision_requirement": "acceptable",
+            "digitized_data_path": None,
+        }]
     stage0_target = targets[0]["figure_id"]
-    stage1_targets = [t["figure_id"] for t in targets]
+    stage1_targets = [t["figure_id"] for t in targets[1:]] or [stage0_target]
     
     stage0 = {
         "stage_id": "stage0_material_validation",
@@ -338,6 +349,191 @@ def _match_output_file(file_entries: List[Any], target_id: str) -> Optional[str]
         entry = file_entries[0]
         return entry if isinstance(entry, str) else entry.get("path") or entry.get("file")
     return None
+
+
+def _normalize_output_file_entry(entry: Any) -> Optional[str]:
+    """Return a string path for a stage output entry."""
+    if isinstance(entry, str):
+        return entry
+    if isinstance(entry, dict):
+        return entry.get("path") or entry.get("file") or entry.get("filename")
+    return str(entry) if entry is not None else None
+
+
+def _collect_expected_outputs(plan_stage: Optional[Dict[str, Any]], paper_id: str, stage_id: Optional[str]) -> Dict[str, List[str]]:
+    """Build a mapping of target_id -> list of expected filenames for the stage."""
+    mapping: Dict[str, List[str]] = defaultdict(list)
+    if not plan_stage:
+        return mapping
+    expected = plan_stage.get("expected_outputs") or []
+    for spec in expected:
+        target = spec.get("target_figure")
+        pattern = spec.get("filename_pattern")
+        if not target or not pattern:
+            continue
+        resolved = pattern.replace("{paper_id}", paper_id or "")
+        if stage_id:
+            resolved = resolved.replace("{stage_id}", stage_id)
+        resolved = resolved.replace("{target_id}", target.lower())
+        mapping[target].append(resolved)
+    return mapping
+
+
+def _match_expected_files(expected_filenames: List[str], output_files: List[Any]) -> Optional[str]:
+    """Match actual files against the plan's expected filenames."""
+    if not expected_filenames:
+        return None
+    normalized_outputs = [
+        Path(_normalize_output_file_entry(entry) or "").name
+        for entry in output_files
+    ]
+    path_lookup = {
+        Path(_normalize_output_file_entry(entry) or "").name: _normalize_output_file_entry(entry)
+        for entry in output_files
+    }
+    for expected in expected_filenames:
+        expected_name = Path(expected).name
+        if expected_name in path_lookup:
+            return path_lookup[expected_name]
+    # Allow substring match if exact name missing
+    for expected in expected_filenames:
+        expected_name = Path(expected).name
+        for actual in normalized_outputs:
+            if expected_name in actual:
+                return path_lookup.get(actual)
+    return None
+
+
+def _record_discrepancy(
+    state: ReproState,
+    stage_id: Optional[str],
+    figure_id: str,
+    quantity: str,
+    paper_value: str,
+    simulation_value: str,
+    classification: str = "investigate",
+    difference_percent: float = 100.0,
+    likely_cause: str = "",
+    action_taken: str = "",
+    blocking: bool = True,
+) -> Dict[str, Any]:
+    """Append a discrepancy entry to both global log and the stage progress."""
+    if state.get("discrepancies_log") is None:
+        state["discrepancies_log"] = []
+    log = state.setdefault("discrepancies_log", [])
+    entry_id = f"D{len(log) + 1}"
+    discrepancy = {
+        "id": entry_id,
+        "figure": figure_id,
+        "quantity": quantity,
+        "paper_value": paper_value,
+        "simulation_value": simulation_value,
+        "difference_percent": difference_percent,
+        "classification": classification,
+        "likely_cause": likely_cause,
+        "action_taken": action_taken,
+        "blocking": blocking,
+    }
+    log.append(discrepancy)
+    
+    if stage_id:
+        progress_stage = get_progress_stage(state, stage_id)
+        if progress_stage is not None:
+            stage_discrepancies = progress_stage.setdefault("discrepancies", [])
+            stage_discrepancies.append(discrepancy)
+    return discrepancy
+
+
+def _materials_from_stage_outputs(state: ReproState) -> List[Dict[str, Any]]:
+    """Build material entries from Stage 0 stage_outputs files."""
+    stage_outputs = state.get("stage_outputs", {})
+    files = stage_outputs.get("files", [])
+    materials: List[Dict[str, Any]] = []
+    for entry in files:
+        path_str = _normalize_output_file_entry(entry)
+        if not path_str:
+            continue
+        suffix = Path(path_str).suffix.lower()
+        if suffix not in {".csv", ".json", ".h5", ".hdf5", ".npz", ".npy"}:
+            continue
+        material_id = Path(path_str).stem
+        materials.append({
+            "material_id": material_id,
+            "name": material_id.replace("_", " ").title(),
+            "source": "stage0_output",
+            "path": path_str,
+            "csv_available": suffix == ".csv",
+            "from": "stage0_output",
+        })
+    return materials
+
+
+def _extract_materials_from_plan_assumptions(state: ReproState) -> List[Dict[str, Any]]:
+    """Existing fallback path that scans plan parameters and assumptions."""
+    import json
+    import os
+    
+    plan = state.get("plan", {})
+    extracted_params = plan.get("extracted_parameters", [])
+    assumptions = state.get("assumptions", {})
+    
+    # Load material database
+    material_db = _load_material_database()
+    if not material_db:
+        return []
+    
+    material_lookup = {}
+    for mat in material_db.get("materials", []):
+        mat_id = mat.get("material_id", "")
+        material_lookup[mat_id] = mat
+        parts = mat_id.split("_")
+        if len(parts) >= 2:
+            simple_name = parts[-1]
+            if simple_name not in material_lookup:
+                material_lookup[simple_name] = mat
+    
+    validated_materials = []
+    seen_material_ids = set()
+    
+    for param in extracted_params:
+        name = param.get("name", "").lower()
+        value = str(param.get("value", "")).lower()
+        if "material" in name:
+            matched_material = _match_material_from_text(value, material_lookup)
+            if matched_material and matched_material["material_id"] not in seen_material_ids:
+                validated_materials.append(_format_validated_material(
+                    matched_material, 
+                    from_source=f"parameter: {param.get('name')}"
+                ))
+                seen_material_ids.add(matched_material["material_id"])
+    
+    global_assumptions = assumptions.get("global_assumptions", {})
+    material_assumptions = global_assumptions.get("materials", [])
+    
+    for assumption in material_assumptions:
+        if isinstance(assumption, dict):
+            desc = assumption.get("description", "").lower()
+            matched_material = _match_material_from_text(desc, material_lookup)
+            if matched_material and matched_material["material_id"] not in seen_material_ids:
+                validated_materials.append(_format_validated_material(
+                    matched_material,
+                    from_source=f"assumption: {assumption.get('description', '')[:50]}"
+                ))
+                seen_material_ids.add(matched_material["material_id"])
+    
+    return validated_materials
+
+
+def _deduplicate_materials(materials: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    deduped: List[Dict[str, Any]] = []
+    seen = set()
+    for mat in materials:
+        key = mat.get("path") or mat.get("material_id")
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        deduped.append(mat)
+    return deduped
 
 
 def _stage_comparisons_for_stage(state: ReproState, stage_id: Optional[str]) -> List[Dict[str, Any]]:
@@ -1030,6 +1226,8 @@ def results_analyzer_node(state: ReproState) -> dict:
     ]
     
     output_files = state.get("stage_outputs", {}).get("files", [])
+    paper_id = state.get("paper_id", "paper")
+    expected_outputs_map = _collect_expected_outputs(stage_info, paper_id, current_stage_id or "")
     figure_lookup = {fig.get("id") or fig.get("figure_id"): fig for fig in figures}
     
     figure_comparisons: List[Dict[str, Any]] = []
@@ -1037,19 +1235,30 @@ def results_analyzer_node(state: ReproState) -> dict:
     matches = 0
     
     for target_id in target_ids:
-        matched_file = _match_output_file(output_files, target_id)
+        expected_names = expected_outputs_map.get(target_id, [])
+        matched_file = _match_expected_files(expected_names, output_files)
+        if not matched_file:
+            matched_file = _match_output_file(output_files, target_id)
         has_output = matched_file is not None
+        classification_label = "match" if has_output else "missing_output"
         if has_output:
             matches += 1
         
         figure_meta = figure_lookup.get(target_id) or {}
-        classification_label = "pending_validation" if has_output else "missing_output"
         comparison_table = [{
             "feature": "Simulation Output",
             "paper": figure_meta.get("description", target_id),
             "reproduction": matched_file or "Not generated",
-            "status": "✅ Match" if has_output else "❌ Mismatch",
+            "status": "✅ Match" if has_output else "❌ Missing",
         }]
+        if figure_meta.get("digitized_data_path"):
+            comparison_table.append({
+                "feature": "Digitized reference",
+                "paper": figure_meta["digitized_data_path"],
+                "reproduction": matched_file or "Not generated",
+                "status": "Pending review" if has_output else "❌ Missing",
+            })
+        
         comparison_entry = {
             "figure_id": target_id,
             "stage_id": current_stage_id,
@@ -1063,25 +1272,27 @@ def results_analyzer_node(state: ReproState) -> dict:
         }
         figure_comparisons.append(comparison_entry)
         
+        if not has_output:
+            _record_discrepancy(
+                state,
+                current_stage_id,
+                target_id,
+                "output_artifact",
+                "Expected artifact generated per plan",
+                "Not generated",
+                classification="investigate",
+                likely_cause="Simulation run did not create expected output file.",
+                action_taken="Flagged for analyzer follow-up",
+                blocking=True,
+            )
+        
         per_result_reports.append({
             "result_id": f"{current_stage_id or 'stage'}_{target_id}",
             "target_figure": target_id,
-            "quantity": stage_info.get("stage_type", "unknown") if stage_info else "unknown",
-            "paper_value": {
-                "value": 0,
-                "unit": "a.u.",
-                "source": figure_meta.get("description", "paper_description"),
-            },
-            "simulated_value": {
-                "value": 0,
-                "unit": "a.u.",
-            },
-            "discrepancy": {
-                "absolute": 0,
-                "relative_percent": 0 if has_output else 100,
-                "classification": "excellent" if has_output else "investigate",
-            },
-            "notes": "Output file identified." if has_output else "No output file matched the target figure.",
+            "status": classification_label,
+            "expected_outputs": expected_names,
+            "matched_output": matched_file,
+            "notes": "Output identified." if has_output else "Output missing; requires rerun.",
         })
     
     total_targets = len(target_ids)
@@ -1825,75 +2036,14 @@ def material_checkpoint_node(state: ReproState) -> dict:
 
 def _extract_validated_materials(state: ReproState) -> list:
     """
-    Extract material information from plan and build validated_materials list.
-    
-    Uses materials/index.json as the authoritative source for material data.
-    Scans extracted_parameters for material-related entries and matches them
-    against material_id values in the index.
-    
-    Returns:
-        List of dicts with material_id, data_file, drude_lorentz_fit, etc.
+    Extract material information from Stage 0 outputs or fall back to plan data.
     """
-    import json
-    import os
+    materials = _materials_from_stage_outputs(state)
+    materials.extend(_extract_materials_from_plan_assumptions(state))
     
-    plan = state.get("plan", {})
-    extracted_params = plan.get("extracted_parameters", [])
-    assumptions = state.get("assumptions", {})
-    
-    # Load material database
-    material_db = _load_material_database()
-    if not material_db:
-        return []
-    
-    # Build lookup tables from material database
-    material_lookup = {}
-    for mat in material_db.get("materials", []):
-        mat_id = mat.get("material_id", "")
-        material_lookup[mat_id] = mat
-        
-        # Also index by simple name (e.g., "silver" -> "palik_silver")
-        # Extract simple name from material_id (e.g., "palik_silver" -> "silver")
-        parts = mat_id.split("_")
-        if len(parts) >= 2:
-            simple_name = parts[-1]  # e.g., "silver", "gold", "aluminum"
-            if simple_name not in material_lookup:
-                material_lookup[simple_name] = mat
-    
-    validated_materials = []
-    seen_material_ids = set()
-    
-    # Scan extracted parameters for material info
-    for param in extracted_params:
-        name = param.get("name", "").lower()
-        value = str(param.get("value", "")).lower()
-        
-        # Look for material-related parameters
-        if "material" in name:
-            matched_material = _match_material_from_text(value, material_lookup)
-            if matched_material and matched_material["material_id"] not in seen_material_ids:
-                validated_materials.append(_format_validated_material(
-                    matched_material, 
-                    from_source=f"parameter: {param.get('name')}"
-                ))
-                seen_material_ids.add(matched_material["material_id"])
-    
-    # Also check assumptions for material choices
-    global_assumptions = assumptions.get("global_assumptions", {})
-    material_assumptions = global_assumptions.get("materials", [])
-    
-    for assumption in material_assumptions:
-        if isinstance(assumption, dict):
-            desc = assumption.get("description", "").lower()
-            matched_material = _match_material_from_text(desc, material_lookup)
-            if matched_material and matched_material["material_id"] not in seen_material_ids:
-                validated_materials.append(_format_validated_material(
-                    matched_material,
-                    from_source=f"assumption: {assumption.get('description', '')[:50]}"
-                ))
-                seen_material_ids.add(matched_material["material_id"])
-    
-    return validated_materials
+    if not materials:
+        materials = state.get("planned_materials", [])
+    return _deduplicate_materials(materials)
 
 
 def _load_material_database() -> dict:
