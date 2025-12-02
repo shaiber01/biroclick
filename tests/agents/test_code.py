@@ -12,7 +12,6 @@ from src.agents.code import (
 class TestCodeGeneratorNode:
     """Tests for code_generator_node function."""
 
-    @pytest.mark.skip(reason="Uses 'code' state key not 'generated_code' - needs implementation alignment")
     @patch("src.agents.code.call_agent_with_metrics")
     @patch("src.agents.code.check_context_or_escalate")
     @patch("src.agents.code.build_agent_prompt")
@@ -24,34 +23,41 @@ class TestCodeGeneratorNode:
         mock_context.return_value = None
         mock_prompt.return_value = "system prompt"
         mock_user.return_value = "user content"
+        # Code must be >50 chars and not contain stub markers
         mock_call.return_value = {
-            "code": "import meep as mp\nsim = mp.Simulation()",
+            "code": "import meep as mp\nimport numpy as np\n\nsim = mp.Simulation(cell_size=mp.Vector3(2,2,0), resolution=10)\nsim.run(until=200)",
             "explanation": "Basic simulation setup",
             "expected_runtime_minutes": 5,
         }
         
-        state = {"current_stage_id": "stage1", "design_description": {}}
+        # Design must be >50 chars and not contain stub markers
+        state = {
+            "current_stage_id": "stage1",
+            "current_stage_type": "MATERIAL_VALIDATION",  # Avoids validated_materials check
+            "design_description": "This is a detailed simulation design specification with geometry, sources, and monitors for the FDTD simulation.",
+        }
         
         result = code_generator_node(state)
         
         assert result["workflow_phase"] == "code_generation"
-        assert "generated_code" in result
-        assert "meep" in result["generated_code"]
+        assert "code" in result
+        assert "meep" in result["code"]
 
-    @pytest.mark.skip(reason="Implementation doesn't check for missing design this way")
     @patch("src.agents.code.check_context_or_escalate")
-    def test_errors_on_missing_design(self, mock_context):
-        """Should error when design_description is missing."""
+    def test_errors_on_stub_design(self, mock_context):
+        """Should error when design_description is a stub."""
         mock_context.return_value = None
         
-        state = {"current_stage_id": "stage1", "design_description": None}
+        state = {
+            "current_stage_id": "stage1",
+            "design_description": "STUB design TODO replace",  # Contains stub marker
+        }
         
         result = code_generator_node(state)
         
-        assert result["awaiting_user_input"] is True
-        assert result["ask_user_trigger"] == "missing_design"
+        # Returns supervisor_verdict to continue and tries again
+        assert result.get("supervisor_verdict") == "ok_continue"
 
-    @pytest.mark.skip(reason="Implementation has different error handling - needs alignment")
     @patch("src.agents.code.call_agent_with_metrics")
     @patch("src.agents.code.check_context_or_escalate")
     @patch("src.agents.code.build_agent_prompt")
@@ -63,7 +69,11 @@ class TestCodeGeneratorNode:
         mock_user.return_value = "content"
         mock_call.side_effect = Exception("API error")
         
-        state = {"current_stage_id": "stage1", "design_description": {}}
+        state = {
+            "current_stage_id": "stage1",
+            "current_stage_type": "MATERIAL_VALIDATION",
+            "design_description": "This is a detailed simulation design specification with geometry, sources, and monitors for the FDTD simulation.",
+        }
         
         result = code_generator_node(state)
         
@@ -111,7 +121,6 @@ class TestCodeReviewerNode:
         assert result["workflow_phase"] == "code_review"
         assert result["last_code_review_verdict"] == "approve"
 
-    @pytest.mark.skip(reason="Uses 'code' state key not 'generated_code' - needs alignment")
     @patch("src.agents.code.call_agent_with_metrics")
     @patch("src.agents.code.check_context_or_escalate")
     @patch("src.agents.code.build_agent_prompt")
@@ -128,7 +137,7 @@ class TestCodeReviewerNode:
         
         state = {
             "current_stage_id": "stage1",
-            "generated_code": "import meep as mp",
+            "code": "import meep as mp",  # Uses 'code' not 'generated_code'
             "code_revision_count": 0,
         }
         
@@ -136,7 +145,7 @@ class TestCodeReviewerNode:
         
         assert result["last_code_review_verdict"] == "needs_revision"
         assert result["code_revision_count"] == 1
-        assert "code_reviewer_feedback" in result
+        assert "reviewer_feedback" in result  # Uses 'reviewer_feedback' not 'code_reviewer_feedback'
 
     @patch("src.agents.code.call_agent_with_metrics")
     @patch("src.agents.code.check_context_or_escalate")

@@ -39,9 +39,10 @@ class TestSimulationDesignerNode:
         assert "design_description" in result
         assert result["design_description"]["geometry"]["type"] == "sphere"
 
-    @pytest.mark.skip(reason="Implementation doesn't directly return escalation for None stage_id")
-    def test_errors_on_missing_stage_id(self):
+    @patch("src.agents.design.check_context_or_escalate")
+    def test_errors_on_missing_stage_id(self, mock_context):
         """Should error when current_stage_id is missing."""
+        mock_context.return_value = None
         state = {"current_stage_id": None}
         
         result = simulation_designer_node(state)

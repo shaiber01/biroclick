@@ -39,7 +39,6 @@ class TestExecutionValidatorNode:
         assert result["workflow_phase"] == "execution_validation"
         assert result["execution_verdict"] == "pass"
 
-    @pytest.mark.skip(reason="Uses different state keys than expected - needs alignment")
     @patch("src.agents.execution.call_agent_with_metrics")
     @patch("src.agents.execution.check_context_or_escalate")
     @patch("src.agents.execution.build_agent_prompt")
@@ -56,17 +55,15 @@ class TestExecutionValidatorNode:
         
         state = {
             "current_stage_id": "stage1",
-            "run_result": {
-                "success": False,
-                "stderr": "Segmentation fault",
-            },
-            "execution_attempt_count": 0,
+            "stage_outputs": {},  # Uses stage_outputs not run_result
+            "run_error": "Segmentation fault",  # Error is in run_error
+            "execution_failure_count": 0,  # Uses execution_failure_count
         }
         
         result = execution_validator_node(state)
         
         assert result["execution_verdict"] == "fail"
-        assert result["execution_attempt_count"] == 1
+        assert result["execution_failure_count"] == 1
 
     @patch("src.agents.execution.call_agent_with_metrics")
     @patch("src.agents.execution.check_context_or_escalate")
@@ -104,7 +101,6 @@ class TestExecutionValidatorNode:
 class TestPhysicsSanityNode:
     """Tests for physics_sanity_node function."""
 
-    @pytest.mark.skip(reason="Uses different state keys than expected - needs alignment")
     @patch("src.agents.execution.call_agent_with_metrics")
     @patch("src.agents.execution.check_context_or_escalate")
     @patch("src.agents.execution.build_agent_prompt")
@@ -116,22 +112,20 @@ class TestPhysicsSanityNode:
             "verdict": "pass",
             "issues": [],
             "summary": "Results are physically reasonable",
+            "backtrack_suggestion": {"suggest_backtrack": False},
         }
         
         state = {
             "current_stage_id": "stage1",
-            "run_result": {
-                "success": True,
-                "output_files": ["spectrum.csv"],
-            },
+            "stage_outputs": {"files": ["spectrum.csv"]},  # Uses stage_outputs
+            "design_description": {},
         }
         
         result = physics_sanity_node(state)
         
-        assert result["workflow_phase"] == "physics_sanity"
+        assert result["workflow_phase"] == "physics_validation"  # Uses physics_validation not physics_sanity
         assert result["physics_verdict"] == "pass"
 
-    @pytest.mark.skip(reason="Uses different state keys than expected - needs alignment")
     @patch("src.agents.execution.call_agent_with_metrics")
     @patch("src.agents.execution.check_context_or_escalate")
     @patch("src.agents.execution.build_agent_prompt")
@@ -144,18 +138,19 @@ class TestPhysicsSanityNode:
             "issues": [{"severity": "critical", "description": "Negative absorption"}],
             "summary": "Results violate physics",
             "feedback": "Check energy conservation",
+            "backtrack_suggestion": {"suggest_backtrack": False},
         }
         
         state = {
             "current_stage_id": "stage1",
-            "run_result": {"success": True},
-            "physics_revision_count": 0,
+            "stage_outputs": {},
+            "physics_failure_count": 0,  # Uses physics_failure_count not physics_revision_count
         }
         
         result = physics_sanity_node(state)
         
         assert result["physics_verdict"] == "fail"
-        assert result["physics_revision_count"] == 1
+        assert result["physics_failure_count"] == 1
 
     @patch("src.agents.execution.call_agent_with_metrics")
     @patch("src.agents.execution.check_context_or_escalate")
@@ -189,29 +184,29 @@ class TestPhysicsSanityNode:
         
         assert result["awaiting_user_input"] is True
 
-    @pytest.mark.skip(reason="Uses different state keys than expected - needs alignment")
     @patch("src.agents.execution.call_agent_with_metrics")
     @patch("src.agents.execution.check_context_or_escalate")
     @patch("src.agents.execution.build_agent_prompt")
-    def test_respects_max_revisions(self, mock_prompt, mock_context, mock_call):
-        """Should not exceed max revisions."""
+    def test_respects_max_failures(self, mock_prompt, mock_context, mock_call):
+        """Should not exceed max failures."""
         mock_context.return_value = None
         mock_prompt.return_value = "prompt"
         mock_call.return_value = {
             "verdict": "fail",
             "issues": [],
             "summary": "Still unphysical",
+            "backtrack_suggestion": {"suggest_backtrack": False},
         }
         
         state = {
             "current_stage_id": "stage1",
-            "run_result": {},
-            "physics_revision_count": 3,
-            "runtime_config": {"max_physics_revisions": 3},
+            "stage_outputs": {},
+            "physics_failure_count": 3,
+            "runtime_config": {"max_physics_failures": 3},
         }
         
         result = physics_sanity_node(state)
         
         # Should not increment past max
-        assert result["physics_revision_count"] == 3
+        assert result["physics_failure_count"] == 3
 

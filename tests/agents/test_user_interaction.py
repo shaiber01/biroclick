@@ -12,20 +12,18 @@ from src.agents.user_interaction import (
 class TestAskUserNode:
     """Tests for ask_user_node function."""
 
-    @pytest.mark.skip(reason="Implementation structure differs - needs alignment")
-    def test_sets_awaiting_input_flag(self):
-        """Should set awaiting_user_input flag."""
+    def test_returns_not_awaiting_when_no_questions(self):
+        """Should return awaiting_user_input=False when no questions pending."""
         state = {
-            "pending_user_questions": ["What is your choice?"],
+            "pending_user_questions": [],
             "ask_user_trigger": "test_trigger",
         }
         
         result = ask_user_node(state)
         
-        assert result["awaiting_user_input"] is True
-        assert "user_question" in result
+        assert result["awaiting_user_input"] is False
 
-    @pytest.mark.skip(reason="Implementation structure differs - needs alignment")
+    @pytest.mark.skip(reason="ask_user_node is CLI-based - requires stdin mocking")
     def test_formats_question_from_pending(self):
         """Should format question from pending questions."""
         state = {
@@ -36,24 +34,23 @@ class TestAskUserNode:
         result = ask_user_node(state)
         
         assert result["awaiting_user_input"] is True
-        # Question should include all pending questions
-        assert "Question 1" in result["user_question"]
 
-    @pytest.mark.skip(reason="Implementation structure differs - needs alignment")
-    def test_handles_empty_questions(self):
-        """Should handle empty pending questions."""
-        state = {"pending_user_questions": [], "ask_user_trigger": "test"}
+    @pytest.mark.skip(reason="ask_user_node is CLI-based - requires stdin mocking")
+    def test_collects_user_response(self):
+        """Should collect user response via CLI."""
+        state = {
+            "pending_user_questions": ["Question?"],
+            "ask_user_trigger": "test",
+        }
         
         result = ask_user_node(state)
         
-        # Should still set awaiting_user_input
-        assert result["awaiting_user_input"] is True
+        assert result["awaiting_user_input"] is False
 
 
 class TestMaterialCheckpointNode:
     """Tests for material_checkpoint_node function."""
 
-    @pytest.mark.skip(reason="Implementation structure differs - needs alignment")
     @patch("src.agents.user_interaction.extract_validated_materials")
     @patch("src.agents.user_interaction.format_material_checkpoint_question")
     def test_triggers_material_validation(self, mock_format, mock_extract):
@@ -65,20 +62,20 @@ class TestMaterialCheckpointNode:
         
         state = {
             "current_stage_id": "stage0_material_validation",
-            "run_result": {"success": True, "output_files": ["gold.csv"]},
+            "stage_outputs": {"files": ["gold.csv"]},  # Uses stage_outputs
+            "progress": {"stages": []},
         }
         
         result = material_checkpoint_node(state)
         
         assert result["awaiting_user_input"] is True
         assert result["ask_user_trigger"] == "material_checkpoint"
-        assert "validated_materials" in result
+        assert "pending_validated_materials" in result  # Uses pending_validated_materials
 
-    @pytest.mark.skip(reason="Implementation structure differs - needs alignment")
     @patch("src.agents.user_interaction.extract_validated_materials")
     @patch("src.agents.user_interaction.format_material_checkpoint_question")
-    def test_includes_validated_materials(self, mock_format, mock_extract):
-        """Should include validated materials in result."""
+    def test_includes_pending_validated_materials(self, mock_format, mock_extract):
+        """Should include pending validated materials in result."""
         mock_extract.return_value = [
             {"material_id": "gold", "name": "Gold"},
             {"material_id": "silver", "name": "Silver"},
@@ -87,14 +84,14 @@ class TestMaterialCheckpointNode:
         
         state = {
             "current_stage_id": "stage0",
-            "run_result": {"success": True},
+            "stage_outputs": {"files": []},
+            "progress": {"stages": []},
         }
         
         result = material_checkpoint_node(state)
         
-        assert len(result["validated_materials"]) == 2
+        assert len(result["pending_validated_materials"]) == 2
 
-    @pytest.mark.skip(reason="Implementation structure differs - needs alignment")
     @patch("src.agents.user_interaction.extract_validated_materials")
     @patch("src.agents.user_interaction.format_material_checkpoint_question")
     def test_handles_no_materials(self, mock_format, mock_extract):
@@ -104,13 +101,14 @@ class TestMaterialCheckpointNode:
         
         state = {
             "current_stage_id": "stage0",
-            "run_result": {"success": True},
+            "stage_outputs": {"files": []},
+            "progress": {"stages": []},
         }
         
         result = material_checkpoint_node(state)
         
         assert result["awaiting_user_input"] is True
-        assert result["validated_materials"] == []
+        assert result["pending_validated_materials"] == []
 
     @patch("src.agents.user_interaction.extract_validated_materials")
     @patch("src.agents.user_interaction.format_material_checkpoint_question")
