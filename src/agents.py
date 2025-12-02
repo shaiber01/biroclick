@@ -336,9 +336,10 @@ def select_stage_node(state: ReproState) -> dict:
     for stage in stages:
         status = stage.get("status", "not_started")
         
-        # Skip completed, in_progress, blocked, or invalidated stages
+        # Skip completed, in_progress, or blocked stages.
+        # NOTE: "invalidated" stages ARE eligible if their dependencies are met (re-run)
         if status in ["completed_success", "completed_partial", "completed_failed", 
-                      "in_progress", "blocked", "invalidated"]:
+                      "in_progress", "blocked"]:
             continue
         
         # Check if dependencies are satisfied
@@ -895,9 +896,11 @@ def supervisor_node(state: ReproState) -> dict:
                 result["planner_feedback"] = f"User indicated wrong material: {response_text}. Please update plan."
             elif "NEED_HELP" in response_text:
                 result["supervisor_verdict"] = "ask_user"
+                # OVERWRITE pending questions to avoid loop
                 result["pending_user_questions"] = [
                     "Please provide more details about the material issue. "
-                    "What specific aspect of the optical constants looks incorrect?"
+                    "What specific aspect of the optical constants looks incorrect? "
+                    "(e.g., 'Imaginary part too high', 'Wrong units', 'Resonance missing')"
                 ]
             else:
                 # Default: assume approval if unclear
