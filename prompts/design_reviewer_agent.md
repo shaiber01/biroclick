@@ -120,81 +120,46 @@ When reviewing a simulation design, verify EVERY item:
 B. OUTPUT FORMAT
 ═══════════════════════════════════════════════════════════════════════
 
-Your output must conform to the schema in schemas/design_reviewer_output_schema.json.
-Use function calling with this schema to ensure valid output.
+Return a JSON object with your design review results. The system validates structure automatically.
 
-{
-  "stage_id": "stage1_single_disk",
-  
-  "verdict": "approve | needs_revision",
-  
-  "checklist_results": {
-    "geometry": {
-      "status": "pass | fail | warning",
-      "notes": "details if not pass"
-    },
-    "physics": {
-      "status": "pass | fail | warning",
-      "notes": "details if not pass"
-    },
-    "materials": {
-      "status": "pass | fail | warning",
-      "notes": "details if not pass"
-    },
-    "unit_system": {
-      "status": "pass | fail | warning",
-      "notes": "details if not pass"
-    },
-    "source": {
-      "status": "pass | fail | warning",
-      "notes": "details if not pass"
-    },
-    "domain": {
-      "status": "pass | fail | warning",
-      "notes": "details if not pass"
-    },
-    "resolution": {
-      "status": "pass | fail | warning",
-      "notes": "details if not pass"
-    },
-    "outputs": {
-      "status": "pass | fail | warning",
-      "notes": "details if not pass"
-    },
-    "runtime": {
-      "status": "pass | fail | warning",
-      "notes": "details if not pass"
-    }
-  },
-  
-  "strengths": [
-    "list of things done well"
-  ],
-  
-  "issues": [
-    {
-      "severity": "blocking | major | minor",
-      "category": "geometry | physics | materials | unit_system | source | domain | resolution | outputs | runtime",
-      "description": "what the issue is",
-      "suggested_fix": "how to fix it"
-    }
-  ],
-  
-  "revision_count": 1,
-  
-  "escalate_to_user": false,  // or specific question string
-  
-  "backtrack_suggestion": {
-    // OPTIONAL - Only include if design review reveals earlier plan assumptions were wrong
-    "suggest_backtrack": true | false,
-    "target_stage_id": "stage_id to go back to",
-    "reason": "What in the design reveals earlier stages are wrong",
-    "severity": "critical | significant | minor",
-    "evidence": "Specific evidence from design review"
-  },
-  
-  "summary": "one paragraph summary of design review"
-}
+### Required Fields
+
+| Field | Description |
+|-------|-------------|
+| `stage_id` | The stage ID of the design being reviewed |
+| `verdict` | `"approve"` or `"needs_revision"` |
+| `checklist_results` | Object with results for each checklist category |
+| `summary` | One paragraph design review summary |
+
+### Checklist Categories
+
+Each category in `checklist_results` should have `status` ("pass", "warning", or "fail") plus `notes`:
+
+**geometry**: Dimensions match paper? Structures positioned correctly?
+
+**physics**: Correct phenomena being simulated? Appropriate approximations?
+
+**materials**: All materials specified with valid sources?
+
+**unit_system**: Consistent normalization? Conversions documented?
+
+**source**: Correct type, spectrum, polarization for the measurement?
+
+**domain**: Cell size adequate? PML sufficient? Symmetries correct?
+
+**resolution**: Sufficient for smallest features? Within budget?
+
+**outputs**: All target figures have mapped outputs?
+
+**runtime**: Estimate reasonable? Within budget?
+
+### Optional Fields
+
+| Field | Description |
+|-------|-------------|
+| `strengths` | Array of things done well |
+| `issues` | Array of problems (severity, category, description, suggested_fix) |
+| `backtrack_suggestion` | Only if design reveals FUNDAMENTAL plan issues (wrong geometry type, etc.) |
 
 ═══════════════════════════════════════════════════════════════════════
 C. VERDICT GUIDELINES

@@ -232,53 +232,44 @@ METASURFACES:
 F. OUTPUT FORMAT
 ═══════════════════════════════════════════════════════════════════════
 
-Your output must be a JSON object:
+Return a JSON object with your prompt adaptations. The system validates structure automatically.
 
-{
-  "paper_id": "paper_identifier",
-  "analysis_summary": {
-    "domain": "plasmonics_strong_coupling",
-    "sub_domain": "J-aggregate_nanoparticle_coupling",
-    "key_materials": ["aluminum", "TDBC_J-aggregate", "PMMA"],
-    "key_phenomena": ["localized_surface_plasmon", "exciton", "Rabi_splitting"],
-    "simulation_challenges": [
-      "Resonant material requires careful Lorentzian fitting",
-      "Coupling strength sensitive to geometry details"
-    ],
-    "identified_gaps": [
-      "Base prompts lack J-aggregate fitting guidance",
-      "Rabi splitting thresholds not defined"
-    ]
-  },
-  
-  "prompt_modifications": [
-    {
-      "id": "MOD_001",
-      "target_agent": "SimulationDesignerAgent",
-      "target_file": "simulation_designer_agent.md",
-      "section": "B. MATERIAL MODEL GUIDELINES",
-      "modification_type": "append | modify | disable",
-      "confidence": 0.85,
-      "original_content": null,  // Only for modify/disable
-      "new_content": "...",
-      "reasoning": "why this modification helps",
-      "impact": "high | medium | low"
-    }
-  ],
-  
-  "agents_not_modified": [
-    {
-      "agent": "ExecutionValidatorAgent",
-      "reason": "Base prompt sufficient for this paper"
-    }
-  ],
-  
-  "warnings": [
-    "Paper uses unusual material X - may need user input on optical data"
-  ],
-  
-  "adaptation_log_file": "prompt_adaptations_<paper_id>.json"
-}
+### Required Fields
+
+| Field | Description |
+|-------|-------------|
+| `paper_id` | The paper identifier |
+| `analysis_summary` | Your analysis of the paper's requirements |
+| `prompt_modifications` | Array of modifications to apply |
+
+### Field Details
+
+**analysis_summary**: Object with:
+- `domain`: Physics domain (plasmonics, photonic_crystal, etc.)
+- `sub_domain`: More specific area
+- `key_materials`: Materials that need special handling
+- `key_phenomena`: Physics phenomena involved
+- `simulation_challenges`: What makes this paper tricky
+- `identified_gaps`: What base prompts don't cover
+
+**prompt_modifications**: For each modification:
+- `id`: Unique ID (MOD_001, MOD_002, etc.)
+- `target_agent`: Which agent's prompt to modify
+- `target_file`: The prompt filename
+- `section`: Which section to modify
+- `modification_type`: "append", "modify", or "disable"
+- `confidence`: 0.0-1.0 confidence score
+- `new_content`: The content to add/replace
+- `reasoning`: Why this helps
+- `impact`: "high", "medium", or "low"
+
+### Optional Fields
+
+| Field | Description |
+|-------|-------------|
+| `agents_not_modified` | Array of agents that don't need changes (with reason) |
+| `warnings` | Issues that may need user input |
+| `adaptation_log_file` | Filename to save adaptation log |
 
 ═══════════════════════════════════════════════════════════════════════
 G. MODIFICATION APPLICATION

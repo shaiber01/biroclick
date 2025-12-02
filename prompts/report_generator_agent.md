@@ -110,94 +110,55 @@ If the reproduction was interrupted or incomplete:
 5) Explain why in conclusions.final_statement
 
 ═══════════════════════════════════════════════════════════════════════
-D. OUTPUT FORMAT (must match report_schema.json exactly)
+D. OUTPUT FORMAT
 ═══════════════════════════════════════════════════════════════════════
 
-Return a JSON object with this structure:
+Return a JSON object with the final reproduction report. The system validates structure automatically.
 
-{
-  "paper_id": "string - unique paper identifier",
-  
-  "paper_citation": {
-    "authors": "Author names",
-    "title": "Paper title",
-    "journal": "Journal name",
-    "year": 2023,
-    "volume": "optional",
-    "pages": "optional",
-    "doi": "optional"
-  },
-  
-  "executive_summary": {
-    "overall_assessment": [
-      {
-        "aspect": "What was assessed",
-        "status": "Reproduced|Partial|Not Reproduced|Not Attempted",
-        "status_icon": "✅|⚠️|❌|⏭️",
-        "notes": "Brief explanation"
-      }
-    ]
-  },
-  
-  "assumptions": {
-    "parameters_from_paper": [
-      {"parameter": "name", "value": "value with units", "source": "Paper Section X"}
-    ],
-    "parameters_requiring_interpretation": [
-      {"parameter": "name", "assumed_value": "value", "rationale": "why", "impact": "Critical|Moderate|Minor"}
-    ],
-    "simulation_implementation": [
-      {"parameter": "name", "value": "value"}
-    ]
-  },
-  
-  "figure_comparisons": [
-    {
-      "figure_id": "Fig2a",
-      "title": "Descriptive title",
-      "paper_image_path": "optional path",
-      "reproduction_image_path": "optional path",
-      "comparison_table": [
-        {"feature": "Peak wavelength", "paper": "650 nm", "reproduction": "655 nm", "status": "✅ Match|⚠️ Partial|❌ Mismatch"}
-      ],
-      "shape_comparison": [
-        {"aspect": "Peak shape", "paper": "Lorentzian", "reproduction": "Lorentzian with shoulder"}
-      ],
-      "reason_for_difference": "Explanation of any discrepancies"
-    }
-  ],
-  
-  "summary_table": [
-    {
-      "figure": "Fig2a",
-      "main_effect": "Extinction spectrum",
-      "effect_match": "✅|⚠️|❌",
-      "shape_format": "Spectral shape",
-      "format_match": "✅|⚠️|❌"
-    }
-  ],
-  
-  "systematic_discrepancies": [
-    {
-      "name": "LSP Spectral Redshift",
-      "description": "All LSP resonances are redshifted by ~50 nm",
-      "origin": "Different optical constants source",
-      "affected_figures": ["Fig2a", "Fig3b"]
-    }
-  ],
-  
-  "conclusions": {
-    "main_physics_reproduced": true,
-    "key_findings": [
-      "✅ Main plasmonic resonance reproduced within 5%",
-      "⚠️ Field enhancement 30% lower than paper"
-    ],
-    "limitations": [
-      "Material data from different source than paper"
-    ],
-    "final_statement": "The reproduction validates the paper's main claims..."
-  }
-}
+### Required Fields
+
+| Field | Description |
+|-------|-------------|
+| `paper_id` | Unique paper identifier |
+| `paper_citation` | Paper bibliographic info (authors, title, journal, year) |
+| `executive_summary` | High-level assessment with overall_assessment array |
+| `assumptions` | All assumptions made during reproduction |
+| `figure_comparisons` | Detailed comparison for each target figure |
+| `summary_table` | Quick-reference table of all figure results |
+| `conclusions` | Final assessment and findings |
+
+### Field Details
+
+**executive_summary.overall_assessment**: Array of assessments, each with:
+- `aspect`: What was assessed (e.g., "Material optical properties")
+- `status`: "Reproduced", "Partial", "Not Reproduced", or "Not Attempted"
+- `status_icon`: ✅, ⚠️, ❌, or ⏭️
+- `notes`: Brief explanation
+
+**assumptions**: Three arrays:
+- `parameters_from_paper`: Params with parameter, value, source
+- `parameters_requiring_interpretation`: Params with parameter, assumed_value, rationale, impact (Critical/Moderate/Minor)
+- `simulation_implementation`: Numerical choices with parameter, value
+
+**figure_comparisons**: For each figure:
+- `figure_id`, `title`, `paper_image_path`, `reproduction_image_path`
+- `comparison_table`: Array of {feature, paper, reproduction, status (✅ Match/⚠️ Partial/❌ Mismatch)}
+- `shape_comparison`: Array of {aspect, paper, reproduction}
+- `reason_for_difference`: Explanation of discrepancies
+
+**summary_table**: Array with figure, main_effect, effect_match (✅/⚠️/❌), shape_format, format_match
+
+**conclusions**: Object with:
+- `main_physics_reproduced`: boolean
+- `key_findings`: Array of findings with status icons
+- `limitations`: Array of limitations
+- `final_statement`: One paragraph conclusion
+
+### Optional Fields
+
+| Field | Description |
+|-------|-------------|
+| `systematic_discrepancies` | Patterns affecting multiple figures (name, description, origin, affected_figures) |
 
 ═══════════════════════════════════════════════════════════════════════
 E. EXAMPLE OUTPUT

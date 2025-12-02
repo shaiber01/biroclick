@@ -256,90 +256,47 @@ Meep-specific checks that catch common API misuse errors:
 C. OUTPUT FORMAT
 ═══════════════════════════════════════════════════════════════════════
 
-Your output must conform to the schema in schemas/code_reviewer_output_schema.json.
-Use function calling with this schema to ensure valid output.
+Return a JSON object with your code review results. The system validates structure automatically.
 
-{
-  "stage_id": "stage1_single_disk",
-  
-  "verdict": "approve | needs_revision",
-  
-  "checklist_results": {
-    "unit_normalization": {
-      "status": "pass | fail | warning",
-      "a_unit_value": 1e-6,
-      "design_a_unit": 1e-6,
-      "match": true,
-      "notes": "details if not pass"
-    },
-    "numerics": {
-      "status": "pass | fail | warning",
-      "notes": "details if not pass"
-    },
-    "source": {
-      "status": "pass | fail | warning",
-      "notes": "details if not pass"
-    },
-    "domain": {
-      "status": "pass | fail | warning",
-      "notes": "details if not pass"
-    },
-    "monitors": {
-      "status": "pass | fail | warning",
-      "notes": "details if not pass"
-    },
-    "visualization": {
-      "status": "pass | fail | warning",
-      "notes": "details if not pass"
-    },
-    "code_quality": {
-      "status": "pass | fail | warning",
-      "notes": "details if not pass"
-    },
-    "runtime": {
-      "status": "pass | fail | warning",
-      "estimated_minutes": 15,
-      "budget_minutes": 30,
-      "notes": "details if not pass"
-    },
-    "meep_api": {
-      "status": "pass | fail | warning",
-      "notes": "details if not pass"
-    }
-  },
-  
-  "strengths": [
-    "list of things done well"
-  ],
-  
-  "issues": [
-    {
-      "severity": "blocking | major | minor",
-      "category": "unit_normalization | numerics | source | domain | monitors | visualization | code_quality | runtime | meep_api",
-      "description": "what the issue is",
-      "suggested_fix": "how to fix it",
-      "code_location": "line number or function name if applicable"
-    }
-  ],
-  
-  "revision_count": 1,
-  
-  "escalate_to_user": false,  // or specific question string
-  
-  "backtrack_suggestion": {
-    // OPTIONAL - Only include if code review reveals the DESIGN was based on wrong assumptions
-    "suggest_backtrack": true | false,
-    "target_stage_id": "stage_id to go back to",
-    "reason": "What in the code reveals earlier stages are wrong",
-    "severity": "critical | significant | minor",
-    "evidence": "Specific evidence from code review"
-  },
-  // Note: Only suggest backtrack if code reveals FUNDAMENTAL issues
-  // from earlier stages (wrong geometry type, wrong material, etc.)
-  // Do NOT suggest backtrack for code bugs that can be fixed in revision
-  
-  "summary": "one paragraph summary of code review"
-}
+### Required Fields
+
+| Field | Description |
+|-------|-------------|
+| `stage_id` | The stage ID of the code being reviewed |
+| `verdict` | `"approve"` or `"needs_revision"` |
+| `checklist_results` | Object with results for each checklist category |
+| `summary` | One paragraph code review summary |
+
+### Checklist Categories
+
+Each category in `checklist_results` should have `status` ("pass", "warning", or "fail") plus `notes`:
+
+**unit_normalization**: Does code use same a_unit as design?
+- Additional fields: `a_unit_value`, `design_a_unit`, `match`
+
+**numerics**: PML thickness, resolution, runtime adequate?
+
+**source**: Correct type, position, spectrum, polarization?
+
+**domain**: Cell size, symmetries, periodicity correct?
+
+**monitors**: Correct positions, types, frequency ranges?
+
+**visualization**: Uses plt.savefig/close, no plt.show()?
+
+**code_quality**: Clean, documented, handles errors?
+
+**runtime**: Within budget? Additional fields: `estimated_minutes`, `budget_minutes`
+
+**meep_api**: Uses current Meep API, no deprecated calls?
+
+### Optional Fields
+
+| Field | Description |
+|-------|-------------|
+| `strengths` | Array of things done well |
+| `issues` | Array of problems (severity, category, description, suggested_fix, code_location) |
+| `backtrack_suggestion` | Only if code reveals FUNDAMENTAL design issues (wrong geometry type, etc.) |
 
 ═══════════════════════════════════════════════════════════════════════
 D. VERDICT GUIDELINES
