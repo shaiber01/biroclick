@@ -197,9 +197,9 @@ class TestResultsAnalyzerNode:
     @patch("src.agents.analysis.Path")
     def test_calls_llm_for_visual_analysis(
         self, mock_path_cls, mock_match, mock_metrics, mock_load, mock_stub, mock_prompt,
-        mock_context, mock_plan_stage, mock_user_content, mock_images, mock_call
+        mock_context, mock_plan_stage, mock_user_content, mock_images, mock_call, validated_results_analyzer_response
     ):
-        """Should call LLM for visual comparison when images available."""
+        """Should call LLM for visual comparison when images available (using validated mock)."""
         mock_context.return_value = None
         mock_prompt.return_value = "prompt"
         mock_stub.return_value = [{"id": "Fig1", "image_path": "/fig1.png"}]
@@ -209,11 +209,10 @@ class TestResultsAnalyzerNode:
         mock_match.return_value = "/outputs/output.csv"
         mock_images.return_value = ["/fig1.png", "/output.png"]
         mock_user_content.return_value = "Analysis content"
-        mock_call.return_value = {
-            "overall_classification": "ACCEPTABLE_MATCH",
-            "summary": "Visual analysis complete",
-            "figure_comparisons": [],
-        }
+        
+        mock_response = validated_results_analyzer_response.copy()
+        mock_response["overall_classification"] = "ACCEPTABLE_MATCH"
+        mock_call.return_value = mock_response
         
         # Mock Path to simulate existing files
         mock_file = MagicMock()
@@ -419,10 +418,7 @@ class TestComparisonValidatorNode:
 
     @patch("src.agents.base.check_context_or_escalate")
     def test_returns_escalation_on_context_overflow(self, mock_context):
-        """Should return escalation when context overflow.
-        
-        Note: Patches base.py because comparison_validator_node uses @with_context_check decorator.
-        """
+        """Should return escalation when context overflow."""
         mock_context.return_value = {
             "awaiting_user_input": True,
             "pending_user_questions": ["Context overflow"],

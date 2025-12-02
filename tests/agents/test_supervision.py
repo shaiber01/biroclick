@@ -84,15 +84,15 @@ class TestSupervisorNode:
     @patch("src.agents.supervision.supervisor.call_agent_with_metrics")
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     @patch("src.agents.supervision.supervisor.build_agent_prompt")
-    def test_continues_workflow_on_success(self, mock_prompt, mock_context, mock_call):
-        """Should continue workflow on successful stage completion."""
+    def test_continues_workflow_on_success(self, mock_prompt, mock_context, mock_call, validated_supervisor_response):
+        """Should continue workflow on successful stage completion (using validated mock)."""
         mock_context.return_value = None
         mock_prompt.return_value = "system prompt"
-        mock_call.return_value = {
-            "verdict": "ok_continue",
-            "next_action": "proceed_to_next_stage",
-            "summary": "Stage completed successfully",
-        }
+        
+        mock_response = validated_supervisor_response.copy()
+        mock_response["verdict"] = "ok_continue"
+        mock_response.pop("should_stop", None) # Ensure should_stop is not True
+        mock_call.return_value = mock_response
         
         state = {
             "current_stage_id": "stage1",
@@ -110,15 +110,20 @@ class TestSupervisorNode:
     @patch("src.agents.supervision.supervisor.call_agent_with_metrics")
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     @patch("src.agents.supervision.supervisor.build_agent_prompt")
-    def test_triggers_backtrack_on_failure(self, mock_prompt, mock_context, mock_call):
-        """Should trigger backtrack on stage failure."""
+    def test_triggers_backtrack_on_failure(self, mock_prompt, mock_context, mock_call, validated_supervisor_response):
+        """Should trigger backtrack on stage failure (using validated mock)."""
         mock_context.return_value = None
         mock_prompt.return_value = "prompt"
-        mock_call.return_value = {
-            "verdict": "backtrack",
-            "backtrack_target": "design",
-            "summary": "Need to revise design",
+        
+        mock_response = validated_supervisor_response.copy()
+        mock_response["verdict"] = "backtrack_to_stage"
+        mock_response["backtrack_decision"] = {
+            "accepted": True,
+            "target_stage_id": "design",
+            "stages_to_invalidate": ["stage1"],
+            "reason": "design flawed"
         }
+        mock_call.return_value = mock_response
         
         state = {
             "current_stage_id": "stage1",
@@ -128,28 +133,7 @@ class TestSupervisorNode:
         
         result = supervisor_node(state)
         
-        assert result["supervisor_verdict"] == "backtrack"
-
-    @patch("src.agents.supervision.supervisor.call_agent_with_metrics")
-    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
-    @patch("src.agents.supervision.supervisor.build_agent_prompt")
-    def test_handles_material_checkpoint(self, mock_prompt, mock_context, mock_call):
-        """Should handle material checkpoint trigger."""
-        mock_context.return_value = None
-        mock_prompt.return_value = "prompt"
-        mock_call.return_value = {
-            "verdict": "material_checkpoint",
-            "summary": "Material validation needed",
-        }
-        
-        state = {
-            "current_stage_id": "stage0_material_validation",
-            "supervisor_call_count": 0,
-        }
-        
-        result = supervisor_node(state)
-        
-        assert result["supervisor_verdict"] == "material_checkpoint"
+        assert result["supervisor_verdict"] == "backtrack_to_stage"
 
     @patch("src.agents.supervision.supervisor.call_agent_with_metrics")
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
@@ -186,14 +170,14 @@ class TestSupervisorNode:
     @patch("src.agents.supervision.supervisor.call_agent_with_metrics")
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     @patch("src.agents.supervision.supervisor.build_agent_prompt")
-    def test_returns_supervisor_verdict(self, mock_prompt, mock_context, mock_call):
-        """Should return supervisor verdict from LLM output."""
+    def test_returns_supervisor_verdict(self, mock_prompt, mock_context, mock_call, validated_supervisor_response):
+        """Should return supervisor verdict from LLM output (using validated mock)."""
         mock_context.return_value = None
         mock_prompt.return_value = "prompt"
-        mock_call.return_value = {
-            "verdict": "ok_continue",
-            "summary": "Continue",
-        }
+        
+        mock_response = validated_supervisor_response.copy()
+        mock_response["verdict"] = "ok_continue"
+        mock_call.return_value = mock_response
         
         state = {
             "current_stage_id": "stage1",
@@ -210,14 +194,16 @@ class TestSupervisorNode:
     @patch("src.agents.supervision.supervisor.call_agent_with_metrics")
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     @patch("src.agents.supervision.supervisor.build_agent_prompt")
-    def test_handles_finish_verdict(self, mock_prompt, mock_context, mock_call):
-        """Should handle finish verdict when workflow complete."""
+    def test_handles_finish_verdict(self, mock_prompt, mock_context, mock_call, validated_supervisor_response):
+        """Should handle finish verdict when workflow complete (using validated mock)."""
         mock_context.return_value = None
         mock_prompt.return_value = "prompt"
-        mock_call.return_value = {
-            "verdict": "finish",
-            "summary": "All stages completed",
-        }
+        
+        mock_response = validated_supervisor_response.copy()
+        mock_response["verdict"] = "all_complete"
+        mock_response["should_stop"] = True
+        mock_response["stop_reason"] = "Done"
+        mock_call.return_value = mock_response
         
         state = {
             "current_stage_id": None,
@@ -227,7 +213,7 @@ class TestSupervisorNode:
         
         result = supervisor_node(state)
         
-        assert result["supervisor_verdict"] == "finish"
+        assert result["supervisor_verdict"] == "all_complete"
 
 
 class TestMaterialCheckpointTrigger:
