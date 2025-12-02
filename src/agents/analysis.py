@@ -110,7 +110,14 @@ def results_analyzer_node(state: ReproState) -> dict:
             "analysis_summary": {
                 "overall_classification": "NO_TARGETS",
                 "unresolved_targets": [],
-                "summary": "Analysis skipped: Stage has no targets defined."
+                "summary": "Analysis skipped: Stage has no targets defined.",
+                "totals": {
+                    "targets": 0,
+                    "matches": 0,
+                    "pending": 0,
+                    "missing": 0,
+                    "mismatch": 0,
+                },
             },
             "analysis_overall_classification": "NO_TARGETS",
             "analysis_result_reports": [],
@@ -533,6 +540,12 @@ def comparison_validator_node(state: ReproState) -> dict:
     Note: Context check is handled by @with_context_check decorator.
     """
 
+    # Defensive check: if state already has awaiting_user_input=True from a previous node,
+    # skip processing and return immediately. The @with_context_check decorator handles
+    # escalations from this node, but this guards against pre-existing escalation state.
+    if state.get("awaiting_user_input"):
+        return state
+    
     stage_id = state.get("current_stage_id")
     comparisons = stage_comparisons_for_stage(state, stage_id)
     breakdown = breakdown_comparison_classifications(comparisons)
