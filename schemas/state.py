@@ -807,7 +807,7 @@ class ReproState(TypedDict, total=False):
     performance_estimate: Optional[Dict[str, Any]]
     stage_outputs: Dict[str, Any]  # Filenames, stdout, etc.
     run_error: Optional[str]  # Capture simulation failures
-    analysis_summary: Optional[str]  # Per-result report JSON
+    analysis_summary: Optional[Dict[str, Any]]  # Structured analyzer summary
     analysis_result_reports: List[Dict[str, Any]]  # Detailed per-result comparisons
     analysis_overall_classification: Optional[str]  # ResultsAnalyzer overall verdict
     
@@ -1549,7 +1549,15 @@ def estimate_context_for_node(
         # These receive outputs + figures
         breakdown["stage_outputs"] = 3000  # Typical outputs context
         breakdown["paper_figures"] = 2000  # Figure context
-        breakdown["analysis_summary"] = len(state.get("analysis_summary", "") or "") // chars_per_token
+        summary = state.get("analysis_summary")
+        if isinstance(summary, str):
+            summary_len = len(summary)
+        elif isinstance(summary, dict):
+            import json
+            summary_len = len(json.dumps(summary))
+        else:
+            summary_len = 0
+        breakdown["analysis_summary"] = summary_len // chars_per_token
         
     elif node_name == "supervisor":
         # Supervisor receives summary of everything
@@ -1690,7 +1698,12 @@ def get_context_recovery_actions(
     
     # Only suggest clearing fields that aren't needed for current node
     if node_name not in ["analyze", "compare"]:
-        analysis_summary = state.get("analysis_summary", "") or ""
+        analysis_summary_val = state.get("analysis_summary")
+        if isinstance(analysis_summary_val, dict):
+            import json
+            analysis_summary = json.dumps(analysis_summary_val)
+        else:
+            analysis_summary = analysis_summary_val or ""
         if len(analysis_summary) > 1000:
             clearable_fields.append("analysis_summary")
             clearable_savings += len(analysis_summary) // chars_per_token

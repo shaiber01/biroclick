@@ -11,11 +11,17 @@ These are currently stubs showing expected state mutations.
 See prompts/*.md for the corresponding agent system prompts.
 """
 
+import csv
+import json
 import os
+import re
 import signal
 from collections import defaultdict
+from math import isfinite
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Tuple
+
+import numpy as np
 
 from schemas.state import (
     ReproState, 
@@ -26,7 +32,10 @@ from schemas.state import (
     validate_state_for_node,
     get_plan_stage,
     get_progress_stage,
+    DISCREPANCY_THRESHOLDS,
 )
+
+PROJECT_ROOT = Path(__file__).parent.parent
 from src.prompts import build_agent_prompt
 from datetime import datetime, timezone
 
@@ -337,6 +346,244 @@ def _build_stub_plan(state: ReproState) -> Dict[str, Any]:
     return plan
 
 
+def _resolve_data_path(path_str: Optional[str]) -> Optional[Path]:
+    """Resolve relative or absolute paths for analyzer inputs."""
+    if not path_str:
+        return None
+    candidate = Path(path_str).expanduser()
+    if candidate.exists():
+        return candidate
+    alt = PROJECT_ROOT / path_str
+    if alt.exists():
+        return alt
+    return None
+
+
+def _normalize_series(xs: List[float], ys: List[float]) -> Optional[Tuple[np.ndarray, np.ndarray]]:
+    if not xs or not ys or len(xs) != len(ys):
+        return None
+    pairs = sorted(zip(xs, ys), key=lambda item: item[0])
+    x_arr = np.array([float(p[0]) for p in pairs], dtype=float)
+    y_arr = np.array([float(p[1]) for p in pairs], dtype=float)
+    if len(x_arr) < 3:
+        return None
+    return x_arr, y_arr
+
+
+def _load_numeric_series(path_str: Optional[str]) -> Optional[Tuple[np.ndarray, np.ndarray]]:
+    resolved = _resolve_data_path(path_str)
+    if not resolved or not resolved.exists():
+        return None
+    suffix = resolved.suffix.lower()
+    try:
+        if suffix in {".csv", ".tsv"}:
+            delimiter = "," if suffix == ".csv" else "\t"
+            xs: List[float] = []
+            ys: List[float] = []
+            with resolved.open("r", encoding="utf-8") as f:
+                reader = csv.reader(f, delimiter=delimiter)
+                for row in reader:
+                    numeric_cells = []
+                    for cell in row:
+                        try:
+                            numeric_cells.append(float(cell))
+                        except ValueError:
+                            continue
+                    if len(numeric_cells) >= 2:
+                        xs.append(numeric_cells[0])
+                        ys.append(numeric_cells[1])
+            return _normalize_series(xs, ys)
+        if suffix == ".json":
+            data = json.loads(resolved.read_text(encoding="utf-8"))
+            if isinstance(data, dict) and "x" in data and "y" in data:
+                xs = [float(x) for x in data["x"]]
+                ys = [float(y) for y in data["y"]]
+                return _normalize_series(xs, ys)
+            if isinstance(data, list):
+                xs = []
+                ys = []
+                for point in data:
+                    if isinstance(point, dict):
+                        x_val = point.get("x")
+                        y_val = point.get("y")
+                    elif isinstance(point, (list, tuple)) and len(point) >= 2:
+                        x_val, y_val = point[0], point[1]
+                    else:
+                        continue
+                    try:
+                        xs.append(float(x_val))
+                        ys.append(float(y_val))
+                    except (TypeError, ValueError):
+                        continue
+                return _normalize_series(xs, ys)
+            return None
+        if suffix == ".npy":
+            arr = np.load(resolved)
+            if arr.ndim == 2 and arr.shape[1] >= 2:
+                return _normalize_series(arr[:, 0].tolist(), arr[:, 1].tolist())
+            return None
+        if suffix == ".npz":
+            archive = np.load(resolved)
+            first_key = archive.files[0] if archive.files else None
+            if not first_key:
+                return None
+            arr = archive[first_key]
+            if arr.ndim == 2 and arr.shape[1] >= 2:
+                return _normalize_series(arr[:, 0].tolist(), arr[:, 1].tolist())
+            return None
+    except Exception:
+        return None
+    return None
+
+
+def _compute_peak_metrics(x: np.ndarray, y: np.ndarray) -> Dict[str, float]:
+    """Compute basic peak metrics for a curve."""
+    if x.size == 0 or y.size == 0:
+        return {}
+    idx = int(np.argmax(y))
+    peak_position = float(x[idx])
+    peak_value = float(y[idx])
+    half_max = peak_value / 2 if peak_value else None
+    left_cross = None
+    right_cross = None
+    if half_max and half_max > 0:
+        for i in range(idx, -1, -1):
+            if y[i] <= half_max:
+                left_cross = float(x[i])
+                break
+        for i in range(idx, len(y)):
+            if y[i] <= half_max:
+                right_cross = float(x[i])
+                break
+    fwhm = None
+    if left_cross is not None and right_cross is not None:
+        fwhm = abs(right_cross - left_cross)
+    return {
+        "peak_position": peak_position,
+        "peak_value": peak_value,
+        "fwhm": fwhm if fwhm is not None else None,
+    }
+
+
+def _quantitative_curve_metrics(
+    sim_series: Optional[Tuple[np.ndarray, np.ndarray]],
+    ref_series: Optional[Tuple[np.ndarray, np.ndarray]],
+) -> Dict[str, float]:
+    """Compute quantitative metrics comparing simulation vs reference curves."""
+    metrics: Dict[str, float] = {}
+    if not sim_series:
+        return metrics
+    x_sim, y_sim = sim_series
+    sim_peak = _compute_peak_metrics(x_sim, y_sim)
+    metrics["peak_position_sim"] = sim_peak.get("peak_position")
+    metrics["peak_value_sim"] = sim_peak.get("peak_value")
+    metrics["fwhm_sim"] = sim_peak.get("fwhm")
+    
+    if not ref_series:
+        return metrics
+    
+    x_ref, y_ref = ref_series
+    if x_ref.size < 3 or y_ref.size < 3:
+        return metrics
+    ref_peak = _compute_peak_metrics(x_ref, y_ref)
+    metrics["peak_position_paper"] = ref_peak.get("peak_position")
+    metrics["peak_value_paper"] = ref_peak.get("peak_value")
+    metrics["fwhm_paper"] = ref_peak.get("fwhm")
+    
+    # Interpolate reference onto simulation axis
+    y_ref_interp = np.interp(x_sim, x_ref, y_ref, left=np.nan, right=np.nan)
+    mask = np.isfinite(y_ref_interp)
+    if not mask.any():
+        return metrics
+    sim_vals = y_sim[mask]
+    ref_vals = y_ref_interp[mask]
+    n_points = sim_vals.size
+    metrics["n_points_compared"] = int(n_points)
+    if n_points == 0:
+        return metrics
+    
+    peak_paper = metrics.get("peak_position_paper")
+    peak_sim = metrics.get("peak_position_sim")
+    if peak_paper is not None and peak_sim is not None and peak_paper != 0:
+        metrics["peak_position_error_percent"] = abs(peak_sim - peak_paper) / abs(peak_paper) * 100.0
+    
+    if metrics.get("peak_value_paper"):
+        peak_ratio = metrics.get("peak_value_sim", 0) / metrics["peak_value_paper"]
+        metrics["peak_height_ratio"] = float(peak_ratio) if peak_ratio and isfinite(peak_ratio) else None
+    
+    if metrics.get("fwhm_paper") and metrics.get("fwhm_sim"):
+        paper_fwhm = metrics["fwhm_paper"]
+        if paper_fwhm:
+            metrics["fwhm_ratio"] = float(metrics["fwhm_sim"] / paper_fwhm)
+    
+    rmse = float(np.sqrt(np.mean((sim_vals - ref_vals) ** 2)))
+    value_range = float(np.max(ref_vals) - np.min(ref_vals)) or 1.0
+    metrics["normalized_rmse_percent"] = rmse / value_range * 100.0
+    
+    if n_points > 1:
+        corr = np.corrcoef(sim_vals, ref_vals)[0, 1]
+        if isfinite(corr):
+            metrics["correlation"] = float(corr)
+        mean_ref = float(np.mean(ref_vals))
+        ss_res = float(np.sum((ref_vals - sim_vals) ** 2))
+        ss_tot = float(np.sum((ref_vals - mean_ref) ** 2)) or 1.0
+        r_squared = 1.0 - (ss_res / ss_tot)
+        metrics["r_squared"] = float(r_squared)
+    
+    return metrics
+
+
+def _classify_percent_error(error_percent: float) -> str:
+    thresholds = DISCREPANCY_THRESHOLDS["resonance_wavelength"]
+    if error_percent <= thresholds["excellent"]:
+        return "match"
+    if error_percent <= thresholds["acceptable"]:
+        return "partial_match"
+    return "mismatch"
+
+
+def _classification_from_metrics(
+    metrics: Dict[str, float],
+    precision_requirement: str,
+    has_reference: bool,
+) -> str:
+    if not has_reference and precision_requirement != "qualitative":
+        return "pending_validation"
+    if precision_requirement == "qualitative":
+        # Visual confirmation only
+        return "match"
+    
+    error_percent = metrics.get("peak_position_error_percent")
+    if error_percent is not None:
+        return _classify_percent_error(error_percent)
+    
+    rmse = metrics.get("normalized_rmse_percent")
+    if rmse is not None:
+        if rmse <= 5:
+            return "match"
+        if rmse <= 15:
+            return "partial_match"
+        return "mismatch"
+    
+    return "pending_validation"
+
+
+def _extract_targets_from_feedback(feedback: Optional[str], known_targets: List[str]) -> List[str]:
+    if not feedback:
+        return []
+    pattern = re.compile(r"(Fig\s?[0-9]+[a-zA-Z]?)", re.IGNORECASE)
+    matches = [m.strip().replace(" ", "") for m in pattern.findall(feedback)]
+    ordered = []
+    seen = set()
+    normalized_known = {t.lower(): t for t in known_targets}
+    for match in matches:
+        normalized = match.lower()
+        if normalized in normalized_known and normalized not in seen:
+            ordered.append(normalized_known[normalized])
+            seen.add(normalized)
+    return ordered
+
+
 def _match_output_file(file_entries: List[Any], target_id: str) -> Optional[str]:
     """Best-effort match simulation output files to a target figure."""
     normalized_id = (target_id or "").lower()
@@ -561,13 +808,22 @@ def _stage_comparisons_for_stage(state: ReproState, stage_id: Optional[str]) -> 
     ]
 
 
+def _analysis_reports_for_stage(state: ReproState, stage_id: Optional[str]) -> List[Dict[str, Any]]:
+    if not stage_id:
+        return []
+    return [
+        report for report in state.get("analysis_result_reports", [])
+        if report.get("stage_id") == stage_id
+    ]
+
+
 def _breakdown_comparison_classifications(comparisons: List[Dict[str, Any]]) -> Dict[str, List[str]]:
     """Summarize comparison classifications into missing/pending/match buckets."""
     breakdown: Dict[str, List[str]] = {"missing": [], "pending": [], "matches": []}
     for comp in comparisons:
         classification = (comp.get("classification") or "").lower()
         figure_id = comp.get("figure_id") or "unknown"
-        if classification in {"missing_output", "fail", "not_reproduced"}:
+        if classification in {"missing_output", "fail", "not_reproduced", "mismatch", "poor_match"}:
             breakdown["missing"].append(figure_id)
         elif classification in {"pending_validation", "partial_match", "match_pending", "partial"}:
             breakdown["pending"].append(figure_id)
@@ -776,7 +1032,6 @@ def select_stage_node(state: ReproState) -> dict:
                 "run_error": None,
                 "analysis_summary": None,
                 "analysis_overall_classification": None,
-                "analysis_result_reports": [],
             }
     
     # Priority 2: Find not_started stages with satisfied dependencies
@@ -862,7 +1117,6 @@ def select_stage_node(state: ReproState) -> dict:
             "run_error": None,
             "analysis_summary": None,
             "analysis_overall_classification": None,
-            "analysis_result_reports": [],
         }
     
     # No more stages to run
@@ -1236,29 +1490,38 @@ def results_analyzer_node(state: ReproState) -> dict:
     current_stage_id = state.get("current_stage_id")
     stage_info = get_plan_stage(state, current_stage_id) if current_stage_id else None
     figures = _ensure_stub_figures(state)
-    target_ids = (stage_info.get("targets") if stage_info else []) or [
-        fig.get("id", "FigStub") for fig in figures
-    ]
+    target_ids = []
+    if stage_info and stage_info.get("targets"):
+        target_ids = stage_info["targets"]
+    elif stage_info and stage_info.get("target_details"):
+        target_ids = [t.get("figure_id") for t in stage_info["target_details"] if t.get("figure_id")]
+    else:
+        target_ids = [fig.get("id", "FigStub") for fig in figures]
+    
+    feedback_targets = _extract_targets_from_feedback(state.get("analysis_feedback"), target_ids)
+    ordered_targets = feedback_targets + [t for t in target_ids if t not in feedback_targets]
+    ordered_targets = ordered_targets or target_ids
     
     stage_outputs = state.get("stage_outputs", {})
     output_files = stage_outputs.get("files", [])
     paper_id = state.get("paper_id", "paper")
     expected_outputs_map = _collect_expected_outputs(stage_info, paper_id, current_stage_id or "")
     figure_lookup = {fig.get("id") or fig.get("figure_id"): fig for fig in figures}
-    plan_targets_map = {
-        target.get("figure_id"): target
-        for target in state.get("plan", {}).get("targets", [])
-    }
+    if stage_info and stage_info.get("target_details"):
+        target_meta_list = stage_info["target_details"]
+    else:
+        target_meta_list = state.get("plan", {}).get("targets", [])
+    plan_targets_map = {target.get("figure_id"): target for target in target_meta_list}
     matched_targets: List[str] = []
     pending_targets: List[str] = []
     missing_targets: List[str] = []
+    mismatch_targets: List[str] = []
     stage_discrepancies: List[Dict[str, Any]] = []
     
     figure_comparisons: List[Dict[str, Any]] = []
     per_result_reports: List[Dict[str, Any]] = []
-    matches = 0
     
-    for target_id in target_ids:
+    for target_id in ordered_targets:
         expected_names = expected_outputs_map.get(target_id, [])
         matched_file = _match_expected_files(expected_names, output_files)
         if not matched_file:
@@ -1267,11 +1530,18 @@ def results_analyzer_node(state: ReproState) -> dict:
         figure_meta = figure_lookup.get(target_id) or {}
         target_cfg = plan_targets_map.get(target_id, {})
         precision_requirement = target_cfg.get("precision_requirement", "acceptable")
-        digitized_path = figure_meta.get("digitized_data_path") or target_cfg.get("digitized_data_path")
+        reference_path = target_cfg.get("reference_data_path") or (stage_info.get("reference_data_path") if stage_info else None)
+        digitized_path = (
+            figure_meta.get("digitized_data_path")
+            or target_cfg.get("digitized_data_path")
+            or target_cfg.get("digitized_reference")
+            or reference_path
+        )
         requires_digitized = precision_requirement == "excellent"
+        quantitative_metrics: Dict[str, Any] = {}
+        classification_label = "missing_output"
         
         if not has_output:
-            classification_label = "missing_output"
             missing_targets.append(target_id)
             stage_discrepancies.append(
                 _record_discrepancy(
@@ -1287,40 +1557,83 @@ def results_analyzer_node(state: ReproState) -> dict:
                     blocking=True,
                 )
             )
-        elif requires_digitized and not digitized_path:
-            classification_label = "pending_validation"
-            pending_targets.append(target_id)
-            stage_discrepancies.append(
-                _record_discrepancy(
-                    state,
-                    current_stage_id,
-                    target_id,
-                    "digitized_reference",
-                    "Digitized reference required",
-                    "Not provided",
-                    classification="investigate",
-                    likely_cause="precision_requirement='excellent' but digitized data missing",
-                    action_taken="Awaiting digitized data or user guidance",
-                    blocking=False,
-                )
-            )
         else:
-            classification_label = "match"
-            matched_targets.append(target_id)
-            matches += 1
+            sim_series = _load_numeric_series(matched_file)
+            ref_series = _load_numeric_series(digitized_path)
+            quantitative_metrics = _quantitative_curve_metrics(sim_series, ref_series)
+            has_reference = ref_series is not None
+            
+            if requires_digitized and not digitized_path:
+                classification_label = "pending_validation"
+                pending_targets.append(target_id)
+                stage_discrepancies.append(
+                    _record_discrepancy(
+                        state,
+                        current_stage_id,
+                        target_id,
+                        "digitized_reference",
+                        "Digitized reference required",
+                        "Not provided",
+                        classification="investigate",
+                        likely_cause="precision_requirement='excellent' but digitized data missing",
+                        action_taken="Awaiting digitized data or user guidance",
+                        blocking=False,
+                    )
+                )
+            else:
+                classification_label = _classification_from_metrics(
+                    quantitative_metrics,
+                    precision_requirement,
+                    has_reference,
+                )
+                if classification_label == "match":
+                    matched_targets.append(target_id)
+                elif classification_label in {"pending_validation", "partial_match"}:
+                    pending_targets.append(target_id)
+                else:
+                    mismatch_targets.append(target_id)
+                
+                error_percent = quantitative_metrics.get("peak_position_error_percent")
+                if error_percent is not None and classification_label in {"partial_match", "mismatch"}:
+                    discrepancy_class = "acceptable" if classification_label == "partial_match" else "investigate"
+                    blocking = classification_label == "mismatch"
+                    paper_peak = quantitative_metrics.get("peak_position_paper")
+                    sim_peak = quantitative_metrics.get("peak_position_sim")
+                    stage_discrepancies.append(
+                        _record_discrepancy(
+                            state,
+                            current_stage_id,
+                            target_id,
+                            "resonance_wavelength",
+                            f"{paper_peak:.2f} nm" if paper_peak else "Paper peak unavailable",
+                            f"{sim_peak:.2f} nm" if sim_peak else "Simulation peak unavailable",
+                            classification=discrepancy_class,
+                            difference_percent=error_percent,
+                            likely_cause="See analyzer notes",
+                            action_taken="Documented for supervisor review",
+                            blocking=blocking,
+                        )
+                    )
         
         comparison_table = [{
             "feature": "Simulation Output",
             "paper": figure_meta.get("description", target_id),
             "reproduction": matched_file or "Not generated",
-            "status": "✅ Match" if has_output and classification_label == "match" else ("⚠️ Pending" if classification_label == "pending_validation" else "❌ Missing"),
+            "status": (
+                "✅ Match" if has_output and classification_label == "match"
+                else "⚠️ Pending" if classification_label in {"pending_validation", "partial_match"}
+                else "❌ Missing"
+            ),
         }]
         if digitized_path:
             comparison_table.append({
                 "feature": "Digitized reference",
                 "paper": digitized_path,
                 "reproduction": matched_file or "Not generated",
-                "status": "Pending review" if classification_label != "missing_output" else "❌ Missing",
+                "status": (
+                    "Pending review" if classification_label not in {"missing_output", "mismatch"}
+                    else "❌ Missing"
+                ),
             })
         
         comparison_entry = {
@@ -1336,6 +1649,12 @@ def results_analyzer_node(state: ReproState) -> dict:
         }
         figure_comparisons.append(comparison_entry)
         
+        target_criteria = []
+        if stage_info:
+            for criterion in stage_info.get("validation_criteria", []):
+                if target_id and target_id.lower() in criterion.lower():
+                    target_criteria.append(criterion)
+        
         per_result_reports.append({
             "result_id": f"{current_stage_id or 'stage'}_{target_id}",
             "target_figure": target_id,
@@ -1344,28 +1663,35 @@ def results_analyzer_node(state: ReproState) -> dict:
             "matched_output": matched_file,
             "precision_requirement": precision_requirement,
             "digitized_data_path": digitized_path,
+            "validation_criteria": target_criteria,
+            "quantitative_metrics": quantitative_metrics,
             "notes": "Output identified." if has_output else "Output missing; requires rerun.",
         })
     
     total_targets = len(target_ids)
     missing_count = len(missing_targets)
     pending_count = len(pending_targets)
+    mismatch_count = len(mismatch_targets)
     
     if total_targets == 0:
         overall_classification = "NO_TARGETS"
-    elif missing_count > 0:
+    elif missing_count > 0 or mismatch_count > 0:
         overall_classification = "POOR_MATCH"
     elif pending_count > 0:
         overall_classification = "PARTIAL_MATCH"
-    elif matches == total_targets:
+    elif len(matched_targets) == total_targets:
         overall_classification = "EXCELLENT_MATCH"
     else:
         overall_classification = "ACCEPTABLE_MATCH"
     
-    summary_notes = state.get("analysis_feedback") or (
-        f"{matches}/{total_targets or 1} targets produced simulation outputs."
-        if total_targets else "No explicit targets defined for this stage."
-    )
+    summary_notes_parts = []
+    if state.get("analysis_feedback"):
+        summary_notes_parts.append(f"Validator feedback: {state['analysis_feedback']}")
+    if total_targets:
+        summary_notes_parts.append(f"{len(matched_targets)}/{total_targets} targets currently classified as matches.")
+    else:
+        summary_notes_parts.append("No explicit targets defined for this stage.")
+    summary_notes = " ".join(summary_notes_parts)
     
     summary = {
         "stage_id": current_stage_id,
@@ -1374,12 +1700,16 @@ def results_analyzer_node(state: ReproState) -> dict:
             "matches": len(matched_targets),
             "pending": pending_count,
             "missing": missing_count,
+            "mismatch": mismatch_count,
         },
         "matched_targets": matched_targets,
         "pending_targets": pending_targets,
         "missing_targets": missing_targets,
+        "mismatch_targets": mismatch_targets,
         "discrepancies_logged": len(stage_discrepancies),
         "validation_criteria": stage_info.get("validation_criteria", []) if stage_info else [],
+        "feedback_applied": feedback_targets,
+        "unresolved_targets": missing_targets + pending_targets + mismatch_targets,
         "notes": summary_notes,
     }
     
@@ -1389,13 +1719,27 @@ def results_analyzer_node(state: ReproState) -> dict:
         if comp.get("stage_id") != current_stage_id
     ]
     
+    existing_reports = state.get("analysis_result_reports", [])
+    reports_with_stage = [
+        {**report, "stage_id": current_stage_id}
+        for report in per_result_reports
+    ]
+    filtered_reports = [
+        report for report in existing_reports
+        if report.get("stage_id") != current_stage_id
+    ]
+    merged_reports = filtered_reports + reports_with_stage
+    
+    unresolved = summary["unresolved_targets"]
+    analysis_feedback_next = None if not unresolved else state.get("analysis_feedback")
+    
     return {
         "workflow_phase": "analysis",
         "analysis_summary": summary,
         "analysis_overall_classification": overall_classification,
-        "analysis_result_reports": per_result_reports,
+        "analysis_result_reports": merged_reports,
         "figure_comparisons": filtered_existing + figure_comparisons,
-        "analysis_feedback": None,
+        "analysis_feedback": analysis_feedback_next,
     }
 
 
@@ -2304,6 +2648,24 @@ def generate_report_node(state: ReproState) -> ReproState:
                 {"aspect": "Geometric Resonances", "status": "Partial", "status_icon": "⚠️", "notes": "Systematic red-shift"}
             ]
         }
+
+    # Build quantitative summary table from analysis_result_reports
+    quantitative_reports = state.get("analysis_result_reports", [])
+    if quantitative_reports:
+        summary_rows: List[Dict[str, Any]] = []
+        for report in quantitative_reports:
+            metrics = report.get("quantitative_metrics") or {}
+            summary_rows.append({
+                "stage_id": report.get("stage_id"),
+                "figure_id": report.get("target_figure"),
+                "status": report.get("status"),
+                "precision_requirement": report.get("precision_requirement"),
+                "peak_position_error_percent": metrics.get("peak_position_error_percent"),
+                "normalized_rmse_percent": metrics.get("normalized_rmse_percent"),
+                "correlation": metrics.get("correlation"),
+                "n_points_compared": metrics.get("n_points_compared"),
+            })
+        state["quantitative_summary"] = summary_rows
         
     # TODO: Implement report generation logic
     # - Compile figure comparisons

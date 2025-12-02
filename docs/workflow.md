@@ -1305,8 +1305,8 @@ This section documents which nodes mutate which state fields, when state is pers
 | run_code | code | stage_outputs, run_error, runtime_seconds |
 | EXECUTION_CHECK | stage_outputs, run_error | execution_verdict, execution_failure_count |
 | PHYSICS_SANITY | stage_outputs, code | physics_verdict, physics_failure_count, backtrack_suggestion |
-| analyze | stage_outputs, paper_figures | analysis_summary, figure_comparisons, discrepancies_log |
-| COMPARISON_CHECK | figure_comparisons, analysis_summary | comparison_verdict, analysis_revision_count |
+| analyze | stage_outputs, paper_figures | analysis_summary, analysis_result_reports, figure_comparisons, discrepancies_log |
+| COMPARISON_CHECK | figure_comparisons, analysis_summary, analysis_result_reports | comparison_verdict, analysis_revision_count |
 | supervisor | progress, validation_hierarchy, user_responses | supervisor_verdict, progress updates, pending_user_questions |
 | ask_user | pending_user_questions | user_responses, awaiting_user_input |
 | generate_report | figure_comparisons, progress | report_conclusions, final_report_path |
@@ -2409,6 +2409,9 @@ Each agent receives **only what it needs** - not full repo access. This section 
 | Field | Source | Notes |
 |-------|--------|-------|
 | `figure_comparisons` | `state["figure_comparisons"]` | What Analyzer produced |
+| `analysis_summary` | `state["analysis_summary"]` | Structured targets/missing/pending counts |
+| `analysis_result_reports` | `state["analysis_result_reports"]` | Per-target quantitative data |
+| `discrepancies` | From figure_comparisons | Logged discrepancies |
 | `analysis_summary` | `state["analysis_summary"]` | Analyzer's conclusions |
 | `discrepancies` | From figure_comparisons | Logged discrepancies |
 | `target_figures` | `state["paper_figures"][target_ids]` | To verify comparison |

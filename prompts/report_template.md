@@ -118,6 +118,17 @@ This report compares our computational reproduction (Python + Meep FDTD) to the 
 
 ---
 
+## Quantitative Metrics (from `analysis_result_reports`)
+
+| Stage | Figure | Status | Peak Error (%) | Normalized RMSE (%) | Correlation | Notes |
+|-------|--------|--------|----------------|---------------------|-------------|-------|
+| [Stage 1] | [Fig3a] | ✅/⚠️/❌ | [3.8] | [8.5] | [0.92] | [Digitized data used] |
+| ... | ... | ... | ... | ... | ... | ... |
+
+Summaries should call out any figures exceeding the required precision thresholds and reference `quantitative_summary` rows when available.
+
+---
+
 ## Systematic Discrepancies
 
 ### 1. [Discrepancy Name]
