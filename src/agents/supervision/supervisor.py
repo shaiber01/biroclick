@@ -325,36 +325,10 @@ def supervisor_node(state: ReproState) -> dict:
             get_dependent_stages_fn=_get_dependent_stages,
         )
         
-        # If handler set verdict to ok_continue, ensure we don't loop.
-        # The router (graph.py) handles most logic, but for Material Validation,
-        # if we just finished checkpoint (trigger=material_checkpoint) and verdict is ok_continue,
-        # the router sends us back to material_checkpoint unless current_stage_type changes.
-        #
-        # We must trust that handle_trigger updates state (like stage status) so that
-        # subsequent logic works.
-        #
-        # CRITICAL FIX: We must CALL THE LLM even after handling a trigger,
-        # unless the handler explicitly set a "final" verdict like "all_complete" or "replan_needed".
-        # If handler set "ok_continue", we might want the Supervisor LLM to confirm next steps
-        # or provide guidance.
-        #
-        # HOWEVER, calling LLM immediately might just return "ok_continue" again based on state.
-        #
-        # For material_checkpoint specifically:
-        # handle_material_checkpoint sets verdict="ok_continue" and updates stage status to "completed_success".
-        # The router sees "ok_continue".
-        # If router logic is: if MATERIAL_VALIDATION -> material_checkpoint
-        # Then loop continues.
-        #
-        # The router logic relies on current_stage_type.
-        # current_stage_type is derived from current_stage_id.
-        # If current_stage_id is still stage 0, then current_stage_type is still MATERIAL_VALIDATION.
-        #
-        # We need to tell the router "we are done with this stage".
-        # "ok_continue" usually means "go to select_stage".
-        # But router intercepts it for MATERIAL_VALIDATION.
-        #
-        # We should skip LLM call here if verdict is already set, to avoid overriding it.
+        # After handling a trigger, we skip the LLM call because:
+        # 1. handle_trigger() already set the appropriate verdict
+        # 2. Calling LLM would risk overriding that decision
+        # 3. The router uses supervisor_verdict to route next steps
     
     # Normal supervision (not post-ask_user)
     else:
