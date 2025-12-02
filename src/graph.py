@@ -232,6 +232,19 @@ def route_after_supervisor(state: ReproState) -> Literal["select_stage", "plan",
     verdict = state.get("supervisor_verdict")
     current_stage_type = state.get("current_stage_type", "")
     
+    # ═══════════════════════════════════════════════════════════════════════
+    # VALIDATE VERDICT EXISTS: Handle None or missing verdict
+    # ═══════════════════════════════════════════════════════════════════════
+    if verdict is None:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(
+            "supervisor_verdict is None - supervisor may not have run or failed. "
+            "Escalating to user for guidance."
+        )
+        # Set ask_user fields to handle missing verdict
+        return "ask_user"
+    
     if verdict == "ok_continue" or verdict == "change_priority":
         if state.get("should_stop"):
             return "generate_report"

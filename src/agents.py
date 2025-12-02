@@ -1138,6 +1138,19 @@ def plan_reviewer_node(state: ReproState) -> dict:
     # - Call LLM with plan_reviewer_agent.md prompt
     # - Parse agent output per plan_reviewer_output_schema.json
     
+    # ═══════════════════════════════════════════════════════════════════════
+    # VALIDATE PLAN HAS STAGES: Critical check before approval
+    # ═══════════════════════════════════════════════════════════════════════
+    plan = state.get("plan", {})
+    plan_stages = plan.get("stages", [])
+    
+    if not plan_stages or len(plan_stages) == 0:
+        # Plan has no stages - this is a blocking issue
+        blocking_issues.append(
+            "PLAN_ISSUE: Plan must contain at least one stage. "
+            "Current plan has no stages defined."
+        )
+    
     # If there are blocking plan issues (e.g., excellent precision without digitized data),
     # automatically flag for revision
     if blocking_issues:
@@ -1194,16 +1207,45 @@ def select_stage_node(state: ReproState) -> dict:
     plan_stages = plan.get("stages", [])
     
     if not stages and not plan_stages:
-        # No stages defined yet
+        # No stages defined yet - this is an error state
+        # Should not happen if plan_review validated correctly, but handle gracefully
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(
+            "select_stage_node called but no stages exist in plan or progress. "
+            "This indicates plan_review failed to validate or plan initialization failed."
+        )
         return {
             "workflow_phase": "stage_selection",
             "current_stage_id": None,
             "current_stage_type": None,
+            "ask_user_trigger": "no_stages_available",
+            "pending_user_questions": [
+                "ERROR: No stages available to execute. The plan appears to be empty. "
+                "Please check the plan and replan if necessary."
+            ],
+            "awaiting_user_input": True,
         }
     
     # Use plan stages if progress stages aren't initialized
     if not stages:
         stages = plan_stages
+    
+    # Additional validation: ensure stages list is not empty after initialization
+    if not stages or len(stages) == 0:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error("Stages list is empty after initialization - this should not happen")
+        return {
+            "workflow_phase": "stage_selection",
+            "current_stage_id": None,
+            "current_stage_type": None,
+            "ask_user_trigger": "no_stages_available",
+            "pending_user_questions": [
+                "ERROR: Stages list is empty. Cannot proceed with reproduction."
+            ],
+            "awaiting_user_input": True,
+        }
     
     # Get current validation hierarchy
     hierarchy = get_validation_hierarchy(state)
@@ -1519,9 +1561,38 @@ def code_generator_node(state: ReproState) -> dict:
     # - Parse agent output per code_generator_output_schema.json
     
     # STUB: Replace with actual LLM call
+    generated_code = "# STUB: Simulation code would be generated here."
+    
+    # ═══════════════════════════════════════════════════════════════════════
+    # VALIDATE GENERATED CODE: Ensure code is non-empty and not stub
+    # ═══════════════════════════════════════════════════════════════════════
+    stub_markers = ["STUB", "TODO", "PLACEHOLDER", "# Replace", "would be generated"]
+    is_stub = any(marker in generated_code.upper() for marker in stub_markers)
+    is_empty = not generated_code or not generated_code.strip() or len(generated_code.strip()) < 50
+    
+    if is_stub or is_empty:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(
+            f"Generated code is stub or empty (stub={is_stub}, empty={is_empty}). "
+            "Code generation must produce valid simulation code."
+        )
+        # Increment revision count and provide feedback
+        result = {
+            "workflow_phase": "code_generation",
+            "code": generated_code,
+            "code_revision_count": state.get("code_revision_count", 0) + 1,
+            "reviewer_feedback": (
+                "ERROR: Generated code is empty or contains stub markers. "
+                "Code generation must produce valid Meep simulation code. "
+                "Please regenerate with proper implementation."
+            ),
+        }
+        return result
+    
     result = {
         "workflow_phase": "code_generation",
-        "code": "# STUB: Simulation code would be generated here."
+        "code": generated_code
         # agent_output fields would go here (simulation_code, etc.)
     }
     
@@ -1710,8 +1781,69 @@ def results_analyzer_node(state: ReproState) -> dict:
     ordered_targets = feedback_targets + [t for t in target_ids if t not in feedback_targets]
     ordered_targets = ordered_targets or target_ids
     
+    # ═══════════════════════════════════════════════════════════════════════
+    # VALIDATE STAGE OUTPUTS: Ensure outputs exist before analysis
+    # ═══════════════════════════════════════════════════════════════════════
     stage_outputs = state.get("stage_outputs", {})
     output_files = stage_outputs.get("files", [])
+    
+    if not stage_outputs or not output_files:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(
+            f"Stage outputs are empty or missing for stage {current_stage_id}. "
+            "Cannot proceed with analysis without simulation outputs."
+        )
+        # Route back to execution validation with error
+        return {
+            "workflow_phase": "analysis",
+            "execution_verdict": "fail",
+            "run_error": (
+                f"Stage outputs are missing for {current_stage_id}. "
+                "Simulation may not have completed successfully. "
+                "Please check execution logs and rerun simulation."
+            ),
+            "analysis_summary": "Analysis skipped: No outputs available",
+        }
+    
+    # Validate that output files actually exist on disk
+    from pathlib import Path
+    existing_files = []
+    missing_files = []
+    for file_path in output_files:
+        file_obj = Path(file_path) if isinstance(file_path, str) else Path(str(file_path))
+        if file_obj.exists() and file_obj.is_file():
+            existing_files.append(file_path)
+        else:
+            missing_files.append(file_path)
+    
+    if not existing_files and output_files:
+        # All files are missing - this is an error
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(
+            f"All output files are missing from disk: {output_files}. "
+            "Files may have been deleted or simulation failed to write outputs."
+        )
+        return {
+            "workflow_phase": "analysis",
+            "execution_verdict": "fail",
+            "run_error": (
+                f"Output files listed in stage_outputs do not exist on disk: {missing_files}. "
+                "Simulation may have failed to write outputs or files were deleted."
+            ),
+            "analysis_summary": "Analysis skipped: Output files missing",
+        }
+    
+    # Use only existing files for analysis
+    if missing_files:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(
+            f"Some output files are missing: {missing_files}. "
+            f"Proceeding with {len(existing_files)} available files."
+        )
+        output_files = existing_files
     paper_id = state.get("paper_id", "paper")
     expected_outputs_map = _collect_expected_outputs(stage_info, paper_id, current_stage_id or "")
     plan_stage_columns = _collect_expected_columns(stage_info)
@@ -1746,6 +1878,23 @@ def results_analyzer_node(state: ReproState) -> dict:
             or target_cfg.get("digitized_reference")
             or reference_path
         )
+        
+        # ═══════════════════════════════════════════════════════════════════════
+        # VALIDATE FIGURE IMAGE PATH: Check file exists before use
+        # ═══════════════════════════════════════════════════════════════════════
+        paper_image_path = figure_meta.get("image_path")
+        if paper_image_path:
+            from pathlib import Path
+            image_file = Path(paper_image_path)
+            if not image_file.exists() or not image_file.is_file():
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(
+                    f"Figure image path does not exist or is not a file: {paper_image_path}. "
+                    f"Comparison for {target_id} will proceed without reference image."
+                )
+                # Mark as missing reference but continue processing
+                paper_image_path = None
         requires_digitized = precision_requirement == "excellent"
         quantitative_metrics: Dict[str, Any] = {}
         classification_label = "missing_output"
