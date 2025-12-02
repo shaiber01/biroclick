@@ -38,7 +38,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 # ═══════════════════════════════════════════════════════════════════════
 
 # Default model for all agents (Claude Opus 4.5)
-DEFAULT_MODEL = "claude-opus-4-20250514"
+DEFAULT_MODEL = "claude-opus-4-5"
 
 # Schema directory
 SCHEMAS_DIR = Path(__file__).parent.parent / "schemas"
@@ -140,6 +140,17 @@ def get_llm_client(model: Optional[str] = None) -> ChatAnthropic:
         
     Returns:
         ChatAnthropic client instance
+        
+    Configuration:
+        - model: Claude Opus 4.5 (most capable model for scientific reasoning)
+        - max_tokens: 16384 (accommodates thinking budget + response)
+        - temperature: 1.0 (required when extended thinking is enabled)
+        - thinking: enabled with 10000 token budget for complex reasoning
+        - timeout: 5 minutes for long generations
+        
+    Note:
+        Extended thinking is enabled for better reasoning on complex scientific
+        tasks. This requires tool_choice="auto" instead of forcing specific tools.
     """
     global _llm_client
     
@@ -148,8 +159,13 @@ def get_llm_client(model: Optional[str] = None) -> ChatAnthropic:
     if _llm_client is None:
         _llm_client = ChatAnthropic(
             model=model,
-            max_tokens=8192,  # Max output tokens
-            timeout=300.0,    # 5 minute timeout for long generations
+            max_tokens=16384,    # Accommodates thinking budget + response
+            timeout=300.0,       # 5 minute timeout for long generations
+            temperature=1.0,     # Required when extended thinking is enabled
+            thinking={
+                "type": "enabled",
+                "budget_tokens": 10000,  # Token budget for internal reasoning
+            },
         )
     
     return _llm_client
@@ -276,14 +292,15 @@ def call_agent(
     llm = get_llm_client(model)
     
     # Create tool-enabled LLM with the schema
+    # Use tool_choice="auto" to be compatible with extended thinking mode
     tool_name = f"submit_{agent_name}_output"
     llm_with_tools = llm.bind_tools(
         tools=[{
             "name": tool_name,
-            "description": f"Submit the {agent_name} agent's structured output",
+            "description": f"Submit the {agent_name} agent's structured output. You MUST use this tool to return your response.",
             "input_schema": schema,
         }],
-        tool_choice={"type": "tool", "name": tool_name},
+        tool_choice={"type": "auto"},  # Compatible with thinking mode
     )
     
     # Build messages
@@ -319,13 +336,27 @@ def call_agent(
                 return tool_call["args"]
             else:
                 # Fallback: try to parse response content as JSON
-                # This shouldn't happen with tool_choice set, but handle gracefully
+                # With tool_choice="auto", model may respond without using tool
+                content = response.content
+                if isinstance(content, list):
+                    # Extract text from content blocks (may include thinking)
+                    content = " ".join(
+                        block.get("text", "") if isinstance(block, dict) else str(block)
+                        for block in content
+                    )
+                
+                # Try to find and parse JSON in the response
                 try:
-                    return json.loads(response.content)
-                except json.JSONDecodeError:
+                    # Look for JSON object in response
+                    import re
+                    json_match = re.search(r'\{[\s\S]*\}', content)
+                    if json_match:
+                        return json.loads(json_match.group())
+                    raise ValueError("No JSON found")
+                except (json.JSONDecodeError, ValueError):
                     raise ValueError(
                         f"Agent {agent_name} did not return structured output. "
-                        f"Response: {response.content[:500]}"
+                        f"Response: {content[:500] if content else '(empty)'}"
                     )
                     
         except Exception as e:
