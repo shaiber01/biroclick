@@ -1,48 +1,68 @@
 # Materials Database
 
-Optical constants for materials commonly used in optics/photonics simulations.
+Comprehensive optical constants library for Meep FDTD and other photonics simulations.
+
+## Quick Stats
+
+- **25 tabulated materials** with CSV data
+- **3 constant approximations** (air, water, glass)
+- Wavelength coverage: **188nm - 3000nm**
+- All data from peer-reviewed sources via [refractiveindex.info](https://refractiveindex.info)
 
 ## Available Materials
 
-### Metals
+### Metals (10 materials)
 
-| Material ID | Name | Wavelength Range | Source | Applications |
-|-------------|------|------------------|--------|--------------|
-| `palik_silver` | Silver (Ag) | 188-1000 nm | Johnson & Christy 1972 | Plasmonics, SERS, metamaterials |
-| `palik_gold` | Gold (Au) | 200-2000 nm | Palik 1998 | Biosensors, nanomedicine |
-| `johnson_christy_copper` | Copper (Cu) | 188-1000 nm | Johnson & Christy 1972 | Plasmonics, interconnects |
-| `rakic_aluminum` | Aluminum (Al) | 200-1200 nm | Rakic 1998 | UV plasmonics |
-| `johnson_christy_chromium` | Chromium (Cr) | 200-1200 nm | Johnson & Christy 1974 | Adhesion layers |
-| `johnson_christy_titanium` | Titanium (Ti) | 200-1200 nm | Johnson & Christy 1974 | Adhesion layers |
-| `johnson_christy_nickel` | Nickel (Ni) | 200-1200 nm | Johnson & Christy 1974 | Magneto-optics |
-| `rakic_platinum` | Platinum (Pt) | 200-1200 nm | Rakic 1998 | Catalysis, electrochemistry |
+| Material ID | Name | λ Range | Source | Key Applications |
+|-------------|------|---------|--------|------------------|
+| `palik_silver` | Silver (Ag) | 188-1000nm | Johnson & Christy 1972 | Plasmonics, SERS, lowest losses |
+| `palik_gold` | Gold (Au) | 200-2000nm | Palik 1998 | Biosensors, stable, biocompatible |
+| `johnson_christy_copper` | Copper (Cu) | 188-1000nm | Johnson & Christy 1972 | Cheap plasmonics >600nm |
+| `rakic_aluminum` | Aluminum (Al) | 200-1200nm | Rakic 1998 | UV plasmonics |
+| `naik_tin` | Titanium Nitride (TiN) | 300-2000nm | Naik 2012 | **Refractory plasmonics**, CMOS |
+| `johnson_christy_chromium` | Chromium (Cr) | 200-1200nm | Johnson & Christy 1974 | Adhesion layers |
+| `johnson_christy_titanium` | Titanium (Ti) | 200-1200nm | Johnson & Christy 1974 | Adhesion layers |
+| `johnson_christy_nickel` | Nickel (Ni) | 200-1200nm | Johnson & Christy 1974 | Magneto-optics |
+| `rakic_platinum` | Platinum (Pt) | 200-1200nm | Rakic 1998 | Catalysis, high-temp |
 
-### Semiconductors
+### Semiconductors (4 materials)
 
-| Material ID | Name | Wavelength Range | Source | Applications |
-|-------------|------|------------------|--------|--------------|
-| `palik_silicon` | Silicon (Si) | 300-2000 nm | Palik 1998 | Mie resonators, waveguides |
-| `aspnes_germanium` | Germanium (Ge) | 300-2000 nm | Aspnes 1983 | IR optics, high-n resonators |
-| `aspnes_gaas` | Gallium Arsenide (GaAs) | 300-2000 nm | Aspnes 1983 | Lasers, LEDs, quantum dots |
+| Material ID | Name | λ Range | Source | Key Applications |
+|-------------|------|---------|--------|------------------|
+| `palik_silicon` | Silicon (Si) | 300-2000nm | Palik 1998 | Mie resonators, n~3.5 |
+| `aspnes_germanium` | Germanium (Ge) | 300-2000nm | Aspnes 1983 | IR optics, n~4-5 |
+| `aspnes_gaas` | Gallium Arsenide | 300-2000nm | Aspnes 1983 | Lasers, LEDs, Eg=1.42eV |
+| `aspnes_inp` | Indium Phosphide | 300-2000nm | Aspnes 1983 | **Telecom 1550nm**, PICs |
 
-### Dielectrics
+### Dielectrics (9 materials)
 
-| Material ID | Name | Wavelength Range | Source | Applications |
-|-------------|------|------------------|--------|--------------|
-| `malitson_sio2` | Silicon Dioxide (SiO₂) | 200-2000 nm | Malitson 1965 | Substrates, spacers |
-| `devore_tio2` | Titanium Dioxide (TiO₂) | 430-2000 nm | Devore 1951 | Metasurfaces, photocatalysis |
-| `philipp_si3n4` | Silicon Nitride (Si₃N₄) | 200-2000 nm | Philipp 1973 | Waveguides, integrated photonics |
-| `malitson_al2o3` | Aluminum Oxide (Al₂O₃) | 200-3000 nm | Malitson 1962 | Substrates, protective coatings |
-| `konig_ito` | Indium Tin Oxide (ITO) | 300-2000 nm | König 2014 | Transparent electrodes |
-| `constant_glass` | Glass (BK7-like) | 300-2000 nm | Constant n=1.51 | Quick estimates |
-| `constant_air` | Air/Vacuum | All | Constant n=1.0 | Surrounding medium |
-| `constant_water` | Water | 300-1200 nm | Constant n=1.33 | Biosensing |
+| Material ID | Name | λ Range | Source | Key Applications |
+|-------------|------|---------|--------|------------------|
+| `malitson_sio2` | Silicon Dioxide (SiO₂) | 200-2000nm | Malitson 1965 | Standard substrate, n~1.45 |
+| `devore_tio2` | Titanium Dioxide (TiO₂) | 430-2000nm | Devore 1951 | **High-n metasurfaces**, n~2.4-2.9 |
+| `philipp_si3n4` | Silicon Nitride (Si₃N₄) | 200-2000nm | Philipp 1973 | **Photonic waveguides**, n~2.0 |
+| `malitson_al2o3` | Aluminum Oxide (Al₂O₃) | 200-3000nm | Malitson 1962 | Sapphire substrates |
+| `bright_hfo2` | Hafnium Dioxide (HfO₂) | 200-2000nm | Bright 2013 | **High-k gate oxide**, n~1.9 |
+| `bond_zno` | Zinc Oxide (ZnO) | 370-2000nm | Bond 1965 | TCO, piezoelectric |
+| `dodge_mgf2` | Magnesium Fluoride (MgF₂) | 200-2000nm | Dodge 1984 | **AR coatings**, n~1.38 |
+| `konig_ito` | Indium Tin Oxide (ITO) | 300-2000nm | König 2014 | Transparent electrodes |
+| `sultanova_pmma` | PMMA (Acrylic) | 400-1600nm | Sultanova 2009 | E-beam resist, n~1.49 |
 
-### 2D Materials
+### 2D Materials (3 materials)
 
-| Material ID | Name | Wavelength Range | Source | Applications |
-|-------------|------|------------------|--------|--------------|
-| `kuzmenko_graphene` | Graphene | 300-2000 nm | Kuzmenko 2008 | Modulators, photodetectors |
+| Material ID | Name | λ Range | Source | Key Applications |
+|-------------|------|---------|--------|------------------|
+| `kuzmenko_graphene` | Graphene | 300-2000nm | Kuzmenko 2008 | Modulators, ~2.3%/layer absorption |
+| `segura_hbn` | Hexagonal BN (hBN) | 250-2000nm | Segura 2018 | **Graphene encapsulation**, phonon polaritons |
+| `li_mos2` | Molybdenum Disulfide (MoS₂) | 400-2000nm | Li 2014 | **Valleytronics**, TMD, direct gap |
+
+### Constant Approximations (3 materials)
+
+| Material ID | Name | n | Applications |
+|-------------|------|---|--------------|
+| `constant_glass` | Glass (BK7-like) | 1.51 | Quick estimates |
+| `constant_air` | Air/Vacuum | 1.00 | Surrounding medium |
+| `constant_water` | Water | 1.33 | Biosensing |
 
 ## Usage
 
@@ -55,8 +75,8 @@ with open('materials/index.json') as f:
     index = json.load(f)
 
 # Find by ID
-silver = next(m for m in index['materials'] if m['material_id'] == 'palik_silver')
-print(f"Silver: {silver['wavelength_range_nm']}")
+material = next(m for m in index['materials'] if m['material_id'] == 'palik_gold')
+print(f"Gold wavelength range: {material['wavelength_range_nm']}")
 ```
 
 ### 2. Loading Tabulated Data
@@ -64,39 +84,33 @@ print(f"Silver: {silver['wavelength_range_nm']}")
 ```python
 import numpy as np
 
-# Check if CSV is available
-if silver['csv_available']:
+if material['csv_available']:
     data = np.loadtxt(
-        f"materials/{silver['data_file']}", 
+        f"materials/{material['data_file']}", 
         delimiter=',', 
         skiprows=10,  # Skip header comments
         unpack=True
     )
     wavelength_nm, n, k = data
     
-    # Convert to complex refractive index
+    # Complex refractive index
     n_complex = n + 1j * k
     
-    # Convert to permittivity
+    # Permittivity
     epsilon = n_complex ** 2
 ```
 
-### 3. Using Drude-Lorentz Fit in Meep
+### 3. Using in Meep
 
 ```python
 import meep as mp
 
-# Get fit parameters
-fit = silver['drude_lorentz_fit']
-
-# Unit conversion: eV to Meep frequency units (where c=1, a=1µm)
-# f_meep = f_eV / (hbar * c / a) = f_eV * a / (hc) 
-# For a = 1 µm: f_meep ≈ f_eV * 0.8065
-eV_to_meep = 1.0 / 1.23984  # More precisely: a_um / (hc in eV·µm)
+fit = material['drude_lorentz_fit']
+eV_to_meep = 1.0 / 1.23984  # For a = 1 µm
 
 susceptibilities = []
 
-# Add Drude terms (free electrons)
+# Drude terms
 for drude in fit['drude_terms']:
     susceptibilities.append(mp.DrudeSusceptibility(
         frequency=drude['omega_p_eV'] * eV_to_meep,
@@ -104,7 +118,7 @@ for drude in fit['drude_terms']:
         sigma=1.0
     ))
 
-# Add Lorentz terms (interband transitions)
+# Lorentz terms
 for lorentz in fit['lorentz_terms']:
     susceptibilities.append(mp.LorentzianSusceptibility(
         frequency=lorentz['omega_0_eV'] * eV_to_meep,
@@ -112,122 +126,74 @@ for lorentz in fit['lorentz_terms']:
         sigma=lorentz['sigma']
     ))
 
-# Create Meep material
-silver_material = mp.Medium(
+meep_material = mp.Medium(
     epsilon=fit['eps_inf'], 
     E_susceptibilities=susceptibilities
 )
 ```
 
-### 4. Material Validation (Stage 0)
+## Material Selection Guide
 
-Always validate materials before running simulations:
+### By Application
 
-1. Compute ε(λ) from Drude-Lorentz fit
-2. Compare to tabulated CSV data
-3. Check wavelength range coverage
-4. Compare to any spectra shown in paper
+| Application | Recommended Materials |
+|-------------|-----------------------|
+| **Visible Plasmonics** | Ag (best Q), Au (stable), Cu (cheap) |
+| **UV Plasmonics** | Al |
+| **High-Temp Plasmonics** | TiN |
+| **Biosensing** | Au (biocompatible) |
+| **Telecom (1550nm)** | InP, Si, Ge |
+| **Metasurfaces** | TiO₂, Si, Si₃N₄ |
+| **Waveguides** | Si₃N₄, Si, SiO₂ |
+| **AR Coatings** | MgF₂ (low-n) + TiO₂ (high-n) |
+| **2D Electronics** | MoS₂, graphene, hBN |
+| **Gate Dielectrics** | HfO₂ |
 
-## Adding New Materials
+### By Refractive Index
 
-### Step 1: Get Tabulated Data
-
-Best sources:
-- [refractiveindex.info](https://refractiveindex.info) - Comprehensive database
-- Palik, *Handbook of Optical Constants of Solids* (1998)
-- Johnson & Christy, PRB 6, 4370 (1972) - Noble metals
-
-### Step 2: Create CSV File
-
-Format:
-```csv
-# Material name and description
-# Source: Citation
-# Format: wavelength_nm, n (real), k (imaginary)
-#
-wavelength_nm,n,k
-200,1.07,1.21
-220,1.03,1.36
-...
-```
-
-### Step 3: (Optional) Fit Drude-Lorentz Model
-
-```python
-from scipy.optimize import minimize
-import numpy as np
-
-def drude_lorentz_epsilon(omega, eps_inf, omega_p, gamma_d, lorentz_params):
-    """Compute permittivity from Drude-Lorentz model."""
-    # Drude term
-    eps = eps_inf - omega_p**2 / (omega**2 + 1j * gamma_d * omega)
-    
-    # Lorentz terms
-    for omega_0, gamma_l, sigma in lorentz_params:
-        eps += sigma * omega_0**2 / (omega_0**2 - omega**2 - 1j * gamma_l * omega)
-    
-    return eps
-
-def fit_error(params, omega, eps_data):
-    """Error function for optimization."""
-    # Unpack params and compute model
-    eps_model = drude_lorentz_epsilon(omega, *params)
-    return np.sum(np.abs(eps_model - eps_data)**2)
-
-# Fit to your data
-# result = minimize(fit_error, initial_params, args=(omega, eps_data))
-```
-
-### Step 4: Add to index.json
-
-Follow `material_schema.json` format. Required fields:
-- `material_id`: Unique snake_case identifier
-- `name`: Human-readable name
-- `source`: Citation
-- `wavelength_range_nm`: [min, max]
-- `data_format`: "wavelength_nm_n_k"
-- `data_file`: Filename or null
-- `csv_available`: true/false
+| Category | Materials | Typical n |
+|----------|-----------|-----------|
+| **Very High** | Ge, Si, GaAs, InP | 3.0 - 5.0 |
+| **High** | TiO₂, Si₃N₄, hBN, MoS₂ | 1.9 - 2.9 |
+| **Medium** | SiO₂, Al₂O₃, HfO₂, ZnO, PMMA | 1.4 - 2.0 |
+| **Low** | MgF₂, Air | 1.0 - 1.4 |
 
 ## Data Sources
 
-| Source | Coverage | Notes |
-|--------|----------|-------|
-| [refractiveindex.info](https://refractiveindex.info) | Comprehensive | Compiles multiple sources with citations |
-| Palik Handbook (1998) | Comprehensive | Standard reference |
-| Rakic et al. (1998) | Metals | Drude-Lorentz fits, Applied Optics |
-| Johnson & Christy (1972, 1974) | Metals | PRB, widely cited |
-| Aspnes & Studna (1983) | Semiconductors | PRB, Si, Ge, GaAs |
-| Malitson (1962, 1965) | Oxides | J. Opt. Soc. Am., SiO₂, Al₂O₃ |
+| Reference | Materials | Citation |
+|-----------|-----------|----------|
+| Johnson & Christy (1972) | Ag, Au, Cu | PRB 6, 4370 |
+| Johnson & Christy (1974) | Cr, Ti, Ni | PRB 9, 5056 |
+| Rakic et al. (1998) | Al, Pt | Appl. Opt. 37, 5271 |
+| Aspnes & Studna (1983) | Si, Ge, GaAs, InP | PRB 27, 985 |
+| Malitson (1962, 1965) | Al₂O₃, SiO₂ | JOSA |
+| Naik et al. (2012) | TiN | OME 2, 478 |
 
 ## Notes
 
 ### Metals
-- **Silver**: Lowest losses, best for high-Q plasmonics. Tarnishes in air.
-- **Gold**: Chemically stable, good biocompatibility, interband losses <500nm
-- **Copper**: Good plasmonics >600nm, cheap, oxidizes in air
-- **Aluminum**: Best for UV plasmonics, forms native oxide (~2-3nm)
-- **Chromium/Titanium**: Adhesion layers (2-5nm) for Au/Ag/Al films
-- **Nickel**: Ferromagnetic, enables magneto-optical control
-- **Platinum**: Catalytic, chemically inert, high-temperature stable
+- **Ag**: Lowest losses, highest Q plasmons. Tarnishes in air.
+- **Au**: Chemically stable, biocompatible. Interband losses <500nm.
+- **Cu**: Good >600nm, cheap. Oxidizes in air.
+- **Al**: Best for UV. Native oxide (~3nm) shifts resonances.
+- **TiN**: Refractory - stable where Au/Ag melt. CMOS compatible.
+- **Cr/Ti**: Adhesion layers (2-5nm) under Au/Ag/Al.
 
 ### Semiconductors
-- **Silicon**: High-index (n~3.5), Mie resonances, absorbs above bandgap (~1100nm)
-- **Germanium**: Very high-index (n~4), transparent in mid-IR
-- **GaAs**: Direct bandgap (~870nm), for lasers and LEDs
-
-### Dielectrics
-- **SiO₂**: Standard substrate (n~1.45), very low loss
-- **TiO₂**: High-index (n~2.4), photocatalysis, metasurfaces
-- **Si₃N₄**: Waveguide material (n~2.0), integrated photonics
-- **Al₂O₃**: Sapphire substrates, native oxide on Al
-- **ITO**: Transparent conductor, NIR plasmonics
+- **Si**: n~3.5, absorbs above bandgap (~1100nm). Mie resonances.
+- **Ge**: n~4-5, transparent in mid-IR.
+- **GaAs**: Direct gap 1.42eV, for lasers/LEDs.
+- **InP**: Key for 1550nm telecom photonics.
 
 ### 2D Materials
-- **Graphene**: ~2.3% absorption per layer, effective constants assume 0.34nm thickness
+- **Graphene**: ~2.3% absorption/layer. Use 0.34nm thickness.
+- **hBN**: Insulator, encapsulates graphene. Phonon polaritons in mid-IR.
+- **MoS₂**: Direct gap ~1.9eV in monolayer. Use 0.65nm thickness.
 
 ### Fit Quality
-- `excellent`: <5% error across fit range
-- `good`: 5-15% error, suitable for most simulations
-- `moderate`: 15-30% error, prefer tabulated data
-- `approximate`: Constant approximation, quick estimates only
+| Rating | Error | Recommendation |
+|--------|-------|----------------|
+| `excellent` | <5% | Use fit or tabulated |
+| `good` | 5-15% | Suitable for most work |
+| `moderate` | 15-30% | Prefer tabulated data |
+| `approximate` | >30% | Quick estimates only |

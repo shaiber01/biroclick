@@ -2,7 +2,7 @@
   "$schema": "./material_schema.json",
   "title": "Materials Index",
   "description": "Index of available optical material data for Meep simulations",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "last_updated": "2024-12-02",
   
   "status": {
@@ -24,10 +24,18 @@
       "aspnes_gaas.csv",
       "kuzmenko_graphene.csv",
       "johnson_christy_nickel.csv",
-      "rakic_platinum.csv"
+      "rakic_platinum.csv",
+      "naik_tin.csv",
+      "bright_hfo2.csv",
+      "bond_zno.csv",
+      "dodge_mgf2.csv",
+      "sultanova_pmma.csv",
+      "aspnes_inp.csv",
+      "segura_hbn.csv",
+      "li_mos2.csv"
     ],
     "planned_csv_files": [],
-    "note": "Comprehensive material library for plasmonics, photonics, and metasurfaces. Data sourced from refractiveindex.info which compiles standard references (Palik, Rakic, Malitson, Johnson & Christy, Aspnes)."
+    "note": "Comprehensive material library for plasmonics, photonics, and metasurfaces. Data sourced from refractiveindex.info which compiles standard references."
   },
   
   "materials": [
@@ -129,6 +137,29 @@
         "fit_wavelength_range_nm": [200, 1000]
       },
       "notes": "Preferred for UV plasmonics due to high plasma frequency. Native oxide layer (Al2O3, ~2-3nm) may shift resonances.",
+      "csv_available": true
+    },
+    
+    {
+      "material_id": "naik_tin",
+      "name": "Titanium Nitride (Naik)",
+      "source": "G.V. Naik et al., Optical Materials Express 2, 478-489, 2012",
+      "source_doi": "10.1364/OME.2.000478",
+      "wavelength_range_nm": [300, 2000],
+      "data_format": "wavelength_nm_n_k",
+      "data_file": "naik_tin.csv",
+      "material_type": "metal",
+      "common_applications": ["refractory plasmonics", "high-temperature", "CMOS-compatible", "solar absorbers"],
+      "drude_lorentz_fit": {
+        "eps_inf": 1.0,
+        "drude_terms": [
+          {"omega_p_eV": 8.0, "gamma_eV": 0.5}
+        ],
+        "lorentz_terms": [],
+        "fit_quality": "moderate",
+        "fit_wavelength_range_nm": [600, 2000]
+      },
+      "notes": "Refractory plasmonic material - stable at high temperatures where Au/Ag melt. CMOS compatible. Gold-like color. Properties depend on stoichiometry.",
       "csv_available": true
     },
     
@@ -293,6 +324,29 @@
     },
     
     {
+      "material_id": "aspnes_inp",
+      "name": "Indium Phosphide (Aspnes)",
+      "source": "D.E. Aspnes and A.A. Studna, Phys. Rev. B 27, 985-1009, 1983",
+      "source_doi": "10.1103/PhysRevB.27.985",
+      "wavelength_range_nm": [300, 2000],
+      "data_format": "wavelength_nm_n_k",
+      "data_file": "aspnes_inp.csv",
+      "material_type": "semiconductor",
+      "common_applications": ["telecom photonics", "lasers", "photonic integrated circuits", "1550nm devices"],
+      "drude_lorentz_fit": {
+        "eps_inf": 9.6,
+        "drude_terms": [],
+        "lorentz_terms": [
+          {"omega_0_eV": 3.2, "gamma_eV": 0.3, "sigma": 3.5}
+        ],
+        "fit_quality": "good",
+        "fit_wavelength_range_nm": [950, 2000]
+      },
+      "notes": "III-V semiconductor, direct bandgap 1.34eV (~925nm). Key material for telecom photonics at 1550nm. Substrate for InGaAsP devices.",
+      "csv_available": true
+    },
+    
+    {
       "material_id": "malitson_sio2",
       "name": "Silicon Dioxide (SiO2, Fused Silica)",
       "source": "Malitson, J. Opt. Soc. Am. 55, 1205-1209, 1965",
@@ -377,6 +431,69 @@
     },
     
     {
+      "material_id": "bright_hfo2",
+      "name": "Hafnium Dioxide (HfO2)",
+      "source": "T.J. Bright et al., J. Appl. Phys. 114, 083515, 2013",
+      "source_doi": "10.1063/1.4819325",
+      "wavelength_range_nm": [200, 2000],
+      "data_format": "wavelength_nm_n_k",
+      "data_file": "bright_hfo2.csv",
+      "material_type": "dielectric",
+      "common_applications": ["gate dielectrics", "high-k capacitors", "optical coatings", "CMOS"],
+      "drude_lorentz_fit": {
+        "eps_inf": 3.7,
+        "drude_terms": [],
+        "lorentz_terms": [],
+        "fit_quality": "good",
+        "fit_wavelength_range_nm": [300, 2000]
+      },
+      "notes": "Amorphous HfO2, high-k dielectric (k~25). Standard gate oxide in modern transistors. Transparent in visible/NIR.",
+      "csv_available": true
+    },
+    
+    {
+      "material_id": "bond_zno",
+      "name": "Zinc Oxide (ZnO)",
+      "source": "W.L. Bond, J. Appl. Phys. 36, 1674-1677, 1965",
+      "source_doi": "10.1063/1.1703108",
+      "wavelength_range_nm": [370, 2000],
+      "data_format": "wavelength_nm_n_k",
+      "data_file": "bond_zno.csv",
+      "material_type": "dielectric",
+      "common_applications": ["transparent conductors", "piezoelectrics", "gas sensors", "SAW devices"],
+      "drude_lorentz_fit": {
+        "eps_inf": 3.7,
+        "drude_terms": [],
+        "lorentz_terms": [],
+        "fit_quality": "good",
+        "fit_wavelength_range_nm": [400, 2000]
+      },
+      "notes": "Wurtzite ZnO, ordinary ray. Wide bandgap 3.37eV (~368nm). Piezoelectric. Can be doped (AZO) for conductivity.",
+      "csv_available": true
+    },
+    
+    {
+      "material_id": "dodge_mgf2",
+      "name": "Magnesium Fluoride (MgF2)",
+      "source": "M.J. Dodge, Appl. Opt. 23, 1980-1985, 1984",
+      "source_doi": "10.1364/AO.23.001980",
+      "wavelength_range_nm": [200, 2000],
+      "data_format": "wavelength_nm_n_k",
+      "data_file": "dodge_mgf2.csv",
+      "material_type": "dielectric",
+      "common_applications": ["anti-reflection coatings", "UV optics", "protective coatings", "thin films"],
+      "drude_lorentz_fit": {
+        "eps_inf": 1.9,
+        "drude_terms": [],
+        "lorentz_terms": [],
+        "fit_quality": "excellent",
+        "fit_wavelength_range_nm": [200, 2000]
+      },
+      "notes": "Low-index material (n~1.38), ideal for AR coatings. Transparent UV to mid-IR. Commonly paired with high-index materials.",
+      "csv_available": true
+    },
+    
+    {
       "material_id": "konig_ito",
       "name": "Indium Tin Oxide (ITO)",
       "source": "T.A.F. König et al., ACS Appl. Mater. Interfaces 6, 6503-6510, 2014",
@@ -400,6 +517,27 @@
     },
     
     {
+      "material_id": "sultanova_pmma",
+      "name": "PMMA (Acrylic)",
+      "source": "N. Sultanova et al., Acta Physica Polonica A 116, 585-587, 2009",
+      "source_doi": "10.12693/APhysPolA.116.585",
+      "wavelength_range_nm": [400, 1600],
+      "data_format": "wavelength_nm_n_k",
+      "data_file": "sultanova_pmma.csv",
+      "material_type": "organic",
+      "common_applications": ["e-beam resist", "optical fibers", "lenses", "protective coatings"],
+      "drude_lorentz_fit": {
+        "eps_inf": 2.2,
+        "drude_terms": [],
+        "lorentz_terms": [],
+        "fit_quality": "good",
+        "fit_wavelength_range_nm": [400, 1600]
+      },
+      "notes": "Common optical polymer (n~1.49). Trade names: Plexiglas, Lucite, Perspex. E-beam lithography resist.",
+      "csv_available": true
+    },
+    
+    {
       "material_id": "kuzmenko_graphene",
       "name": "Graphene (Kuzmenko)",
       "source": "A.B. Kuzmenko et al., Phys. Rev. Lett. 100, 117401, 2008",
@@ -417,6 +555,48 @@
         "fit_wavelength_range_nm": [400, 2000]
       },
       "notes": "EFFECTIVE optical constants assuming 0.34nm thickness. 2D material - better described by sheet conductivity. ~2.3% absorption per layer.",
+      "csv_available": true
+    },
+    
+    {
+      "material_id": "segura_hbn",
+      "name": "Hexagonal Boron Nitride (hBN)",
+      "source": "A. Segura et al., J. Appl. Phys. 124, 105303, 2018",
+      "source_doi": "10.1063/1.5046889",
+      "wavelength_range_nm": [250, 2000],
+      "data_format": "wavelength_nm_n_k",
+      "data_file": "segura_hbn.csv",
+      "material_type": "2d_material",
+      "common_applications": ["graphene encapsulation", "phonon polaritons", "2D heterostructures", "UV emitters"],
+      "drude_lorentz_fit": {
+        "eps_inf": 3.7,
+        "drude_terms": [],
+        "lorentz_terms": [],
+        "fit_quality": "good",
+        "fit_wavelength_range_nm": [300, 2000]
+      },
+      "notes": "In-plane (ordinary ray) constants. Layered insulator similar to graphite. Supports phonon polaritons in mid-IR. Strong UV exciton ~215nm.",
+      "csv_available": true
+    },
+    
+    {
+      "material_id": "li_mos2",
+      "name": "Molybdenum Disulfide (MoS2)",
+      "source": "Y. Li et al., Phys. Rev. B 90, 205422, 2014",
+      "source_doi": "10.1103/PhysRevB.90.205422",
+      "wavelength_range_nm": [400, 2000],
+      "data_format": "wavelength_nm_n_k",
+      "data_file": "li_mos2.csv",
+      "material_type": "2d_material",
+      "common_applications": ["valleytronics", "photodetectors", "transistors", "electrocatalysis"],
+      "drude_lorentz_fit": {
+        "eps_inf": 1.0,
+        "drude_terms": [],
+        "lorentz_terms": [],
+        "fit_quality": "approximate",
+        "fit_wavelength_range_nm": [500, 2000]
+      },
+      "notes": "EFFECTIVE constants for monolayer (0.65nm thickness). TMD with direct bandgap ~1.9eV in monolayer. Strong A,B excitons ~620-660nm. Valley-selective.",
       "csv_available": true
     },
     
