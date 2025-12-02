@@ -83,9 +83,12 @@ def route_after_plan_review(state: ReproState) -> Literal["select_stage", "plan"
         if replan_count < max_replans:
             return "plan"
         else:
+            # Save checkpoint before escalating to ensure state is preserved
+            save_checkpoint(state, "before_ask_user_replan_limit")
             return "ask_user"
     
-    # Fallback
+    # Fallback: save checkpoint before escalating
+    save_checkpoint(state, "before_ask_user_plan_review_fallback")
     return "ask_user"
 
 
@@ -105,9 +108,12 @@ def route_after_design_review(state: ReproState) -> Literal["generate_code", "de
         if revision_count < max_design:
             return "design"
         else:
+            # Save checkpoint before escalating to ensure state is preserved
+            save_checkpoint(state, "before_ask_user_design_review_limit")
             return "ask_user"
     
-    # Fallback
+    # Fallback: save checkpoint before escalating
+    save_checkpoint(state, "before_ask_user_design_review_fallback")
     return "ask_user"
 
 
@@ -128,9 +134,12 @@ def route_after_code_review(state: ReproState) -> Literal["run_code", "generate_
         if revision_count < max_code:
             return "generate_code"
         else:
+            # Save checkpoint before escalating to ensure state is preserved
+            save_checkpoint(state, "before_ask_user_code_review_limit")
             return "ask_user"
     
-    # Fallback
+    # Fallback: save checkpoint before escalating
+    save_checkpoint(state, "before_ask_user_code_review_fallback")
     return "ask_user"
 
 def route_after_select_stage(state: ReproState) -> Literal["design", "generate_report"]:
@@ -171,6 +180,8 @@ def route_after_execution_check(state: ReproState) -> Literal["physics_check", "
             "execution_verdict is None - execution_validator_node may not have run or failed. "
             "Escalating to user for guidance."
         )
+        # Save checkpoint before escalating to ensure state is preserved
+        save_checkpoint(state, "before_ask_user_execution_error")
         # Set ask_user fields to handle missing verdict
         return "ask_user"
     
@@ -181,7 +192,11 @@ def route_after_execution_check(state: ReproState) -> Literal["physics_check", "
         if state.get("execution_failure_count", 0) < max_failures:
             return "generate_code"
         else:
+            # Save checkpoint before escalating to ensure state is preserved
+            save_checkpoint(state, "before_ask_user_execution_limit")
             return "ask_user"
+    # Fallback: save checkpoint before escalating
+    save_checkpoint(state, "before_ask_user_execution_fallback")
     return "ask_user"
 
 def route_after_physics_check(state: ReproState) -> Literal["analyze", "generate_code", "design", "ask_user"]:
@@ -210,6 +225,8 @@ def route_after_physics_check(state: ReproState) -> Literal["analyze", "generate
             "physics_verdict is None - physics_sanity_node may not have run or failed. "
             "Escalating to user for guidance."
         )
+        # Save checkpoint before escalating to ensure state is preserved
+        save_checkpoint(state, "before_ask_user_physics_error")
         # Set ask_user fields to handle missing verdict
         return "ask_user"
     
@@ -220,6 +237,8 @@ def route_after_physics_check(state: ReproState) -> Literal["analyze", "generate
         if state.get("physics_failure_count", 0) < max_failures:
             return "generate_code"
         else:
+            # Save checkpoint before escalating to ensure state is preserved
+            save_checkpoint(state, "before_ask_user_physics_limit")
             return "ask_user"
     elif verdict == "design_flaw":
         # Fundamental design issue - route to design, NOT code
@@ -227,7 +246,11 @@ def route_after_physics_check(state: ReproState) -> Literal["analyze", "generate
         if state.get("design_revision_count", 0) < max_design:
             return "design"
         else:
+            # Save checkpoint before escalating to ensure state is preserved
+            save_checkpoint(state, "before_ask_user_design_limit")
             return "ask_user"
+    # Fallback: save checkpoint before escalating
+    save_checkpoint(state, "before_ask_user_physics_fallback")
     return "ask_user"
 
 def route_after_comparison_check(state: ReproState) -> Literal["supervisor", "analyze"]:
@@ -281,6 +304,8 @@ def route_after_supervisor(state: ReproState) -> Literal["select_stage", "plan",
             "supervisor_verdict is None - supervisor may not have run or failed. "
             "Escalating to user for guidance."
         )
+        # Save checkpoint before escalating to ensure state is preserved
+        save_checkpoint(state, "before_ask_user_supervisor_error")
         # Set ask_user fields to handle missing verdict
         return "ask_user"
     
@@ -303,6 +328,8 @@ def route_after_supervisor(state: ReproState) -> Literal["select_stage", "plan",
         if state.get("replan_count", 0) < MAX_REPLANS:
             return "plan"
         else:
+            # Save checkpoint before escalating to ensure state is preserved
+            save_checkpoint(state, "before_ask_user_replan_limit")
             return "ask_user"
             
     elif verdict == "ask_user":

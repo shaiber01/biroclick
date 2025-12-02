@@ -1531,11 +1531,10 @@ outputs/<paper_id>/
 
 ## Context Window Management
 
-> **Heads-up:** Automated `context_budget` accounting is planned for the next release.  
-> In the current build, nodes still call `check_context_before_node()` for safety, but the
-> per-state budget ledger described below is forward-looking design documentation.
-
-> **Implementation note (v0.1.0)**: The `context_budget` tracking mechanics described below are part of the v0 planning spec. The actual state field and metrics wiring will land in the next implementation milestone. Until then, treat this section as forward-looking guidance.
+> **Note:** `context_budget` tracking is implemented and functional. All agent nodes call 
+> `check_context_before_node()` which estimates token usage, tracks cumulative budget in 
+> `metrics.context_budget_used`, and provides recovery actions. The implementation includes
+> automatic recovery for low-risk actions and escalation to user when needed.
 
 ### Overview
 

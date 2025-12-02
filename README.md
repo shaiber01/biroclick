@@ -29,7 +29,7 @@ The first implementation targets a minimal vertical slice to validate the archit
 - **Mandatory material checkpoint**: Explicit `material_checkpoint` node after Stage 0 requiring user confirmation
 - **Cross-stage backtracking**: `handle_backtrack` node for invalidating and re-running stages
 - **Single source of truth**: Validation hierarchy computed from progress (not stored separately)
-- **Context management**: `context_budget` tracking planned for the next release (design documented, implementation pending)
+- **Context management**: `context_budget` tracking implemented with automatic token estimation and recovery actions
 - **Metrics pipeline**: Token usage tracking via `metrics` field in state
 - **Physics-driven redesign**: `design_flaw` verdict routes physics failures to design (not code)
 - **Validated materials handoff**: `validated_materials` field passed from Stage 0 to all subsequent stages

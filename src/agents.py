@@ -1551,6 +1551,41 @@ def select_stage_node(state: ReproState) -> dict:
                     hierarchy.get(ARRAY_SYS_KEY) not in ["passed", "partial"]:
                     continue
         
+        # ═══════════════════════════════════════════════════════════════════════
+        # EXPLICIT TYPE ORDER ENFORCEMENT: Ensure all lower-order types are completed
+        # This provides a safety net against plan inconsistencies
+        # ═══════════════════════════════════════════════════════════════════════
+        from schemas.state import STAGE_TYPE_ORDER
+        if stage_type and stage_type in STAGE_TYPE_ORDER:
+            current_type_index = STAGE_TYPE_ORDER.index(stage_type)
+            # Check that all lower-order stage types have at least one completed stage
+            for lower_type_index in range(current_type_index):
+                lower_type = STAGE_TYPE_ORDER[lower_type_index]
+                # Check if any stage of this lower type is completed
+                has_completed_lower_type = False
+                for other_stage in stages:
+                    if other_stage.get("stage_type") == lower_type:
+                        other_status = other_stage.get("status", "not_started")
+                        if other_status in ["completed_success", "completed_partial"]:
+                            has_completed_lower_type = True
+                            break
+                # If this lower type exists in the plan but none are completed, block selection
+                if not has_completed_lower_type:
+                    # Check if this lower type exists in the plan at all
+                    lower_type_exists = any(
+                        s.get("stage_type") == lower_type for s in stages
+                    )
+                    if lower_type_exists:
+                        # Lower type exists but not completed - block this stage
+                        import logging
+                        logger = logging.getLogger(__name__)
+                        logger.warning(
+                            f"Stage '{stage.get('stage_id')}' (type {stage_type}) cannot be selected "
+                            f"because lower-order type '{lower_type}' exists but is not completed. "
+                            "This enforces STAGE_TYPE_ORDER validation hierarchy."
+                        )
+                        continue
+        
         # This stage is eligible
         # ═══════════════════════════════════════════════════════════════════════
         # RESET COUNTERS: Only reset if switching to a different stage
@@ -2786,12 +2821,12 @@ def supervisor_node(state: ReproState) -> dict:
                     "Please update the plan and assumptions to use the specified database/material, "
                     "then re-run Stage 0."
                 )
-                # Mark stage 0 as invalid
+                # Mark stage 0 as needs_rerun (not just invalidated) to ensure it gets re-selected after replan
                 if current_stage_id:
                     update_progress_stage_status(
                         state, 
                         current_stage_id, 
-                        "invalidated", 
+                        "needs_rerun",  # Changed from "invalidated" to ensure re-selection
                         invalidation_reason="User requested material change"
                     )
                 # Clear pending materials since they're rejected
@@ -2804,12 +2839,12 @@ def supervisor_node(state: ReproState) -> dict:
                 # Need to replan with different material
                 result["supervisor_verdict"] = "replan_needed"
                 result["planner_feedback"] = f"User indicated wrong material: {response_text}. Please update plan."
-                # Mark stage 0 as invalid
+                # Mark stage 0 as needs_rerun (not just invalidated) to ensure it gets re-selected after replan
                 if current_stage_id:
                     update_progress_stage_status(
                         state,
                         current_stage_id,
-                        "invalidated",
+                        "needs_rerun",  # Changed from "invalidated" to ensure re-selection
                         invalidation_reason="User rejected material"
                     )
                 # Clear pending materials since they're rejected
@@ -3758,6 +3793,13 @@ def handle_backtrack_node(state: ReproState) -> dict:
             "awaiting_user_input": True,
         }
     
+    # Check if backtracking to Stage 0 (MATERIAL_VALIDATION) - need to clear validated materials
+    target_stage = next((s for s in stages if s.get("stage_id") == target_id), None)
+    is_material_validation = False
+    if target_stage:
+        target_stage_type = target_stage.get("stage_type")
+        is_material_validation = target_stage_type == "MATERIAL_VALIDATION"
+    
     # Update stage statuses
     for stage in stages:
         stage_id = stage.get("stage_id", "")
@@ -3796,6 +3838,13 @@ def handle_backtrack_node(state: ReproState) -> dict:
         # This prevents double-reset and preserves counter state correctly
         # ═══════════════════════════════════════════════════════════════════════
     }
+    
+    # ═══════════════════════════════════════════════════════════════════════
+    # CLEAR VALIDATED_MATERIALS: If backtracking to Stage 0, clear materials
+    # ═══════════════════════════════════════════════════════════════════════
+    if is_material_validation:
+        result["validated_materials"] = []
+        result["pending_validated_materials"] = []
     
     # Guard clause: Check if max backtracks exceeded
     max_backtracks = state.get("runtime_config", {}).get("max_backtracks", 2)
