@@ -247,79 +247,54 @@ Your action:
 D. OUTPUT FORMAT
 ═══════════════════════════════════════════════════════════════════════
 
-{
-  "verdict": "ok_continue | replan_needed | change_priority | ask_user | backtrack_to_stage | all_complete",
-  
-  "validation_hierarchy_status": {
-    "material_validation": "passed | partial | failed | not_done",
-    "single_structure": "passed | partial | failed | not_done",
-    "arrays_systems": "passed | partial | failed | not_done",
-    "parameter_sweeps": "passed | partial | failed | not_done"
-  },
-  
-  "main_physics_assessment": {
-    "central_claim": "description of paper's main claim/phenomenon",
-    "reproduced": true | false | "partial",
-    "confidence": "high | medium | low",
-    "evidence": "brief summary of what supports this assessment"
-  },
-  
-  "error_analysis": {
-    "systematic_shifts_identified": [
-      "~4% red-shift from 2D approximation",
-      "~10nm shift from Palik vs Johnson-Christy Al data"
-    ],
-    "random_discrepancies": [],
-    "unresolved_issues": []
-  },
-  
-  "progress_assessment": {
-    "stages_completed": 2,
-    "stages_remaining": 3,
-    "overall_trajectory": "on_track | behind | stuck | ahead",
-    "diminishing_returns": false
-  },
-  
-  "high_level_assessment": "One paragraph describing overall progress, 
-    concerns, and whether we're on track to reproduce the main claims.",
-  
-  "recommendations": [
-    "Specific actionable recommendations",
-    "e.g., 'Accept Stage 1 partial match and proceed to diameter sweep'",
-    "e.g., 'Try alternative Al optical data (Rakic) for one test case'"
-  ],
-  
-  "questions_for_user": [
-    "Specific questions if verdict is ask_user",
-    "e.g., 'Is ±5% wavelength shift acceptable for plasmonics?'"
-  ],
-  
-  "priority_changes": [
-    // Only if verdict is change_priority
-    {
-      "stage_id": "stage_to_deprioritize",
-      "action": "deprioritize | skip | move_earlier",
-      "reason": "why"
-    }
-  ],
-  
-  "backtrack_decision": {
-    // Only if verdict is backtrack_to_stage
-    // Or if rejecting a backtrack suggestion, explain why
-    "accepted": true | false,
-    "target_stage_id": "stage_1",
-    "stages_to_invalidate": ["stage_2", "stage_3"],
-    "reason": "Material was incorrectly identified; stage 1 geometry was optimized for wrong material",
-    "original_suggestion": {
-      "from_agent": "ResultsAnalyzerAgent",
-      "suggested_target": "stage_1",
-      "severity": "critical"
-    }
-  },
-  
-  "should_stop": false,
-  "stop_reason": null  // or explanation if should_stop is true
-}
+Return a JSON object with your supervisory decision. The system validates structure automatically.
+
+### Required Fields
+
+| Field | Description |
+|-------|-------------|
+| `verdict` | Your decision (see values below) |
+| `validation_hierarchy_status` | Status of each validation level |
+| `main_physics_assessment` | Physics sanity summary |
+| `summary` | One paragraph explaining your decision |
+
+### Verdict Values
+
+| Verdict | When to Use |
+|---------|-------------|
+| `ok_continue` | Stage passed, proceed to next |
+| `replan_needed` | Fundamental issue requires replanning |
+| `change_priority` | Reorder remaining stages |
+| `ask_user` | Need user input for decision |
+| `backtrack_to_stage` | Must redo earlier stage |
+| `all_complete` | All stages done, ready for report |
+
+### Field Details
+
+**validation_hierarchy_status**: Track progress through validation levels:
+- `material_validation`: "passed", "partial", "failed", or "not_done"
+- `single_structure`: same options
+- `arrays_systems`: same options
+- `parameter_sweeps`: same options
+
+**main_physics_assessment**: Object with:
+- `physics_plausible`, `conservation_satisfied`, `value_ranges_reasonable`: booleans
+- `systematic_issues`: array of identified systematic errors
+- `notes`: summary of physics status
+
+**recommendations**: Array of objects with `action`, `priority` (high/medium/low), and `rationale`.
+
+**backtrack_decision**: If backtracking, specify `target_stage_id` and `stages_to_invalidate`. Always include `reason`.
+
+### Optional Fields
+
+| Field | Description |
+|-------|-------------|
+| `error_analysis` | Type, persistence, and root cause of errors |
+| `user_question` | Specific question if verdict is ask_user |
+| `progress_summary` | Stages completed/remaining, blockers |
+| `should_stop` | Whether to halt workflow |
+| `stop_reason` | Explanation if stopping |
 
 ═══════════════════════════════════════════════════════════════════════
 E. COMMON SCENARIOS

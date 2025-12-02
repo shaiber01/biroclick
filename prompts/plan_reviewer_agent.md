@@ -94,76 +94,50 @@ When reviewing a reproduction plan, verify EVERY item:
 B. OUTPUT FORMAT
 ═══════════════════════════════════════════════════════════════════════
 
-Your output must conform to the schema in schemas/plan_reviewer_output_schema.json.
-Use function calling with this schema to ensure valid output.
+Return a JSON object with your review of the plan. The system validates structure automatically.
 
-{
-  "verdict": "approve | needs_revision",
-  
-  "coverage_check": {
-    "status": "pass | fail | warning",
-    "figures_covered": ["fig1a", "fig2b"],
-    "figures_missing": ["fig3c - appears reproducible but not staged"],
-    "notes": "details on coverage gaps"
-  },
-  
-  "digitized_data_check": {
-    "status": "pass | fail | warning",
-    "excellent_targets": ["fig3a"],
-    "missing_digitized": ["fig3a - requires <2% but no digitized data path"],
-    "notes": "targets needing digitized data for quantitative comparison"
-  },
-  
-  "staging_check": {
-    "status": "pass | fail | warning",
-    "stage_0_present": true,
-    "stage_1_present": true,
-    "dependency_issues": [],
-    "notes": "details on staging issues"
-  },
-  
-  "parameter_check": {
-    "status": "pass | fail | warning",
-    "extracted_count": 15,
-    "cross_checked_count": 10,
-    "missing_critical": ["substrate thickness - needed for all stages"],
-    "notes": "details on parameter extraction"
-  },
-  
-  "assumptions_check": {
-    "status": "pass | fail | warning",
-    "assumption_count": 5,
-    "risky_assumptions": ["assuming silver not gold - should validate in Stage 0"],
-    "notes": "details on assumption quality"
-  },
-  
-  "performance_check": {
-    "status": "pass | fail | warning",
-    "total_estimated_runtime_min": 45,
-    "budget_min": 60,
-    "risky_stages": ["stage3_sweep - may exceed budget"],
-    "notes": "details on performance concerns"
-  },
-  
-  "issues": [
-    {
-      "severity": "blocking | major | minor",
-      "category": "coverage | staging | parameters | assumptions | performance",
-      "description": "what the issue is",
-      "suggested_fix": "how to fix it"
-    }
-  ],
-  
-  "strengths": [
-    "list of things done well"
-  ],
-  
-  "revision_count": 1,
-  
-  "escalate_to_user": false,  // or specific question string
-  
-  "summary": "one paragraph summary of plan review"
-}
+### Required Fields
+
+| Field | Description |
+|-------|-------------|
+| `verdict` | `"approve"` or `"needs_revision"` |
+| `checklist_results` | Object with results for each checklist category |
+| `summary` | One paragraph review summary |
+
+### Checklist Categories
+
+Each category in `checklist_results` should have `status` ("pass", "warning", or "fail") plus category-specific fields:
+
+**coverage**: Are all reproducible figures staged?
+- `figures_covered`, `figures_missing`, `notes`
+
+**digitized_data**: Do excellent-precision targets have digitized data?
+- `excellent_targets`, `have_digitized`, `missing_digitized`, `notes`
+
+**staging**: Is validation hierarchy correct (material → single → array → sweep)?
+- `stage_0_present`, `stage_1_present`, `validation_hierarchy_followed`, `dependency_issues`, `notes`
+
+**parameter_extraction**: Are all critical parameters extracted?
+- `extracted_count`, `cross_checked_count`, `missing_critical`, `notes`
+
+**assumptions**: Are assumptions documented with validation plans?
+- `assumption_count`, `risky_assumptions`, `undocumented_gaps`, `notes`
+
+**performance**: Are runtime estimates within budget?
+- `total_estimated_runtime_min`, `budget_min`, `risky_stages`, `notes`
+
+**material_validation_setup**: Does Stage 0 cover all needed materials?
+- `materials_covered`, `materials_missing`, `validation_criteria_clear`, `notes`
+
+**output_specifications**: Are outputs mapped to target figures?
+- `all_stages_have_outputs`, `figure_mappings_complete`, `notes`
+
+### Optional Fields
+
+| Field | Description |
+|-------|-------------|
+| `issues` | Array of problems found (severity, category, description, suggested_fix) |
+| `strengths` | Array of things done well |
 
 ═══════════════════════════════════════════════════════════════════════
 C. VERDICT GUIDELINES

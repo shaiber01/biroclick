@@ -194,79 +194,44 @@ LOGICAL ERRORS:
 H. OUTPUT FORMAT
 ═══════════════════════════════════════════════════════════════════════
 
-Your output must be a JSON object:
+Return a JSON object with your validation of the ResultsAnalyzer's work. The system validates structure automatically.
 
-{
-  "review_type": "comparison_validation",
-  "stage_id": "stage1_single_disk",
-  
-  "verdict": "approve | needs_revision",
-  
-  "completeness_check": {
-    "all_figures_compared": true | false,
-    "figures_expected": ["Fig3a", "Fig3b"],
-    "figures_found": ["Fig3a", "Fig3b"],
-    "figures_missing": []
-  },
-  
-  "qualitative_validation": {
-    "accurate": true | false,
-    "issues": []
-  },
-  
-  "quantitative_validation": {
-    "math_correct": true | false,
-    "thresholds_correct": true | false,
-    "spot_checks": [
-      {
-        "quantity": "resonance_wavelength",
-        "analyzer_calculation": "|540-520|/520 = 3.8%",
-        "verified": true
-      }
-    ],
-    "issues": []
-  },
-  
-  "classification_validation": {
-    "all_correct": true | false,
-    "per_figure": [
-      {
-        "figure_id": "Fig3a",
-        "analyzer_classification": "partial",
-        "correct": true,
-        "reason": "3.8% is acceptable, but oscillations noted"
-      }
-    ],
-    "issues": []
-  },
-  
-  "documentation_validation": {
-    "complete": true | false,
-    "discrepancies_documented": true | false,
-    "explanations_plausible": true | false,
-    "issues": []
-  },
-  
-  "progress_validation": {
-    "status_consistent": true | false,
-    "issues": []
-  },
-  
-  "issues": [
-    {
-      "severity": "blocking | major | minor",
-      "category": "math | classification | documentation | completeness",
-      "description": "what the issue is",
-      "correction": "what should be changed"
-    }
-  ],
-  
-  "revision_count": 1,
-  
-  "escalate_to_user": false | "specific question string",
-  
-  "summary": "one paragraph comparison validation summary"
-}
+### Required Fields
+
+| Field | Description |
+|-------|-------------|
+| `stage_id` | The stage ID being validated |
+| `verdict` | `"approve"` or `"needs_revision"` |
+| `accuracy_check` | Verification of extracted values |
+| `math_check` | Verification of calculations |
+| `summary` | One paragraph validation summary |
+
+### Field Details
+
+**accuracy_check**: Verify the analyzer's data extraction:
+- `status`: "pass", "warning", or "fail"
+- `paper_values_verified`: did they read the paper correctly?
+- `simulation_values_verified`: did they read the simulation data correctly?
+- `units_consistent`: are units handled properly?
+- `notes`: your assessment
+
+**math_check**: Verify the calculations:
+- `status`: "pass", "warning", or "fail"
+- `discrepancy_calculations_correct`: is |sim - paper| right?
+- `percentage_calculations_correct`: is relative % right?
+- `classification_matches_thresholds`: does classification match the %, or should 3.8% be ACCEPTABLE not PARTIAL?
+- `errors_found`: array of math errors discovered
+- `notes`: spot-check details
+
+**issues**: Array of problems found. Each with `severity` (minor/major/blocking), `category`, `description`, `suggested_fix`.
+
+### Optional Fields
+
+| Field | Description |
+|-------|-------------|
+| `classification_check` | Whether overall_classification is appropriate |
+| `documentation_check` | Whether discrepancies are properly documented |
+| `revision_suggestions` | Specific improvements for the analyzer |
 
 ═══════════════════════════════════════════════════════════════════════
 I. VERDICT GUIDELINES

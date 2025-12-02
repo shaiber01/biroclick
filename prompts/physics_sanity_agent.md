@@ -113,72 +113,43 @@ WARNINGS (flag but don't block):
 E. OUTPUT FORMAT
 ═══════════════════════════════════════════════════════════════════════
 
-Your output must be a JSON object:
+Return a JSON object with your physics validation results. The system validates structure automatically.
 
-{
-  "review_type": "physics_sanity",
-  "stage_id": "stage1_single_disk",
-  
-  "verdict": "pass | warning | fail | design_flaw",
-  
-  "conservation_check": {
-    "status": "pass | warning | fail",
-    "T_plus_R_plus_A": 0.98,
-    "details": "Energy conservation satisfied within 2%"
-  },
-  
-  "value_ranges": {
-    "status": "pass | warning | fail",
-    "T_range": [0.05, 0.95],
-    "R_range": [0.02, 0.85],
-    "A_range": [0.01, 0.15],
-    "issues": []
-  },
-  
-  "numerical_quality": {
-    "status": "pass | warning | fail",
-    "smoothness": "pass | warning | fail",
-    "symmetry": "pass | warning | fail | N/A",
-    "boundary_artifacts": "pass | warning | fail",
-    "issues": []
-  },
-  
-  "blocking_issues": [
-    // Only if verdict is "fail"
-    {
-      "type": "T > 1",
-      "location": "wavelength 520nm",
-      "value": 1.05,
-      "suggested_fix": "Check monitor normalization"
-    }
-  ],
-  
-  "warnings": [
-    // Issues that don't block but should be noted
-    {
-      "type": "oscillations",
-      "description": "Minor Fabry-Perot fringes visible",
-      "severity": "minor"
-    }
-  ],
-  
-  "proceed_to_analysis": true | false,
-  
-  "backtrack_suggestion": {
-    // OPTIONAL - Only include if physics check reveals fundamental setup error
-    // affecting earlier stages (not just current simulation issues)
-    "suggest_backtrack": true | false,
-    "target_stage_id": "stage_id to go back to",
-    "reason": "What physics violation suggests earlier stages are wrong",
-    "severity": "critical | significant | minor",
-    "evidence": "Specific physics evidence (e.g., 'resonance at 300nm suggests wrong material')"
-  },
-  // Note: Only suggest backtrack if physics evidence points to FUNDAMENTAL issues
-  // in earlier stages (wrong material properties, wrong geometry type, etc.)
-  // Do NOT suggest backtrack for numerical issues that can be fixed in current stage
-  
-  "summary": "one sentence physics validation summary"
-}
+### Required Fields
+
+| Field | Description |
+|-------|-------------|
+| `stage_id` | The stage ID being validated |
+| `verdict` | Your assessment: `"pass"`, `"warning"`, `"fail"`, or `"design_flaw"` |
+| `conservation_checks` | Array of conservation law verifications |
+| `value_range_checks` | Array of physical value range checks |
+| `summary` | One paragraph physics summary |
+
+### Field Details
+
+**conservation_checks**: For each law (energy, reciprocity, etc.):
+- `law`: which law (e.g., "energy: T+R+A=1")
+- `status`: "pass", "warning", or "fail"
+- `expected_value`, `actual_value`, `deviation_percent`, `threshold_percent`
+- `notes`: explanation
+
+**value_range_checks**: For each quantity (T, R, A, field enhancement, etc.):
+- `quantity`: what you're checking
+- `status`: "pass", "warning", or "fail"
+- `value`: observed value
+- `expected_range`: {min, max}
+- `notes`: explanation
+
+**numerical_quality**: Object with `field_decay_achieved`, `convergence_observed` (booleans), `artifacts_detected` (array), and `notes`.
+
+**concerns**: Array of issues found. Each with `concern`, `severity` (minor/moderate/critical), `possible_cause`, `suggested_action`.
+
+### Optional Fields
+
+| Field | Description |
+|-------|-------------|
+| `physical_plausibility` | Checks for resonance positions, linewidths, magnitudes |
+| `backtrack_suggestion` | If physics violation suggests earlier stage is wrong |
 
 ═══════════════════════════════════════════════════════════════════════
 F. VERDICT GUIDELINES

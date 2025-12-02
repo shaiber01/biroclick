@@ -221,68 +221,38 @@ When problems are found, diagnose and suggest fixes:
 F. OUTPUT FORMAT
 ═══════════════════════════════════════════════════════════════════════
 
-Your output must be a JSON object:
+Return a JSON object with your validation results. The system validates structure automatically.
 
-{
-  "review_type": "execution_validation",
-  "stage_id": "stage1_single_disk",
-  
-  "verdict": "pass | fail | warning",
-  
-  "completion_status": {
-    "completed": true | false,
-    "exit_code": 0,
-    "error_message": null | "error details",
-    "early_exit": false,
-    "early_exit_reason": null | "field decay reached" | "crash"
-  },
-  
-  "runtime_analysis": {
-    "runtime_seconds": 145,
-    "estimated_seconds": 300,
-    "runtime_ratio": 0.48,
-    "within_budget": true,
-    "budget_minutes": 10,
-    "anomaly_detected": false,
-    "anomaly_description": null
-  },
-  
-  "file_validation": {
-    "expected_files": ["file1.csv", "file1.png"],
-    "found_files": ["file1.csv", "file1.png"],
-    "missing_files": [],
-    "corrupt_files": [],
-    "empty_files": []
-  },
-  
-  "data_integrity": {
-    "nan_detected": false,
-    "inf_detected": false,
-    "shape_correct": true,
-    "range_correct": true,
-    "issues": []
-  },
-  
-  "issues": [
-    {
-      "severity": "blocking | warning | info",
-      "category": "completion | runtime | files | data",
-      "description": "what the issue is",
-      "suggested_fix": "how to fix it"
-    }
-  ],
-  
-  "failure_tracking": {
-    "should_increment_failure_count": true | false,
-    "failure_category": "recoverable | resource_limit | numerical | unknown | none",
-    "retry_recommended": true | false,
-    "suggested_changes_for_retry": "specific changes for CodeGeneratorAgent to try, or null"
-  },
-  
-  "proceed_to_analysis": true | false,
-  
-  "summary": "one sentence execution status"
-}
+### Required Fields
+
+| Field | Description |
+|-------|-------------|
+| `stage_id` | The stage ID being validated |
+| `verdict` | Your assessment: `"pass"`, `"warning"`, or `"fail"` |
+| `execution_status` | Completion info: `completed`, `exit_code`, `runtime_seconds`, `memory_peak_mb`, `timed_out` |
+| `files_check` | File validation: `expected_files`, `found_files`, `missing_files`, `all_present`, and `spec_compliance` array |
+| `summary` | One sentence execution summary |
+
+### Field Details
+
+**files_check.spec_compliance**: For each expected output, verify:
+- `artifact_type`: matches design spec (spectrum_csv, plot_png, etc.)
+- `exists`, `non_empty`, `valid_format`: basic file checks
+- `columns_match`: for CSVs, do columns match the spec?
+- `issues`: list any problems found
+
+**data_quality**: Check for `nan_detected`, `inf_detected`, `negative_where_unexpected`, and list any `suspicious_values`.
+
+**errors_detected**: Array of errors found. Each with `error_type`, `message`, `location`, `severity`.
+
+### Optional Fields
+
+| Field | Description |
+|-------|-------------|
+| `warnings` | Non-blocking issues worth noting |
+| `stdout_summary` | Key information from stdout |
+| `stderr_summary` | Key information from stderr |
+| `recovery_suggestion` | If failed, what might fix it |
 
 ═══════════════════════════════════════════════════════════════════════
 G. VERDICT GUIDELINES

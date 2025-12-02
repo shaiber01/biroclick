@@ -12,6 +12,7 @@ Usage:
 
 import json
 import signal
+import uuid
 import pytest
 from pathlib import Path
 from typing import Dict, Any, List
@@ -19,6 +20,11 @@ from unittest.mock import patch, MagicMock
 
 from schemas.state import create_initial_state, ReproState
 from src.graph import create_repro_graph
+
+
+def unique_thread_id(prefix: str = "test") -> str:
+    """Generate a unique thread ID to prevent state pollution between tests."""
+    return f"{prefix}_{uuid.uuid4().hex[:8]}"
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -224,18 +230,38 @@ class MockLLMResponses:
     def plan_reviewer_approve() -> dict:
         return {
             "verdict": "approve",
+            "checklist_results": {
+                "coverage": {"status": "pass", "figures_covered": ["Fig1"], "figures_missing": [], "notes": "All figures covered"},
+                "digitized_data": {"status": "pass", "excellent_targets": [], "have_digitized": [], "missing_digitized": [], "notes": "N/A"},
+                "staging": {"status": "pass", "stage_0_present": True, "stage_1_present": True, "validation_hierarchy_followed": True, "dependency_issues": [], "notes": "OK"},
+                "parameter_extraction": {"status": "pass", "extracted_count": 2, "cross_checked_count": 2, "missing_critical": [], "notes": "OK"},
+                "assumptions": {"status": "pass", "assumption_count": 0, "risky_assumptions": [], "undocumented_gaps": [], "notes": "OK"},
+                "performance": {"status": "pass", "total_estimated_runtime_min": 5, "budget_min": 15, "risky_stages": [], "notes": "OK"},
+                "material_validation_setup": {"status": "pass", "materials_covered": ["gold"], "materials_missing": [], "validation_criteria_clear": True, "notes": "OK"},
+                "output_specifications": {"status": "pass", "all_stages_have_outputs": True, "figure_mappings_complete": True, "notes": "OK"}
+            },
             "issues": [],
+            "strengths": ["Good parameter extraction"],
             "summary": "Plan is valid",
-            "recommendations": [],
         }
     
     @staticmethod
     def plan_reviewer_reject() -> dict:
         return {
             "verdict": "needs_revision",
-            "issues": ["Missing material source"],
+            "checklist_results": {
+                "coverage": {"status": "pass", "figures_covered": ["Fig1"], "figures_missing": [], "notes": "OK"},
+                "digitized_data": {"status": "pass", "excellent_targets": [], "have_digitized": [], "missing_digitized": [], "notes": "N/A"},
+                "staging": {"status": "pass", "stage_0_present": True, "stage_1_present": True, "validation_hierarchy_followed": True, "dependency_issues": [], "notes": "OK"},
+                "parameter_extraction": {"status": "fail", "extracted_count": 2, "cross_checked_count": 0, "missing_critical": ["material source"], "notes": "Missing material source"},
+                "assumptions": {"status": "pass", "assumption_count": 0, "risky_assumptions": [], "undocumented_gaps": [], "notes": "OK"},
+                "performance": {"status": "pass", "total_estimated_runtime_min": 5, "budget_min": 15, "risky_stages": [], "notes": "OK"},
+                "material_validation_setup": {"status": "fail", "materials_covered": [], "materials_missing": ["gold"], "validation_criteria_clear": False, "notes": "Missing material source"},
+                "output_specifications": {"status": "pass", "all_stages_have_outputs": True, "figure_mappings_complete": True, "notes": "OK"}
+            },
+            "issues": [{"severity": "blocking", "category": "materials", "description": "Missing material source", "suggested_fix": "Add material database reference"}],
+            "strengths": [],
             "summary": "Plan needs work",
-            "recommendations": ["Add material database reference"],
         }
     
     # ─────────────────────────────────────────────────────────────────────
@@ -247,55 +273,70 @@ class MockLLMResponses:
         return {
             "stage_id": stage_id,
             "design_description": "Gold nanorod FDTD simulation for extinction spectrum",
-            "unit_system": "nm",
-            "computational_domain": {
-                "x_range": [-200, 200],
-                "y_range": [-200, 200],
-                "z_range": [-400, 400],
+            "unit_system": {
+                "characteristic_length_m": 1e-9,
+                "length_unit": "nm",
+                "example_conversions": {"100nm_to_meep": 100}
             },
-            "geometry": [
-                {
-                    "object_type": "cylinder",
-                    "center": [0, 0, 0],
-                    "radius": 20,
-                    "height": 100,
-                    "axis": [0, 0, 1],
-                    "material": "gold_jc",
-                }
+            "geometry": {
+                "dimensionality": "3D",
+                "cell_size": {"x": 400, "y": 400, "z": 800},
+                "resolution": 20,
+                "structures": [
+                    {
+                        "name": "nanorod",
+                        "type": "cylinder",
+                        "material_ref": "gold_jc",
+                        "center": {"x": 0, "y": 0, "z": 0},
+                        "dimensions": {"radius": 20, "height": 100},
+                        "real_dimensions": {"radius_nm": 20, "height_nm": 100}
+                    }
+                ],
+                "symmetries": []
+            },
+            "materials": [
+                {"id": "gold_jc", "name": "Gold (Johnson-Christy)", "model_type": "drude_lorentz", "source": "johnson_christy", "data_file": "materials/johnson_christy_gold.csv", "parameters": {}, "wavelength_range": {"min_nm": 400, "max_nm": 900}},
+                {"id": "water", "name": "Water", "model_type": "constant", "source": "assumed", "data_file": None, "parameters": {"epsilon": 1.77}}
             ],
             "sources": [
                 {
-                    "source_type": "GaussianSource",
-                    "center": [0, 0, -300],
-                    "size": [400, 400, 0],
-                    "wavelength_range": [400, 900],
-                    "polarization": [1, 0, 0],
+                    "type": "gaussian",
+                    "component": "Ex",
+                    "center": {"x": 0, "y": 0, "z": -300},
+                    "size": {"x": 400, "y": 400, "z": 0},
+                    "wavelength_center_nm": 650,
+                    "wavelength_width_nm": 400,
+                    "frequency_center_meep": 1.54,
+                    "frequency_width_meep": 0.95
                 }
-            ],
-            "materials": [
-                {"material_id": "gold_jc", "name": "Gold (Johnson-Christy)", "role": "nanorod"},
-                {"material_id": "water", "name": "Water", "role": "background"},
             ],
             "boundary_conditions": {
-                "x": "PML",
-                "y": "PML",
-                "z": "PML",
+                "x_min": "pml", "x_max": "pml",
+                "y_min": "pml", "y_max": "pml",
+                "z_min": "pml", "z_max": "pml",
+                "pml_thickness": 50
             },
             "monitors": [
-                {
-                    "monitor_type": "FluxMonitor",
-                    "center": [0, 0, 300],
-                    "size": [400, 400, 0],
-                    "name": "transmission",
-                }
+                {"type": "flux", "name": "transmission", "purpose": "Measure transmitted power", "center": {"x": 0, "y": 0, "z": 300}, "size": {"x": 400, "y": 400, "z": 0}, "frequency_points": 100}
             ],
-            "expected_outputs": [
-                {"name": "extinction_spectrum.csv", "type": "spectrum"},
-            ],
-            "performance_estimate": {
-                "estimated_runtime_minutes": 5,
-                "memory_estimate_mb": 512,
+            "simulation_parameters": {
+                "run_until": {"type": "decay", "value": 50, "decay_by": 1e-5},
+                "subpixel_averaging": True,
+                "force_complex_fields": False
             },
+            "performance_estimate": {
+                "runtime_estimate_minutes": 5,
+                "memory_estimate_gb": 0.5,
+                "total_cells": 1000000,
+                "timesteps_estimate": 5000,
+                "notes": "3D simulation, moderate resolution"
+            },
+            "output_specifications": [
+                {"artifact_type": "spectrum_csv", "filename_pattern": "{paper_id}_{stage_id}_extinction.csv", "description": "Extinction spectrum"}
+            ],
+            "new_assumptions": [],
+            "design_rationale": "Standard FDTD setup for nanorod extinction",
+            "potential_issues": []
         }
     
     @staticmethod
@@ -382,8 +423,32 @@ np.savetxt("extinction_spectrum.csv",
 
 print("Simulation completed successfully")
 ''',
-            "expected_outputs": ["extinction_spectrum.csv"],
-            "explanation": "FDTD simulation of gold nanorod extinction",
+            "code_summary": "FDTD simulation of gold nanorod extinction spectrum",
+            "unit_system_used": {"characteristic_length_m": 1e-6, "verified_from_design": True},
+            "materials_used": [
+                {"material_name": "gold", "source": "meep_builtin", "data_file_path": None}
+            ],
+            "expected_outputs": [
+                {"artifact_type": "spectrum_csv", "filename": "extinction_spectrum.csv", "description": "Extinction spectrum", "columns": ["wavelength_nm", "flux"], "target_figure": "Fig1"}
+            ],
+            "estimated_runtime_minutes": 5,
+            "estimated_memory_gb": 0.5,
+            "dependencies_used": ["meep", "numpy"],
+            "progress_markers": ["Starting simulation...", "Simulation completed successfully"],
+            "safety_checks": {
+                "no_plt_show": True,
+                "no_input": True,
+                "uses_plt_savefig_close": True,
+                "relative_paths_only": True,
+                "includes_result_json": False
+            },
+            "design_compliance": {
+                "unit_system_matches_design": True,
+                "geometry_matches_design": True,
+                "materials_match_design": True,
+                "output_filenames_match_spec": True
+            },
+            "revision_notes": None
         }
     
     @staticmethod
@@ -411,37 +476,96 @@ print("Simulation completed successfully")
     @staticmethod
     def execution_validator_pass() -> dict:
         return {
+            "stage_id": "stage_0_materials",
             "verdict": "pass",
-            "issues": [],
-            "summary": "Execution successful",
-            "output_files_found": ["extinction_spectrum.csv"],
+            "execution_status": {
+                "completed": True,
+                "exit_code": 0,
+                "runtime_seconds": 120,
+                "memory_peak_mb": 512,
+                "timed_out": False
+            },
+            "files_check": {
+                "expected_files": ["extinction_spectrum.csv"],
+                "found_files": ["extinction_spectrum.csv"],
+                "missing_files": [],
+                "all_present": True,
+                "spec_compliance": [
+                    {"artifact_type": "spectrum_csv", "expected_filename": "extinction_spectrum.csv", "actual_filename": "extinction_spectrum.csv", "exists": True, "non_empty": True, "valid_format": True, "columns_match": True, "issues": []}
+                ]
+            },
+            "data_quality": {"nan_detected": False, "inf_detected": False, "negative_where_unexpected": False, "suspicious_values": []},
+            "errors_detected": [],
+            "warnings": [],
+            "stdout_summary": "Simulation completed successfully",
+            "stderr_summary": "",
+            "recovery_suggestion": None,
+            "summary": "Execution successful, all outputs present and valid",
         }
     
     @staticmethod
     def execution_validator_fail() -> dict:
         return {
+            "stage_id": "stage_0_materials",
             "verdict": "fail",
-            "issues": ["Meep segfault during run"],
-            "summary": "Execution failed",
-            "output_files_found": [],
+            "execution_status": {
+                "completed": False,
+                "exit_code": 139,
+                "runtime_seconds": 5,
+                "memory_peak_mb": 256,
+                "timed_out": False
+            },
+            "files_check": {
+                "expected_files": ["extinction_spectrum.csv"],
+                "found_files": [],
+                "missing_files": ["extinction_spectrum.csv"],
+                "all_present": False,
+                "spec_compliance": []
+            },
+            "data_quality": {"nan_detected": False, "inf_detected": False, "negative_where_unexpected": False, "suspicious_values": []},
+            "errors_detected": [{"error_type": "segfault", "message": "Meep segfault during run", "location": "sim.run()", "severity": "critical"}],
+            "warnings": [],
+            "stdout_summary": "Starting simulation...",
+            "stderr_summary": "Segmentation fault (core dumped)",
+            "recovery_suggestion": "Check geometry for overlapping objects",
+            "summary": "Execution failed with segfault",
         }
     
     @staticmethod
     def physics_sanity_pass() -> dict:
         return {
+            "stage_id": "stage_0_materials",
             "verdict": "pass",
-            "issues": [],
-            "summary": "Physics looks reasonable",
-            "checks_performed": ["Peak location", "Peak width", "Signal-to-noise"],
+            "conservation_checks": [
+                {"law": "energy: T+R+A=1", "status": "pass", "expected_value": 1.0, "actual_value": 0.98, "deviation_percent": 2.0, "threshold_percent": 5.0, "notes": "Energy conservation satisfied"}
+            ],
+            "value_range_checks": [
+                {"quantity": "transmission", "status": "pass", "value": 0.45, "expected_range": {"min": 0, "max": 1}, "notes": "OK"},
+                {"quantity": "reflection", "status": "pass", "value": 0.35, "expected_range": {"min": 0, "max": 1}, "notes": "OK"}
+            ],
+            "numerical_quality": {"field_decay_achieved": True, "convergence_observed": True, "artifacts_detected": [], "notes": "Simulation converged properly"},
+            "physical_plausibility": {"resonance_positions_reasonable": True, "linewidths_reasonable": True, "magnitude_scale_reasonable": True, "spectral_features_expected": True, "concerns": []},
+            "concerns": [],
+            "backtrack_suggestion": {"suggest_backtrack": False, "target_stage_id": None, "reason": None, "severity": None, "evidence": None},
+            "summary": "Physics looks reasonable - all checks passed",
         }
     
     @staticmethod
     def physics_sanity_fail() -> dict:
         return {
+            "stage_id": "stage_0_materials",
             "verdict": "fail",
-            "issues": ["Peak at wrong wavelength"],
-            "summary": "Physics sanity check failed",
-            "checks_performed": ["Peak location"],
+            "conservation_checks": [
+                {"law": "energy: T+R+A=1", "status": "fail", "expected_value": 1.0, "actual_value": 1.15, "deviation_percent": 15.0, "threshold_percent": 5.0, "notes": "Energy not conserved - T>1 detected"}
+            ],
+            "value_range_checks": [
+                {"quantity": "transmission", "status": "fail", "value": 1.15, "expected_range": {"min": 0, "max": 1}, "notes": "T>1 is unphysical"}
+            ],
+            "numerical_quality": {"field_decay_achieved": False, "convergence_observed": False, "artifacts_detected": ["T>1 at resonance"], "notes": "Numerical issues detected"},
+            "physical_plausibility": {"resonance_positions_reasonable": False, "linewidths_reasonable": True, "magnitude_scale_reasonable": False, "spectral_features_expected": False, "concerns": ["Peak at wrong wavelength"]},
+            "concerns": [{"concern": "Peak at wrong wavelength", "severity": "critical", "possible_cause": "Wrong material data", "suggested_action": "Check material optical constants"}],
+            "backtrack_suggestion": {"suggest_backtrack": False, "target_stage_id": None, "reason": None, "severity": None, "evidence": None},
+            "summary": "Physics sanity check failed - T>1 and wrong peak position",
         }
     
     # ─────────────────────────────────────────────────────────────────────
@@ -452,46 +576,92 @@ print("Simulation completed successfully")
     def results_analyzer() -> dict:
         return {
             "stage_id": "stage_0_materials",
-            "quantitative_summary": {
-                "peak_wavelength_nm": 705,
-                "peak_width_nm": 50,
-                "peak_intensity": 0.85,
-            },
-            "visual_comparison": "Spectrum shape matches reference well",
-            "confidence_factors": ["Clear peak", "Low noise"],
-            "figure_comparisons": [
-                {
-                    "figure_id": "Fig1",
-                    "match_quality": "good",
-                    "discrepancies": [],
-                    "confidence": 0.85,
-                }
-            ],
             "per_result_reports": [
                 {
-                    "output_file": "extinction_spectrum.csv",
-                    "status": "analyzed",
-                    "summary": "Extinction peak at 705nm",
+                    "result_id": "R1",
+                    "target_figure": "Fig1",
+                    "quantity": "peak_wavelength",
+                    "simulated_value": {"value": 705, "unit": "nm"},
+                    "paper_value": {"value": 700, "unit": "nm", "source": "Figure 1"},
+                    "discrepancy": {"absolute": 5, "relative_percent": 0.7, "classification": "excellent"},
+                    "notes": "Peak position within 1%"
                 }
             ],
+            "figure_comparisons": [
+                {
+                    "paper_figure_id": "Fig1",
+                    "simulated_figure_path": "outputs/extinction_spectrum.png",
+                    "comparison_type": "side_by_side",
+                    "visual_agreement": "good",
+                    "key_features_matched": ["Single plasmon peak", "Correct spectral region"],
+                    "key_features_missed": [],
+                    "notes": "Excellent agreement"
+                }
+            ],
+            "overall_classification": "EXCELLENT_MATCH",
+            "classification_rationale": "Peak position within 1%, all qualitative features match",
+            "confidence": 0.9,
+            "confidence_reason": "Clear peak, low noise, quantitative agreement",
+            "confidence_factors": ["Clear peak", "Low noise", "Good agreement"],
+            "systematic_discrepancies": [],
+            "recommendations": ["Accept result and proceed"],
+            "summary": "Extinction spectrum successfully reproduced with excellent agreement",
         }
     
     @staticmethod
     def comparison_validator_approve() -> dict:
         return {
+            "stage_id": "stage_0_materials",
             "verdict": "approve",
+            "accuracy_check": {
+                "status": "pass",
+                "paper_values_verified": True,
+                "simulation_values_verified": True,
+                "units_consistent": True,
+                "axis_ranges_appropriate": True,
+                "notes": "All values correctly extracted"
+            },
+            "math_check": {
+                "status": "pass",
+                "discrepancy_calculations_correct": True,
+                "percentage_calculations_correct": True,
+                "classification_matches_thresholds": True,
+                "errors_found": [],
+                "notes": "Calculations verified"
+            },
+            "classification_check": {"status": "pass", "misclassifications": [], "notes": "Classification correct"},
+            "documentation_check": {"status": "pass", "all_discrepancies_logged": True, "sources_cited": True, "assumptions_documented": True, "missing_documentation": [], "notes": "Well documented"},
             "issues": [],
-            "summary": "Results match reference",
-            "match_quality": "good",
+            "revision_suggestions": [],
+            "summary": "Results match reference - comparison validated",
         }
     
     @staticmethod
     def comparison_validator_needs_revision() -> dict:
         return {
+            "stage_id": "stage_0_materials",
             "verdict": "needs_revision",
-            "issues": ["Peak offset by 20nm"],
-            "summary": "Results need adjustment",
-            "match_quality": "partial",
+            "accuracy_check": {
+                "status": "warning",
+                "paper_values_verified": True,
+                "simulation_values_verified": True,
+                "units_consistent": True,
+                "axis_ranges_appropriate": True,
+                "notes": "Values verified but discrepancy classification questionable"
+            },
+            "math_check": {
+                "status": "fail",
+                "discrepancy_calculations_correct": True,
+                "percentage_calculations_correct": True,
+                "classification_matches_thresholds": False,
+                "errors_found": ["20nm offset should be PARTIAL_MATCH not ACCEPTABLE_MATCH"],
+                "notes": "Classification needs revision"
+            },
+            "classification_check": {"status": "fail", "misclassifications": [{"figure": "Fig1", "current": "ACCEPTABLE_MATCH", "should_be": "PARTIAL_MATCH"}], "notes": "Misclassified"},
+            "documentation_check": {"status": "pass", "all_discrepancies_logged": True, "sources_cited": True, "assumptions_documented": True, "missing_documentation": [], "notes": "OK"},
+            "issues": [{"severity": "major", "category": "classification", "description": "Peak offset by 20nm misclassified", "suggested_fix": "Change to PARTIAL_MATCH"}],
+            "revision_suggestions": ["Update classification to PARTIAL_MATCH for 20nm offset"],
+            "summary": "Results need classification adjustment",
         }
     
     # ─────────────────────────────────────────────────────────────────────
@@ -502,16 +672,54 @@ print("Simulation completed successfully")
     def supervisor_continue() -> dict:
         return {
             "verdict": "ok_continue",
-            "feedback": "Stage completed successfully",
-            "next_action": "continue_to_next_stage",
+            "validation_hierarchy_status": {
+                "material_validation": "passed",
+                "single_structure": "not_done",
+                "arrays_systems": "not_done",
+                "parameter_sweeps": "not_done"
+            },
+            "main_physics_assessment": {
+                "physics_plausible": True,
+                "conservation_satisfied": True,
+                "value_ranges_reasonable": True,
+                "systematic_issues": [],
+                "notes": "Stage completed successfully"
+            },
+            "error_analysis": {"error_type": "none", "error_persistence": "not_applicable", "root_cause_hypothesis": None, "confidence": "high"},
+            "recommendations": [{"action": "Continue to next stage", "priority": "high", "rationale": "Current stage passed all checks"}],
+            "backtrack_decision": {"accepted": False, "target_stage_id": None, "stages_to_invalidate": [], "reason": None},
+            "user_question": None,
+            "progress_summary": {"stages_completed": 1, "stages_remaining": 0, "overall_confidence": "high", "key_achievements": ["Material validation passed"], "key_blockers": []},
+            "should_stop": False,
+            "stop_reason": None,
+            "summary": "Stage completed successfully, continue to next stage",
         }
     
     @staticmethod
     def supervisor_all_complete() -> dict:
         return {
             "verdict": "all_complete",
-            "feedback": "All stages completed, ready for report",
-            "next_action": "generate_report",
+            "validation_hierarchy_status": {
+                "material_validation": "passed",
+                "single_structure": "passed",
+                "arrays_systems": "passed",
+                "parameter_sweeps": "passed"
+            },
+            "main_physics_assessment": {
+                "physics_plausible": True,
+                "conservation_satisfied": True,
+                "value_ranges_reasonable": True,
+                "systematic_issues": [],
+                "notes": "All stages completed successfully"
+            },
+            "error_analysis": {"error_type": "none", "error_persistence": "not_applicable", "root_cause_hypothesis": None, "confidence": "high"},
+            "recommendations": [{"action": "Generate final report", "priority": "high", "rationale": "All stages passed"}],
+            "backtrack_decision": {"accepted": False, "target_stage_id": None, "stages_to_invalidate": [], "reason": None},
+            "user_question": None,
+            "progress_summary": {"stages_completed": 4, "stages_remaining": 0, "overall_confidence": "high", "key_achievements": ["All validation stages passed"], "key_blockers": []},
+            "should_stop": False,
+            "stop_reason": None,
+            "summary": "All stages completed, ready for report generation",
         }
     
     # ─────────────────────────────────────────────────────────────────────
@@ -640,7 +848,7 @@ class TestPlanningPhase:
             graph = create_repro_graph()
             print("Graph created successfully", flush=True)
             
-            config = {"configurable": {"thread_id": "test_planning"}}
+            config = {"configurable": {"thread_id": unique_thread_id("planning")}}
             print(f"Config: {config}", flush=True)
             
             # Stream through the graph with node counting for safety
@@ -751,7 +959,7 @@ class TestPlanningPhase:
             print("=" * 60)
             
             graph = create_repro_graph()
-            config = {"configurable": {"thread_id": "test_revision"}}
+            config = {"configurable": {"thread_id": unique_thread_id("revision")}}
             
             print("\n--- Running graph ---")
             graph_nodes = []
@@ -812,7 +1020,7 @@ class TestStageSelection:
             print("=" * 60, flush=True)
             
             graph = create_repro_graph()
-            config = {"configurable": {"thread_id": "test_stage_select"}}
+            config = {"configurable": {"thread_id": unique_thread_id("stage_select")}}
             
             print("\n--- Running graph ---")
             final_state = None
@@ -873,7 +1081,7 @@ class TestDesignPhase:
             print("=" * 60, flush=True)
             
             graph = create_repro_graph()
-            config = {"configurable": {"thread_id": "test_design"}}
+            config = {"configurable": {"thread_id": unique_thread_id("design")}}
             
             print("\n--- Running graph ---", flush=True)
             nodes_visited = []
@@ -934,7 +1142,7 @@ class TestDesignPhase:
             print("=" * 60, flush=True)
             
             graph = create_repro_graph()
-            config = {"configurable": {"thread_id": "test_design_rev"}}
+            config = {"configurable": {"thread_id": unique_thread_id("design_rev")}}
             
             print("\n--- Running graph ---", flush=True)
             nodes_visited = []
@@ -986,13 +1194,14 @@ class TestCodePhase:
         
         # Mock run_code_node to avoid actual execution
         mock_run_code = MagicMock(return_value={
-            "execution_result": {
-                "success": True,
-                "stdout": "Simulation completed",
+            "stage_outputs": {
+                "stdout": "Simulation completed successfully",
                 "stderr": "",
-                "output_files": ["extinction_spectrum.csv"],
+                "exit_code": 0,
+                "files": ["/tmp/extinction_spectrum.csv"],
+                "runtime_seconds": 10.5,
             },
-            "output_files": ["extinction_spectrum.csv"],
+            "run_error": None,
         })
         
         with MultiPatch(LLM_PATCH_LOCATIONS, side_effect=mock_llm), \
@@ -1004,7 +1213,7 @@ class TestCodePhase:
             print("=" * 60, flush=True)
             
             graph = create_repro_graph()
-            config = {"configurable": {"thread_id": "test_code"}}
+            config = {"configurable": {"thread_id": unique_thread_id("code")}}
             
             print("\n--- Running graph ---", flush=True)
             nodes_visited = []
@@ -1060,13 +1269,14 @@ class TestExecutionPhase:
             return responses.get(agent, {})
         
         mock_run_code = MagicMock(return_value={
-            "execution_result": {
-                "success": True,
-                "stdout": "Simulation completed",
+            "stage_outputs": {
+                "stdout": "Simulation completed successfully",
                 "stderr": "",
-                "output_files": ["extinction_spectrum.csv"],
+                "exit_code": 0,
+                "files": ["/tmp/extinction_spectrum.csv"],
+                "runtime_seconds": 10.5,
             },
-            "output_files": ["extinction_spectrum.csv"],
+            "run_error": None,
         })
         
         with MultiPatch(LLM_PATCH_LOCATIONS, side_effect=mock_llm), \
@@ -1078,7 +1288,7 @@ class TestExecutionPhase:
             print("=" * 60, flush=True)
             
             graph = create_repro_graph()
-            config = {"configurable": {"thread_id": "test_exec"}}
+            config = {"configurable": {"thread_id": unique_thread_id("exec")}}
             
             print("\n--- Running graph ---", flush=True)
             nodes_visited = []
@@ -1144,13 +1354,14 @@ class TestFullSingleStage:
             return responses.get(agent, {})
         
         mock_run_code = MagicMock(return_value={
-            "execution_result": {
-                "success": True,
-                "stdout": "Simulation completed",
+            "stage_outputs": {
+                "stdout": "Simulation completed successfully",
                 "stderr": "",
-                "output_files": ["extinction_spectrum.csv"],
+                "exit_code": 0,
+                "files": ["/tmp/extinction_spectrum.csv"],
+                "runtime_seconds": 10.5,
             },
-            "output_files": ["extinction_spectrum.csv"],
+            "run_error": None,
         })
         
         # Mock file existence checks only in analysis module (not globally)
@@ -1166,7 +1377,7 @@ class TestFullSingleStage:
             print("=" * 60, flush=True)
             
             graph = create_repro_graph()
-            config = {"configurable": {"thread_id": "test_full"}}
+            config = {"configurable": {"thread_id": unique_thread_id("full")}}
             
             print("\n--- Running graph ---", flush=True)
             nodes_visited = []
@@ -1365,13 +1576,14 @@ class TestUserInteraction:
             return {}
         
         mock_run_code = MagicMock(return_value={
-            "execution_result": {
-                "success": True,
-                "stdout": "Simulation completed",
+            "stage_outputs": {
+                "stdout": "Simulation completed successfully",
                 "stderr": "",
-                "output_files": ["extinction_spectrum.csv"],
+                "exit_code": 0,
+                "files": ["/tmp/extinction_spectrum.csv"],
+                "runtime_seconds": 10.5,
             },
-            "output_files": ["extinction_spectrum.csv"],
+            "run_error": None,
         })
         
         with MultiPatch(LLM_PATCH_LOCATIONS, side_effect=mock_llm), \
@@ -1385,7 +1597,7 @@ class TestUserInteraction:
             print("=" * 60, flush=True)
             
             graph = create_repro_graph()
-            config = {"configurable": {"thread_id": "test_material_pause"}}
+            config = {"configurable": {"thread_id": unique_thread_id("material_pause")}}
             
             # Run graph - it should pause before ask_user
             nodes_visited, graph_state, is_paused = run_until_pause_or_complete(
@@ -1461,13 +1673,14 @@ class TestUserInteraction:
             return {}
         
         mock_run_code = MagicMock(return_value={
-            "execution_result": {
-                "success": True,
-                "stdout": "Simulation completed",
+            "stage_outputs": {
+                "stdout": "Simulation completed successfully",
                 "stderr": "",
-                "output_files": ["extinction_spectrum.csv"],
+                "exit_code": 0,
+                "files": ["/tmp/extinction_spectrum.csv"],
+                "runtime_seconds": 10.5,
             },
-            "output_files": ["extinction_spectrum.csv"],
+            "run_error": None,
         })
         
         with MultiPatch(LLM_PATCH_LOCATIONS, side_effect=mock_llm), \
@@ -1482,7 +1695,7 @@ class TestUserInteraction:
             print("=" * 60, flush=True)
             
             graph = create_repro_graph()
-            config = {"configurable": {"thread_id": "test_user_approve"}}
+            config = {"configurable": {"thread_id": unique_thread_id("user_approve")}}
             
             # Run until paused
             nodes_visited, graph_state, is_paused = run_until_pause_or_complete(
@@ -1578,13 +1791,14 @@ class TestUserInteraction:
             return {}
         
         mock_run_code = MagicMock(return_value={
-            "execution_result": {
-                "success": True,
-                "stdout": "Simulation completed",
+            "stage_outputs": {
+                "stdout": "Simulation completed successfully",
                 "stderr": "",
-                "output_files": ["extinction_spectrum.csv"],
+                "exit_code": 0,
+                "files": ["/tmp/extinction_spectrum.csv"],
+                "runtime_seconds": 10.5,
             },
-            "output_files": ["extinction_spectrum.csv"],
+            "run_error": None,
         })
         
         with MultiPatch(LLM_PATCH_LOCATIONS, side_effect=mock_llm), \
@@ -1599,7 +1813,7 @@ class TestUserInteraction:
             print("=" * 60, flush=True)
             
             graph = create_repro_graph()
-            config = {"configurable": {"thread_id": "test_user_reject"}}
+            config = {"configurable": {"thread_id": unique_thread_id("user_reject")}}
             
             # Run until paused
             nodes_visited, graph_state, is_paused = run_until_pause_or_complete(
@@ -1682,7 +1896,7 @@ class TestUserInteraction:
             print("=" * 60, flush=True)
             
             graph = create_repro_graph()
-            config = {"configurable": {"thread_id": "test_context_overflow"}}
+            config = {"configurable": {"thread_id": unique_thread_id("context_overflow")}}
             
             # Run until pause or design phase completes
             nodes_visited, graph_state, is_paused = run_until_pause_or_complete(
@@ -1770,6 +1984,9 @@ class TestMultiStageWorkflow:
         stage_selections = []
         supervisor_call_count = [0]
         
+        # Pre-generate plan to avoid self reference issues
+        two_stage_plan = self._create_two_stage_plan()
+        
         def mock_llm(*args, **kwargs):
             agent = kwargs.get("agent_name", "unknown")
             print(f"    [LLM] {agent}", flush=True)
@@ -1777,7 +1994,7 @@ class TestMultiStageWorkflow:
             if agent == "prompt_adaptor":
                 return MockLLMResponses.prompt_adaptor()
             elif agent == "planner":
-                return self._create_two_stage_plan()
+                return two_stage_plan  # Use pre-generated plan
             elif agent == "plan_reviewer":
                 return MockLLMResponses.plan_reviewer_approve()
             elif agent == "simulation_designer":
@@ -1803,16 +2020,19 @@ class TestMultiStageWorkflow:
                     "feedback": "Stage completed, continue",
                     "next_action": "continue",
                 }
-            return {}
+            else:
+                print(f"    WARNING: Unknown agent '{agent}', returning default", flush=True)
+                return {"verdict": "approve"}
         
         mock_run_code = MagicMock(return_value={
-            "execution_result": {
-                "success": True,
-                "stdout": "Simulation completed",
+            "stage_outputs": {
+                "stdout": "Simulation completed successfully",
                 "stderr": "",
-                "output_files": ["extinction_spectrum.csv"],
+                "exit_code": 0,
+                "files": ["/tmp/extinction_spectrum.csv"],
+                "runtime_seconds": 10.5,
             },
-            "output_files": ["extinction_spectrum.csv"],
+            "run_error": None,
         })
         
         with MultiPatch(LLM_PATCH_LOCATIONS, side_effect=mock_llm), \
@@ -1826,16 +2046,27 @@ class TestMultiStageWorkflow:
             print("=" * 60, flush=True)
             
             graph = create_repro_graph()
-            config = {"configurable": {"thread_id": "test_two_stage"}}
+            config = {"configurable": {"thread_id": unique_thread_id("two_stage")}}
             
             # Track stage selections
             nodes_visited = []
             select_stage_count = 0
+            plan_stages_count = 0  # Track plan stages for diagnosis
             
             for event in graph.stream(initial_state, config):
                 for node_name, updates in event.items():
                     nodes_visited.append(node_name)
                     print(f"  → {node_name}", flush=True)
+                    
+                    # Diagnose: check plan after plan node
+                    if node_name == "plan":
+                        state_after_plan = graph.get_state(config).values
+                        plan = state_after_plan.get("plan", {})
+                        plan_stages_count = len(plan.get("stages", []))
+                        print(f"    Plan stages: {plan_stages_count}", flush=True)
+                        if plan_stages_count == 0:
+                            print(f"    WARNING: Plan has 0 stages!", flush=True)
+                            print(f"    Plan keys: {plan.keys()}", flush=True)
                     
                     if node_name == "select_stage":
                         select_stage_count += 1
@@ -1843,6 +2074,15 @@ class TestMultiStageWorkflow:
                         current_stage = state.get("current_stage_id")
                         stage_selections.append(current_stage)
                         print(f"    Selected: {current_stage}", flush=True)
+                        
+                        # Diagnose: if None, show more state
+                        if current_stage is None:
+                            progress = state.get("progress", {})
+                            print(f"    Progress stages: {len(progress.get('stages', []))}", flush=True)
+                            for ps in progress.get("stages", []):
+                                print(f"      - {ps.get('stage_id')}: {ps.get('status')}", flush=True)
+                            plan = state.get("plan", {})
+                            print(f"    Plan stages: {len(plan.get('stages', []))}", flush=True)
                         
                         # Stop after second stage selection
                         if select_stage_count >= 2:
@@ -1858,8 +2098,10 @@ class TestMultiStageWorkflow:
             print(f"\nStage selections: {stage_selections}", flush=True)
             
             # Verify stage_0 selected first
-            assert len(stage_selections) >= 1
-            assert stage_selections[0] == "stage_0_materials"
+            assert len(stage_selections) >= 1, \
+                f"No stage was selected. Nodes visited: {nodes_visited[:10]}..."
+            assert stage_selections[0] == "stage_0_materials", \
+                f"Expected 'stage_0_materials', got '{stage_selections[0]}'. Plan had {plan_stages_count} stages."
             
             print("\n✅ Two-stage sequential test passed!", flush=True)
     
@@ -1909,13 +2151,14 @@ class TestMultiStageWorkflow:
             return {}
         
         mock_run_code = MagicMock(return_value={
-            "execution_result": {
-                "success": True,
-                "stdout": "Simulation completed",
+            "stage_outputs": {
+                "stdout": "Simulation completed successfully",
                 "stderr": "",
-                "output_files": ["extinction_spectrum.csv"],
+                "exit_code": 0,
+                "files": ["/tmp/extinction_spectrum.csv"],
+                "runtime_seconds": 10.5,
             },
-            "output_files": ["extinction_spectrum.csv"],
+            "run_error": None,
         })
         
         with MultiPatch(LLM_PATCH_LOCATIONS, side_effect=mock_llm), \
@@ -1929,7 +2172,7 @@ class TestMultiStageWorkflow:
             print("=" * 60, flush=True)
             
             graph = create_repro_graph()
-            config = {"configurable": {"thread_id": "test_stage_trigger"}}
+            config = {"configurable": {"thread_id": unique_thread_id("stage_trigger")}}
             
             # Run until material_checkpoint pause
             nodes_visited, graph_state, is_paused = run_until_pause_or_complete(
@@ -2042,13 +2285,14 @@ class TestMultiStageWorkflow:
             return {}
         
         mock_run_code = MagicMock(return_value={
-            "execution_result": {
-                "success": True,
-                "stdout": "Simulation completed",
+            "stage_outputs": {
+                "stdout": "Simulation completed successfully",
                 "stderr": "",
-                "output_files": ["extinction_spectrum.csv"],
+                "exit_code": 0,
+                "files": ["/tmp/extinction_spectrum.csv"],
+                "runtime_seconds": 10.5,
             },
-            "output_files": ["extinction_spectrum.csv"],
+            "run_error": None,
         })
         
         # Mock file existence checks only in analysis module (not globally)
@@ -2063,7 +2307,7 @@ class TestMultiStageWorkflow:
             print("=" * 60, flush=True)
             
             graph = create_repro_graph()
-            config = {"configurable": {"thread_id": "test_all_complete"}}
+            config = {"configurable": {"thread_id": unique_thread_id("all_complete")}}
             
             nodes_visited = []
             for event in graph.stream(initial_state, config):
@@ -2114,7 +2358,7 @@ class TestMultiStageWorkflow:
             print("=" * 60, flush=True)
             
             graph = create_repro_graph()
-            config = {"configurable": {"thread_id": "test_dep_block"}}
+            config = {"configurable": {"thread_id": unique_thread_id("dep_block")}}
             
             nodes_visited = []
             for event in graph.stream(initial_state, config):
@@ -2207,7 +2451,7 @@ class TestFailureRecovery:
             print("=" * 60, flush=True)
             
             graph = create_repro_graph()
-            config = {"configurable": {"thread_id": "test_exec_fail"}}
+            config = {"configurable": {"thread_id": unique_thread_id("exec_fail")}}
             
             nodes_visited = []
             for event in graph.stream(initial_state, config):
@@ -2292,7 +2536,7 @@ class TestFailureRecovery:
             print("=" * 60, flush=True)
             
             graph = create_repro_graph()
-            config = {"configurable": {"thread_id": "test_physics_fail"}}
+            config = {"configurable": {"thread_id": unique_thread_id("physics_fail")}}
             
             nodes_visited = []
             for event in graph.stream(initial_state, config):
@@ -2359,7 +2603,7 @@ class TestFailureRecovery:
             print("=" * 60, flush=True)
             
             graph = create_repro_graph()
-            config = {"configurable": {"thread_id": "test_code_retry"}}
+            config = {"configurable": {"thread_id": unique_thread_id("code_retry")}}
             
             nodes_visited, graph_state, is_paused = run_until_pause_or_complete(
                 graph, initial_state, config, max_nodes=30
@@ -2412,7 +2656,7 @@ class TestFailureRecovery:
             print("=" * 60, flush=True)
             
             graph = create_repro_graph()
-            config = {"configurable": {"thread_id": "test_design_retry"}}
+            config = {"configurable": {"thread_id": unique_thread_id("design_retry")}}
             
             nodes_visited, graph_state, is_paused = run_until_pause_or_complete(
                 graph, initial_state, config, max_nodes=30
@@ -2456,7 +2700,7 @@ class TestFailureRecovery:
             print("=" * 60, flush=True)
             
             graph = create_repro_graph()
-            config = {"configurable": {"thread_id": "test_llm_error"}}
+            config = {"configurable": {"thread_id": unique_thread_id("llm_error")}}
             
             # The plan_reviewer has error handling that auto-approves on LLM failure
             nodes_visited = []
@@ -2532,13 +2776,14 @@ class TestReportGeneration:
             return {}
         
         mock_run_code = MagicMock(return_value={
-            "execution_result": {
-                "success": True,
-                "stdout": "Simulation completed",
+            "stage_outputs": {
+                "stdout": "Simulation completed successfully",
                 "stderr": "",
-                "output_files": ["extinction_spectrum.csv"],
+                "exit_code": 0,
+                "files": ["/tmp/extinction_spectrum.csv"],
+                "runtime_seconds": 10.5,
             },
-            "output_files": ["extinction_spectrum.csv"],
+            "run_error": None,
         })
         
         # Mock file existence checks only in analysis module (not globally)
@@ -2553,7 +2798,7 @@ class TestReportGeneration:
             print("=" * 60, flush=True)
             
             graph = create_repro_graph()
-            config = {"configurable": {"thread_id": "test_report"}}
+            config = {"configurable": {"thread_id": unique_thread_id("report")}}
             
             nodes_visited = []
             final_state = None
@@ -2656,7 +2901,7 @@ class TestReportGeneration:
             print("=" * 60, flush=True)
             
             graph = create_repro_graph()
-            config = {"configurable": {"thread_id": "test_report_content"}}
+            config = {"configurable": {"thread_id": unique_thread_id("report_content")}}
             
             nodes_visited = []
             
@@ -2750,7 +2995,7 @@ class TestReportGeneration:
             print("=" * 60, flush=True)
             
             graph = create_repro_graph()
-            config = {"configurable": {"thread_id": "test_report_once"}}
+            config = {"configurable": {"thread_id": unique_thread_id("report_once")}}
             
             nodes_visited = []
             for event in graph.stream(initial_state, config):

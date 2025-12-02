@@ -287,103 +287,62 @@ Your plan MUST include:
 F. OUTPUT FORMAT
 ═══════════════════════════════════════════════════════════════════════
 
-You must output a JSON object with these sections:
-
-{
-  "paper_id": "string (e.g., 'aluminum_nanoantenna_2013')",
-  "paper_domain": "plasmonics | photonic_crystal | metamaterial | thin_film | waveguide | strong_coupling | nonlinear | other",
-  "title": "paper title",
-  "summary": "Brief 1-2 sentence summary of the system and main claims",
-  "main_system": "description of physical system",
-  "main_claims": ["list of key claims to verify"],
-  "simulation_approach": "FDTD with Meep",
-  
-  "extracted_parameters": [
-    {
-      "name": "parameter_name",
-      "value": "number or range",
-      "unit": "nm, eV, etc.",
-      "source": "text | figure_caption | figure_axis | supplementary | inferred",
-      "location": "where in paper",
-      "cross_checked": true | false,
-      "discrepancy_notes": "null or explanation"
-    }
-  ],
-  
-  "planned_materials": [
-    {
-      "material_id": "string (unique)",
-      "name": "string (human readable)",
-      "path": "string (path to csv or null)"
-    }
-  ],
-  
-  "targets": [
-    {
-      "figure_id": "Fig3a",
-      "description": "what the figure shows",
-      "type": "spectrum | dispersion | field_map | parameter_sweep",
-      "simulation_class": "FDTD_DIRECT | FDTD_DERIVED | ANALYTICAL | COMPLEX_PHYSICS | NOT_REPRODUCIBLE",
-      "complexity_notes": "any special considerations"
-    }
-  ],
-  
-  "stages": [
-    {
-      "stage_id": "stage0_material_validation",
-      "stage_type": "MATERIAL_VALIDATION | SINGLE_STRUCTURE | ARRAY_SYSTEM | PARAMETER_SWEEP | COMPLEX_PHYSICS",
-      "name": "human-readable name",
-      "description": "what will be done",
-      "targets": ["Fig2a"],
-      "dependencies": [],
-      "is_mandatory_validation": true,
-      "complexity_class": "analytical | 2D_light | 2D_medium | 3D_light | 3D_medium | 3D_heavy",
-      "runtime_estimate_minutes": 5,
-      "runtime_budget_minutes": 15,
-      "max_revisions": 3,
-      "fallback_strategy": "ask_user | simplify | skip_with_warning",
-      "validation_criteria": ["specific measurable criteria"],
-      "reference_data_path": "optional path to digitized data"
-    }
-  ],
-  
-  "assumptions": {
-    "global_assumptions": [
-      {
-        "id": "A1",
-        "category": "material | geometry | source | boundary | numerical",
-        "description": "what is assumed",
-        "reason": "why it's reasonable",
-        "source": "paper_stated | paper_inferred | literature_default | user_provided",
-        "alternatives_considered": ["list"],
-        "critical": true | false,
-        "validated": false,
-        "validation_stage": "stage_id or null"
-      }
-    ],
-    "geometry_interpretations": []
-  },
-  
-  "progress": {
-    "stages": [
-      {
-        "stage_id": "stage0_material_validation",
-        "status": "not_started",
-        "summary": "planned work description"
-      }
-    ]
-  },
-  
-  "blocking_issues": [
-    {
-      "description": "what's blocking",
-      "question_for_user": "specific question"
-    }
-  ]
-}
+Return a JSON object with your reproduction plan. The system validates structure automatically.
 
 You do NOT write simulation code. Your deliverables are: 
 Summary, Extracted Parameters, Figure Classifications, Assumptions, Plan, initial Progress.
+
+### Required Fields
+
+| Field | Description |
+|-------|-------------|
+| `paper_id` | Short identifier (e.g., "aluminum_nanoantenna_2013") |
+| `paper_domain` | One of: plasmonics, photonic_crystal, metamaterial, thin_film, waveguide, strong_coupling, nonlinear, other |
+| `extracted_parameters` | Array of all extracted physical parameters |
+| `targets` | Array of target figures to reproduce |
+| `stages` | Array of simulation stages in execution order |
+| `assumptions` | Object with global_assumptions array |
+| `progress` | Initial progress tracking (all stages "not_started") |
+
+### Field Details
+
+**extracted_parameters**: For each parameter:
+- `name`, `value`, `unit`: the parameter itself
+- `source`: "text", "figure_caption", "figure_axis", "supplementary", or "inferred"
+- `location`: where in paper
+- `cross_checked`: did you verify against another source?
+- `discrepancy_notes`: explain if values conflict
+
+**targets**: For each figure:
+- `figure_id`: exact ID from paper (Fig1a, Fig2, etc.)
+- `description`: what the figure shows
+- `type`: spectrum, dispersion, field_map, parameter_sweep
+- `simulation_class`: FDTD_DIRECT, FDTD_DERIVED, ANALYTICAL, COMPLEX_PHYSICS, or NOT_REPRODUCIBLE
+
+**stages**: For each stage:
+- `stage_id`: unique ID (stage0_material_validation, stage1_single_disk, etc.)
+- `stage_type`: MATERIAL_VALIDATION, SINGLE_STRUCTURE, ARRAY_SYSTEM, PARAMETER_SWEEP, or COMPLEX_PHYSICS
+- `targets`: which figures this stage addresses
+- `dependencies`: stage_ids that must complete first
+- `runtime_budget_minutes`: maximum allowed runtime
+- `validation_criteria`: specific measurable success criteria
+
+**assumptions.global_assumptions**: For each assumption:
+- `id`: unique ID (A1, A2, etc.)
+- `category`: material, geometry, source, boundary, or numerical
+- `description`: what is assumed
+- `reason`: why it's reasonable
+- `critical`: true if wrong assumption would invalidate results
+- `validation_stage`: which stage will validate this (or null)
+
+### Optional Fields
+
+| Field | Description |
+|-------|-------------|
+| `title`, `summary`, `main_system`, `main_claims` | Paper metadata |
+| `planned_materials` | Materials needed with file paths |
+| `staging_rationale` | Explanation of staging strategy |
+| `blocking_issues` | Issues requiring user input before proceeding |
 
 ═══════════════════════════════════════════════════════════════════════
 G. FEW-SHOT EXAMPLES

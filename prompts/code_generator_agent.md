@@ -592,44 +592,53 @@ Before submitting code, verify:
 I. OUTPUT FORMAT
 ═══════════════════════════════════════════════════════════════════════
 
-Your output must be a JSON object:
+Return a JSON object with your generated code. The system validates structure automatically.
 
-{
-  "stage_id": "stage1_single_disk",
-  "mode": "code_generation",
-  
-  "design_reference": {
-    "from_designer": "SimulationDesignerAgent",
-    "design_hash": "optional hash for tracking"
-  },
-  
-  "code": "... complete Python+Meep code ...",
-  
-  "expected_outputs": [
-    {
-      "filename": "paper_stage1_spectrum.csv",
-      "type": "data",
-      "description": "Transmission and reflection spectra"
-    },
-    {
-      "filename": "paper_stage1_fig3a.png",
-      "type": "plot",
-      "description": "Transmission spectrum matching Fig. 3a"
-    }
-  ],
-  
-  "estimated_runtime_minutes": 5,
-  
-  "self_check": {
-    "imports_complete": true,
-    "no_blocking_calls": true,
-    "error_handling": true,
-    "progress_prints": true,
-    "file_outputs": true
-  },
-  
-  "notes": "any implementation notes or deviations from design"
-}
+### Required Fields
+
+| Field | Description |
+|-------|-------------|
+| `stage_id` | The stage ID you're generating code for |
+| `code` | Complete Python+Meep simulation code as a string |
+| `expected_outputs` | Array of output files the code will produce |
+| `estimated_runtime_minutes` | How long the simulation should take |
+
+### Field Details
+
+**code**: Complete, runnable Python script. Must include:
+- All imports
+- Geometry setup using design's unit system
+- Material definitions (use paths from state.material_paths)
+- Source configuration
+- Monitors matching design spec
+- Simulation run
+- Data extraction and saving
+- Plot generation (plt.savefig, then plt.close)
+- REPROLAB_RESULT_JSON marker at end
+
+**expected_outputs**: For each output file:
+- `artifact_type`: matches design spec (spectrum_csv, plot_png, etc.)
+- `filename`: exact filename that will be produced
+- `description`: what's in the file
+- `target_figure`: which paper figure this corresponds to
+- For CSVs: include `columns` array
+
+**safety_checks**: Verify your code before submitting:
+- `no_plt_show`: no interactive display calls
+- `no_input`: no user input prompts
+- `uses_plt_savefig_close`: saves then closes each figure
+- `relative_paths_only`: no hardcoded absolute paths
+- `includes_result_json`: has REPROLAB_RESULT_JSON marker
+
+### Optional Fields
+
+| Field | Description |
+|-------|-------------|
+| `code_summary` | One sentence describing what the code does |
+| `unit_system_used` | Confirm unit system from design |
+| `materials_used` | List materials and their data file paths |
+| `design_compliance` | Confirm code matches design spec |
+| `revision_notes` | If this is a revision, what changed |
 
 ═══════════════════════════════════════════════════════════════════════
 J. MEEP-SPECIFIC BEST PRACTICES

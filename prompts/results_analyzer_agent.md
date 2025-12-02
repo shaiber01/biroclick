@@ -432,103 +432,54 @@ When a stage reproduces multiple related panels (e.g., Fig 2b,c):
 I. OUTPUT FORMAT
 ═══════════════════════════════════════════════════════════════════════
 
-Your output must be a JSON object:
+Return a JSON object with your analysis results. The system validates structure automatically.
 
-{
-  "stage_id": "stage1_single_disk",
-  "mode": "analysis",
-  
-  "outputs_analyzed": [
-    {
-      "filename": "paper_stage1_spectrum.csv",
-      "type": "data",
-      "rows": 1000,
-      "columns": ["wavelength_nm", "transmission"]
-    },
-    {
-      "filename": "paper_stage1_fig3a.png",
-      "type": "plot",
-      "valid": true
-    }
-  ],
-  
-  "per_figure_reports": [
-    {
-      "figure_id": "Fig3a",
-      "output_file": "paper_stage1_fig3a.png",
-      "result_status": "success | partial | failure",
-      
-      "comparison_table": [
-        {
-          "feature": "Resonance wavelength",
-          "paper_value": "520 nm",
-          "simulation_value": "540 nm",
-          "status": "⚠️ +3.8%"
-        },
-        {
-          "feature": "Peak shape",
-          "paper_value": "Single dip",
-          "simulation_value": "Single dip",
-          "status": "✅ Match"
-        }
-      ],
-      
-      "shape_comparison": [
-        {
-          "aspect": "Smoothness",
-          "paper": "Smooth curve",
-          "reproduction": "Minor oscillations at short λ"
-        }
-      ],
-      
-      "reason_for_difference": "2D approximation ignores 3D depolarization; Palik Al data may differ from sample.",
-      
-      "classification_reasoning": "Resonance position within acceptable range, all trends match."
-    }
-  ],
-  
-  "discrepancies": [
-    {
-      "id": "D1",
-      "figure": "Fig3a",
-      "quantity": "resonance_wavelength",
-      "paper_value": "520 nm",
-      "simulation_value": "540 nm",
-      "difference_percent": 3.8,
-      "classification": "acceptable",
-      "likely_cause": "2D approximation",
-      "action_taken": "Documented; proceeding",
-      "blocking": false
-    }
-  ],
-  
-  "new_assumptions": [
-    // Any new assumptions discovered during analysis
-  ],
-  
-  "progress_update": {
-    "stage_id": "stage1_single_disk",
-    "status": "completed_partial",
-    "runtime_seconds": 145,
-    "summary": "Single disk resonance reproduced with 4% shift",
-    "outputs": ["paper_stage1_spectrum.csv", "paper_stage1_fig3a.png"],
-    "issues": ["2D approximation causes ~4% red-shift"],
-    "next_actions": ["Accept as baseline, proceed to next stage"]
-  },
-  
-  "backtrack_suggestion": {
-    // OPTIONAL - Only include if you discover something that invalidates earlier stages
-    // Examples: wrong geometry type, wrong material, wrong wavelength range
-    "suggest_backtrack": true | false,
-    "target_stage_id": "stage_id to go back to (earliest affected stage)",
-    "reason": "What was discovered that invalidates earlier work",
-    "severity": "critical | significant | minor",
-    "stages_affected": ["list of stage_ids that would need to be re-run"],
-    "evidence": "What in the analysis revealed this issue"
-  }
-  // Note: Only suggest backtrack for FUNDAMENTAL issues (wrong geometry type, material, etc.)
-  // Do NOT suggest backtrack for minor parameter adjustments or normal discrepancies
-}
+### Required Fields
+
+| Field | Description |
+|-------|-------------|
+| `stage_id` | The stage ID being analyzed |
+| `per_result_reports` | Array of quantitative comparisons (one per quantity) |
+| `figure_comparisons` | Array of visual figure comparisons |
+| `overall_classification` | Your verdict (see values below) |
+| `summary` | One paragraph summary of the comparison |
+
+### Classification Values (use exactly these)
+
+| Value | Criteria |
+|-------|----------|
+| `EXCELLENT_MATCH` | All key quantities <2% error, trends match exactly |
+| `ACCEPTABLE_MATCH` | Key quantities within 5%, trends match, minor deviations documented |
+| `PARTIAL_MATCH` | Some quantities in 5-10% range, main physics captured |
+| `POOR_MATCH` | Multiple quantities >10% error, trends partially match |
+| `FAILED` | Major quantities wrong OR trends don't match OR physics incorrect |
+
+### Field Details
+
+**per_result_reports**: For each measurable quantity, provide:
+- `result_id`: unique ID (R1, R2, etc.)
+- `target_figure`: which figure this relates to
+- `quantity`: what you're measuring (resonance_wavelength, peak_width, etc.)
+- `simulated_value`: {value, unit}
+- `paper_value`: {value, unit, source}
+- `discrepancy`: {absolute, relative_percent, classification}
+- `notes`: explanation
+
+**figure_comparisons**: For each target figure:
+- `paper_figure_id`, `simulated_figure_path`
+- `visual_agreement`: "excellent", "good", "partial", "poor"
+- `key_features_matched` and `key_features_missed`: arrays of strings
+- `notes`: overall assessment
+
+### Optional Fields
+
+| Field | Description |
+|-------|-------------|
+| `classification_rationale` | Explain your overall_classification choice |
+| `confidence` | 0.0-1.0 confidence score |
+| `confidence_factors` | What affects your confidence |
+| `systematic_discrepancies` | Patterns across multiple results |
+| `recommendations` | Suggestions for next steps |
 
 ═══════════════════════════════════════════════════════════════════════
 J. FINAL REPORT CONTRIBUTIONS

@@ -423,112 +423,47 @@ For each stage, follow this sequence:
 H. OUTPUT FORMAT
 ═══════════════════════════════════════════════════════════════════════
 
-Your output must be a JSON object:
+Return a JSON object with your simulation design. The system validates structure automatically.
 
-{
-  "stage_id": "stage1_single_disk",
-  "mode": "design",
-  
-  "restatement": {
-    "name": "Single bare nanodisk validation",
-    "target_figures": ["Fig3a"],
-    "physical_configuration": "description",
-    "validation_criteria": ["from plan"]
-  },
-  
-  "design": {
-    "unit_system": {
-      "characteristic_length_m": 1e-6,
-      "length_unit": "µm",
-      "example_conversion": "500nm → 0.5 Meep units"
-    },
-    "geometry": {
-      "dimensionality": "2D | 3D",
-      "cell_size": [x, y, z],
-      "structures": [
-        {
-          "name": "disk",
-          "shape": "cylinder",
-          "dimensions": {"radius": 37.5, "height": 30},
-          "position": [0, 0, 0],
-          "material": "aluminum"
-        }
-      ],
-      "periodicity": null | {"x": period_x, "y": period_y}
-    },
-    "materials": [
-      {
-        "name": "aluminum",
-        "model": "Lorentz-Drude | tabulated | constant",
-        "source": "Palik",
-        "parameters": {}
-      }
-    ],
-    "source": {
-      "type": "gaussian_pulse | continuous",
-      "polarization": "Ex | Ey | Ez",
-      "direction": "+z | -z | etc",
-      "wavelength_range": [400, 800],
-      "angle": 0
-    },
-    "boundaries": {
-      "x": "periodic | PML | metallic",
-      "y": "periodic | PML | metallic",
-      "z": "PML"
-    },
-    "numerics": {
-      "resolution": 20,
-      "pml_thickness": 1.0,
-      "simulation_time": 200,
-      "monitors": ["transmission_flux", "reflection_flux"]
-    }
-  },
-  
-  "performance_estimate": {
-    "grid_points": [nx, ny, nz],
-    "total_cells": 1000000,
-    "time_steps": 10000,
-    "num_runs": 1,
-    "estimated_runtime_minutes": 5,
-    "within_budget": true,
-    "simplifications_applied": [],
-    "simplifications_available": []
-  },
-  
-  "assumptions_used": ["A1", "A2"],
-  "new_assumptions": [
-    {
-      "id": "S1",
-      "stage_id": "stage1_single_disk",
-      "category": "numerical",
-      "description": "Use 2D approximation",
-      "reason": "10x faster, captures main resonance",
-      "source": "performance_optimization",
-      "critical": true
-    }
-  ],
-  
-  "output_specifications": {
-    "data_files": [
-      {
-        "filename": "{paper_id}_{stage_id}_spectrum.csv",
-        "target_figure": "Fig3a",
-        "columns": ["wavelength_nm", "transmission", "reflection"],
-        "description": "Far-field spectra"
-      }
-    ],
-    "plot_files": [
-      {
-        "filename": "{paper_id}_{stage_id}_fig3a.png",
-        "target_figure": "Fig3a",
-        "type": "line_plot",
-        "x_axis": {"label": "Wavelength (nm)", "range": [400, 800]},
-        "y_axis": {"label": "Transmission", "range": [0, 1]},
-        "paper_format_notes": "Match paper's high-to-low wavelength if needed"
-      }
-    ]
-  }
-}
+### Required Fields
+
+| Field | Description |
+|-------|-------------|
+| `stage_id` | The stage ID from the plan you're designing for |
+| `design_description` | One paragraph describing the simulation approach |
+| `unit_system` | Your chosen unit normalization (see section D) |
+| `geometry` | Complete geometry specification |
+| `materials` | All materials with sources and parameters |
+| `sources` | Source configuration (type, position, spectrum) |
+| `boundary_conditions` | PML/periodic for each boundary |
+| `monitors` | Flux monitors and their positions |
+| `performance_estimate` | Runtime, memory, cell count estimates |
+| `output_specifications` | Expected output files mapped to target figures |
+
+### Field Details
+
+**unit_system**: Include `characteristic_length_m`, `length_unit`, and `example_conversions` showing how paper values convert to Meep units.
+
+**geometry**: Specify `dimensionality` ("2D" or "3D"), `cell_size`, `resolution`, and `structures` array. Each structure needs: name, type (block/cylinder/sphere), material_ref, center, dimensions in Meep units, and real_dimensions in nm for verification.
+
+**materials**: Array with `id`, `name`, `model_type` (drude_lorentz/constant/tabulated), `source`, `data_file` path (from state.material_paths), and relevant `parameters`.
+
+**sources**: Array with `type` (gaussian/continuous), `component` (Ex/Ey/Ez), `center`, `size`, wavelength range in nm, AND converted Meep frequencies.
+
+**boundary_conditions**: Specify each boundary (x_min, x_max, etc.) as "pml" or "periodic", plus `pml_thickness`.
+
+**monitors**: Array with `type` (flux/field), `name`, `purpose`, `center`, `size`, `frequency_points`.
+
+**output_specifications**: Each output needs `artifact_type`, `filename_pattern` using {paper_id}_{stage_id}, `description`, and for CSVs the `columns` list.
+
+### Optional Fields
+
+| Field | Description |
+|-------|-------------|
+| `new_assumptions` | Any new assumptions introduced by your design |
+| `design_rationale` | Explanation of key design choices |
+| `potential_issues` | Known limitations or risks |
+| `simulation_parameters` | Additional run parameters (decay criteria, etc.)
 
 ═══════════════════════════════════════════════════════════════════════
 H2. OUTPUT-TO-FIGURE MAPPING (CRITICAL)
