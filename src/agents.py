@@ -134,6 +134,11 @@ def _validate_state_or_warn(state: ReproState, node_name: str) -> list:
 def adapt_prompts_node(state: ReproState) -> ReproState:
     """PromptAdaptorAgent: Customize prompts for paper-specific needs."""
     state["workflow_phase"] = "adapting_prompts"
+    
+    # Initialize empty adaptations list (to be populated by LLM)
+    # This ensures the field exists for build_agent_prompt
+    state["prompt_adaptations"] = []
+    
     # TODO: Implement prompt adaptation logic
     # - Analyze paper domain and techniques
     # - Generate prompt modifications
@@ -459,6 +464,7 @@ def simulation_designer_node(state: ReproState) -> dict:
     # STUB: Replace with actual LLM call
     result = {
         "workflow_phase": "design",
+        "design_description": "STUB: Design description would be generated here."
         # agent_output fields would go here
     }
     
@@ -589,6 +595,7 @@ def code_generator_node(state: ReproState) -> dict:
     # STUB: Replace with actual LLM call
     result = {
         "workflow_phase": "code_generation",
+        "code": "# STUB: Simulation code would be generated here."
         # agent_output fields would go here (simulation_code, etc.)
     }
     
@@ -1089,7 +1096,16 @@ def supervisor_node(state: ReproState) -> dict:
             
             if "APPROVE" in response_text:
                 result["supervisor_verdict"] = "backtrack_to_stage"
-                # backtrack_decision should already be set
+                
+                # Ensure backtrack_decision has stages_to_invalidate populated
+                decision = state.get("backtrack_decision", {})
+                if decision:
+                    target = decision.get("target_stage_id")
+                    if target:
+                        dependent = _get_dependent_stages(state.get("plan", {}), target)
+                        decision["stages_to_invalidate"] = dependent
+                        result["backtrack_decision"] = decision
+                        
             elif "REJECT" in response_text:
                 result["backtrack_suggestion"] = None
                 result["supervisor_verdict"] = "ok_continue"
@@ -1171,6 +1187,42 @@ def supervisor_node(state: ReproState) -> dict:
         state["progress"]["user_interactions"].append(interaction_entry)
     
     return result
+
+
+# Helper function for dependency resolution
+def _get_dependent_stages(plan: dict, target_stage_id: str) -> list:
+    """
+    Identify all stages that depend on the target stage (transitively).
+    
+    Args:
+        plan: The plan dictionary containing stages and dependencies
+        target_stage_id: The ID of the stage being backtracked to
+        
+    Returns:
+        List of stage_ids that depend on target_stage_id
+    """
+    stages = plan.get("stages", [])
+    # Build dependency graph: stage_id -> list of dependents
+    dependents_map = {s["stage_id"]: [] for s in stages}
+    
+    for stage in stages:
+        for dep in stage.get("dependencies", []):
+            if dep in dependents_map:
+                dependents_map[dep].append(stage["stage_id"])
+                
+    # BFS/DFS to find all transitive dependents
+    invalidated = set()
+    queue = [target_stage_id]
+    
+    while queue:
+        current = queue.pop(0)
+        if current in dependents_map:
+            for dep in dependents_map[current]:
+                if dep not in invalidated:
+                    invalidated.add(dep)
+                    queue.append(dep)
+                    
+    return list(invalidated)
 
 
 def ask_user_node(state: ReproState) -> Dict[str, Any]:

@@ -2677,7 +2677,7 @@ def initialize_progress_from_plan(state: ReproState) -> ReproState:
     if "metrics" not in state:
         state["metrics"] = {
             "paper_id": paper_id,
-            "started_at": datetime.now().isoformat(),
+            "started_at": datetime.now(timezone.utc).isoformat(),
             "agent_calls": [],
             "stage_metrics": []
         }
@@ -2685,7 +2685,7 @@ def initialize_progress_from_plan(state: ReproState) -> ReproState:
     # Convert plan stages to progress stages
     # Only store EXECUTION STATE fields - design specs stay in plan
     progress_stages = []
-    current_time = datetime.now().isoformat()
+    current_time = datetime.now(timezone.utc).isoformat()
     
     for plan_stage in plan_stages:
         stage_id = plan_stage.get("stage_id", "unknown")
@@ -2862,7 +2862,7 @@ def update_progress_stage_status(
     for stage in stages:
         if stage.get("stage_id") == stage_id:
             stage["status"] = status
-            stage["last_updated"] = datetime.now().isoformat()
+            stage["last_updated"] = datetime.now(timezone.utc).isoformat()
             if summary:
                 stage["summary"] = summary
             if invalidation_reason:
@@ -2936,7 +2936,7 @@ def archive_stage_outputs_to_progress(
     for stage in stages:
         if stage.get("stage_id") == stage_id:
             stage["outputs"] = outputs
-            stage["last_updated"] = datetime.now().isoformat()
+            stage["last_updated"] = datetime.now(timezone.utc).isoformat()
             
             # Record runtime if available
             if runtime_seconds is not None:
