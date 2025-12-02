@@ -206,120 +206,109 @@ Each agent has a corresponding schema in `schemas/`:
 - `assumptions`: Initial assumptions with sources
 - `progress`: Initialized progress structure
 - `extracted_parameters`: Parameters with provenance
-- `review_context`: Set to `"plan"` for CODE_REVIEW
 
 **Transitions**:
-- → CODE_REVIEW (plan review before proceeding)
+- → plan_review (always)
 
 ---
 
 ### 3. select_stage Node
 
-**Purpose**: Choose next stage to execute based on dependencies, status, validation hierarchy, budget, and backtracking state
+**Purpose**: Choose the next stage based on the mutable execution log (`progress["stages"]`), respecting the immutable plan contract, validation hierarchy, runtime budget, and any backtracking state.
 
 **Logic**:
 ```python
 def select_next_stage(state):
+    progress = state.get("progress", {})
+    progress_stages = progress.get("stages", [])
+    plan = state.get("plan", {})
+    plan_stages = {s["stage_id"]: s for s in plan.get("stages", [])}
+
+    if not progress_stages:
+        return None  # Progress hasn't been initialized yet
+
+    # Helper reads status from progress only (plan never mutated after approval)
+    def get_progress_status(stage_id: str) -> str:
+        stage = next((s for s in progress_stages if s.get("stage_id") == stage_id), None)
+        return stage.get("status", "not_started") if stage else "not_started"
+
     # ─── PRIORITY 1: Handle backtracked stages ───────────────────────────
-    # Stages marked "needs_rerun" from backtracking take priority.
-    # INVARIANT: A needs_rerun stage should never have invalidated dependencies
-    # because handle_backtrack marks the target as needs_rerun AFTER marking
-    # all dependents as invalidated. If this invariant is violated, it indicates
-    # a bug in handle_backtrack logic.
-    for stage in state["plan"]["stages"]:
-        if stage["status"] == "needs_rerun":
-            # Safety check (should never happen if handle_backtrack is correct)
+    # handle_backtrack marks the target stage's progress status as "needs_rerun".
+    for stage in progress_stages:
+        if stage.get("status") == "needs_rerun":
+            # Safety check: dependencies should never be invalidated once we're rerunning
             for dep in stage.get("dependencies", []):
-                dep_status = get_stage_status(dep)
-                if dep_status == "invalidated":
+                if get_progress_status(dep) == "invalidated":
                     raise ValueError(
                         f"BUG: needs_rerun stage {stage['stage_id']} has "
-                        f"invalidated dependency {dep}. This should not happen."
+                        f"invalidated dependency {dep}. Progress bookkeeping drifted from plan."
                     )
             return stage["stage_id"]
-    
-    # ─── PRIORITY 2: Check for invalidated stages ready to re-run ────────
-    # Invalidated stages can run once their dependencies are satisfied
-    for stage in state["plan"]["stages"]:
-        if stage["status"] == "invalidated":
+
+    # ─── PRIORITY 2: Promote invalidated stages once deps recover ────────
+    for stage in progress_stages:
+        if stage.get("status") == "invalidated":
             deps_ok = all(
-                get_stage_status(dep) in ["completed_success", "completed_partial"]
-                for dep in stage["dependencies"]
+                get_progress_status(dep) in ["completed_success", "completed_partial"]
+                for dep in stage.get("dependencies", [])
             )
             if deps_ok:
-                stage["status"] = "needs_rerun"
+                stage["status"] = "needs_rerun"  # update progress entry, not the plan
                 return stage["stage_id"]
-    
+
     # ─── PRIORITY 3: Normal stage selection ──────────────────────────────
-    # Check validation hierarchy first (uses canonical names from ValidationHierarchyStatus)
-    hierarchy = get_validation_hierarchy(state)  # Computed from progress["stages"]
-    if hierarchy["material_validation"] != "passed":
-        # Cannot proceed past Stage 0 without material validation
-        return "stage0_material_validation"
-    
-    # Check runtime budget
+    hierarchy = get_validation_hierarchy(state)  # Derived from progress["stages"]
+    if hierarchy["material_validation"] not in ["passed", "partial"]:
+        return "stage0_material_validation"  # Stage 0 gate
+
     budget_remaining = state.get("runtime_budget_remaining_seconds", float("inf"))
-    
-    # Build set of stage types that exist in this paper's plan
-    # This enables paper-dependent hierarchy (not all papers have all stage types)
-    plan_stage_types = {s.get("stage_type") for s in state["plan"]["stages"]}
-    
-    for stage in state["plan"]["stages"]:
-        # Skip completed, blocked, or invalidated stages
-        if stage["status"] in ["completed_success", "completed_partial", "blocked", "invalidated"]:
+    plan_stage_types = {s.get("stage_type") for s in plan.get("stages", [])}
+
+    for progress_stage in progress_stages:
+        status = progress_stage.get("status", "not_started")
+        if status in ["completed_success", "completed_partial", "blocked", "invalidated", "needs_rerun"]:
             continue
-        
-        # Check dependencies
+
         deps_met = all(
-            get_stage_status(dep) in ["completed_success", "completed_partial"]
-            for dep in stage["dependencies"]
+            get_progress_status(dep) in ["completed_success", "completed_partial"]
+            for dep in progress_stage.get("dependencies", [])
         )
-        
         if not deps_met:
             continue
-        
-        # Check validation hierarchy requirements (PAPER-DEPENDENT)
-        # Only enforce hierarchy gates for stage types that exist in this plan.
-        # Example: A photonic crystal paper may have no SINGLE_STRUCTURE stage,
-        # so ARRAY_SYSTEM should not be blocked waiting for it.
-        stage_type = stage.get("stage_type", "")
-        
+
+        plan_stage = plan_stages.get(progress_stage["stage_id"], {})
+        stage_type = plan_stage.get("stage_type", "")
+
+        # Enforce adaptive validation hierarchy using plan metadata
         if stage_type == "ARRAY_SYSTEM":
-            # Only require single_structure if it exists in this plan
-            if "SINGLE_STRUCTURE" in plan_stage_types and hierarchy["single_structure"] != "passed":
-                continue  # Cannot do array without single structure (when it exists)
-        
-        if stage_type == "PARAMETER_SWEEP":
-            # Sweeps can follow either single structure OR array, depending on plan
-            # Only block if the prerequisite stage type exists AND hasn't passed
+            if "SINGLE_STRUCTURE" in plan_stage_types and hierarchy["single_structure"] not in ["passed", "partial"]:
+                continue
+        elif stage_type == "PARAMETER_SWEEP":
             requires_single = "SINGLE_STRUCTURE" in plan_stage_types
             requires_array = "ARRAY_SYSTEM" in plan_stage_types
-            
-            if requires_array and hierarchy["arrays_systems"] != "passed":
-                continue  # Cannot sweep without array validation (when array exists)
-            elif requires_single and not requires_array and hierarchy["single_structure"] != "passed":
-                continue  # Cannot sweep without single structure (when no array stage)
-        
-        if stage_type == "COMPLEX_PHYSICS":
-            # Complex physics requires ALL applicable prerequisite stages to pass
-            if "PARAMETER_SWEEP" in plan_stage_types and hierarchy["parameter_sweeps"] != "passed":
+            if requires_array and hierarchy["arrays_systems"] not in ["passed", "partial"]:
                 continue
-            elif "ARRAY_SYSTEM" in plan_stage_types and hierarchy["arrays_systems"] != "passed":
+            if requires_single and not requires_array and hierarchy["single_structure"] not in ["passed", "partial"]:
                 continue
-            elif "SINGLE_STRUCTURE" in plan_stage_types and hierarchy["single_structure"] != "passed":
+        elif stage_type == "COMPLEX_PHYSICS":
+            if "PARAMETER_SWEEP" in plan_stage_types and hierarchy["parameter_sweeps"] not in ["passed", "partial"]:
                 continue
-        
-        # Check if budget allows this stage
-        estimated_runtime = stage.get("estimated_runtime_seconds", 0)
+            if "ARRAY_SYSTEM" in plan_stage_types and hierarchy["arrays_systems"] not in ["passed", "partial"]:
+                continue
+            if "SINGLE_STRUCTURE" in plan_stage_types and hierarchy["single_structure"] not in ["passed", "partial"]:
+                continue
+
+        estimated_runtime = plan_stage.get("estimated_runtime_seconds", 0)
         if estimated_runtime > budget_remaining:
-            # Skip expensive stages when budget is low
-            # Mark as blocked with reason
-            stage["status"] = "blocked"
-            stage["issues"].append(f"Skipped: estimated {estimated_runtime}s exceeds budget {budget_remaining}s")
+            progress_stage["status"] = "blocked"
+            issues = progress_stage.setdefault("issues", [])
+            issues.append(
+                f"Skipped: estimated {estimated_runtime}s exceeds remaining budget {budget_remaining}s"
+            )
             continue
-        
-        return stage["stage_id"]
-    
+
+        return progress_stage["stage_id"]
+
     return None  # All stages done
 ```
 
@@ -358,57 +347,76 @@ def select_next_stage(state):
 - `output_specifications`: Expected output files and formats
 
 **Transitions**:
-- → CODE_REVIEW (always)
+- → design_review (always)
 
 ---
 
-### 5. CODE_REVIEW Node (CodeReviewerAgent)
+### 5. Review Nodes (Plan / Design / Code)
 
-**Purpose**: Review plan, design, or code before proceeding
+ReproLab now relies on three dedicated review agents—each with its own prompt, schema, counters, and routing logic. There is no shared `review_context` flag anymore; ownership is split per artifact to keep feedback scoped and auditable.
 
-**Why one agent for all reviews?** A single CodeReviewerAgent handles plan, design, and code review because all tasks require the same technical expertise (Meep API knowledge, physics constraints, validation hierarchy understanding). The `review_context` field determines which checklist to use.
+#### 5.1 plan_review Node (PlanReviewerAgent)
 
-**When reviewing plan** (`review_context = "plan"`):
-- [ ] All key simulation-reproducible figures identified
-- [ ] Validation hierarchy respected (Stage 0 first)
-- [ ] Stage dependencies make sense
-- [ ] Runtime budgets realistic
-- [ ] Assumptions properly initialized
+**Purpose**: Validate the staged reproduction plan before any execution.
 
-**When reviewing design** (`review_context = "design"`):
-- [ ] Geometry matches paper interpretation
-- [ ] Materials correctly selected with sources
-- [ ] Source configuration appropriate
-- [ ] Boundary conditions match physics
-- [ ] Resolution adequate for features
-- [ ] Performance within budget
-
-**When reviewing CODE** (`review_context = "code"`):
-- [ ] Code implements design correctly
-- [ ] Progress prints included
-- [ ] No blocking calls (plt.show, input)
-- [ ] Error handling present
-- [ ] File outputs named correctly
+**Checklist highlights**:
+- Every reproducible figure is staged with validation criteria and expected outputs.
+- Stage 0 (materials) exists and precedes downstream stages.
+- Dependencies form an acyclic graph that respects the adaptive validation hierarchy.
+- Targets marked `precision_requirement="excellent"` provide a `digitized_data_path`.
+- Runtime budgets align with `runtime_config` limits.
 
 **Outputs**:
-- `reviewer_verdict`: "approve" | "needs_revision"
-- `reviewer_issues`: List of issues found
-- `reviewer_feedback`: Detailed feedback
+- `last_plan_review_verdict` ("approve" | "needs_revision")
+- Structured findings defined in `plan_reviewer_output_schema.json`
+- `planner_feedback` plus `replan_count` bookkeeping when revisions occur
 
-**Transitions** (after plan review):
-- → select_stage (approved)
-- → plan (needs revision, replan_count < 2)
-- → ask_user (needs revision, replan_count >= 2)
+**Transitions**:
+- `approve` → `select_stage`
+- `needs_revision` (replan_count < limit) → `plan`
+- `needs_revision` (limit reached) → `ask_user`
 
-**Transitions** (after design review):
-- → generate_code (approved)
-- → design (needs revision, count < 3)
-- → ask_user (needs revision, count >= 3)
+#### 5.2 design_review Node (DesignReviewerAgent)
 
-**Transitions** (after code review):
-- → run_code (approved)
-- → generate_code (needs revision, count < 3)
-- → ask_user (needs revision, count >= 3)
+**Purpose**: Gate the SimulationDesigner’s artifact before code generation.
+
+**Checklist highlights**:
+- Geometry, resolution, and units match plan specs.
+- Stage 1+ uses `validated_materials`; Stage 0 uses `planned_materials`.
+- Sources, boundary conditions, and monitors map to the physics goal.
+- New assumptions are explicitly recorded and scoped.
+- Runtime estimates respect the stage’s complexity class.
+
+**Outputs**:
+- `last_design_review_verdict`
+- `reviewer_issues` + narrative feedback
+- `design_revision_count` increments when verdict is `needs_revision`
+
+**Transitions**:
+- `approve` → `generate_code`
+- `needs_revision` (count < limit) → `design`
+- `needs_revision` (limit reached) → `ask_user`
+
+#### 5.3 code_review Node (CodeReviewerAgent)
+
+**Purpose**: Ensure generated Meep code faithfully implements the approved design before sandbox execution.
+
+**Checklist highlights**:
+- Implements geometry/material/unit system exactly as reviewed.
+- Pulls material files from `validated_materials`; no hard-coded constants.
+- Produces expected outputs (names + directories) for downstream analyzers.
+- Includes deterministic logging and avoids blocking calls (e.g., `plt.show`).
+- Respects sandbox rules (no arbitrary filesystem or network access).
+
+**Outputs**:
+- `last_code_review_verdict`
+- `reviewer_issues` + actionable feedback
+- `code_revision_count` increments on `needs_revision`
+
+**Transitions**:
+- `approve` → `run_code`
+- `needs_revision` (count < limit) → `generate_code`
+- `needs_revision` (limit reached) → `ask_user`
 
 ---
 
@@ -426,7 +434,7 @@ def select_next_stage(state):
 - `estimated_runtime_minutes`: Runtime estimate
 
 **Transitions**:
-- → CODE_REVIEW (always - code review phase)
+- → code_review (always - code review phase)
 
 ---
 
@@ -887,17 +895,16 @@ def material_checkpoint_node(state):
 **Outputs**:
 | User Verdict | Output Fields | Next Node |
 |--------------|---------------|-----------|
-| `approve` | `validated_materials` populated | select_stage |
-| `change_database` | `planned_materials` updated, Stage 0 `needs_rerun` | select_stage |
-| `change_material` | `planner_feedback` set | plan |
+| `approve` | `pending_validated_materials` populated (awaiting supervisor move) | ask_user |
+| `change_database` | `planned_materials` updated, Stage 0 `needs_rerun` | ask_user |
+| `change_material` | `planner_feedback` set | ask_user |
 | `need_help` | Additional context added | ask_user |
 
 **Transitions**:
-- → select_stage (user approved, or database change)
-- → plan (user identified wrong material)
-- → ask_user (user needs more information)
+- → ask_user (always; mandatory pause for user confirmation)
+- Supervisor then routes to `select_stage`, `plan`, etc. based on the recorded response.
 
-**STATE INVARIANT**: After this node completes with `approve` verdict, `validated_materials` is guaranteed non-empty. CodeGeneratorAgent for Stage 1+ can safely read from it.
+**STATE INVARIANT**: `material_checkpoint` never mutates `validated_materials` directly. Materials remain in `pending_validated_materials` until Supervisor processes the user’s approval and moves them, guaranteeing the human-in-the-loop gate.
 
 ---
 
@@ -1155,6 +1162,11 @@ The checkpoint contains full state, so resumption continues exactly where paused
                               │            │                        │
                               │            ▼                        │
                               │     ┌─────────────┐                 │
+                              │     │ plan_review │                 │
+                              │     └──────┬──────┘                 │
+                              │            │                        │
+                              │            ▼                        │
+                              │     ┌─────────────┐                 │
                               │     │select_stage │                 │
                               │     └──────┬──────┘                 │
                               │            │                        │
@@ -1181,8 +1193,8 @@ The checkpoint contains full state, so resumption continues exactly where paused
                      │                  │                 │         │
                      │                  ▼                 │         │
                      │           ┌─────────────┐          │         │
-                     │           │ CODE_REVIEW │          │         │
-                     │           │(design check)│         │         │
+                     │           │design_review│          │         │
+                     │           │ (design QA) │          │         │
                      │           └──────┬──────┘          │         │
                      │                  │                 │         │
                      │        ┌─────────┼─────────┐       │         │
@@ -1200,8 +1212,8 @@ The checkpoint contains full state, so resumption continues exactly where paused
                      │         │              │   │                 │
                      │         ▼              │   │                 │
                      │  ┌─────────────┐       │   │                 │
-                     │  │ CODE_REVIEW │       │   │                 │
-                     │  │(code check) │       │   │                 │
+                     │  │ code_review │       │   │                 │
+                     │  │  (code QA)  │       │   │                 │
                      │  └──────┬──────┘       │   │                 │
                      │         │              │   │                 │
                      │    ┌────┼────┐         │   │                 │
@@ -1283,18 +1295,20 @@ This section documents which nodes mutate which state fields, when state is pers
 | Node | Reads | Writes |
 |------|-------|--------|
 | adapt_prompts | paper_text, paper_domain | prompt_adaptations |
-| plan | paper_text, assumptions | plan, assumptions, extracted_parameters, validation_hierarchy |
-| select_stage | plan, validation_hierarchy | current_stage_id, current_stage_type |
+| plan | paper_text, paper_domain | plan, assumptions, extracted_parameters, progress |
+| plan_review | plan, progress | last_plan_review_verdict, replan_count, planner_feedback |
+| select_stage | plan, progress, validation_hierarchy | current_stage_id, current_stage_type |
 | design | plan, assumptions, reviewer_feedback | design_description, performance_estimate, new_assumptions |
-| CODE_REVIEW | design_description, code | reviewer_verdict, reviewer_issues, reviewer_feedback |
+| design_review | design_description, assumptions | last_design_review_verdict, reviewer_issues, design_revision_count |
 | generate_code | design_description, reviewer_feedback | code |
+| code_review | code, design_description | last_code_review_verdict, reviewer_issues, code_revision_count |
 | run_code | code | stage_outputs, run_error, runtime_seconds |
-| EXECUTION_CHECK | stage_outputs, run_error | execution_valid, execution_issues |
-| PHYSICS_SANITY | stage_outputs | physics_valid, physics_issues |
+| EXECUTION_CHECK | stage_outputs, run_error | execution_verdict, execution_failure_count |
+| PHYSICS_SANITY | stage_outputs, code | physics_verdict, physics_failure_count, backtrack_suggestion |
 | analyze | stage_outputs, paper_figures | analysis_summary, figure_comparisons, discrepancies_log |
-| COMPARISON_CHECK | figure_comparisons, analysis_summary | comparison_valid, comparison_issues |
-| supervisor | analysis_summary, validation_hierarchy | supervisor_verdict, progress, stage status updates |
-| ask_user | user_question | user_response, awaiting_user_input |
+| COMPARISON_CHECK | figure_comparisons, analysis_summary | comparison_verdict, analysis_revision_count |
+| supervisor | progress, validation_hierarchy, user_responses | supervisor_verdict, progress updates, pending_user_questions |
+| ask_user | pending_user_questions | user_responses, awaiting_user_input |
 | generate_report | figure_comparisons, progress | report_conclusions, final_report_path |
 
 ### State Persistence Rules
@@ -2370,7 +2384,7 @@ Each agent receives **only what it needs** - not full repo access. This section 
 |-------|--------|-------|
 | `output_files` | `state["stage_outputs"]["files"]` | Plots and data from simulation |
 | `target_figures` | `state["paper_figures"][target_ids]` | **Only** the figures this stage targets |
-| `digitized_data` | `state["digitized_data_paths"]` | CSV paths if user provided |
+| `digitized_data` | From target `paper_figures` entries (`figure["digitized_data_path"]`) | Optional CSV for quantitative comparison |
 | `validation_criteria` | `state["plan"]["stages"][current]` | What to check |
 | `stage_id` | `state["current_stage_id"]` | For reporting |
 | `discrepancy_thresholds` | Constants | Classification thresholds |
@@ -2473,10 +2487,16 @@ def build_agent_context(state: ReproState, agent: str) -> Dict[str, Any]:
     
     elif agent == "ResultsAnalyzerAgent":
         target_ids = get_target_figure_ids(state)
+        target_figures = [f for f in state["paper_figures"] if f["id"] in target_ids]
+        digitized_lookup = {
+            fig["id"]: fig["digitized_data_path"]
+            for fig in target_figures
+            if fig.get("digitized_data_path")
+        }
         return {
             "output_files": state["stage_outputs"]["files"],
-            "target_figures": [f for f in state["paper_figures"] if f["id"] in target_ids],
-            "digitized_data": state.get("digitized_data_paths", {}),
+            "target_figures": target_figures,
+            "digitized_data": digitized_lookup,
             "validation_criteria": get_current_stage(state).get("validation_criteria"),
             "stage_id": state["current_stage_id"],
             "discrepancy_thresholds": DISCREPANCY_THRESHOLDS,

@@ -231,6 +231,15 @@ def plan_reviewer_node(state: ReproState) -> dict:
     - Validates plan precision requirements (excellent targets need digitized data).
     """
     # ═══════════════════════════════════════════════════════════════════════
+    # CONTEXT CHECK: Plan review receives large artifacts; guard context window
+    # ═══════════════════════════════════════════════════════════════════════
+    context_update = _check_context_or_escalate(state, "plan_review")
+    if context_update:
+        if context_update.get("awaiting_user_input"):
+            return context_update
+        state = {**state, **context_update}
+
+    # ═══════════════════════════════════════════════════════════════════════
     # STATE VALIDATION: Check plan meets requirements before review
     # ═══════════════════════════════════════════════════════════════════════
     validation_issues = _validate_state_or_warn(state, "plan_review")
@@ -486,6 +495,15 @@ def design_reviewer_node(state: ReproState) -> dict:
     - Increments `design_revision_count` when verdict is "needs_revision".
     The routing function `route_after_design_review` reads these fields.
     """
+    # ═══════════════════════════════════════════════════════════════════════
+    # CONTEXT CHECK: Reviews can accumulate long histories; guard window
+    # ═══════════════════════════════════════════════════════════════════════
+    context_update = _check_context_or_escalate(state, "design_review")
+    if context_update:
+        if context_update.get("awaiting_user_input"):
+            return context_update
+        state = {**state, **context_update}
+
     # Connect prompt adaptation
     system_prompt = build_agent_prompt("design_reviewer", state)
     
@@ -530,6 +548,15 @@ def code_reviewer_node(state: ReproState) -> dict:
     - Increments `code_revision_count` when verdict is "needs_revision".
     The routing function `route_after_code_review` reads these fields.
     """
+    # ═══════════════════════════════════════════════════════════════════════
+    # CONTEXT CHECK: Code + design can exceed window after revisions
+    # ═══════════════════════════════════════════════════════════════════════
+    context_update = _check_context_or_escalate(state, "code_review")
+    if context_update:
+        if context_update.get("awaiting_user_input"):
+            return context_update
+        state = {**state, **context_update}
+
     # Connect prompt adaptation
     system_prompt = build_agent_prompt("code_reviewer", state)
     
