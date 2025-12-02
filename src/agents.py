@@ -445,26 +445,41 @@ def _record_discrepancy(
 
 
 def _materials_from_stage_outputs(state: ReproState) -> List[Dict[str, Any]]:
-    """Build material entries from Stage 0 stage_outputs files."""
+    """Build material entries from Stage 0 artifacts (live or archived)."""
+    def _build_from_entries(entries: List[Any], source_label: str) -> List[Dict[str, Any]]:
+        results: List[Dict[str, Any]] = []
+        for entry in entries:
+            path_str = _normalize_output_file_entry(entry)
+            if not path_str:
+                continue
+            suffix = Path(path_str).suffix.lower()
+            if suffix not in {".csv", ".json", ".h5", ".hdf5", ".npz", ".npy"}:
+                continue
+            material_id = Path(path_str).stem
+            results.append({
+                "material_id": material_id,
+                "name": material_id.replace("_", " ").title(),
+                "source": source_label,
+                "path": path_str,
+                "csv_available": suffix == ".csv",
+                "from": source_label,
+            })
+        return results
+    
     stage_outputs = state.get("stage_outputs", {})
     files = stage_outputs.get("files", [])
-    materials: List[Dict[str, Any]] = []
-    for entry in files:
-        path_str = _normalize_output_file_entry(entry)
-        if not path_str:
-            continue
-        suffix = Path(path_str).suffix.lower()
-        if suffix not in {".csv", ".json", ".h5", ".hdf5", ".npz", ".npy"}:
-            continue
-        material_id = Path(path_str).stem
-        materials.append({
-            "material_id": material_id,
-            "name": material_id.replace("_", " ").title(),
-            "source": "stage0_output",
-            "path": path_str,
-            "csv_available": suffix == ".csv",
-            "from": "stage0_output",
-        })
+    materials = _build_from_entries(files, "stage0_output")
+    
+    if not materials:
+        stage0_progress = get_progress_stage(state, "stage0_material_validation")
+        progress_files = []
+        if stage0_progress:
+            for output_entry in stage0_progress.get("outputs", []):
+                filename = output_entry.get("filename")
+                if filename:
+                    progress_files.append(filename)
+        materials = _build_from_entries(progress_files, "stage0_progress")
+    
     return materials
 
 
@@ -1225,10 +1240,19 @@ def results_analyzer_node(state: ReproState) -> dict:
         fig.get("id", "FigStub") for fig in figures
     ]
     
-    output_files = state.get("stage_outputs", {}).get("files", [])
+    stage_outputs = state.get("stage_outputs", {})
+    output_files = stage_outputs.get("files", [])
     paper_id = state.get("paper_id", "paper")
     expected_outputs_map = _collect_expected_outputs(stage_info, paper_id, current_stage_id or "")
     figure_lookup = {fig.get("id") or fig.get("figure_id"): fig for fig in figures}
+    plan_targets_map = {
+        target.get("figure_id"): target
+        for target in state.get("plan", {}).get("targets", [])
+    }
+    matched_targets: List[str] = []
+    pending_targets: List[str] = []
+    missing_targets: List[str] = []
+    stage_discrepancies: List[Dict[str, Any]] = []
     
     figure_comparisons: List[Dict[str, Any]] = []
     per_result_reports: List[Dict[str, Any]] = []
@@ -1240,23 +1264,63 @@ def results_analyzer_node(state: ReproState) -> dict:
         if not matched_file:
             matched_file = _match_output_file(output_files, target_id)
         has_output = matched_file is not None
-        classification_label = "match" if has_output else "missing_output"
-        if has_output:
+        figure_meta = figure_lookup.get(target_id) or {}
+        target_cfg = plan_targets_map.get(target_id, {})
+        precision_requirement = target_cfg.get("precision_requirement", "acceptable")
+        digitized_path = figure_meta.get("digitized_data_path") or target_cfg.get("digitized_data_path")
+        requires_digitized = precision_requirement == "excellent"
+        
+        if not has_output:
+            classification_label = "missing_output"
+            missing_targets.append(target_id)
+            stage_discrepancies.append(
+                _record_discrepancy(
+                    state,
+                    current_stage_id,
+                    target_id,
+                    "output_artifact",
+                    target_cfg.get("description", "Expected artifact generated per plan"),
+                    "Not generated",
+                    classification="investigate",
+                    likely_cause="Simulation run did not create expected output file.",
+                    action_taken="Flagged for analyzer follow-up",
+                    blocking=True,
+                )
+            )
+        elif requires_digitized and not digitized_path:
+            classification_label = "pending_validation"
+            pending_targets.append(target_id)
+            stage_discrepancies.append(
+                _record_discrepancy(
+                    state,
+                    current_stage_id,
+                    target_id,
+                    "digitized_reference",
+                    "Digitized reference required",
+                    "Not provided",
+                    classification="investigate",
+                    likely_cause="precision_requirement='excellent' but digitized data missing",
+                    action_taken="Awaiting digitized data or user guidance",
+                    blocking=False,
+                )
+            )
+        else:
+            classification_label = "match"
+            matched_targets.append(target_id)
             matches += 1
         
-        figure_meta = figure_lookup.get(target_id) or {}
         comparison_table = [{
             "feature": "Simulation Output",
             "paper": figure_meta.get("description", target_id),
             "reproduction": matched_file or "Not generated",
-            "status": "✅ Match" if has_output else "❌ Missing",
+            "status": "✅ Match" if has_output and classification_label == "match" else ("⚠️ Pending" if classification_label == "pending_validation" else "❌ Missing"),
         }]
-        if figure_meta.get("digitized_data_path"):
+        if digitized_path:
             comparison_table.append({
                 "feature": "Digitized reference",
-                "paper": figure_meta["digitized_data_path"],
+                "paper": digitized_path,
                 "reproduction": matched_file or "Not generated",
-                "status": "Pending review" if has_output else "❌ Missing",
+                "status": "Pending review" if classification_label != "missing_output" else "❌ Missing",
             })
         
         comparison_entry = {
@@ -1272,43 +1336,52 @@ def results_analyzer_node(state: ReproState) -> dict:
         }
         figure_comparisons.append(comparison_entry)
         
-        if not has_output:
-            _record_discrepancy(
-                state,
-                current_stage_id,
-                target_id,
-                "output_artifact",
-                "Expected artifact generated per plan",
-                "Not generated",
-                classification="investigate",
-                likely_cause="Simulation run did not create expected output file.",
-                action_taken="Flagged for analyzer follow-up",
-                blocking=True,
-            )
-        
         per_result_reports.append({
             "result_id": f"{current_stage_id or 'stage'}_{target_id}",
             "target_figure": target_id,
             "status": classification_label,
             "expected_outputs": expected_names,
             "matched_output": matched_file,
+            "precision_requirement": precision_requirement,
+            "digitized_data_path": digitized_path,
             "notes": "Output identified." if has_output else "Output missing; requires rerun.",
         })
     
     total_targets = len(target_ids)
+    missing_count = len(missing_targets)
+    pending_count = len(pending_targets)
+    
     if total_targets == 0:
-        overall_classification = "ACCEPTABLE_MATCH"
+        overall_classification = "NO_TARGETS"
+    elif missing_count > 0:
+        overall_classification = "POOR_MATCH"
+    elif pending_count > 0:
+        overall_classification = "PARTIAL_MATCH"
     elif matches == total_targets:
         overall_classification = "EXCELLENT_MATCH"
-    elif matches == 0:
-        overall_classification = "POOR_MATCH"
     else:
-        overall_classification = "PARTIAL_MATCH"
+        overall_classification = "ACCEPTABLE_MATCH"
     
-    summary = (
+    summary_notes = state.get("analysis_feedback") or (
         f"{matches}/{total_targets or 1} targets produced simulation outputs."
         if total_targets else "No explicit targets defined for this stage."
     )
+    
+    summary = {
+        "stage_id": current_stage_id,
+        "totals": {
+            "targets": total_targets,
+            "matches": len(matched_targets),
+            "pending": pending_count,
+            "missing": missing_count,
+        },
+        "matched_targets": matched_targets,
+        "pending_targets": pending_targets,
+        "missing_targets": missing_targets,
+        "discrepancies_logged": len(stage_discrepancies),
+        "validation_criteria": stage_info.get("validation_criteria", []) if stage_info else [],
+        "notes": summary_notes,
+    }
     
     existing_comparisons = state.get("figure_comparisons", [])
     filtered_existing = [
@@ -1322,6 +1395,7 @@ def results_analyzer_node(state: ReproState) -> dict:
         "analysis_overall_classification": overall_classification,
         "analysis_result_reports": per_result_reports,
         "figure_comparisons": filtered_existing + figure_comparisons,
+        "analysis_feedback": None,
     }
 
 
@@ -1348,10 +1422,16 @@ def comparison_validator_node(state: ReproState) -> dict:
     stage_id = state.get("current_stage_id")
     comparisons = _stage_comparisons_for_stage(state, stage_id)
     breakdown = _breakdown_comparison_classifications(comparisons)
+    stage_info = get_plan_stage(state, stage_id) if stage_id else None
+    expected_targets = (stage_info.get("targets") if stage_info else []) or []
     
     if not comparisons:
-        verdict = "needs_revision"
-        feedback = "Results analyzer did not produce figure comparisons for this stage."
+        if not expected_targets:
+            verdict = "approve"
+            feedback = "Stage has no reproducible targets; nothing to compare."
+        else:
+            verdict = "needs_revision"
+            feedback = "Results analyzer did not produce figure comparisons for this stage."
     elif breakdown["missing"]:
         verdict = "needs_revision"
         feedback = f"Simulation outputs missing for: {', '.join(breakdown['missing'])}"
@@ -1443,6 +1523,7 @@ def supervisor_node(state: ReproState) -> dict:
             "PARTIAL_MATCH": "completed_partial",
             "ACCEPTABLE_MATCH": "completed_success",
             "EXCELLENT_MATCH": "completed_success",
+            "NO_TARGETS": "completed_success",
         }
         status = classification_map.get(classification, "completed_success")
         
@@ -1459,12 +1540,17 @@ def supervisor_node(state: ReproState) -> dict:
             if physics_verdict == "fail":
                 status = "completed_failed"
         
+        summary_data = current_state.get("analysis_summary")
         if comparison_breakdown["missing"]:
             summary_text = f"Missing outputs for: {', '.join(comparison_breakdown['missing'])}"
         elif comparison_breakdown["pending"]:
             summary_text = f"Comparisons pending for: {', '.join(comparison_breakdown['pending'])}"
+        elif isinstance(summary_data, dict):
+            totals = summary_data.get("totals", {})
+            summary_text = summary_data.get("notes") or \
+                f"{totals.get('matches', 0)}/{totals.get('targets', 0)} targets matched"
         else:
-            summary_text = current_state.get("analysis_summary") or \
+            summary_text = summary_data or \
                 f"Stage classified as {classification or comparison_verdict or 'OK_CONTINUE'}"
         
         return status, summary_text
@@ -2039,8 +2125,8 @@ def _extract_validated_materials(state: ReproState) -> list:
     Extract material information from Stage 0 outputs or fall back to plan data.
     """
     materials = _materials_from_stage_outputs(state)
-    materials.extend(_extract_materials_from_plan_assumptions(state))
-    
+    if not materials:
+        materials.extend(_extract_materials_from_plan_assumptions(state))
     if not materials:
         materials = state.get("planned_materials", [])
     return _deduplicate_materials(materials)
