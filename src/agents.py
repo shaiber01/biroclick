@@ -343,10 +343,23 @@ def select_stage_node(state: ReproState) -> dict:
         if not deps_satisfied:
             continue
         
-        # Check validation hierarchy for stage type
-        stage_type = stage.get("stage_type")
-        
-        # Enforce hierarchy: can't run later stages without earlier ones passing
+    # Check validation hierarchy for stage type
+    stage_type = stage.get("stage_type")
+    
+    # Use consistent hierarchy keys from state.py
+    # Note: get_validation_hierarchy returns keys like 'stage0_material_validation' (specific)
+    # or abstract keys. The current implementation of get_validation_hierarchy in state.py
+    # returns a dict with keys corresponding to the hierarchy levels.
+    # We need to re-fetch hierarchy here as it might change if we processed multiple stages.
+    hierarchy = get_validation_hierarchy(state)
+    
+    # Enforce hierarchy using STAGE_TYPE_TO_HIERARCHY_KEY mapping
+    # This ensures robustness against schema changes
+    required_level_key = STAGE_TYPE_TO_HIERARCHY_KEY.get(stage_type)
+    
+    if required_level_key:
+        # Map current stage type to its prerequisite level in the hierarchy
+        # e.g., SINGLE_STRUCTURE needs 'material_validation' to be passed
         if stage_type == "SINGLE_STRUCTURE":
             if hierarchy.get("material_validation") not in ["passed", "partial"]:
                 continue
@@ -357,7 +370,11 @@ def select_stage_node(state: ReproState) -> dict:
             # Parameter sweeps typically need at least single structure
             if hierarchy.get("single_structure") not in ["passed", "partial"]:
                 continue
-        
+        elif stage_type == "COMPLEX_PHYSICS":
+             if hierarchy.get("parameter_sweep") not in ["passed", "partial"] and \
+                hierarchy.get("array_system") not in ["passed", "partial"]:
+                continue
+
         # This stage is eligible
         return {
             "workflow_phase": "stage_selection",
@@ -1017,6 +1034,32 @@ def supervisor_node(state: ReproState) -> dict:
             # NOTE: In full implementation, LLM decides status. 
             # For stub, assume success if we got here without issues.
             update_progress_stage_status(state, current_stage_id, "completed_success")
+    
+    # Log user interaction if one just happened
+    if ask_user_trigger and user_responses:
+        # Record structured interaction log
+        interaction_entry = {
+            "id": f"U{len(state.get('progress', {}).get('user_interactions', [])) + 1}",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "interaction_type": ask_user_trigger,
+            "context": {
+                "stage_id": current_stage_id,
+                "agent": "SupervisorAgent",
+                "reason": ask_user_trigger
+            },
+            "question": str(state.get("pending_user_questions", [""])[0]),
+            "user_response": str(list(user_responses.values())[-1]),
+            "impact": result.get("supervisor_feedback", "User decision processed"),
+            "alternatives_considered": [] # Would be populated by LLM
+        }
+        
+        # Ensure progress structure exists
+        if "progress" not in state:
+            state["progress"] = {}
+        if "user_interactions" not in state["progress"]:
+            state["progress"]["user_interactions"] = []
+            
+        state["progress"]["user_interactions"].append(interaction_entry)
     
     return result
 

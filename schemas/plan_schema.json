@@ -57,6 +57,11 @@
           "type": "integer",
           "description": "Number of figures that could be reproduced with Meep FDTD"
         },
+        "reproducible_figure_ids": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "List of IDs for all figures classified as reproducible. Critical for auditing coverage."
+        },
         "attempted_figures": {
           "type": "array",
           "items": {"type": "string"},
