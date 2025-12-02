@@ -2,8 +2,8 @@
   "$schema": "./material_schema.json",
   "title": "Materials Index",
   "description": "Index of available optical material data for Meep simulations",
-  "version": "0.2.0",
-  "last_updated": "2024-12-01",
+  "version": "0.3.0",
+  "last_updated": "2024-12-02",
   
   "status": {
     "description": "Current availability of material data files",
@@ -12,18 +12,31 @@
       "palik_gold.csv",
       "rakic_aluminum.csv",
       "palik_silicon.csv",
-      "malitson_sio2.csv"
+      "malitson_sio2.csv",
+      "johnson_christy_copper.csv",
+      "devore_tio2.csv",
+      "philipp_si3n4.csv",
+      "johnson_christy_chromium.csv",
+      "johnson_christy_titanium.csv",
+      "malitson_al2o3.csv",
+      "konig_ito.csv",
+      "aspnes_germanium.csv",
+      "aspnes_gaas.csv",
+      "kuzmenko_graphene.csv",
+      "johnson_christy_nickel.csv",
+      "rakic_platinum.csv"
     ],
-    "planned_csv_files": ["johnson_christy_gold.csv", "palik_copper.csv"],
-    "note": "Core materials for plasmonics, photonics, and metasurfaces are now available. Data sourced from refractiveindex.info which compiles standard references (Palik, Rakic, Malitson)."
+    "planned_csv_files": [],
+    "note": "Comprehensive material library for plasmonics, photonics, and metasurfaces. Data sourced from refractiveindex.info which compiles standard references (Palik, Rakic, Malitson, Johnson & Christy, Aspnes)."
   },
   
   "materials": [
     {
       "material_id": "palik_silver",
-      "name": "Silver (Palik)",
-      "source": "Palik, Handbook of Optical Constants of Solids, 1998",
-      "wavelength_range_nm": [200, 1000],
+      "name": "Silver (Johnson & Christy)",
+      "source": "P.B. Johnson and R.W. Christy, Phys. Rev. B 6, 4370-4379, 1972",
+      "source_doi": "10.1103/PhysRevB.6.4370",
+      "wavelength_range_nm": [188, 1000],
       "data_format": "wavelength_nm_n_k",
       "data_file": "palik_silver.csv",
       "material_type": "metal",
@@ -40,7 +53,7 @@
         "fit_quality": "good",
         "fit_wavelength_range_nm": [300, 1000]
       },
-      "notes": "Standard silver data for visible-NIR plasmonics. Excellent for high-quality plasmonic resonances due to low losses.",
+      "notes": "Lowest optical losses among noble metals. Excellent for high-Q plasmonic resonances. Tarnishes in air.",
       "csv_available": true
     },
     
@@ -64,7 +77,32 @@
         "fit_quality": "good",
         "fit_wavelength_range_nm": [500, 1500]
       },
-      "notes": "Standard gold data. Strong interband transitions below 500nm cause increased absorption and deviate from Drude model. Best for resonances >500nm.",
+      "notes": "Chemically stable, biocompatible. Strong interband transitions below 500nm. Best for resonances >500nm.",
+      "csv_available": true
+    },
+    
+    {
+      "material_id": "johnson_christy_copper",
+      "name": "Copper (Johnson & Christy)",
+      "source": "P.B. Johnson and R.W. Christy, Phys. Rev. B 6, 4370-4379, 1972",
+      "source_doi": "10.1103/PhysRevB.6.4370",
+      "wavelength_range_nm": [188, 1000],
+      "data_format": "wavelength_nm_n_k",
+      "data_file": "johnson_christy_copper.csv",
+      "material_type": "metal",
+      "common_applications": ["plasmonics", "nanoantennas", "interconnects"],
+      "drude_lorentz_fit": {
+        "eps_inf": 1.0,
+        "drude_terms": [
+          {"omega_p_eV": 10.83, "gamma_eV": 0.047}
+        ],
+        "lorentz_terms": [
+          {"omega_0_eV": 2.13, "gamma_eV": 0.38, "sigma": 0.3}
+        ],
+        "fit_quality": "good",
+        "fit_wavelength_range_nm": [600, 1000]
+      },
+      "notes": "Cheaper than Au/Ag with good plasmonic properties above 600nm. Interband transitions ~590nm cause reddish color. Oxidizes in air.",
       "csv_available": true
     },
     
@@ -90,7 +128,99 @@
         "fit_quality": "excellent",
         "fit_wavelength_range_nm": [200, 1000]
       },
-      "notes": "Preferred for UV plasmonics due to high plasma frequency. Native oxide layer (Al2O3, ~2-3nm) not included; may shift resonances in practice.",
+      "notes": "Preferred for UV plasmonics due to high plasma frequency. Native oxide layer (Al2O3, ~2-3nm) may shift resonances.",
+      "csv_available": true
+    },
+    
+    {
+      "material_id": "johnson_christy_chromium",
+      "name": "Chromium (Johnson & Christy)",
+      "source": "P.B. Johnson and R.W. Christy, Phys. Rev. B 9, 5056-5070, 1974",
+      "source_doi": "10.1103/PhysRevB.9.5056",
+      "wavelength_range_nm": [200, 1200],
+      "data_format": "wavelength_nm_n_k",
+      "data_file": "johnson_christy_chromium.csv",
+      "material_type": "metal",
+      "common_applications": ["adhesion layers", "protective coatings", "absorbers"],
+      "drude_lorentz_fit": {
+        "eps_inf": 1.0,
+        "drude_terms": [
+          {"omega_p_eV": 10.75, "gamma_eV": 0.47}
+        ],
+        "lorentz_terms": [],
+        "fit_quality": "moderate",
+        "fit_wavelength_range_nm": [400, 1000]
+      },
+      "notes": "Common adhesion layer (2-5nm) between substrates and Au/Ag films. High optical losses. Very hard metal.",
+      "csv_available": true
+    },
+    
+    {
+      "material_id": "johnson_christy_titanium",
+      "name": "Titanium (Johnson & Christy)",
+      "source": "P.B. Johnson and R.W. Christy, Phys. Rev. B 9, 5056-5070, 1974",
+      "source_doi": "10.1103/PhysRevB.9.5056",
+      "wavelength_range_nm": [200, 1200],
+      "data_format": "wavelength_nm_n_k",
+      "data_file": "johnson_christy_titanium.csv",
+      "material_type": "metal",
+      "common_applications": ["adhesion layers", "biomedical", "aerospace"],
+      "drude_lorentz_fit": {
+        "eps_inf": 1.0,
+        "drude_terms": [
+          {"omega_p_eV": 7.29, "gamma_eV": 0.38}
+        ],
+        "lorentz_terms": [],
+        "fit_quality": "moderate",
+        "fit_wavelength_range_nm": [400, 1000]
+      },
+      "notes": "Used as adhesion layer for Al films. Forms native TiO2 oxide. High losses, not for plasmonics.",
+      "csv_available": true
+    },
+    
+    {
+      "material_id": "johnson_christy_nickel",
+      "name": "Nickel (Johnson & Christy)",
+      "source": "P.B. Johnson and R.W. Christy, Phys. Rev. B 9, 5056-5070, 1974",
+      "source_doi": "10.1103/PhysRevB.9.5056",
+      "wavelength_range_nm": [200, 1200],
+      "data_format": "wavelength_nm_n_k",
+      "data_file": "johnson_christy_nickel.csv",
+      "material_type": "metal",
+      "common_applications": ["magneto-optics", "magnetic plasmonics", "catalysis"],
+      "drude_lorentz_fit": {
+        "eps_inf": 1.0,
+        "drude_terms": [
+          {"omega_p_eV": 15.92, "gamma_eV": 0.048}
+        ],
+        "lorentz_terms": [],
+        "fit_quality": "moderate",
+        "fit_wavelength_range_nm": [400, 1000]
+      },
+      "notes": "Ferromagnetic metal for magneto-optical applications. Higher losses than noble metals but enables magnetic control.",
+      "csv_available": true
+    },
+    
+    {
+      "material_id": "rakic_platinum",
+      "name": "Platinum (Rakic)",
+      "source": "Rakic et al., Applied Optics 37, 5271-5283, 1998",
+      "source_doi": "10.1364/AO.37.005271",
+      "wavelength_range_nm": [200, 1200],
+      "data_format": "wavelength_nm_n_k",
+      "data_file": "rakic_platinum.csv",
+      "material_type": "metal",
+      "common_applications": ["catalysis", "electrochemistry", "high-temperature"],
+      "drude_lorentz_fit": {
+        "eps_inf": 1.0,
+        "drude_terms": [
+          {"omega_p_eV": 9.59, "gamma_eV": 0.08}
+        ],
+        "lorentz_terms": [],
+        "fit_quality": "moderate",
+        "fit_wavelength_range_nm": [400, 1000]
+      },
+      "notes": "Noble metal with excellent chemical stability and catalytic activity. Does not oxidize. Higher losses than Au/Ag.",
       "csv_available": true
     },
     
@@ -112,7 +242,53 @@
         "fit_quality": "good",
         "fit_wavelength_range_nm": [500, 2000]
       },
-      "notes": "High-index semiconductor (n~3.5 in NIR). Strong absorption above bandgap (~1100nm). Below ~400nm, absorption becomes very strong. Use tabulated data for accuracy.",
+      "notes": "High-index semiconductor (n~3.5 in NIR). Strong absorption above bandgap (~1100nm). Below ~400nm, absorption very strong.",
+      "csv_available": true
+    },
+    
+    {
+      "material_id": "aspnes_germanium",
+      "name": "Germanium (Aspnes)",
+      "source": "D.E. Aspnes and A.A. Studna, Phys. Rev. B 27, 985-1009, 1983",
+      "source_doi": "10.1103/PhysRevB.27.985",
+      "wavelength_range_nm": [300, 2000],
+      "data_format": "wavelength_nm_n_k",
+      "data_file": "aspnes_germanium.csv",
+      "material_type": "semiconductor",
+      "common_applications": ["IR optics", "high-index resonators", "detectors"],
+      "drude_lorentz_fit": {
+        "eps_inf": 16.2,
+        "drude_terms": [],
+        "lorentz_terms": [
+          {"omega_0_eV": 2.1, "gamma_eV": 0.3, "sigma": 6.0}
+        ],
+        "fit_quality": "good",
+        "fit_wavelength_range_nm": [1200, 2000]
+      },
+      "notes": "Very high index semiconductor (n~4-5). Indirect bandgap 0.66eV (~1880nm), direct gap 0.8eV (~1550nm). Strong absorption in visible.",
+      "csv_available": true
+    },
+    
+    {
+      "material_id": "aspnes_gaas",
+      "name": "Gallium Arsenide (Aspnes)",
+      "source": "D.E. Aspnes and A.A. Studna, Phys. Rev. B 27, 985-1009, 1983",
+      "source_doi": "10.1103/PhysRevB.27.985",
+      "wavelength_range_nm": [300, 2000],
+      "data_format": "wavelength_nm_n_k",
+      "data_file": "aspnes_gaas.csv",
+      "material_type": "semiconductor",
+      "common_applications": ["lasers", "LEDs", "solar cells", "quantum dots"],
+      "drude_lorentz_fit": {
+        "eps_inf": 10.9,
+        "drude_terms": [],
+        "lorentz_terms": [
+          {"omega_0_eV": 2.9, "gamma_eV": 0.2, "sigma": 4.0}
+        ],
+        "fit_quality": "good",
+        "fit_wavelength_range_nm": [900, 2000]
+      },
+      "notes": "Direct bandgap III-V semiconductor (Eg=1.42eV, ~870nm). High index (n~3.5). Absorbs strongly above bandgap.",
       "csv_available": true
     },
     
@@ -133,7 +309,114 @@
         "fit_quality": "excellent",
         "fit_wavelength_range_nm": [200, 2000]
       },
-      "notes": "Fused silica (amorphous SiO2). Transparent throughout visible and NIR (k≈0). n varies from ~1.55 at 200nm to ~1.44 at 2000nm. Common substrate material.",
+      "notes": "Fused silica (amorphous SiO2). Transparent (k≈0). n varies ~1.55 at 200nm to ~1.44 at 2000nm. Standard substrate.",
+      "csv_available": true
+    },
+    
+    {
+      "material_id": "devore_tio2",
+      "name": "Titanium Dioxide (TiO2, Rutile)",
+      "source": "J.R. Devore, J. Opt. Soc. Am. 41, 416-419, 1951",
+      "source_doi": "10.1364/JOSA.41.000416",
+      "wavelength_range_nm": [430, 2000],
+      "data_format": "wavelength_nm_n_k",
+      "data_file": "devore_tio2.csv",
+      "material_type": "dielectric",
+      "common_applications": ["metasurfaces", "anti-reflection coatings", "photocatalysis", "dielectric nanoantennas"],
+      "drude_lorentz_fit": {
+        "eps_inf": 5.913,
+        "drude_terms": [],
+        "lorentz_terms": [],
+        "fit_quality": "good",
+        "fit_wavelength_range_nm": [430, 2000]
+      },
+      "notes": "High-index dielectric (n~2.4-2.9). Rutile phase, ordinary ray. Transparent in visible. Anatase has slightly different properties.",
+      "csv_available": true
+    },
+    
+    {
+      "material_id": "philipp_si3n4",
+      "name": "Silicon Nitride (Si3N4)",
+      "source": "H.R. Philipp, J. Electrochem. Soc. 120, 295-300, 1973",
+      "source_doi": "10.1149/1.2403440",
+      "wavelength_range_nm": [200, 2000],
+      "data_format": "wavelength_nm_n_k",
+      "data_file": "philipp_si3n4.csv",
+      "material_type": "dielectric",
+      "common_applications": ["waveguides", "integrated photonics", "MEMS", "passivation"],
+      "drude_lorentz_fit": {
+        "eps_inf": 3.8,
+        "drude_terms": [],
+        "lorentz_terms": [],
+        "fit_quality": "good",
+        "fit_wavelength_range_nm": [300, 2000]
+      },
+      "notes": "Low-loss dielectric (n~2.0). Standard for photonic waveguides. LPCVD vs PECVD films may differ due to H content.",
+      "csv_available": true
+    },
+    
+    {
+      "material_id": "malitson_al2o3",
+      "name": "Aluminum Oxide (Al2O3, Sapphire)",
+      "source": "I.H. Malitson, J. Opt. Soc. Am. 52, 1377-1379, 1962",
+      "source_doi": "10.1364/JOSA.52.001377",
+      "wavelength_range_nm": [200, 3000],
+      "data_format": "wavelength_nm_n_k",
+      "data_file": "malitson_al2o3.csv",
+      "material_type": "dielectric",
+      "common_applications": ["substrates", "protective coatings", "waveguides"],
+      "drude_lorentz_fit": {
+        "eps_inf": 3.077,
+        "drude_terms": [],
+        "lorentz_terms": [],
+        "fit_quality": "excellent",
+        "fit_wavelength_range_nm": [200, 3000]
+      },
+      "notes": "Crystalline sapphire (alpha-Al2O3), ordinary ray. Native oxide on Al (~2-3nm). Very hard, chemically resistant.",
+      "csv_available": true
+    },
+    
+    {
+      "material_id": "konig_ito",
+      "name": "Indium Tin Oxide (ITO)",
+      "source": "T.A.F. König et al., ACS Appl. Mater. Interfaces 6, 6503-6510, 2014",
+      "source_doi": "10.1021/am405100n",
+      "wavelength_range_nm": [300, 2000],
+      "data_format": "wavelength_nm_n_k",
+      "data_file": "konig_ito.csv",
+      "material_type": "dielectric",
+      "common_applications": ["transparent electrodes", "touchscreens", "electrochromic devices", "NIR plasmonics"],
+      "drude_lorentz_fit": {
+        "eps_inf": 3.8,
+        "drude_terms": [
+          {"omega_p_eV": 1.78, "gamma_eV": 0.15}
+        ],
+        "lorentz_terms": [],
+        "fit_quality": "good",
+        "fit_wavelength_range_nm": [400, 1500]
+      },
+      "notes": "Transparent conducting oxide (TCO). Properties depend on deposition and doping. Plasmonic behavior in NIR due to free carriers.",
+      "csv_available": true
+    },
+    
+    {
+      "material_id": "kuzmenko_graphene",
+      "name": "Graphene (Kuzmenko)",
+      "source": "A.B. Kuzmenko et al., Phys. Rev. Lett. 100, 117401, 2008",
+      "source_doi": "10.1103/PhysRevLett.100.117401",
+      "wavelength_range_nm": [300, 2000],
+      "data_format": "wavelength_nm_n_k",
+      "data_file": "kuzmenko_graphene.csv",
+      "material_type": "2d_material",
+      "common_applications": ["plasmonics", "modulators", "photodetectors", "saturable absorbers"],
+      "drude_lorentz_fit": {
+        "eps_inf": 1.0,
+        "drude_terms": [],
+        "lorentz_terms": [],
+        "fit_quality": "approximate",
+        "fit_wavelength_range_nm": [400, 2000]
+      },
+      "notes": "EFFECTIVE optical constants assuming 0.34nm thickness. 2D material - better described by sheet conductivity. ~2.3% absorption per layer.",
       "csv_available": true
     },
     
@@ -221,7 +504,8 @@
       "https://refractiveindex.info - Comprehensive database with citations",
       "Palik, Handbook of Optical Constants of Solids (1998)",
       "Rakic et al., Applied Optics 37, 5271 (1998) - Metal optical constants",
-      "Johnson & Christy, PRB 6, 4370 (1972) - Noble metals"
+      "Johnson & Christy, PRB 6, 4370 (1972) - Noble metals",
+      "Aspnes & Studna, PRB 27, 985 (1983) - Semiconductors"
     ]
   }
 }

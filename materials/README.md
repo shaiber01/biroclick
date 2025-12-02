@@ -4,16 +4,45 @@ Optical constants for materials commonly used in optics/photonics simulations.
 
 ## Available Materials
 
-| Material ID | Name | Type | Wavelength Range | CSV Available |
-|-------------|------|------|------------------|---------------|
-| `palik_silver` | Silver (Ag) | Metal | 200-1000 nm | ✅ |
-| `palik_gold` | Gold (Au) | Metal | 200-2000 nm | ✅ |
-| `rakic_aluminum` | Aluminum (Al) | Metal | 200-1200 nm | ✅ |
-| `palik_silicon` | Silicon (Si) | Semiconductor | 300-2000 nm | ✅ |
-| `malitson_sio2` | Silicon Dioxide | Dielectric | 200-2000 nm | ✅ |
-| `constant_glass` | Glass (BK7-like) | Dielectric | 300-2000 nm | ❌ (n=1.51) |
-| `constant_air` | Air/Vacuum | Dielectric | All | ❌ (n=1.0) |
-| `constant_water` | Water | Dielectric | 300-1200 nm | ❌ (n=1.33) |
+### Metals
+
+| Material ID | Name | Wavelength Range | Source | Applications |
+|-------------|------|------------------|--------|--------------|
+| `palik_silver` | Silver (Ag) | 188-1000 nm | Johnson & Christy 1972 | Plasmonics, SERS, metamaterials |
+| `palik_gold` | Gold (Au) | 200-2000 nm | Palik 1998 | Biosensors, nanomedicine |
+| `johnson_christy_copper` | Copper (Cu) | 188-1000 nm | Johnson & Christy 1972 | Plasmonics, interconnects |
+| `rakic_aluminum` | Aluminum (Al) | 200-1200 nm | Rakic 1998 | UV plasmonics |
+| `johnson_christy_chromium` | Chromium (Cr) | 200-1200 nm | Johnson & Christy 1974 | Adhesion layers |
+| `johnson_christy_titanium` | Titanium (Ti) | 200-1200 nm | Johnson & Christy 1974 | Adhesion layers |
+| `johnson_christy_nickel` | Nickel (Ni) | 200-1200 nm | Johnson & Christy 1974 | Magneto-optics |
+| `rakic_platinum` | Platinum (Pt) | 200-1200 nm | Rakic 1998 | Catalysis, electrochemistry |
+
+### Semiconductors
+
+| Material ID | Name | Wavelength Range | Source | Applications |
+|-------------|------|------------------|--------|--------------|
+| `palik_silicon` | Silicon (Si) | 300-2000 nm | Palik 1998 | Mie resonators, waveguides |
+| `aspnes_germanium` | Germanium (Ge) | 300-2000 nm | Aspnes 1983 | IR optics, high-n resonators |
+| `aspnes_gaas` | Gallium Arsenide (GaAs) | 300-2000 nm | Aspnes 1983 | Lasers, LEDs, quantum dots |
+
+### Dielectrics
+
+| Material ID | Name | Wavelength Range | Source | Applications |
+|-------------|------|------------------|--------|--------------|
+| `malitson_sio2` | Silicon Dioxide (SiO₂) | 200-2000 nm | Malitson 1965 | Substrates, spacers |
+| `devore_tio2` | Titanium Dioxide (TiO₂) | 430-2000 nm | Devore 1951 | Metasurfaces, photocatalysis |
+| `philipp_si3n4` | Silicon Nitride (Si₃N₄) | 200-2000 nm | Philipp 1973 | Waveguides, integrated photonics |
+| `malitson_al2o3` | Aluminum Oxide (Al₂O₃) | 200-3000 nm | Malitson 1962 | Substrates, protective coatings |
+| `konig_ito` | Indium Tin Oxide (ITO) | 300-2000 nm | König 2014 | Transparent electrodes |
+| `constant_glass` | Glass (BK7-like) | 300-2000 nm | Constant n=1.51 | Quick estimates |
+| `constant_air` | Air/Vacuum | All | Constant n=1.0 | Surrounding medium |
+| `constant_water` | Water | 300-1200 nm | Constant n=1.33 | Biosensing |
+
+### 2D Materials
+
+| Material ID | Name | Wavelength Range | Source | Applications |
+|-------------|------|------------------|--------|--------------|
+| `kuzmenko_graphene` | Graphene | 300-2000 nm | Kuzmenko 2008 | Modulators, photodetectors |
 
 ## Usage
 
@@ -40,7 +69,7 @@ if silver['csv_available']:
     data = np.loadtxt(
         f"materials/{silver['data_file']}", 
         delimiter=',', 
-        skiprows=9,  # Skip header comments
+        skiprows=10,  # Skip header comments
         unpack=True
     )
     wavelength_nm, n, k = data
@@ -165,26 +194,40 @@ Follow `material_schema.json` format. Required fields:
 | Source | Coverage | Notes |
 |--------|----------|-------|
 | [refractiveindex.info](https://refractiveindex.info) | Comprehensive | Compiles multiple sources with citations |
-| Palik Handbook | Comprehensive | Standard reference, 1998 |
+| Palik Handbook (1998) | Comprehensive | Standard reference |
 | Rakic et al. (1998) | Metals | Drude-Lorentz fits, Applied Optics |
-| Johnson & Christy (1972) | Au, Ag, Cu | PRB, widely cited |
-| Malitson (1965) | SiO2 | J. Opt. Soc. Am., fused silica |
+| Johnson & Christy (1972, 1974) | Metals | PRB, widely cited |
+| Aspnes & Studna (1983) | Semiconductors | PRB, Si, Ge, GaAs |
+| Malitson (1962, 1965) | Oxides | J. Opt. Soc. Am., SiO₂, Al₂O₃ |
 
 ## Notes
 
 ### Metals
-- **Silver**: Lowest losses, best for high-Q plasmonics
+- **Silver**: Lowest losses, best for high-Q plasmonics. Tarnishes in air.
 - **Gold**: Chemically stable, good biocompatibility, interband losses <500nm
-- **Aluminum**: Best for UV plasmonics, forms native oxide
+- **Copper**: Good plasmonics >600nm, cheap, oxidizes in air
+- **Aluminum**: Best for UV plasmonics, forms native oxide (~2-3nm)
+- **Chromium/Titanium**: Adhesion layers (2-5nm) for Au/Ag/Al films
+- **Nickel**: Ferromagnetic, enables magneto-optical control
+- **Platinum**: Catalytic, chemically inert, high-temperature stable
+
+### Semiconductors
+- **Silicon**: High-index (n~3.5), Mie resonances, absorbs above bandgap (~1100nm)
+- **Germanium**: Very high-index (n~4), transparent in mid-IR
+- **GaAs**: Direct bandgap (~870nm), for lasers and LEDs
 
 ### Dielectrics
-- **Silicon**: High-index (n~3.5), Mie resonances, absorbs above bandgap
-- **SiO2**: Standard substrate (n~1.45), very low loss
-- **Glass**: Use constant n=1.51 for quick estimates, SiO2 data for accuracy
+- **SiO₂**: Standard substrate (n~1.45), very low loss
+- **TiO₂**: High-index (n~2.4), photocatalysis, metasurfaces
+- **Si₃N₄**: Waveguide material (n~2.0), integrated photonics
+- **Al₂O₃**: Sapphire substrates, native oxide on Al
+- **ITO**: Transparent conductor, NIR plasmonics
+
+### 2D Materials
+- **Graphene**: ~2.3% absorption per layer, effective constants assume 0.34nm thickness
 
 ### Fit Quality
 - `excellent`: <5% error across fit range
 - `good`: 5-15% error, suitable for most simulations
-- `moderate`: 15-30% error, use tabulated data preferred
-- `approximate`: Constant approximation, use for quick estimates only
-
+- `moderate`: 15-30% error, prefer tabulated data
+- `approximate`: Constant approximation, quick estimates only
