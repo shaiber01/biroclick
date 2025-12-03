@@ -19,6 +19,7 @@ Environment Setup:
 import base64
 import json
 import os
+import threading
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
@@ -53,11 +54,14 @@ RETRY_DELAY_SECONDS = 2.0
 # ═══════════════════════════════════════════════════════════════════════
 
 _schema_cache: Dict[str, dict] = {}
+_schema_cache_lock = threading.Lock()
 
 
 def load_schema(schema_name: str) -> dict:
     """
     Load a JSON schema from the schemas directory.
+    
+    Thread-safe: Uses a lock to ensure concurrent calls return the same cached object.
     
     Args:
         schema_name: Schema filename (with or without .json extension)
@@ -75,28 +79,35 @@ def load_schema(schema_name: str) -> dict:
     # Normalize cache key: always use .json extension for consistency
     cache_key = schema_name if schema_name.endswith(".json") else f"{schema_name}.json"
     
+    # Fast path: check cache without lock (safe for reads)
     if cache_key in _schema_cache:
         return _schema_cache[cache_key]
     
-    # Normalize filename for file access
-    if not schema_name.endswith(".json"):
-        schema_name = f"{schema_name}.json"
-    
-    schema_path = SCHEMAS_DIR / schema_name
-    
-    # Check if file exists, handling OSError for very long filenames
-    try:
-        if not schema_path.exists():
-            raise FileNotFoundError(f"Schema not found: {schema_path}")
-    except OSError as e:
-        # Handle very long filenames or other filesystem errors
-        raise FileNotFoundError(f"Schema not found: {schema_path}") from e
-    
-    with open(schema_path, "r", encoding="utf-8") as f:
-        schema = json.load(f)
-    
-    _schema_cache[cache_key] = schema
-    return schema
+    # Slow path: acquire lock for thread-safe cache population
+    with _schema_cache_lock:
+        # Double-check after acquiring lock (another thread may have populated it)
+        if cache_key in _schema_cache:
+            return _schema_cache[cache_key]
+        
+        # Normalize filename for file access
+        if not schema_name.endswith(".json"):
+            schema_name = f"{schema_name}.json"
+        
+        schema_path = SCHEMAS_DIR / schema_name
+        
+        # Check if file exists, handling OSError for very long filenames
+        try:
+            if not schema_path.exists():
+                raise FileNotFoundError(f"Schema not found: {schema_path}")
+        except OSError as e:
+            # Handle very long filenames or other filesystem errors
+            raise FileNotFoundError(f"Schema not found: {schema_path}") from e
+        
+        with open(schema_path, "r", encoding="utf-8") as f:
+            schema = json.load(f)
+        
+        _schema_cache[cache_key] = schema
+        return schema
 
 
 def get_agent_schema(agent_name: str) -> dict:

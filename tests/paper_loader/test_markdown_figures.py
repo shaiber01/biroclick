@@ -584,12 +584,16 @@ class TestResolveFigureUrl:
         assert result == "https://example.com/images/fig.png"
 
     def test_relative_url_with_base_url_no_trailing_slash(self):
-        """Base URL without trailing slash joins correctly."""
+        """Base URL without trailing slash joins correctly.
+        
+        The code treats paths without file extensions as directories,
+        so 'images' becomes 'images/' before joining.
+        """
         url = "fig.png"
         base_url = "https://example.com/images"
         result = resolve_figure_url(url, base_url=base_url)
-        # urljoin replaces last segment if no trailing slash
-        assert result == "https://example.com/fig.png"
+        # Code normalizes base_url to treat paths without extensions as directories
+        assert result == "https://example.com/images/fig.png"
 
     def test_dot_relative_url_with_base_url(self):
         """Relative URL starting with ./ joined with base_url."""

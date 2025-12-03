@@ -1708,7 +1708,7 @@ class TestCodeReviewerBoundaryConditions:
     """Test boundary conditions and edge cases."""
 
     def test_code_reviewer_counter_at_exactly_max_minus_one(self, base_state):
-        """Counter at max-1 should increment to max, not escalate yet."""
+        """Counter at max-1 should increment to max AND escalate (budget exhausted)."""
         from src.agents.code import code_reviewer_node
 
         mock_response = {
@@ -1730,10 +1730,11 @@ class TestCodeReviewerBoundaryConditions:
         assert result["code_revision_count"] == max_revs, (
             f"Should increment to max. Expected {max_revs}, got {result['code_revision_count']}"
         )
-        # Should NOT escalate - only escalates when already at max and needs more
-        assert result.get("awaiting_user_input") is not True, (
-            "Should not escalate when incrementing TO max (only when AT max and needs more)"
+        # SHOULD escalate - when counter reaches max, revision budget is exhausted
+        assert result.get("awaiting_user_input") is True, (
+            "Should escalate when counter reaches max (budget exhausted)"
         )
+        assert result.get("ask_user_trigger") == "code_review_limit"
 
     def test_code_reviewer_with_zero_max_revisions(self, base_state):
         """Should handle zero max_revisions edge case."""
@@ -1908,20 +1909,28 @@ print("Done")
         base_state["runtime_config"] = {"max_code_revisions": max_revs}
 
         # Simulate multiple rejections
-        for i in range(max_revs + 1):
+        # With max=3, escalation happens when counter REACHES max:
+        # i=0: 0→1, no escalate (1 < 3)
+        # i=1: 1→2, no escalate (2 < 3)
+        # i=2: 2→3, ESCALATE (3 >= 3, budget exhausted)
+        for i in range(max_revs):
             base_state["code_revision_count"] = i
 
             with patch("src.agents.code.call_agent_with_metrics", return_value=review_response):
                 result = code_reviewer_node(base_state)
 
-            if i < max_revs:
+            # Counter increments by 1 each rejection
+            expected_count = i + 1
+            assert result["code_revision_count"] == expected_count
+
+            if expected_count < max_revs:
                 # Should increment counter and continue
                 assert result.get("awaiting_user_input") is not True, (
-                    f"Should not escalate at revision {i}"
+                    f"Should not escalate at count {expected_count} (max={max_revs})"
                 )
             else:
-                # Should escalate at max
+                # Should escalate when reaching max
                 assert result.get("awaiting_user_input") is True, (
-                    f"Should escalate at revision {i} (max={max_revs})"
+                    f"Should escalate at count {expected_count} (max={max_revs})"
                 )
                 assert result.get("ask_user_trigger") == "code_review_limit"

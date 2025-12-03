@@ -195,8 +195,8 @@ def physics_sanity_node(state: ReproState) -> dict:
     user_content += f"## Stage Outputs\n```json\n{json.dumps(stage_outputs, indent=2, default=str)}\n```"
     
     # Add design spec for physics reference
-    # Include design_description even if empty dict (falsy but should be shown)
-    if design is not None:
+    # Only include if design has actual content (empty dict/string provides no value)
+    if design:
         if isinstance(design, dict):
             user_content += f"\n\n## Design Spec\n```json\n{json.dumps(design, indent=2)}\n```"
         else:

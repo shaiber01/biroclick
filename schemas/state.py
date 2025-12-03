@@ -949,9 +949,9 @@ def create_initial_state(
             runtime_config=DEBUG_RUNTIME_CONFIG
         )
     """
-    # Use defaults if not provided
-    hw_config = hardware_config if hardware_config is not None else DEFAULT_HARDWARE_CONFIG
-    rt_config = runtime_config if runtime_config is not None else DEFAULT_RUNTIME_CONFIG
+    # Use defaults if not provided - use dict() to create copies and prevent mutation of globals
+    hw_config = hardware_config if hardware_config is not None else dict(DEFAULT_HARDWARE_CONFIG)
+    rt_config = runtime_config if runtime_config is not None else dict(DEFAULT_RUNTIME_CONFIG)
     
     return ReproState(
         # Paper identification

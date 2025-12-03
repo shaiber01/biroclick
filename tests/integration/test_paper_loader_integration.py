@@ -136,14 +136,14 @@ class TestPaperLoaderIntegration:
             markdown_path=str(sample_paper_dir),
             output_dir=str(output_dir),
             paper_id="test_integration_paper",
-            paper_domain="photonics",
+            paper_domain="waveguide",
             download_figures=True
         )
         
         # 2. Verify structure with STRICT assertions
         assert paper_input["paper_id"] == "test_integration_paper"
         assert paper_input["paper_title"] == "Integrated Nanophotonics for Data Centers"
-        assert paper_input["paper_domain"] == "photonics"
+        assert paper_input["paper_domain"] == "waveguide"
         
         # Verify paper_text contains exact expected content
         assert "Integrated Nanophotonics" in paper_input["paper_text"]
@@ -688,7 +688,7 @@ class TestPaperLoaderIntegration:
         assert paper_input["paper_id"] == "my_paper_2023"
 
     def test_domain_validation(self, tmp_path):
-        """Test that invalid domains are handled correctly."""
+        """Test that invalid domains raise ValidationError."""
         paper_dir = tmp_path / "domain"
         paper_dir.mkdir()
         img_dir = paper_dir / "images"
@@ -709,13 +709,13 @@ class TestPaperLoaderIntegration:
         )
         assert paper_input["paper_domain"] == "plasmonics"
         
-        # Invalid domain should still work (validation might warn but not fail)
-        paper_input = load_paper_from_markdown(
-            markdown_path=str(md_path),
-            output_dir=str(output_dir),
-            paper_domain="invalid_domain_xyz"
-        )
-        assert paper_input["paper_domain"] == "invalid_domain_xyz"
+        # Invalid domain should raise ValidationError
+        with pytest.raises(ValidationError, match="Invalid paper_domain"):
+            load_paper_from_markdown(
+                markdown_path=str(md_path),
+                output_dir=str(output_dir),
+                paper_domain="invalid_domain_xyz"
+            )
 
     def test_download_figures_false(self, tmp_path):
         """Test that download_figures=False still extracts figure info."""

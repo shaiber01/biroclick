@@ -1272,7 +1272,7 @@ class TestDesignDescriptionHandling:
         assert "## Design Spec" in user_content
 
     def test_physics_sanity_with_empty_design_description(self, base_state):
-        """Test physics sanity handles empty dict design_description - shows empty JSON."""
+        """Test physics sanity handles empty dict design_description - excludes section."""
         from src.agents.execution import physics_sanity_node
 
         mock_response = execution_verdict_response(verdict="pass", summary="OK")
@@ -1289,9 +1289,8 @@ class TestDesignDescriptionHandling:
         assert result["physics_verdict"] == "pass"
         call_kwargs = mock_call.call_args.kwargs
         user_content = call_kwargs["user_content"]
-        # Should include Design Spec section with empty JSON
-        assert "## Design Spec" in user_content
-        assert "{}" in user_content
+        # Empty dict should be excluded (no useful information to show)
+        assert "## Design Spec" not in user_content
 
     def test_physics_sanity_with_none_design_description(self, base_state):
         """Test physics sanity handles None design_description - no Design Spec section."""

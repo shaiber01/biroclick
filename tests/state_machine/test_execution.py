@@ -461,8 +461,8 @@ class TestPhysicsSanityNode:
             user_content = call_kwargs.get("user_content", "")
             assert "resolution" in user_content or "Design Spec" in user_content
 
-    def test_empty_design_description_dict_included(self, physics_state):
-        """Test that empty dict design_description is still included."""
+    def test_empty_design_description_dict_excluded(self, physics_state):
+        """Test that empty dict design_description is excluded (no value to show)."""
         physics_state["design_description"] = {}
         
         with patch("src.agents.execution.call_agent_with_metrics") as mock_llm:
@@ -472,7 +472,8 @@ class TestPhysicsSanityNode:
             
             call_kwargs = mock_llm.call_args.kwargs
             user_content = call_kwargs.get("user_content", "")
-            assert "Design Spec" in user_content
+            # Empty dict should not be included (no useful information)
+            assert "Design Spec" not in user_content
 
     def test_awaiting_user_input_returns_empty(self, physics_state):
         """Test that awaiting_user_input state returns empty result."""

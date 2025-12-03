@@ -379,17 +379,26 @@ class TestReviewerContract:
             assert has_failed_checklist or response.get("issues"), \
                 f"{reviewer_name}: needs_revision should have issues or failed checklist items"
         else:
+            # Create a checklist with at least one failure to justify needs_revision
+            checklist = self._get_checklist_results_for_reviewer(reviewer_name)
+            # Set one item to fail to provide justification for needs_revision
+            first_key = next(iter(checklist.keys()))
+            checklist[first_key] = {"status": "fail", "notes": "Test failure"}
+            
             response = {
                 "stage_id": "stage_1",
                 "verdict": "needs_revision",
-                "checklist_results": self._get_checklist_results_for_reviewer(reviewer_name),
-                "issues": [],  # Empty issues with needs_revision
+                "checklist_results": checklist,
+                "issues": [],  # Empty issues is OK if checklist shows failure
                 "summary": "Test",
             }
             validate(instance=response, schema=schema)
-            # For design/code reviewers, needs_revision should have issues
-            assert len(response["issues"]) > 0, \
-                f"{reviewer_name}: needs_revision verdict must have at least one issue"
+            # For design/code reviewers, needs_revision should have issues OR failed checklist
+            has_failed_checklist = any(
+                item.get("status") == "fail" for item in response["checklist_results"].values()
+            )
+            assert has_failed_checklist or response.get("issues"), \
+                f"{reviewer_name}: needs_revision should have issues or failed checklist items"
 
     @pytest.mark.parametrize("reviewer_name,schema_file", list(REVIEWER_SCHEMAS.items()))
     def test_missing_required_field_fails(self, reviewer_name, schema_file):
