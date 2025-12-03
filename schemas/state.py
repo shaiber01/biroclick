@@ -261,6 +261,9 @@ def get_validation_hierarchy(state: dict) -> "ValidationHierarchyStatus":
             
     # Now compute aggregate status for each key
     for key, statuses in status_map.items():
+        # If hierarchy was already set to "failed" due to missing stages, keep it
+        if hierarchy.get(key) == "failed":
+            continue
         if not statuses:
             hierarchy[key] = "not_done" # No stages of this type exist/planned yet
             continue

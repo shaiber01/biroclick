@@ -247,6 +247,28 @@ class TestValidateDomain:
         assert len(VALID_DOMAINS) == len(set(VALID_DOMAINS)), \
             f"VALID_DOMAINS contains duplicates: {VALID_DOMAINS}"
 
+    def test_valid_domains_are_all_strings(self):
+        """Test that VALID_DOMAINS contains only string values."""
+        # This is a sanity check on the configuration
+        # If VALID_DOMAINS contains non-strings, the function behavior might be unexpected
+        for domain in VALID_DOMAINS:
+            assert isinstance(domain, str), \
+                f"VALID_DOMAINS should contain only strings, but found {type(domain).__name__}: {domain!r}"
+
+    def test_valid_domains_are_non_empty(self):
+        """Test that VALID_DOMAINS doesn't contain empty strings."""
+        # Empty string would be confusing - is it valid or not?
+        for domain in VALID_DOMAINS:
+            assert len(domain) > 0, \
+                f"VALID_DOMAINS should not contain empty strings, but found one"
+
+    def test_valid_domains_have_no_whitespace(self):
+        """Test that VALID_DOMAINS doesn't contain domains with leading/trailing whitespace."""
+        # Domains with whitespace would be confusing
+        for domain in VALID_DOMAINS:
+            assert domain == domain.strip(), \
+                f"VALID_DOMAINS should not contain domains with whitespace, but found: {domain!r}"
+
     # ═══════════════════════════════════════════════════════════════════════
     # Return Value Verification
     # ═══════════════════════════════════════════════════════════════════════
@@ -276,4 +298,40 @@ class TestValidateDomain:
             result2 = validate_domain(domain)
             assert result1 == result2, f"Function should be deterministic for '{domain}'"
             assert result1 is result2, f"Function should return same object for '{domain}'"
+
+    def test_function_matches_python_in_operator(self):
+        """Test that function behavior matches Python's 'in' operator."""
+        # This verifies the function implementation is correct
+        test_cases = VALID_DOMAINS + ["invalid", "", "plasmonics ", " Plasmonics"]
+        for domain in test_cases:
+            expected = domain in VALID_DOMAINS
+            actual = validate_domain(domain)
+            assert actual == expected, \
+                f"Function should match 'in' operator: domain={domain!r}, expected={expected}, got={actual}"
+
+    def test_substring_not_valid(self):
+        """Test that substrings of valid domains are not considered valid."""
+        # This ensures the function doesn't do substring matching
+        for valid_domain in VALID_DOMAINS:
+            if len(valid_domain) > 1:
+                # Test first half
+                substring = valid_domain[:len(valid_domain)//2]
+                if substring not in VALID_DOMAINS:
+                    assert validate_domain(substring) is False, \
+                        f"Substring '{substring}' of '{valid_domain}' should not be valid"
+                
+                # Test last half
+                substring = valid_domain[len(valid_domain)//2:]
+                if substring not in VALID_DOMAINS:
+                    assert validate_domain(substring) is False, \
+                        f"Substring '{substring}' of '{valid_domain}' should not be valid"
+
+    def test_concatenated_domains_not_valid(self):
+        """Test that concatenating valid domains doesn't create a valid domain."""
+        # This ensures the function doesn't do pattern matching
+        if len(VALID_DOMAINS) >= 2:
+            concatenated = VALID_DOMAINS[0] + VALID_DOMAINS[1]
+            if concatenated not in VALID_DOMAINS:
+                assert validate_domain(concatenated) is False, \
+                    f"Concatenated domain '{concatenated}' should not be valid"
 
