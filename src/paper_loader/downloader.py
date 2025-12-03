@@ -52,6 +52,9 @@ def download_figure(
     try:
         parsed = urlparse(url)
         
+        if parsed.scheme and parsed.scheme not in ('http', 'https', 'file'):
+            raise FigureDownloadError(f"Unsupported scheme: {parsed.scheme}")
+        
         if parsed.scheme in ('http', 'https'):
             # Remote URL - download it
             request = urllib.request.Request(
@@ -67,7 +70,7 @@ def download_figure(
                 
         elif parsed.scheme == 'file':
             # file:// URL - extract path and copy
-            local_path = Path(unquote(parsed.path))
+            local_path = Path(unquote(parsed.path)).expanduser()
             if not local_path.exists():
                 raise FigureDownloadError(f"Local file not found: {local_path}")
             
@@ -76,11 +79,18 @@ def download_figure(
             
         else:
             # Assume local file path (relative or absolute)
-            local_path = Path(url)
+            local_path = Path(url).expanduser()
             
             # If relative and base_path provided, resolve against it
             if not local_path.is_absolute() and base_path:
-                local_path = base_path / url
+                # Security check: prevent path traversal outside base_path
+                resolved_path = (base_path / local_path).resolve()
+                resolved_base = base_path.resolve()
+                
+                if not str(resolved_path).startswith(str(resolved_base)):
+                    raise FigureDownloadError(f"Access denied: Path {local_path} resolves outside base path {base_path}")
+                
+                local_path = resolved_path
             
             if not local_path.exists():
                 raise FigureDownloadError(f"Local file not found: {local_path}")
