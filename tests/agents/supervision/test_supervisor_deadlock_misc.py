@@ -787,12 +787,16 @@ class TestDeadlockTriggerEdgeCases:
 
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     @patch("src.agents.supervision.supervisor.call_agent_with_metrics")
-    def test_verifies_no_interaction_logged_when_no_responses(self, mock_call, mock_context):
-        """Should not log interaction when no user responses."""
+    def test_logs_interaction_even_when_no_responses(self, mock_call, mock_context):
+        """Should log interaction even when user_responses is empty.
+        
+        The component intentionally logs all interactions (even empty responses)
+        to track that the user was asked - this is documented behavior.
+        """
         mock_context.return_value = None
         state = {
             "ask_user_trigger": "deadlock_detected",
-            "user_responses": {},  # No responses
+            "user_responses": {},  # No responses - still should log
             "current_stage_id": "stage1",
             "progress": {
                 "stages": [],
@@ -802,8 +806,12 @@ class TestDeadlockTriggerEdgeCases:
 
         result = supervisor_node(state)
         
-        # Should not log interaction when no responses (even if trigger exists)
-        # The code checks: if ask_user_trigger and user_responses
-        if "progress" in result and "user_interactions" in result["progress"]:
-            assert len(result["progress"]["user_interactions"]) == 0
+        # Should log interaction even with empty responses (to track user was asked)
+        # The code explicitly comments: "Log even if user_responses is empty"
+        assert "progress" in result
+        assert "user_interactions" in result["progress"]
+        assert len(result["progress"]["user_interactions"]) == 1
+        interaction = result["progress"]["user_interactions"][0]
+        assert interaction["interaction_type"] == "deadlock_detected"
+        assert interaction["user_response"] == ""  # Empty response logged
 

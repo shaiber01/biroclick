@@ -1,5 +1,20 @@
-"""Supervisor tests for code/design/execution/physics/replan limit triggers."""
+"""Supervisor tests for code/design/execution/physics/replan limit triggers.
 
+This module tests the supervisor_node handling of various limit-related triggers:
+- code_review_limit
+- design_review_limit
+- execution_failure_limit
+- physics_failure_limit
+- replan_limit
+- llm_error
+- clarification
+- critical error triggers (missing_paper_text, missing_stage_id, progress_init_failed)
+- planning error triggers (no_stages_available, invalid_backtrack_target, backtrack_target_not_found)
+- backtrack_limit
+- invalid_backtrack_decision
+"""
+
+import pytest
 from unittest.mock import patch, MagicMock
 
 from src.agents.supervision import supervisor_node
@@ -811,6 +826,923 @@ class TestErrorHandling:
 
         result = supervisor_node(state)
 
+        assert result["supervisor_verdict"] == "ask_user"
+        assert result["ask_user_trigger"] is None
+
+
+class TestLlmErrorTrigger:
+    """Tests for llm_error trigger handling."""
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_retries_on_retry(self, mock_context):
+        """Should continue workflow on RETRY."""
+        mock_context.return_value = None
+        state = {
+            "ask_user_trigger": "llm_error",
+            "user_responses": {"Question": "RETRY"},
+            "progress": {"stages": [], "user_interactions": []},
+        }
+
+        result = supervisor_node(state)
+
+        assert result["supervisor_verdict"] == "ok_continue"
+        assert result["ask_user_trigger"] is None
+        assert "supervisor_feedback" in result
+        assert "retry" in result["supervisor_feedback"].lower()
+        assert result.get("should_stop") is not True
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.trigger_handlers.update_progress_stage_status")
+    def test_skips_stage_on_skip(self, mock_update, mock_context):
+        """Should skip stage on SKIP."""
+        mock_context.return_value = None
+        state = {
+            "ask_user_trigger": "llm_error",
+            "user_responses": {"Question": "SKIP"},
+            "current_stage_id": "stage1",
+            "progress": {"stages": [], "user_interactions": []},
+        }
+
+        result = supervisor_node(state)
+
+        assert result["supervisor_verdict"] == "ok_continue"
+        assert result["ask_user_trigger"] is None
+        assert result.get("should_stop") is not True
+        mock_update.assert_called_once()
+        call_args = mock_update.call_args
+        assert call_args[0][1] == "stage1"
+        assert call_args[0][2] == "blocked"
+        assert "llm error" in call_args[1]["summary"].lower()
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_stops_on_stop(self, mock_context):
+        """Should stop workflow on STOP."""
+        mock_context.return_value = None
+        state = {
+            "ask_user_trigger": "llm_error",
+            "user_responses": {"Question": "STOP"},
+            "progress": {"stages": [], "user_interactions": []},
+        }
+
+        result = supervisor_node(state)
+
+        assert result["supervisor_verdict"] == "all_complete"
+        assert result["should_stop"] is True
+        assert result["ask_user_trigger"] is None
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_asks_clarification_on_unclear(self, mock_context):
+        """Should ask clarification on unclear response."""
+        mock_context.return_value = None
+        state = {
+            "ask_user_trigger": "llm_error",
+            "user_responses": {"Question": "maybe"},
+            "progress": {"stages": [], "user_interactions": []},
+        }
+
+        result = supervisor_node(state)
+
+        assert result["supervisor_verdict"] == "ask_user"
+        assert result["ask_user_trigger"] is None
+        assert "pending_user_questions" in result
+        assert len(result["pending_user_questions"]) > 0
+        question = result["pending_user_questions"][0]
+        assert "RETRY" in question or "SKIP" in question or "STOP" in question
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_handles_empty_user_responses(self, mock_context):
+        """Should handle empty user_responses gracefully."""
+        mock_context.return_value = None
+        state = {
+            "ask_user_trigger": "llm_error",
+            "user_responses": {},
+            "progress": {"stages": [], "user_interactions": []},
+        }
+
+        result = supervisor_node(state)
+
+        assert result["supervisor_verdict"] == "ask_user"
+        assert result["ask_user_trigger"] is None
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_handles_none_current_stage_id_on_skip(self, mock_context):
+        """Should handle None current_stage_id when skipping."""
+        mock_context.return_value = None
+        state = {
+            "ask_user_trigger": "llm_error",
+            "user_responses": {"Question": "SKIP"},
+            "current_stage_id": None,
+            "progress": {"stages": [], "user_interactions": []},
+        }
+
+        result = supervisor_node(state)
+
+        assert result["supervisor_verdict"] == "ok_continue"
+        assert result["ask_user_trigger"] is None
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_handles_case_insensitive_retry(self, mock_context):
+        """Should handle case-insensitive RETRY keyword."""
+        mock_context.return_value = None
+        state = {
+            "ask_user_trigger": "llm_error",
+            "user_responses": {"Question": "retry"},
+            "progress": {"stages": [], "user_interactions": []},
+        }
+
+        result = supervisor_node(state)
+
+        assert result["supervisor_verdict"] == "ok_continue"
+        assert "retry" in result["supervisor_feedback"].lower()
+
+
+class TestClarificationTrigger:
+    """Tests for clarification trigger handling."""
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_continues_with_clarification(self, mock_context):
+        """Should continue workflow with user clarification."""
+        mock_context.return_value = None
+        state = {
+            "ask_user_trigger": "clarification",
+            "user_responses": {"Question": "The wavelength should be 550nm"},
+            "progress": {"stages": [], "user_interactions": []},
+        }
+
+        result = supervisor_node(state)
+
+        assert result["supervisor_verdict"] == "ok_continue"
+        assert result["ask_user_trigger"] is None
+        assert "supervisor_feedback" in result
+        assert "User clarification" in result["supervisor_feedback"]
+        assert "550nm" in result["supervisor_feedback"]
+        assert result.get("should_stop") is not True
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_continues_with_empty_clarification(self, mock_context):
+        """Should continue even with empty clarification."""
+        mock_context.return_value = None
+        state = {
+            "ask_user_trigger": "clarification",
+            "user_responses": {},
+            "progress": {"stages": [], "user_interactions": []},
+        }
+
+        result = supervisor_node(state)
+
+        assert result["supervisor_verdict"] == "ok_continue"
+        assert result["ask_user_trigger"] is None
+        assert "supervisor_feedback" in result
+        assert "No clarification" in result["supervisor_feedback"]
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_preserves_clarification_text(self, mock_context):
+        """Should preserve full clarification text in feedback."""
+        mock_context.return_value = None
+        clarification = "Use FDTD with PML boundaries and mesh size 10nm"
+        state = {
+            "ask_user_trigger": "clarification",
+            "user_responses": {"Question": clarification},
+            "progress": {"stages": [], "user_interactions": []},
+        }
+
+        result = supervisor_node(state)
+
+        assert result["supervisor_verdict"] == "ok_continue"
+        assert clarification in result["supervisor_feedback"]
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_handles_whitespace_only_clarification(self, mock_context):
+        """Should handle whitespace-only clarification."""
+        mock_context.return_value = None
+        state = {
+            "ask_user_trigger": "clarification",
+            "user_responses": {"Question": "   "},
+            "progress": {"stages": [], "user_interactions": []},
+        }
+
+        result = supervisor_node(state)
+
+        assert result["supervisor_verdict"] == "ok_continue"
+        assert result["ask_user_trigger"] is None
+
+
+class TestCriticalErrorTriggers:
+    """Tests for critical error triggers (missing_paper_text, missing_stage_id, progress_init_failed)."""
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_missing_paper_text_retry(self, mock_context):
+        """Should continue workflow on RETRY for missing_paper_text."""
+        mock_context.return_value = None
+        state = {
+            "ask_user_trigger": "missing_paper_text",
+            "user_responses": {"Question": "RETRY"},
+            "progress": {"stages": [], "user_interactions": []},
+        }
+
+        result = supervisor_node(state)
+
+        assert result["supervisor_verdict"] == "ok_continue"
+        assert result["ask_user_trigger"] is None
+        assert "supervisor_feedback" in result
+        assert "critical error" in result["supervisor_feedback"].lower()
+        assert result.get("should_stop") is not True
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_missing_paper_text_stop(self, mock_context):
+        """Should stop workflow on STOP for missing_paper_text."""
+        mock_context.return_value = None
+        state = {
+            "ask_user_trigger": "missing_paper_text",
+            "user_responses": {"Question": "STOP"},
+            "progress": {"stages": [], "user_interactions": []},
+        }
+
+        result = supervisor_node(state)
+
+        assert result["supervisor_verdict"] == "all_complete"
+        assert result["should_stop"] is True
+        assert result["ask_user_trigger"] is None
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_missing_paper_text_unclear(self, mock_context):
+        """Should ask clarification on unclear response for missing_paper_text."""
+        mock_context.return_value = None
+        state = {
+            "ask_user_trigger": "missing_paper_text",
+            "user_responses": {"Question": "maybe"},
+            "progress": {"stages": [], "user_interactions": []},
+        }
+
+        result = supervisor_node(state)
+
+        assert result["supervisor_verdict"] == "ask_user"
+        assert result["ask_user_trigger"] is None
+        assert "pending_user_questions" in result
+        question = result["pending_user_questions"][0]
+        assert "RETRY" in question or "STOP" in question
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_missing_stage_id_retry(self, mock_context):
+        """Should continue workflow on RETRY for missing_stage_id."""
+        mock_context.return_value = None
+        state = {
+            "ask_user_trigger": "missing_stage_id",
+            "user_responses": {"Question": "RETRY"},
+            "progress": {"stages": [], "user_interactions": []},
+        }
+
+        result = supervisor_node(state)
+
+        assert result["supervisor_verdict"] == "ok_continue"
+        assert result["ask_user_trigger"] is None
+        assert result.get("should_stop") is not True
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_missing_stage_id_stop(self, mock_context):
+        """Should stop workflow on STOP for missing_stage_id."""
+        mock_context.return_value = None
+        state = {
+            "ask_user_trigger": "missing_stage_id",
+            "user_responses": {"Question": "STOP"},
+            "progress": {"stages": [], "user_interactions": []},
+        }
+
+        result = supervisor_node(state)
+
+        assert result["supervisor_verdict"] == "all_complete"
+        assert result["should_stop"] is True
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_progress_init_failed_retry(self, mock_context):
+        """Should continue workflow on RETRY for progress_init_failed."""
+        mock_context.return_value = None
+        state = {
+            "ask_user_trigger": "progress_init_failed",
+            "user_responses": {"Question": "RETRY"},
+            "progress": {"stages": [], "user_interactions": []},
+        }
+
+        result = supervisor_node(state)
+
+        assert result["supervisor_verdict"] == "ok_continue"
+        assert result["ask_user_trigger"] is None
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_progress_init_failed_stop(self, mock_context):
+        """Should stop workflow on STOP for progress_init_failed."""
+        mock_context.return_value = None
+        state = {
+            "ask_user_trigger": "progress_init_failed",
+            "user_responses": {"Question": "STOP"},
+            "progress": {"stages": [], "user_interactions": []},
+        }
+
+        result = supervisor_node(state)
+
+        assert result["supervisor_verdict"] == "all_complete"
+        assert result["should_stop"] is True
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_critical_error_empty_responses(self, mock_context):
+        """Should ask clarification on empty responses for critical errors."""
+        mock_context.return_value = None
+        state = {
+            "ask_user_trigger": "missing_paper_text",
+            "user_responses": {},
+            "progress": {"stages": [], "user_interactions": []},
+        }
+
+        result = supervisor_node(state)
+
+        assert result["supervisor_verdict"] == "ask_user"
+        assert result["ask_user_trigger"] is None
+        assert "pending_user_questions" in result
+
+
+class TestPlanningErrorTriggers:
+    """Tests for planning error triggers (no_stages_available, invalid_backtrack_target, backtrack_target_not_found)."""
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_no_stages_available_replan(self, mock_context):
+        """Should trigger replan on REPLAN for no_stages_available."""
+        mock_context.return_value = None
+        state = {
+            "ask_user_trigger": "no_stages_available",
+            "user_responses": {"Question": "REPLAN"},
+            "progress": {"stages": [], "user_interactions": []},
+        }
+
+        result = supervisor_node(state)
+
+        assert result["supervisor_verdict"] == "replan_needed"
+        assert result["ask_user_trigger"] is None
+        assert "planner_feedback" in result
+        assert "REPLAN" in result["planner_feedback"]
+        assert result.get("should_stop") is not True
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_no_stages_available_stop(self, mock_context):
+        """Should stop workflow on STOP for no_stages_available."""
+        mock_context.return_value = None
+        state = {
+            "ask_user_trigger": "no_stages_available",
+            "user_responses": {"Question": "STOP"},
+            "progress": {"stages": [], "user_interactions": []},
+        }
+
+        result = supervisor_node(state)
+
+        assert result["supervisor_verdict"] == "all_complete"
+        assert result["should_stop"] is True
+        assert result["ask_user_trigger"] is None
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_no_stages_available_unclear(self, mock_context):
+        """Should ask clarification on unclear response for no_stages_available."""
+        mock_context.return_value = None
+        state = {
+            "ask_user_trigger": "no_stages_available",
+            "user_responses": {"Question": "unsure"},
+            "progress": {"stages": [], "user_interactions": []},
+        }
+
+        result = supervisor_node(state)
+
+        assert result["supervisor_verdict"] == "ask_user"
+        assert result["ask_user_trigger"] is None
+        assert "pending_user_questions" in result
+        question = result["pending_user_questions"][0]
+        assert "REPLAN" in question or "STOP" in question
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_invalid_backtrack_target_replan(self, mock_context):
+        """Should trigger replan on REPLAN for invalid_backtrack_target."""
+        mock_context.return_value = None
+        state = {
+            "ask_user_trigger": "invalid_backtrack_target",
+            "user_responses": {"Question": "REPLAN"},
+            "progress": {"stages": [], "user_interactions": []},
+        }
+
+        result = supervisor_node(state)
+
+        assert result["supervisor_verdict"] == "replan_needed"
+        assert result["ask_user_trigger"] is None
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_invalid_backtrack_target_stop(self, mock_context):
+        """Should stop workflow on STOP for invalid_backtrack_target."""
+        mock_context.return_value = None
+        state = {
+            "ask_user_trigger": "invalid_backtrack_target",
+            "user_responses": {"Question": "STOP"},
+            "progress": {"stages": [], "user_interactions": []},
+        }
+
+        result = supervisor_node(state)
+
+        assert result["supervisor_verdict"] == "all_complete"
+        assert result["should_stop"] is True
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_backtrack_target_not_found_replan(self, mock_context):
+        """Should trigger replan on REPLAN for backtrack_target_not_found."""
+        mock_context.return_value = None
+        state = {
+            "ask_user_trigger": "backtrack_target_not_found",
+            "user_responses": {"Question": "REPLAN"},
+            "progress": {"stages": [], "user_interactions": []},
+        }
+
+        result = supervisor_node(state)
+
+        assert result["supervisor_verdict"] == "replan_needed"
+        assert result["ask_user_trigger"] is None
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_backtrack_target_not_found_stop(self, mock_context):
+        """Should stop workflow on STOP for backtrack_target_not_found."""
+        mock_context.return_value = None
+        state = {
+            "ask_user_trigger": "backtrack_target_not_found",
+            "user_responses": {"Question": "STOP"},
+            "progress": {"stages": [], "user_interactions": []},
+        }
+
+        result = supervisor_node(state)
+
+        assert result["supervisor_verdict"] == "all_complete"
+        assert result["should_stop"] is True
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_planning_error_empty_responses(self, mock_context):
+        """Should ask clarification on empty responses for planning errors."""
+        mock_context.return_value = None
+        state = {
+            "ask_user_trigger": "no_stages_available",
+            "user_responses": {},
+            "progress": {"stages": [], "user_interactions": []},
+        }
+
+        result = supervisor_node(state)
+
+        assert result["supervisor_verdict"] == "ask_user"
+        assert result["ask_user_trigger"] is None
+        assert "pending_user_questions" in result
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_planning_error_case_insensitive_replan(self, mock_context):
+        """Should handle case-insensitive REPLAN keyword."""
+        mock_context.return_value = None
+        state = {
+            "ask_user_trigger": "no_stages_available",
+            "user_responses": {"Question": "replan"},
+            "progress": {"stages": [], "user_interactions": []},
+        }
+
+        result = supervisor_node(state)
+
+        assert result["supervisor_verdict"] == "replan_needed"
+
+
+class TestBacktrackLimitTrigger:
+    """Tests for backtrack_limit trigger handling."""
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_force_continues_on_force(self, mock_context):
+        """Should continue workflow on FORCE."""
+        mock_context.return_value = None
+        state = {
+            "ask_user_trigger": "backtrack_limit",
+            "user_responses": {"Question": "FORCE_CONTINUE"},
+            "progress": {"stages": [], "user_interactions": []},
+        }
+
+        result = supervisor_node(state)
+
+        assert result["supervisor_verdict"] == "ok_continue"
+        assert result["ask_user_trigger"] is None
+        assert "supervisor_feedback" in result
+        assert "backtrack limit" in result["supervisor_feedback"].lower()
+        assert result.get("should_stop") is not True
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_force_continues_on_continue(self, mock_context):
+        """Should continue workflow on CONTINUE."""
+        mock_context.return_value = None
+        state = {
+            "ask_user_trigger": "backtrack_limit",
+            "user_responses": {"Question": "CONTINUE"},
+            "progress": {"stages": [], "user_interactions": []},
+        }
+
+        result = supervisor_node(state)
+
+        assert result["supervisor_verdict"] == "ok_continue"
+        assert result["ask_user_trigger"] is None
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_stops_on_stop(self, mock_context):
+        """Should stop workflow on STOP."""
+        mock_context.return_value = None
+        state = {
+            "ask_user_trigger": "backtrack_limit",
+            "user_responses": {"Question": "STOP"},
+            "progress": {"stages": [], "user_interactions": []},
+        }
+
+        result = supervisor_node(state)
+
+        assert result["supervisor_verdict"] == "all_complete"
+        assert result["should_stop"] is True
+        assert result["ask_user_trigger"] is None
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_asks_clarification_on_unclear(self, mock_context):
+        """Should ask clarification on unclear response."""
+        mock_context.return_value = None
+        state = {
+            "ask_user_trigger": "backtrack_limit",
+            "user_responses": {"Question": "maybe"},
+            "progress": {"stages": [], "user_interactions": []},
+        }
+
+        result = supervisor_node(state)
+
+        assert result["supervisor_verdict"] == "ask_user"
+        assert result["ask_user_trigger"] is None
+        assert "pending_user_questions" in result
+        question = result["pending_user_questions"][0]
+        assert "FORCE" in question or "CONTINUE" in question or "STOP" in question
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_handles_empty_user_responses(self, mock_context):
+        """Should handle empty user_responses gracefully."""
+        mock_context.return_value = None
+        state = {
+            "ask_user_trigger": "backtrack_limit",
+            "user_responses": {},
+            "progress": {"stages": [], "user_interactions": []},
+        }
+
+        result = supervisor_node(state)
+
+        assert result["supervisor_verdict"] == "ask_user"
+        assert result["ask_user_trigger"] is None
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_handles_case_insensitive_force(self, mock_context):
+        """Should handle case-insensitive FORCE keyword."""
+        mock_context.return_value = None
+        state = {
+            "ask_user_trigger": "backtrack_limit",
+            "user_responses": {"Question": "force"},
+            "progress": {"stages": [], "user_interactions": []},
+        }
+
+        result = supervisor_node(state)
+
+        assert result["supervisor_verdict"] == "ok_continue"
+
+
+class TestInvalidBacktrackDecisionTrigger:
+    """Tests for invalid_backtrack_decision trigger handling."""
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_continues_on_continue(self, mock_context):
+        """Should continue workflow on CONTINUE and clear invalid decision."""
+        mock_context.return_value = None
+        state = {
+            "ask_user_trigger": "invalid_backtrack_decision",
+            "user_responses": {"Question": "CONTINUE"},
+            "backtrack_decision": {"target_stage_id": "invalid_stage"},
+            "progress": {"stages": [], "user_interactions": []},
+        }
+
+        result = supervisor_node(state)
+
+        assert result["supervisor_verdict"] == "ok_continue"
+        assert result["ask_user_trigger"] is None
+        assert result["backtrack_decision"] is None  # Should clear invalid decision
+        assert result.get("should_stop") is not True
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_stops_on_stop(self, mock_context):
+        """Should stop workflow on STOP."""
+        mock_context.return_value = None
+        state = {
+            "ask_user_trigger": "invalid_backtrack_decision",
+            "user_responses": {"Question": "STOP"},
+            "progress": {"stages": [], "user_interactions": []},
+        }
+
+        result = supervisor_node(state)
+
+        assert result["supervisor_verdict"] == "all_complete"
+        assert result["should_stop"] is True
+        assert result["ask_user_trigger"] is None
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_asks_clarification_on_unclear(self, mock_context):
+        """Should ask clarification on unclear response."""
+        mock_context.return_value = None
+        state = {
+            "ask_user_trigger": "invalid_backtrack_decision",
+            "user_responses": {"Question": "maybe"},
+            "progress": {"stages": [], "user_interactions": []},
+        }
+
+        result = supervisor_node(state)
+
+        assert result["supervisor_verdict"] == "ask_user"
+        assert result["ask_user_trigger"] is None
+        assert "pending_user_questions" in result
+        question = result["pending_user_questions"][0]
+        assert "CONTINUE" in question or "STOP" in question
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_handles_empty_user_responses(self, mock_context):
+        """Should handle empty user_responses gracefully."""
+        mock_context.return_value = None
+        state = {
+            "ask_user_trigger": "invalid_backtrack_decision",
+            "user_responses": {},
+            "progress": {"stages": [], "user_interactions": []},
+        }
+
+        result = supervisor_node(state)
+
+        assert result["supervisor_verdict"] == "ask_user"
+        assert result["ask_user_trigger"] is None
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_handles_missing_backtrack_decision(self, mock_context):
+        """Should handle missing backtrack_decision when continuing."""
+        mock_context.return_value = None
+        state = {
+            "ask_user_trigger": "invalid_backtrack_decision",
+            "user_responses": {"Question": "CONTINUE"},
+            "progress": {"stages": [], "user_interactions": []},
+        }
+
+        result = supervisor_node(state)
+
+        assert result["supervisor_verdict"] == "ok_continue"
+        assert result["backtrack_decision"] is None
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_handles_case_insensitive_continue(self, mock_context):
+        """Should handle case-insensitive CONTINUE keyword."""
+        mock_context.return_value = None
+        state = {
+            "ask_user_trigger": "invalid_backtrack_decision",
+            "user_responses": {"Question": "continue"},
+            "progress": {"stages": [], "user_interactions": []},
+        }
+
+        result = supervisor_node(state)
+
+        assert result["supervisor_verdict"] == "ok_continue"
+
+
+class TestTriggerHandlerIntegration:
+    """Integration tests verifying trigger handler integration."""
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_all_limit_triggers_clear_trigger(self, mock_context):
+        """All limit triggers should clear the ask_user_trigger."""
+        mock_context.return_value = None
+        
+        triggers = [
+            "code_review_limit",
+            "design_review_limit",
+            "execution_failure_limit",
+            "physics_failure_limit",
+            "replan_limit",
+            "llm_error",
+            "clarification",
+            "missing_paper_text",
+            "missing_stage_id",
+            "progress_init_failed",
+            "no_stages_available",
+            "invalid_backtrack_target",
+            "backtrack_target_not_found",
+            "backtrack_limit",
+            "invalid_backtrack_decision",
+        ]
+        
+        for trigger in triggers:
+            state = {
+                "ask_user_trigger": trigger,
+                "user_responses": {"Question": "STOP"},  # Universal response
+                "progress": {"stages": [], "user_interactions": []},
+            }
+            
+            result = supervisor_node(state)
+            
+            assert result["ask_user_trigger"] is None, f"Trigger {trigger} did not clear ask_user_trigger"
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_stop_response_always_stops_workflow(self, mock_context):
+        """STOP response should always stop workflow for all triggers."""
+        mock_context.return_value = None
+        
+        triggers = [
+            "code_review_limit",
+            "design_review_limit",
+            "execution_failure_limit",
+            "physics_failure_limit",
+            "replan_limit",
+            "llm_error",
+            "missing_paper_text",
+            "missing_stage_id",
+            "progress_init_failed",
+            "no_stages_available",
+            "invalid_backtrack_target",
+            "backtrack_target_not_found",
+            "backtrack_limit",
+            "invalid_backtrack_decision",
+        ]
+        
+        for trigger in triggers:
+            state = {
+                "ask_user_trigger": trigger,
+                "user_responses": {"Question": "STOP"},
+                "progress": {"stages": [], "user_interactions": []},
+            }
+            
+            result = supervisor_node(state)
+            
+            assert result["supervisor_verdict"] == "all_complete", \
+                f"Trigger {trigger} did not set all_complete verdict on STOP"
+            assert result["should_stop"] is True, \
+                f"Trigger {trigger} did not set should_stop on STOP"
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_skip_response_skips_stage(self, mock_context):
+        """SKIP response should skip stage for applicable triggers."""
+        mock_context.return_value = None
+        
+        triggers_with_skip = [
+            "code_review_limit",
+            "design_review_limit",
+            "execution_failure_limit",
+            "physics_failure_limit",
+            "llm_error",
+        ]
+        
+        for trigger in triggers_with_skip:
+            state = {
+                "ask_user_trigger": trigger,
+                "user_responses": {"Question": "SKIP"},
+                "current_stage_id": "stage1",
+                "progress": {"stages": [], "user_interactions": []},
+            }
+            
+            with patch("src.agents.supervision.trigger_handlers.update_progress_stage_status") as mock_update:
+                result = supervisor_node(state)
+                
+                assert result["supervisor_verdict"] == "ok_continue", \
+                    f"Trigger {trigger} did not set ok_continue verdict on SKIP"
+                assert result.get("should_stop") is not True, \
+                    f"Trigger {trigger} set should_stop on SKIP"
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_logs_user_interaction_for_all_triggers(self, mock_context):
+        """All triggers should log user interaction."""
+        mock_context.return_value = None
+        
+        triggers = [
+            "code_review_limit",
+            "design_review_limit",
+            "execution_failure_limit",
+            "physics_failure_limit",
+            "replan_limit",
+            "llm_error",
+            "clarification",
+            "backtrack_limit",
+            "invalid_backtrack_decision",
+        ]
+        
+        for trigger in triggers:
+            state = {
+                "ask_user_trigger": trigger,
+                "user_responses": {"Question": "STOP"},
+                "pending_user_questions": ["Question?"],
+                "current_stage_id": "stage1",
+                "progress": {"stages": [], "user_interactions": []},
+            }
+            
+            result = supervisor_node(state)
+            
+            assert "progress" in result, f"Trigger {trigger} did not return progress"
+            assert "user_interactions" in result["progress"], \
+                f"Trigger {trigger} did not log user interaction"
+            assert len(result["progress"]["user_interactions"]) == 1, \
+                f"Trigger {trigger} logged wrong number of interactions"
+            interaction = result["progress"]["user_interactions"][0]
+            assert interaction["interaction_type"] == trigger, \
+                f"Trigger {trigger} logged wrong interaction type"
+
+
+class TestUserResponseVariations:
+    """Tests for various user response formats and edge cases."""
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_handles_response_with_extra_text(self, mock_context):
+        """Should handle response with extra text before/after keyword."""
+        mock_context.return_value = None
+        state = {
+            "ask_user_trigger": "code_review_limit",
+            "user_responses": {"Question": "Please PROVIDE_HINT: Try using numpy arrays for better performance"},
+            "code_revision_count": 3,
+        }
+
+        result = supervisor_node(state)
+
+        assert result["code_revision_count"] == 0
+        assert result["supervisor_verdict"] == "ok_continue"
+        assert "numpy arrays" in result["reviewer_feedback"]
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_handles_response_with_special_characters(self, mock_context):
+        """Should handle response with special characters."""
+        mock_context.return_value = None
+        state = {
+            "ask_user_trigger": "code_review_limit",
+            "user_responses": {"Question": "HINT: Use np.array([1,2,3])!"},
+            "code_revision_count": 2,
+        }
+
+        result = supervisor_node(state)
+
+        assert result["code_revision_count"] == 0
+        assert result["supervisor_verdict"] == "ok_continue"
+        assert "np.array" in result["reviewer_feedback"]
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_handles_response_with_newlines(self, mock_context):
+        """Should handle response with newlines."""
+        mock_context.return_value = None
+        state = {
+            "ask_user_trigger": "replan_limit",
+            "user_responses": {"Question": "GUIDANCE:\n1. Step one\n2. Step two"},
+            "replan_count": 3,
+        }
+
+        result = supervisor_node(state)
+
+        assert result["replan_count"] == 0
+        assert result["supervisor_verdict"] == "replan_needed"
+        assert "Step one" in result["planner_feedback"]
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_handles_unicode_response(self, mock_context):
+        """Should handle unicode characters in response."""
+        mock_context.return_value = None
+        state = {
+            "ask_user_trigger": "clarification",
+            "user_responses": {"Question": "Use λ=550nm for the wavelength"},
+            "progress": {"stages": [], "user_interactions": []},
+        }
+
+        result = supervisor_node(state)
+
+        assert result["supervisor_verdict"] == "ok_continue"
+        assert "λ=550nm" in result["supervisor_feedback"]
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_handles_very_long_response(self, mock_context):
+        """Should handle very long response."""
+        mock_context.return_value = None
+        long_hint = "HINT: " + "A" * 10000
+        state = {
+            "ask_user_trigger": "code_review_limit",
+            "user_responses": {"Question": long_hint},
+            "code_revision_count": 2,
+        }
+
+        result = supervisor_node(state)
+
+        assert result["code_revision_count"] == 0
+        assert result["supervisor_verdict"] == "ok_continue"
+        assert "User hint:" in result["reviewer_feedback"]
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_handles_numeric_response_value(self, mock_context):
+        """Should handle numeric response value gracefully."""
+        mock_context.return_value = None
+        state = {
+            "ask_user_trigger": "code_review_limit",
+            "user_responses": {"Question": 42},  # Non-string value
+            "progress": {"stages": [], "user_interactions": []},
+        }
+
+        # Should handle gracefully
+        result = supervisor_node(state)
+
+        # Should ask for clarification since "42" doesn't match any keyword
         assert result["supervisor_verdict"] == "ask_user"
         assert result["ask_user_trigger"] is None
 

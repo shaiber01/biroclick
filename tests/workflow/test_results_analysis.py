@@ -849,9 +849,11 @@ class TestComparisonValidatorEdgeCases:
         with patch("src.agents.analysis.check_context_or_escalate", return_value=None):
             result = comparison_validator_node(validated_analysis_state)
 
-            # Should return early
-            assert result.get("awaiting_user_input") is True
-            assert "workflow_phase" not in result or result.get("workflow_phase") != "comparison_validation"
+            # Should return empty dict (no state changes) - this preserves awaiting_user_input=True
+            # in the merged state since LangGraph merges the result dict into state
+            assert result == {}
+            # Verify workflow_phase was NOT set (processing was skipped)
+            assert "workflow_phase" not in result
 
     def test_truncates_feedback_when_many_issues(self, validated_analysis_state):
         """Should truncate feedback when many issues exist."""

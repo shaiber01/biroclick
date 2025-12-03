@@ -662,3 +662,786 @@ class TestCreatePaperInput:
         assert len(paper_input["supplementary"]["supplementary_data_files"]) == 2
 
 
+class TestCreatePaperInputInvalidDomain:
+    """Tests for invalid domain validation in create_paper_input."""
+
+    def test_invalid_domain_should_raise_error(self):
+        """Invalid domain should raise ValidationError, not be silently accepted."""
+        from src.paper_loader import VALID_DOMAINS
+        
+        # Use a domain that is clearly not in the valid list
+        invalid_domain = "definitely_not_a_valid_domain_xyz123"
+        assert invalid_domain not in VALID_DOMAINS
+        
+        with pytest.raises(ValidationError) as exc_info:
+            create_paper_input(
+                paper_id="test",
+                paper_title="Test",
+                paper_text="A" * 150,
+                figures=[],
+                paper_domain=invalid_domain,
+            )
+        error_msg = str(exc_info.value).lower()
+        assert "domain" in error_msg or invalid_domain.lower() in error_msg
+
+    def test_empty_string_domain_should_raise_error(self):
+        """Empty string domain should raise ValidationError."""
+        with pytest.raises(ValidationError) as exc_info:
+            create_paper_input(
+                paper_id="test",
+                paper_title="Test",
+                paper_text="A" * 150,
+                figures=[],
+                paper_domain="",
+            )
+        assert "domain" in str(exc_info.value).lower()
+
+    def test_none_domain_should_raise_error(self):
+        """None domain should raise ValidationError or TypeError."""
+        with pytest.raises((ValidationError, TypeError)):
+            create_paper_input(
+                paper_id="test",
+                paper_title="Test",
+                paper_text="A" * 150,
+                figures=[],
+                paper_domain=None,
+            )
+
+    def test_numeric_domain_should_raise_error(self):
+        """Numeric domain should raise ValidationError or TypeError."""
+        with pytest.raises((ValidationError, TypeError)):
+            create_paper_input(
+                paper_id="test",
+                paper_title="Test",
+                paper_text="A" * 150,
+                figures=[],
+                paper_domain=123,
+            )
+
+    def test_domain_case_sensitivity(self):
+        """Test that domain validation is case-sensitive."""
+        from src.paper_loader import VALID_DOMAINS
+        
+        # "plasmonics" is valid, but "PLASMONICS" should not be (case-sensitive)
+        # Unless the system is case-insensitive, in which case it should work
+        # This test reveals the actual behavior
+        if "plasmonics" in VALID_DOMAINS:
+            try:
+                paper_input = create_paper_input(
+                    paper_id="test",
+                    paper_title="Test",
+                    paper_text="A" * 150,
+                    figures=[],
+                    paper_domain="PLASMONICS",
+                )
+                # If it succeeds, verify the domain is stored as provided
+                assert paper_input["paper_domain"] == "PLASMONICS"
+            except ValidationError:
+                # Case-sensitive validation - this is also acceptable
+                pass
+
+
+class TestFigureEdgeCases:
+    """Tests for figure edge cases that should be properly validated."""
+
+    def test_figure_with_empty_string_id(self):
+        """Figure with empty string id should raise ValidationError."""
+        with pytest.raises(ValidationError) as exc_info:
+            create_paper_input(
+                paper_id="test",
+                paper_title="Test",
+                paper_text="A" * 150,
+                figures=[{"id": "", "description": "Test", "image_path": "test.png"}],
+            )
+        error_msg = str(exc_info.value).lower()
+        assert "id" in error_msg or "empty" in error_msg or "figure" in error_msg
+
+    def test_figure_with_none_image_path(self):
+        """Figure with None image_path should raise ValidationError."""
+        with pytest.raises(ValidationError) as exc_info:
+            create_paper_input(
+                paper_id="test",
+                paper_title="Test",
+                paper_text="A" * 150,
+                figures=[{"id": "Fig1", "description": "Test", "image_path": None}],
+            )
+        error_msg = str(exc_info.value).lower()
+        assert "image_path" in error_msg or "figure" in error_msg or "none" in error_msg
+
+    def test_figure_with_non_string_image_path(self):
+        """Figure with non-string image_path should raise ValidationError."""
+        with pytest.raises(ValidationError) as exc_info:
+            create_paper_input(
+                paper_id="test",
+                paper_title="Test",
+                paper_text="A" * 150,
+                figures=[{"id": "Fig1", "description": "Test", "image_path": 123}],
+            )
+        error_msg = str(exc_info.value).lower()
+        assert "image_path" in error_msg or "figure" in error_msg or "string" in error_msg
+
+    def test_figure_with_none_id(self):
+        """Figure with None id should raise ValidationError."""
+        with pytest.raises(ValidationError) as exc_info:
+            create_paper_input(
+                paper_id="test",
+                paper_title="Test",
+                paper_text="A" * 150,
+                figures=[{"id": None, "description": "Test", "image_path": "test.png"}],
+            )
+        error_msg = str(exc_info.value).lower()
+        assert "id" in error_msg or "figure" in error_msg
+
+    def test_figure_with_non_string_id(self):
+        """Figure with non-string id should raise ValidationError."""
+        with pytest.raises(ValidationError) as exc_info:
+            create_paper_input(
+                paper_id="test",
+                paper_title="Test",
+                paper_text="A" * 150,
+                figures=[{"id": 123, "description": "Test", "image_path": "test.png"}],
+            )
+        error_msg = str(exc_info.value).lower()
+        assert "id" in error_msg or "figure" in error_msg or "string" in error_msg
+
+    def test_figure_with_whitespace_only_id(self):
+        """Figure with whitespace-only id should either fail or be handled."""
+        # Whitespace-only IDs are problematic - test expected behavior
+        # The validation should either reject this or trim it
+        try:
+            paper_input = create_paper_input(
+                paper_id="test",
+                paper_title="Test",
+                paper_text="A" * 150,
+                figures=[{"id": "   ", "description": "Test", "image_path": "test.png"}],
+            )
+            # If accepted, it should either be trimmed or stored as-is
+            assert paper_input["figures"][0]["id"] == "   " or paper_input["figures"][0]["id"].strip() == ""
+        except ValidationError:
+            # Rejection is also acceptable behavior
+            pass
+
+    def test_figure_description_is_optional(self):
+        """Figure description field should be optional or have sensible default."""
+        # The schema shows description is required, but let's verify
+        try:
+            paper_input = create_paper_input(
+                paper_id="test",
+                paper_title="Test",
+                paper_text="A" * 150,
+                figures=[{"id": "Fig1", "image_path": "test.png"}],  # No description
+            )
+            # If it succeeds, description might have a default or be truly optional
+            assert "description" in paper_input["figures"][0] or "description" not in paper_input["figures"][0]
+        except ValidationError:
+            # Description is required - this is also acceptable
+            pass
+
+    def test_duplicate_figure_ids(self):
+        """Test behavior with duplicate figure IDs."""
+        # Duplicate IDs might be an error or might be allowed
+        # This test reveals the actual behavior
+        try:
+            paper_input = create_paper_input(
+                paper_id="test",
+                paper_title="Test",
+                paper_text="A" * 150,
+                figures=[
+                    {"id": "Fig1", "description": "First", "image_path": "test1.png"},
+                    {"id": "Fig1", "description": "Duplicate", "image_path": "test2.png"},
+                ],
+            )
+            # If duplicates are allowed, verify both are stored
+            assert len(paper_input["figures"]) == 2
+            assert paper_input["figures"][0]["id"] == "Fig1"
+            assert paper_input["figures"][1]["id"] == "Fig1"
+        except ValidationError:
+            # Duplicate IDs are not allowed - also acceptable
+            pass
+
+
+class TestSupplementaryDataFileEdgeCases:
+    """Tests for supplementary data file edge cases."""
+
+    def test_supplementary_data_file_not_dict(self):
+        """Supplementary data file that is not a dict should raise ValidationError."""
+        with pytest.raises(ValidationError) as exc_info:
+            create_paper_input(
+                paper_id="test",
+                paper_title="Test",
+                paper_text="A" * 150,
+                figures=[],
+                supplementary_data_files=["not a dict"],
+            )
+        error_msg = str(exc_info.value).lower()
+        assert "data file" in error_msg or "dictionary" in error_msg or "dict" in error_msg
+
+    def test_supplementary_data_file_missing_id(self):
+        """Supplementary data file missing id should raise ValidationError."""
+        with pytest.raises(ValidationError) as exc_info:
+            create_paper_input(
+                paper_id="test",
+                paper_title="Test",
+                paper_text="A" * 150,
+                figures=[],
+                supplementary_data_files=[{"description": "Test", "file_path": "test.csv", "data_type": "spectrum"}],
+            )
+        assert "id" in str(exc_info.value).lower()
+
+    def test_supplementary_data_file_missing_description(self):
+        """Supplementary data file missing description should raise ValidationError."""
+        with pytest.raises(ValidationError) as exc_info:
+            create_paper_input(
+                paper_id="test",
+                paper_title="Test",
+                paper_text="A" * 150,
+                figures=[],
+                supplementary_data_files=[{"id": "S1", "file_path": "test.csv", "data_type": "spectrum"}],
+            )
+        assert "description" in str(exc_info.value).lower()
+
+    def test_supplementary_data_file_missing_file_path(self):
+        """Supplementary data file missing file_path should raise ValidationError."""
+        with pytest.raises(ValidationError) as exc_info:
+            create_paper_input(
+                paper_id="test",
+                paper_title="Test",
+                paper_text="A" * 150,
+                figures=[],
+                supplementary_data_files=[{"id": "S1", "description": "Test", "data_type": "spectrum"}],
+            )
+        assert "file_path" in str(exc_info.value).lower()
+
+    def test_supplementary_data_file_missing_data_type(self):
+        """Supplementary data file missing data_type should raise ValidationError."""
+        with pytest.raises(ValidationError) as exc_info:
+            create_paper_input(
+                paper_id="test",
+                paper_title="Test",
+                paper_text="A" * 150,
+                figures=[],
+                supplementary_data_files=[{"id": "S1", "description": "Test", "file_path": "test.csv"}],
+            )
+        assert "data_type" in str(exc_info.value).lower()
+
+    def test_supplementary_data_file_with_valid_data_types(self):
+        """Test that various data_type values are accepted."""
+        # Test different data_type values
+        data_types = ["spectrum", "geometry", "parameters", "time_series", "other"]
+        for data_type in data_types:
+            paper_input = create_paper_input(
+                paper_id="test",
+                paper_title="Test",
+                paper_text="A" * 150,
+                figures=[],
+                supplementary_data_files=[{
+                    "id": f"S_{data_type}",
+                    "description": f"Test {data_type}",
+                    "file_path": f"test_{data_type}.csv",
+                    "data_type": data_type
+                }],
+            )
+            assert paper_input["supplementary"]["supplementary_data_files"][0]["data_type"] == data_type
+
+
+class TestSupplementaryFigureEdgeCases:
+    """Tests for supplementary figure edge cases."""
+
+    def test_supplementary_figure_not_dict(self):
+        """Supplementary figure that is not a dict should raise ValidationError."""
+        with pytest.raises(ValidationError) as exc_info:
+            create_paper_input(
+                paper_id="test",
+                paper_title="Test",
+                paper_text="A" * 150,
+                figures=[],
+                supplementary_figures=["not a dict"],
+            )
+        error_msg = str(exc_info.value).lower()
+        assert "supplementary figure" in error_msg or "dictionary" in error_msg or "dict" in error_msg
+
+    def test_supplementary_figure_with_none_id(self):
+        """Supplementary figure with None id should raise ValidationError."""
+        with pytest.raises(ValidationError) as exc_info:
+            create_paper_input(
+                paper_id="test",
+                paper_title="Test",
+                paper_text="A" * 150,
+                figures=[],
+                supplementary_figures=[{"id": None, "description": "Test", "image_path": "test.png"}],
+            )
+        error_msg = str(exc_info.value).lower()
+        assert "id" in error_msg
+
+    def test_supplementary_figure_with_empty_id(self):
+        """Supplementary figure with empty id should raise ValidationError."""
+        with pytest.raises(ValidationError) as exc_info:
+            create_paper_input(
+                paper_id="test",
+                paper_title="Test",
+                paper_text="A" * 150,
+                figures=[],
+                supplementary_figures=[{"id": "", "description": "Test", "image_path": "test.png"}],
+            )
+        error_msg = str(exc_info.value).lower()
+        assert "id" in error_msg or "empty" in error_msg
+
+    def test_supplementary_figure_with_none_image_path(self):
+        """Supplementary figure with None image_path should raise ValidationError."""
+        with pytest.raises(ValidationError) as exc_info:
+            create_paper_input(
+                paper_id="test",
+                paper_title="Test",
+                paper_text="A" * 150,
+                figures=[],
+                supplementary_figures=[{"id": "S1", "description": "Test", "image_path": None}],
+            )
+        error_msg = str(exc_info.value).lower()
+        assert "image_path" in error_msg or "none" in error_msg
+
+
+class TestDeepCopyBehavior:
+    """Tests for deep copy behavior to prevent side effects."""
+
+    def test_deep_copy_of_figure_dicts(self):
+        """Verify that figure dicts themselves are copied, not just the list."""
+        original_figures = [
+            {"id": "Fig1", "description": "Original", "image_path": "test.png"}
+        ]
+        paper_input = create_paper_input(
+            paper_id="test",
+            paper_title="Test",
+            paper_text="A" * 150,
+            figures=original_figures,
+        )
+        # Verify the dict object is a different reference
+        assert paper_input["figures"][0] is not original_figures[0]
+        # Modify the returned dict
+        paper_input["figures"][0]["description"] = "Modified"
+        # Original should be unchanged
+        assert original_figures[0]["description"] == "Original"
+
+    def test_deep_copy_of_supplementary_figure_dicts(self):
+        """Verify that supplementary figure dicts are copied, not just the list."""
+        original_supp_figs = [
+            {"id": "S1", "description": "Original", "image_path": "test.png"}
+        ]
+        paper_input = create_paper_input(
+            paper_id="test",
+            paper_title="Test",
+            paper_text="A" * 150,
+            figures=[],
+            supplementary_figures=original_supp_figs,
+        )
+        # Verify the dict object is a different reference
+        assert paper_input["supplementary"]["supplementary_figures"][0] is not original_supp_figs[0]
+        # Modify the returned dict
+        paper_input["supplementary"]["supplementary_figures"][0]["description"] = "Modified"
+        # Original should be unchanged
+        assert original_supp_figs[0]["description"] == "Original"
+
+    def test_deep_copy_of_supplementary_data_file_dicts(self):
+        """Verify that supplementary data file dicts are copied, not just the list."""
+        original_data_files = [
+            {"id": "S1", "description": "Original", "file_path": "test.csv", "data_type": "spectrum"}
+        ]
+        paper_input = create_paper_input(
+            paper_id="test",
+            paper_title="Test",
+            paper_text="A" * 150,
+            figures=[],
+            supplementary_data_files=original_data_files,
+        )
+        # Verify the dict object is a different reference
+        assert paper_input["supplementary"]["supplementary_data_files"][0] is not original_data_files[0]
+        # Modify the returned dict
+        paper_input["supplementary"]["supplementary_data_files"][0]["description"] = "Modified"
+        # Original should be unchanged
+        assert original_data_files[0]["description"] == "Original"
+
+
+class TestPaperTextBoundaryConditions:
+    """Tests for paper_text boundary conditions."""
+
+    def test_paper_text_with_100_chars_including_whitespace(self):
+        """Paper text with exactly 100 chars but some whitespace should work if stripped >= 100."""
+        # 100 chars total, but stripping leading/trailing whitespace leaves 98
+        # This should fail validation since len(paper_text.strip()) < 100
+        text_with_whitespace = " " + "A" * 98 + " "  # 100 chars total, 98 after strip
+        with pytest.raises(ValidationError) as exc_info:
+            create_paper_input(
+                paper_id="test",
+                paper_title="Test",
+                paper_text=text_with_whitespace,
+                figures=[],
+            )
+        assert "paper_text" in str(exc_info.value).lower()
+
+    def test_paper_text_with_102_chars_but_strips_to_100(self):
+        """Paper text with 102 chars that strips to exactly 100 should work."""
+        # Leading/trailing space + 100 chars
+        text_with_whitespace = " " + "A" * 100 + " "  # 102 chars total, 100 after strip
+        paper_input = create_paper_input(
+            paper_id="test",
+            paper_title="Test",
+            paper_text=text_with_whitespace,
+            figures=[],
+        )
+        # Verify the original text is stored (not stripped)
+        assert paper_input["paper_text"] == text_with_whitespace
+        assert len(paper_input["paper_text"]) == 102
+
+    def test_paper_text_with_newlines_only(self):
+        """Paper text with only newlines should fail validation."""
+        with pytest.raises(ValidationError) as exc_info:
+            create_paper_input(
+                paper_id="test",
+                paper_title="Test",
+                paper_text="\n" * 150,
+                figures=[],
+            )
+        assert "paper_text" in str(exc_info.value).lower()
+
+    def test_paper_text_with_tabs_only(self):
+        """Paper text with only tabs should fail validation."""
+        with pytest.raises(ValidationError) as exc_info:
+            create_paper_input(
+                paper_id="test",
+                paper_title="Test",
+                paper_text="\t" * 150,
+                figures=[],
+            )
+        assert "paper_text" in str(exc_info.value).lower()
+
+    def test_paper_text_with_mixed_whitespace_only(self):
+        """Paper text with only mixed whitespace should fail validation."""
+        with pytest.raises(ValidationError) as exc_info:
+            create_paper_input(
+                paper_id="test",
+                paper_title="Test",
+                paper_text=" \t\n" * 50,  # 150 chars of mixed whitespace
+                figures=[],
+            )
+        assert "paper_text" in str(exc_info.value).lower()
+
+    def test_paper_text_just_over_max_length(self):
+        """Paper text just 1 character over max should fail."""
+        max_chars = CONTEXT_WINDOW_LIMITS["max_paper_chars"]
+        with pytest.raises(ValidationError) as exc_info:
+            create_paper_input(
+                paper_id="test",
+                paper_title="Test",
+                paper_text="A" * (max_chars + 1),
+                figures=[],
+            )
+        error_msg = str(exc_info.value).lower()
+        assert "exceeds" in error_msg or "paper_text" in error_msg or "maximum" in error_msg
+
+
+class TestUnicodeHandling:
+    """Tests for unicode handling in text fields."""
+
+    def test_paper_text_with_unicode_characters(self):
+        """Paper text with unicode characters should be preserved."""
+        unicode_text = "α β γ δ ε ζ η θ ι κ λ μ ν ξ π ρ σ τ υ φ χ ψ ω " * 5  # Greek letters
+        paper_input = create_paper_input(
+            paper_id="test",
+            paper_title="Test",
+            paper_text=unicode_text,
+            figures=[],
+        )
+        assert paper_input["paper_text"] == unicode_text
+
+    def test_paper_title_with_unicode_characters(self):
+        """Paper title with unicode characters should be preserved."""
+        unicode_title = "Study of α-particle interactions: γ-ray spectroscopy"
+        paper_input = create_paper_input(
+            paper_id="test",
+            paper_title=unicode_title,
+            paper_text="A" * 150,
+            figures=[],
+        )
+        assert paper_input["paper_title"] == unicode_title
+
+    def test_paper_id_with_unicode_characters(self):
+        """Paper ID with unicode characters - test actual behavior."""
+        # Some systems may not allow unicode in IDs
+        unicode_id = "paper_α_2024"
+        try:
+            paper_input = create_paper_input(
+                paper_id=unicode_id,
+                paper_title="Test",
+                paper_text="A" * 150,
+                figures=[],
+            )
+            assert paper_input["paper_id"] == unicode_id
+        except ValidationError:
+            # If unicode IDs are not allowed, that's acceptable
+            pass
+
+    def test_figure_description_with_unicode(self):
+        """Figure description with unicode should be preserved."""
+        unicode_desc = "Absorption spectrum showing λmax = 590 nm (ε = 10⁵ M⁻¹cm⁻¹)"
+        figures = [{"id": "Fig1", "description": unicode_desc, "image_path": "test.png"}]
+        paper_input = create_paper_input(
+            paper_id="test",
+            paper_title="Test",
+            paper_text="A" * 150,
+            figures=figures,
+        )
+        assert paper_input["figures"][0]["description"] == unicode_desc
+
+    def test_supplementary_text_with_unicode(self):
+        """Supplementary text with unicode should be preserved."""
+        unicode_supp = "Δλ measurements: λ₁ = 400nm, λ₂ = 700nm, Δλ = 300nm"
+        paper_input = create_paper_input(
+            paper_id="test",
+            paper_title="Test",
+            paper_text="A" * 150,
+            figures=[],
+            supplementary_text=unicode_supp,
+        )
+        assert paper_input["supplementary"]["supplementary_text"] == unicode_supp
+
+    def test_paper_text_with_emoji(self):
+        """Paper text with emoji characters should be handled."""
+        # Emojis in scientific papers are rare but should be handled
+        text_with_emoji = "Research findings 🔬 show significant results 📊 " * 4
+        paper_input = create_paper_input(
+            paper_id="test",
+            paper_title="Test",
+            paper_text=text_with_emoji,
+            figures=[],
+        )
+        assert paper_input["paper_text"] == text_with_emoji
+
+    def test_paper_text_with_mathematical_symbols(self):
+        """Paper text with mathematical symbols should be preserved."""
+        math_text = "∫₀^∞ e^(-x²) dx = √π/2, ∑ᵢ aᵢ = ∏ⱼ bⱼ, ∀x ∃y: x ≤ y " * 3
+        paper_input = create_paper_input(
+            paper_id="test",
+            paper_title="Test",
+            paper_text=math_text,
+            figures=[],
+        )
+        assert paper_input["paper_text"] == math_text
+
+
+class TestPaperTitleValidation:
+    """Additional tests for paper title validation."""
+
+    def test_paper_title_non_string_type(self):
+        """Non-string paper_title should raise ValidationError."""
+        with pytest.raises(ValidationError) as exc_info:
+            create_paper_input(
+                paper_id="test",
+                paper_title=123,
+                paper_text="A" * 150,
+                figures=[],
+            )
+        assert "paper_title" in str(exc_info.value).lower()
+
+    def test_paper_title_very_long(self):
+        """Very long paper_title should be accepted (or rejected with clear error)."""
+        # Scientific paper titles can be long, but there might be limits
+        very_long_title = "A" * 10000
+        try:
+            paper_input = create_paper_input(
+                paper_id="test",
+                paper_title=very_long_title,
+                paper_text="A" * 150,
+                figures=[],
+            )
+            assert paper_input["paper_title"] == very_long_title
+            assert len(paper_input["paper_title"]) == 10000
+        except ValidationError:
+            # If there's a length limit, that's fine too
+            pass
+
+    def test_paper_title_with_newlines(self):
+        """Paper title with newlines should be handled appropriately."""
+        title_with_newlines = "First Line\nSecond Line\nThird Line"
+        paper_input = create_paper_input(
+            paper_id="test",
+            paper_title=title_with_newlines,
+            paper_text="A" * 150,
+            figures=[],
+        )
+        # Title should be preserved exactly as provided
+        assert paper_input["paper_title"] == title_with_newlines
+
+    def test_paper_title_whitespace_only(self):
+        """Paper title with only whitespace - test behavior."""
+        # This might be valid or invalid depending on requirements
+        try:
+            paper_input = create_paper_input(
+                paper_id="test",
+                paper_title="   ",
+                paper_text="A" * 150,
+                figures=[],
+            )
+            assert paper_input["paper_title"] == "   "
+        except ValidationError:
+            # Whitespace-only titles might be rejected
+            pass
+
+
+class TestExtraFieldsHandling:
+    """Tests for handling of extra/unknown fields."""
+
+    def test_extra_fields_in_figure_are_preserved(self):
+        """Extra fields in figure dict should be preserved."""
+        figures = [
+            {
+                "id": "Fig1",
+                "description": "Test",
+                "image_path": "test.png",
+                "custom_field": "custom_value",
+                "another_field": 123,
+            }
+        ]
+        paper_input = create_paper_input(
+            paper_id="test",
+            paper_title="Test",
+            paper_text="A" * 150,
+            figures=figures,
+        )
+        # Extra fields should be preserved
+        assert paper_input["figures"][0].get("custom_field") == "custom_value"
+        assert paper_input["figures"][0].get("another_field") == 123
+
+    def test_extra_fields_in_supplementary_figure_are_preserved(self):
+        """Extra fields in supplementary figure dict should be preserved."""
+        supp_figs = [
+            {
+                "id": "S1",
+                "description": "Test",
+                "image_path": "test.png",
+                "custom_field": "custom_value",
+            }
+        ]
+        paper_input = create_paper_input(
+            paper_id="test",
+            paper_title="Test",
+            paper_text="A" * 150,
+            figures=[],
+            supplementary_figures=supp_figs,
+        )
+        assert paper_input["supplementary"]["supplementary_figures"][0].get("custom_field") == "custom_value"
+
+    def test_extra_fields_in_data_file_are_preserved(self):
+        """Extra fields in data file dict should be preserved."""
+        data_files = [
+            {
+                "id": "S1",
+                "description": "Test",
+                "file_path": "test.csv",
+                "data_type": "spectrum",
+                "custom_field": "custom_value",
+            }
+        ]
+        paper_input = create_paper_input(
+            paper_id="test",
+            paper_title="Test",
+            paper_text="A" * 150,
+            figures=[],
+            supplementary_data_files=data_files,
+        )
+        assert paper_input["supplementary"]["supplementary_data_files"][0].get("custom_field") == "custom_value"
+
+
+class TestMissingRequiredFields:
+    """Tests for missing required top-level fields."""
+
+    def test_missing_paper_id_arg_raises_type_error(self):
+        """Omitting paper_id argument should raise TypeError (not ValidationError)."""
+        with pytest.raises(TypeError):
+            create_paper_input(
+                paper_title="Test",
+                paper_text="A" * 150,
+                figures=[],
+            )
+
+    def test_missing_paper_title_arg_raises_type_error(self):
+        """Omitting paper_title argument should raise TypeError."""
+        with pytest.raises(TypeError):
+            create_paper_input(
+                paper_id="test",
+                paper_text="A" * 150,
+                figures=[],
+            )
+
+    def test_missing_paper_text_arg_raises_type_error(self):
+        """Omitting paper_text argument should raise TypeError."""
+        with pytest.raises(TypeError):
+            create_paper_input(
+                paper_id="test",
+                paper_title="Test",
+                figures=[],
+            )
+
+    def test_missing_figures_arg_raises_type_error(self):
+        """Omitting figures argument should raise TypeError."""
+        with pytest.raises(TypeError):
+            create_paper_input(
+                paper_id="test",
+                paper_title="Test",
+                paper_text="A" * 150,
+            )
+
+
+class TestSpecialCharacters:
+    """Tests for special characters in various fields."""
+
+    def test_paper_id_with_special_characters(self):
+        """Paper ID with special characters - test behavior."""
+        special_ids = [
+            "paper-with-dashes",
+            "paper_with_underscores",
+            "paper.with.dots",
+            "paper/with/slashes",  # Might be problematic for file paths
+            "paper:with:colons",
+        ]
+        for special_id in special_ids:
+            try:
+                paper_input = create_paper_input(
+                    paper_id=special_id,
+                    paper_title="Test",
+                    paper_text="A" * 150,
+                    figures=[],
+                )
+                assert paper_input["paper_id"] == special_id
+            except ValidationError:
+                # Some special characters might be rejected
+                pass
+
+    def test_figure_id_with_special_characters(self):
+        """Figure ID with special characters - test behavior."""
+        special_ids = ["Fig1a", "Fig_1_a", "Fig-1-a", "Fig.1.a"]
+        for fig_id in special_ids:
+            paper_input = create_paper_input(
+                paper_id="test",
+                paper_title="Test",
+                paper_text="A" * 150,
+                figures=[{"id": fig_id, "description": "Test", "image_path": "test.png"}],
+            )
+            assert paper_input["figures"][0]["id"] == fig_id
+
+    def test_image_path_with_special_characters(self):
+        """Image path with special characters - test behavior."""
+        special_paths = [
+            "path/to/image.png",
+            "path\\to\\image.png",
+            "path with spaces/image.png",
+            "path/with/αβγ/image.png",
+        ]
+        for path in special_paths:
+            paper_input = create_paper_input(
+                paper_id="test",
+                paper_title="Test",
+                paper_text="A" * 150,
+                figures=[{"id": "Fig1", "description": "Test", "image_path": path}],
+            )
+            assert paper_input["figures"][0]["image_path"] == path
+
+

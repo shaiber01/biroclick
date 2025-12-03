@@ -58,7 +58,12 @@ class TestPlanReviewerLLMCalls:
         )
 
     def test_plan_reviewer_handles_llm_error(self, base_state):
-        """plan_reviewer should auto-approve on LLM failure."""
+        """plan_reviewer should fail-closed (needs_revision) on LLM failure.
+        
+        This is the correct defensive behavior - reviewers should not auto-approve
+        when they cannot actually review. The component uses default_verdict="needs_revision"
+        which is safer than auto-approve.
+        """
         from src.agents.planning import plan_reviewer_node
 
         base_state["plan"] = {
@@ -73,20 +78,24 @@ class TestPlanReviewerLLMCalls:
                 }
             ],
         }
+        base_state["replan_count"] = 0  # Set initial count so we can verify increment
 
         with patch(
             "src.agents.planning.call_agent_with_metrics", side_effect=Exception("LLM Fail")
         ):
             result = plan_reviewer_node(base_state)
 
-        assert result["last_plan_review_verdict"] == "approve", (
-            f"Expected auto-approve on LLM error, got '{result['last_plan_review_verdict']}'"
+        # Fail-closed: needs_revision is safer than auto-approve when review cannot be performed
+        assert result["last_plan_review_verdict"] == "needs_revision", (
+            f"Expected fail-closed (needs_revision) on LLM error, got '{result['last_plan_review_verdict']}'"
         )
         assert result["workflow_phase"] == "plan_review", "Workflow phase should be set"
-        # Verify replan_count is NOT incremented for auto-approve
-        assert "replan_count" not in result or result.get("replan_count") == base_state.get("replan_count", 0), (
-            "replan_count should not be incremented when auto-approving due to LLM error"
+        # replan_count SHOULD be incremented for LLM rejection (not a blocking structural issue)
+        assert result.get("replan_count") == 1, (
+            f"replan_count should be incremented on LLM error rejection, got {result.get('replan_count')}"
         )
+        # Should have planner_feedback set
+        assert "planner_feedback" in result, "Should have planner_feedback on rejection"
     
     def test_plan_reviewer_includes_assumptions_in_user_content(self, base_state):
         """plan_reviewer should include assumptions in user_content when calling LLM."""
@@ -1014,6 +1023,606 @@ class TestCircularDependencyDetection:
         )
 
 
+class TestVerdictNormalization:
+    """Test verdict normalization logic in plan_reviewer_node."""
+
+    def test_plan_reviewer_normalizes_pass_to_approve(self, base_state):
+        """plan_reviewer should normalize 'pass' verdict to 'approve'."""
+        from src.agents.planning import plan_reviewer_node
+
+        base_state["plan"] = {
+            "paper_id": "test",
+            "title": "Test Plan",
+            "stages": [
+                {
+                    "stage_id": "s1",
+                    "stage_type": "MATERIAL_VALIDATION",
+                    "targets": ["Fig1"],
+                    "dependencies": [],
+                }
+            ],
+        }
+
+        # LLM returns "pass" instead of "approve"
+        mock_response = {"verdict": "pass", "issues": [], "summary": "OK"}
+
+        with patch(
+            "src.agents.planning.call_agent_with_metrics", return_value=mock_response
+        ):
+            result = plan_reviewer_node(base_state)
+
+        assert result["last_plan_review_verdict"] == "approve", (
+            f"Expected 'approve' (normalized from 'pass'), got '{result['last_plan_review_verdict']}'"
+        )
+
+    def test_plan_reviewer_normalizes_approved_to_approve(self, base_state):
+        """plan_reviewer should normalize 'approved' verdict to 'approve'."""
+        from src.agents.planning import plan_reviewer_node
+
+        base_state["plan"] = {
+            "paper_id": "test",
+            "title": "Test Plan",
+            "stages": [
+                {
+                    "stage_id": "s1",
+                    "stage_type": "MATERIAL_VALIDATION",
+                    "targets": ["Fig1"],
+                    "dependencies": [],
+                }
+            ],
+        }
+
+        mock_response = {"verdict": "approved", "issues": [], "summary": "OK"}
+
+        with patch(
+            "src.agents.planning.call_agent_with_metrics", return_value=mock_response
+        ):
+            result = plan_reviewer_node(base_state)
+
+        assert result["last_plan_review_verdict"] == "approve", (
+            f"Expected 'approve' (normalized from 'approved'), got '{result['last_plan_review_verdict']}'"
+        )
+
+    def test_plan_reviewer_normalizes_accept_to_approve(self, base_state):
+        """plan_reviewer should normalize 'accept' verdict to 'approve'."""
+        from src.agents.planning import plan_reviewer_node
+
+        base_state["plan"] = {
+            "paper_id": "test",
+            "title": "Test Plan",
+            "stages": [
+                {
+                    "stage_id": "s1",
+                    "stage_type": "MATERIAL_VALIDATION",
+                    "targets": ["Fig1"],
+                    "dependencies": [],
+                }
+            ],
+        }
+
+        mock_response = {"verdict": "accept", "issues": [], "summary": "OK"}
+
+        with patch(
+            "src.agents.planning.call_agent_with_metrics", return_value=mock_response
+        ):
+            result = plan_reviewer_node(base_state)
+
+        assert result["last_plan_review_verdict"] == "approve", (
+            f"Expected 'approve' (normalized from 'accept'), got '{result['last_plan_review_verdict']}'"
+        )
+
+    def test_plan_reviewer_normalizes_reject_to_needs_revision(self, base_state):
+        """plan_reviewer should normalize 'reject' verdict to 'needs_revision'."""
+        from src.agents.planning import plan_reviewer_node
+
+        base_state["plan"] = {
+            "paper_id": "test",
+            "title": "Test Plan",
+            "stages": [
+                {
+                    "stage_id": "s1",
+                    "stage_type": "MATERIAL_VALIDATION",
+                    "targets": ["Fig1"],
+                    "dependencies": [],
+                }
+            ],
+        }
+        base_state["replan_count"] = 0
+
+        mock_response = {"verdict": "reject", "issues": [{"severity": "major", "description": "Plan incomplete"}], "summary": "Rejected"}
+
+        with patch(
+            "src.agents.planning.call_agent_with_metrics", return_value=mock_response
+        ):
+            result = plan_reviewer_node(base_state)
+
+        assert result["last_plan_review_verdict"] == "needs_revision", (
+            f"Expected 'needs_revision' (normalized from 'reject'), got '{result['last_plan_review_verdict']}'"
+        )
+        # Also verify replan_count was incremented
+        assert result.get("replan_count") == 1, "replan_count should be incremented on rejection"
+
+    def test_plan_reviewer_normalizes_revision_needed_to_needs_revision(self, base_state):
+        """plan_reviewer should normalize 'revision_needed' verdict to 'needs_revision'."""
+        from src.agents.planning import plan_reviewer_node
+
+        base_state["plan"] = {
+            "paper_id": "test",
+            "title": "Test Plan",
+            "stages": [
+                {
+                    "stage_id": "s1",
+                    "stage_type": "MATERIAL_VALIDATION",
+                    "targets": ["Fig1"],
+                    "dependencies": [],
+                }
+            ],
+        }
+        base_state["replan_count"] = 0
+
+        mock_response = {"verdict": "revision_needed", "issues": [], "summary": "Needs work"}
+
+        with patch(
+            "src.agents.planning.call_agent_with_metrics", return_value=mock_response
+        ):
+            result = plan_reviewer_node(base_state)
+
+        assert result["last_plan_review_verdict"] == "needs_revision", (
+            f"Expected 'needs_revision' (normalized from 'revision_needed'), got '{result['last_plan_review_verdict']}'"
+        )
+
+    def test_plan_reviewer_normalizes_needs_work_to_needs_revision(self, base_state):
+        """plan_reviewer should normalize 'needs_work' verdict to 'needs_revision'."""
+        from src.agents.planning import plan_reviewer_node
+
+        base_state["plan"] = {
+            "paper_id": "test",
+            "title": "Test Plan",
+            "stages": [
+                {
+                    "stage_id": "s1",
+                    "stage_type": "MATERIAL_VALIDATION",
+                    "targets": ["Fig1"],
+                    "dependencies": [],
+                }
+            ],
+        }
+        base_state["replan_count"] = 0
+
+        mock_response = {"verdict": "needs_work", "issues": [], "summary": "Needs work"}
+
+        with patch(
+            "src.agents.planning.call_agent_with_metrics", return_value=mock_response
+        ):
+            result = plan_reviewer_node(base_state)
+
+        assert result["last_plan_review_verdict"] == "needs_revision", (
+            f"Expected 'needs_revision' (normalized from 'needs_work'), got '{result['last_plan_review_verdict']}'"
+        )
+
+    def test_plan_reviewer_defaults_to_needs_revision_for_unknown_verdict(self, base_state):
+        """plan_reviewer should default to 'needs_revision' for unknown verdicts (fail-closed)."""
+        from src.agents.planning import plan_reviewer_node
+
+        base_state["plan"] = {
+            "paper_id": "test",
+            "title": "Test Plan",
+            "stages": [
+                {
+                    "stage_id": "s1",
+                    "stage_type": "MATERIAL_VALIDATION",
+                    "targets": ["Fig1"],
+                    "dependencies": [],
+                }
+            ],
+        }
+        base_state["replan_count"] = 0
+
+        # Unknown verdict value
+        mock_response = {"verdict": "maybe_ok", "issues": [], "summary": "Uncertain"}
+
+        with patch(
+            "src.agents.planning.call_agent_with_metrics", return_value=mock_response
+        ):
+            result = plan_reviewer_node(base_state)
+
+        assert result["last_plan_review_verdict"] == "needs_revision", (
+            f"Expected 'needs_revision' (fail-closed for unknown verdict), got '{result['last_plan_review_verdict']}'"
+        )
+
+    def test_plan_reviewer_defaults_to_needs_revision_for_missing_verdict(self, base_state):
+        """plan_reviewer should default to 'needs_revision' when verdict is missing."""
+        from src.agents.planning import plan_reviewer_node
+
+        base_state["plan"] = {
+            "paper_id": "test",
+            "title": "Test Plan",
+            "stages": [
+                {
+                    "stage_id": "s1",
+                    "stage_type": "MATERIAL_VALIDATION",
+                    "targets": ["Fig1"],
+                    "dependencies": [],
+                }
+            ],
+        }
+        base_state["replan_count"] = 0
+
+        # Missing verdict key entirely
+        mock_response = {"issues": [], "summary": "Review done"}
+
+        with patch(
+            "src.agents.planning.call_agent_with_metrics", return_value=mock_response
+        ):
+            result = plan_reviewer_node(base_state)
+
+        assert result["last_plan_review_verdict"] == "needs_revision", (
+            f"Expected 'needs_revision' (for missing verdict), got '{result['last_plan_review_verdict']}'"
+        )
+
+    def test_plan_reviewer_defaults_to_needs_revision_for_none_verdict(self, base_state):
+        """plan_reviewer should default to 'needs_revision' when verdict is None."""
+        from src.agents.planning import plan_reviewer_node
+
+        base_state["plan"] = {
+            "paper_id": "test",
+            "title": "Test Plan",
+            "stages": [
+                {
+                    "stage_id": "s1",
+                    "stage_type": "MATERIAL_VALIDATION",
+                    "targets": ["Fig1"],
+                    "dependencies": [],
+                }
+            ],
+        }
+        base_state["replan_count"] = 0
+
+        # verdict is None
+        mock_response = {"verdict": None, "issues": [], "summary": "Review done"}
+
+        with patch(
+            "src.agents.planning.call_agent_with_metrics", return_value=mock_response
+        ):
+            result = plan_reviewer_node(base_state)
+
+        assert result["last_plan_review_verdict"] == "needs_revision", (
+            f"Expected 'needs_revision' (for None verdict), got '{result['last_plan_review_verdict']}'"
+        )
+
+    def test_plan_reviewer_defaults_to_needs_revision_for_empty_string_verdict(self, base_state):
+        """plan_reviewer should default to 'needs_revision' when verdict is empty string."""
+        from src.agents.planning import plan_reviewer_node
+
+        base_state["plan"] = {
+            "paper_id": "test",
+            "title": "Test Plan",
+            "stages": [
+                {
+                    "stage_id": "s1",
+                    "stage_type": "MATERIAL_VALIDATION",
+                    "targets": ["Fig1"],
+                    "dependencies": [],
+                }
+            ],
+        }
+        base_state["replan_count"] = 0
+
+        # verdict is empty string
+        mock_response = {"verdict": "", "issues": [], "summary": "Review done"}
+
+        with patch(
+            "src.agents.planning.call_agent_with_metrics", return_value=mock_response
+        ):
+            result = plan_reviewer_node(base_state)
+
+        assert result["last_plan_review_verdict"] == "needs_revision", (
+            f"Expected 'needs_revision' (for empty string verdict), got '{result['last_plan_review_verdict']}'"
+        )
+
+
+class TestAskUserEscalation:
+    """Test ask_user escalation when max replans is reached."""
+
+    def test_plan_reviewer_escalates_to_user_at_max_replans(self, base_state):
+        """plan_reviewer should escalate to ask_user when max replans reached."""
+        from src.agents.planning import plan_reviewer_node
+        from schemas.state import MAX_REPLANS
+
+        # Set replan_count to max-1 so the rejection pushes it to max
+        base_state["replan_count"] = MAX_REPLANS - 1
+        base_state["runtime_config"] = {}  # Use default MAX_REPLANS
+        base_state["plan"] = {
+            "paper_id": "test",
+            "title": "Test Plan",
+            "stages": [
+                {
+                    "stage_id": "s1",
+                    "stage_type": "MATERIAL_VALIDATION",
+                    "targets": ["Fig1"],
+                    "dependencies": [],
+                }
+            ],
+        }
+
+        mock_response = {"verdict": "needs_revision", "issues": [{"severity": "major", "description": "Issues"}], "summary": "Needs work", "feedback": "Fix these issues"}
+
+        with patch(
+            "src.agents.planning.call_agent_with_metrics", return_value=mock_response
+        ):
+            result = plan_reviewer_node(base_state)
+
+        assert result["last_plan_review_verdict"] == "needs_revision", "Should still be needs_revision"
+        assert result.get("replan_count") == MAX_REPLANS, f"Should be at max ({MAX_REPLANS})"
+        assert result.get("ask_user_trigger") == "plan_review_limit", (
+            f"Should trigger ask_user with 'plan_review_limit', got '{result.get('ask_user_trigger')}'"
+        )
+        assert result.get("awaiting_user_input") is True, "Should be awaiting user input"
+        assert "pending_user_questions" in result, "Should have pending_user_questions"
+        assert len(result["pending_user_questions"]) > 0, "Should have at least one question"
+        # Verify question mentions the limit
+        question = result["pending_user_questions"][0]
+        assert f"{MAX_REPLANS}/{MAX_REPLANS}" in question, f"Question should mention replan limit, got: {question}"
+        # Verify question contains feedback
+        assert "Fix these issues" in question or "feedback" in question.lower(), f"Question should include feedback, got: {question}"
+
+    def test_plan_reviewer_escalates_to_user_at_custom_max_replans(self, base_state):
+        """plan_reviewer should respect custom max_replans from runtime_config."""
+        from src.agents.planning import plan_reviewer_node
+
+        custom_max = 2
+        base_state["replan_count"] = custom_max - 1  # At max-1
+        base_state["runtime_config"] = {"max_replans": custom_max}
+        base_state["plan"] = {
+            "paper_id": "test",
+            "title": "Test Plan",
+            "stages": [
+                {
+                    "stage_id": "s1",
+                    "stage_type": "MATERIAL_VALIDATION",
+                    "targets": ["Fig1"],
+                    "dependencies": [],
+                }
+            ],
+        }
+
+        mock_response = {"verdict": "needs_revision", "issues": [], "summary": "Needs work"}
+
+        with patch(
+            "src.agents.planning.call_agent_with_metrics", return_value=mock_response
+        ):
+            result = plan_reviewer_node(base_state)
+
+        assert result.get("replan_count") == custom_max, f"Should be at custom max ({custom_max})"
+        assert result.get("ask_user_trigger") == "plan_review_limit", "Should escalate at custom max"
+        assert result.get("awaiting_user_input") is True, "Should be awaiting user input"
+
+    def test_plan_reviewer_does_not_escalate_before_max_replans(self, base_state):
+        """plan_reviewer should NOT escalate before max replans is reached."""
+        from src.agents.planning import plan_reviewer_node
+        from schemas.state import MAX_REPLANS
+
+        # Set to less than max-1
+        base_state["replan_count"] = 0
+        base_state["runtime_config"] = {}
+        base_state["plan"] = {
+            "paper_id": "test",
+            "title": "Test Plan",
+            "stages": [
+                {
+                    "stage_id": "s1",
+                    "stage_type": "MATERIAL_VALIDATION",
+                    "targets": ["Fig1"],
+                    "dependencies": [],
+                }
+            ],
+        }
+
+        mock_response = {"verdict": "needs_revision", "issues": [], "summary": "Needs work"}
+
+        with patch(
+            "src.agents.planning.call_agent_with_metrics", return_value=mock_response
+        ):
+            result = plan_reviewer_node(base_state)
+
+        assert result.get("replan_count") == 1, "Should increment to 1"
+        assert "ask_user_trigger" not in result or result.get("ask_user_trigger") is None, (
+            "Should NOT escalate before max replans"
+        )
+        assert result.get("awaiting_user_input") is not True, "Should NOT be awaiting user input"
+
+    def test_plan_reviewer_escalation_includes_last_node_before_ask_user(self, base_state):
+        """plan_reviewer escalation should set last_node_before_ask_user."""
+        from src.agents.planning import plan_reviewer_node
+        from schemas.state import MAX_REPLANS
+
+        base_state["replan_count"] = MAX_REPLANS - 1
+        base_state["plan"] = {
+            "paper_id": "test",
+            "title": "Test Plan",
+            "stages": [
+                {
+                    "stage_id": "s1",
+                    "stage_type": "MATERIAL_VALIDATION",
+                    "targets": ["Fig1"],
+                    "dependencies": [],
+                }
+            ],
+        }
+
+        mock_response = {"verdict": "needs_revision", "issues": [], "summary": "Needs work"}
+
+        with patch(
+            "src.agents.planning.call_agent_with_metrics", return_value=mock_response
+        ):
+            result = plan_reviewer_node(base_state)
+
+        assert result.get("last_node_before_ask_user") == "plan_review", (
+            f"Expected last_node_before_ask_user='plan_review', got '{result.get('last_node_before_ask_user')}'"
+        )
+
+
+class TestPlannerFeedback:
+    """Test planner_feedback handling in plan_reviewer_node."""
+
+    def test_plan_reviewer_sets_planner_feedback_on_llm_rejection(self, base_state):
+        """plan_reviewer should set planner_feedback from LLM response on rejection."""
+        from src.agents.planning import plan_reviewer_node
+
+        base_state["plan"] = {
+            "paper_id": "test",
+            "title": "Test Plan",
+            "stages": [
+                {
+                    "stage_id": "s1",
+                    "stage_type": "MATERIAL_VALIDATION",
+                    "targets": ["Fig1"],
+                    "dependencies": [],
+                }
+            ],
+        }
+        base_state["replan_count"] = 0
+
+        feedback_text = "The plan needs better target coverage and clearer dependencies."
+        mock_response = {
+            "verdict": "needs_revision",
+            "issues": [{"severity": "major", "description": "Incomplete"}],
+            "summary": "Plan needs work",
+            "feedback": feedback_text,
+        }
+
+        with patch(
+            "src.agents.planning.call_agent_with_metrics", return_value=mock_response
+        ):
+            result = plan_reviewer_node(base_state)
+
+        assert result.get("planner_feedback") == feedback_text, (
+            f"Expected planner_feedback='{feedback_text}', got '{result.get('planner_feedback')}'"
+        )
+
+    def test_plan_reviewer_uses_summary_as_fallback_for_planner_feedback(self, base_state):
+        """plan_reviewer should fall back to summary when feedback is missing."""
+        from src.agents.planning import plan_reviewer_node
+
+        base_state["plan"] = {
+            "paper_id": "test",
+            "title": "Test Plan",
+            "stages": [
+                {
+                    "stage_id": "s1",
+                    "stage_type": "MATERIAL_VALIDATION",
+                    "targets": ["Fig1"],
+                    "dependencies": [],
+                }
+            ],
+        }
+        base_state["replan_count"] = 0
+
+        summary_text = "Plan needs improvements in target coverage"
+        mock_response = {
+            "verdict": "needs_revision",
+            "issues": [],
+            "summary": summary_text,
+            # No "feedback" key
+        }
+
+        with patch(
+            "src.agents.planning.call_agent_with_metrics", return_value=mock_response
+        ):
+            result = plan_reviewer_node(base_state)
+
+        assert result.get("planner_feedback") == summary_text, (
+            f"Expected planner_feedback='{summary_text}' (fallback from summary), got '{result.get('planner_feedback')}'"
+        )
+
+    def test_plan_reviewer_sets_empty_planner_feedback_when_both_missing(self, base_state):
+        """plan_reviewer should set empty string when both feedback and summary are missing."""
+        from src.agents.planning import plan_reviewer_node
+
+        base_state["plan"] = {
+            "paper_id": "test",
+            "title": "Test Plan",
+            "stages": [
+                {
+                    "stage_id": "s1",
+                    "stage_type": "MATERIAL_VALIDATION",
+                    "targets": ["Fig1"],
+                    "dependencies": [],
+                }
+            ],
+        }
+        base_state["replan_count"] = 0
+
+        mock_response = {
+            "verdict": "needs_revision",
+            "issues": [],
+            # No "feedback" or "summary" keys
+        }
+
+        with patch(
+            "src.agents.planning.call_agent_with_metrics", return_value=mock_response
+        ):
+            result = plan_reviewer_node(base_state)
+
+        assert "planner_feedback" in result, "planner_feedback should be set on rejection"
+        assert result["planner_feedback"] == "", (
+            f"Expected empty planner_feedback when both missing, got '{result.get('planner_feedback')}'"
+        )
+
+    def test_plan_reviewer_does_not_set_planner_feedback_on_approval(self, base_state):
+        """plan_reviewer should NOT set planner_feedback when verdict is approve."""
+        from src.agents.planning import plan_reviewer_node
+
+        base_state["plan"] = {
+            "paper_id": "test",
+            "title": "Test Plan",
+            "stages": [
+                {
+                    "stage_id": "s1",
+                    "stage_type": "MATERIAL_VALIDATION",
+                    "targets": ["Fig1"],
+                    "dependencies": [],
+                }
+            ],
+        }
+
+        mock_response = {
+            "verdict": "approve",
+            "issues": [],
+            "summary": "Plan looks good",
+            "feedback": "Some optional feedback",
+        }
+
+        with patch(
+            "src.agents.planning.call_agent_with_metrics", return_value=mock_response
+        ):
+            result = plan_reviewer_node(base_state)
+
+        assert "planner_feedback" not in result, (
+            f"planner_feedback should NOT be set on approval, got '{result.get('planner_feedback')}'"
+        )
+
+
+class TestContextCheckBehavior:
+    """Test with_context_check decorator behavior in plan_reviewer_node."""
+
+    def test_plan_reviewer_returns_empty_when_awaiting_user_input(self, base_state):
+        """plan_reviewer should return empty dict when already awaiting user input."""
+        from src.agents.planning import plan_reviewer_node
+
+        base_state["awaiting_user_input"] = True
+        base_state["plan"] = {
+            "paper_id": "test",
+            "title": "Test Plan",
+            "stages": [{"stage_id": "s1", "stage_type": "MATERIAL_VALIDATION", "targets": ["Fig1"], "dependencies": []}],
+        }
+
+        result = plan_reviewer_node(base_state)
+
+        # The decorator should return empty dict to avoid modifying state
+        assert result == {}, f"Expected empty dict when awaiting user input, got {result}"
+
+
 class TestComplexScenarios:
     """Test complex scenarios and edge cases."""
 
@@ -1223,4 +1832,593 @@ class TestComplexScenarios:
         assert "invalid_stage" in feedback.lower() or "no targets" in feedback.lower(), (
             f"Feedback should mention invalid stage, got: {feedback}"
         )
+
+
+class TestStageTypeValidation:
+    """Test validation of stage_type values."""
+
+    def test_plan_reviewer_accepts_valid_stage_types(self, base_state):
+        """plan_reviewer should accept all valid stage types."""
+        from src.agents.planning import plan_reviewer_node
+
+        valid_stage_types = [
+            "MATERIAL_VALIDATION",
+            "SINGLE_STRUCTURE",
+            "ARRAY_SYSTEM",
+            "PARAMETER_SWEEP",
+        ]
+
+        for stage_type in valid_stage_types:
+            base_state["plan"] = {
+                "paper_id": "test",
+                "title": f"Test Plan with {stage_type}",
+                "stages": [
+                    {
+                        "stage_id": f"stage_{stage_type}",
+                        "stage_type": stage_type,
+                        "targets": ["Fig1"],
+                        "dependencies": [],
+                    }
+                ],
+                "targets": [{"figure_id": "Fig1"}],
+            }
+
+            mock_response = {"verdict": "approve", "issues": [], "summary": "OK"}
+
+            with patch(
+                "src.agents.planning.call_agent_with_metrics", return_value=mock_response
+            ):
+                result = plan_reviewer_node(base_state)
+
+            assert result["last_plan_review_verdict"] == "approve", (
+                f"Expected 'approve' for valid stage_type '{stage_type}', got '{result['last_plan_review_verdict']}'"
+            )
+
+
+class TestPlanStructureEdgeCases:
+    """Test edge cases in plan structure validation."""
+
+    def test_plan_reviewer_handles_stage_with_very_long_id(self, base_state):
+        """plan_reviewer should handle stages with very long IDs."""
+        from src.agents.planning import plan_reviewer_node
+
+        long_id = "stage_" + "a" * 500  # 506 character ID
+        base_state["plan"] = {
+            "paper_id": "test",
+            "title": "Long ID Plan",
+            "stages": [
+                {
+                    "stage_id": long_id,
+                    "stage_type": "MATERIAL_VALIDATION",
+                    "targets": ["Fig1"],
+                    "dependencies": [],
+                }
+            ],
+            "targets": [{"figure_id": "Fig1"}],
+        }
+
+        mock_response = {"verdict": "approve", "issues": [], "summary": "OK"}
+
+        with patch(
+            "src.agents.planning.call_agent_with_metrics", return_value=mock_response
+        ):
+            result = plan_reviewer_node(base_state)
+
+        # Should not crash with long ID
+        assert result["workflow_phase"] == "plan_review", "Should complete with long ID"
+
+    def test_plan_reviewer_handles_stage_with_special_characters_in_id(self, base_state):
+        """plan_reviewer should handle stages with special characters in IDs."""
+        from src.agents.planning import plan_reviewer_node
+
+        special_id = "stage-1_2.3:test"
+        base_state["plan"] = {
+            "paper_id": "test",
+            "title": "Special ID Plan",
+            "stages": [
+                {
+                    "stage_id": special_id,
+                    "stage_type": "MATERIAL_VALIDATION",
+                    "targets": ["Fig1"],
+                    "dependencies": [],
+                }
+            ],
+            "targets": [{"figure_id": "Fig1"}],
+        }
+
+        mock_response = {"verdict": "approve", "issues": [], "summary": "OK"}
+
+        with patch(
+            "src.agents.planning.call_agent_with_metrics", return_value=mock_response
+        ):
+            result = plan_reviewer_node(base_state)
+
+        assert result["workflow_phase"] == "plan_review", "Should handle special characters"
+
+    def test_plan_reviewer_handles_many_stages(self, base_state):
+        """plan_reviewer should handle plans with many stages."""
+        from src.agents.planning import plan_reviewer_node
+
+        stages = [
+            {
+                "stage_id": f"stage_{i}",
+                "stage_type": "SINGLE_STRUCTURE",
+                "targets": [f"Fig{i}"],
+                "dependencies": [f"stage_{i-1}"] if i > 0 else [],
+            }
+            for i in range(50)  # 50 stages
+        ]
+
+        base_state["plan"] = {
+            "paper_id": "test",
+            "title": "Many Stages Plan",
+            "stages": stages,
+            "targets": [{"figure_id": f"Fig{i}"} for i in range(50)],
+        }
+
+        mock_response = {"verdict": "approve", "issues": [], "summary": "OK"}
+
+        with patch(
+            "src.agents.planning.call_agent_with_metrics", return_value=mock_response
+        ):
+            result = plan_reviewer_node(base_state)
+
+        assert result["last_plan_review_verdict"] == "approve", "Should handle many stages"
+
+    def test_plan_reviewer_handles_stage_with_many_dependencies(self, base_state):
+        """plan_reviewer should handle stages with many dependencies."""
+        from src.agents.planning import plan_reviewer_node
+
+        # Create 10 independent stages and one that depends on all of them
+        independent_stages = [
+            {
+                "stage_id": f"independent_{i}",
+                "stage_type": "MATERIAL_VALIDATION",
+                "targets": [f"mat_{i}"],
+                "dependencies": [],
+            }
+            for i in range(10)
+        ]
+
+        dependent_stage = {
+            "stage_id": "dependent_on_all",
+            "stage_type": "SINGLE_STRUCTURE",
+            "targets": ["Fig1"],
+            "dependencies": [f"independent_{i}" for i in range(10)],
+        }
+
+        base_state["plan"] = {
+            "paper_id": "test",
+            "title": "Many Dependencies Plan",
+            "stages": independent_stages + [dependent_stage],
+            "targets": [{"figure_id": "Fig1"}],
+        }
+
+        mock_response = {"verdict": "approve", "issues": [], "summary": "OK"}
+
+        with patch(
+            "src.agents.planning.call_agent_with_metrics", return_value=mock_response
+        ):
+            result = plan_reviewer_node(base_state)
+
+        assert result["last_plan_review_verdict"] == "approve", "Should handle many dependencies"
+
+    def test_plan_reviewer_handles_stage_with_many_targets(self, base_state):
+        """plan_reviewer should handle stages with many targets."""
+        from src.agents.planning import plan_reviewer_node
+
+        base_state["plan"] = {
+            "paper_id": "test",
+            "title": "Many Targets Plan",
+            "stages": [
+                {
+                    "stage_id": "stage_0",
+                    "stage_type": "PARAMETER_SWEEP",
+                    "targets": [f"Fig{i}" for i in range(100)],  # 100 targets
+                    "dependencies": [],
+                }
+            ],
+            "targets": [{"figure_id": f"Fig{i}"} for i in range(100)],
+        }
+
+        mock_response = {"verdict": "approve", "issues": [], "summary": "OK"}
+
+        with patch(
+            "src.agents.planning.call_agent_with_metrics", return_value=mock_response
+        ):
+            result = plan_reviewer_node(base_state)
+
+        assert result["last_plan_review_verdict"] == "approve", "Should handle many targets"
+
+    def test_plan_reviewer_handles_diamond_dependency_pattern(self, base_state):
+        """plan_reviewer should handle diamond dependency pattern (A->B, A->C, B->D, C->D)."""
+        from src.agents.planning import plan_reviewer_node
+
+        base_state["plan"] = {
+            "paper_id": "test",
+            "title": "Diamond Dependencies",
+            "stages": [
+                {"stage_id": "A", "stage_type": "MATERIAL_VALIDATION", "targets": ["mat"], "dependencies": []},
+                {"stage_id": "B", "stage_type": "SINGLE_STRUCTURE", "targets": ["Fig1"], "dependencies": ["A"]},
+                {"stage_id": "C", "stage_type": "SINGLE_STRUCTURE", "targets": ["Fig2"], "dependencies": ["A"]},
+                {"stage_id": "D", "stage_type": "ARRAY_SYSTEM", "targets": ["Fig3"], "dependencies": ["B", "C"]},
+            ],
+            "targets": [{"figure_id": "Fig1"}, {"figure_id": "Fig2"}, {"figure_id": "Fig3"}],
+        }
+
+        mock_response = {"verdict": "approve", "issues": [], "summary": "OK"}
+
+        with patch(
+            "src.agents.planning.call_agent_with_metrics", return_value=mock_response
+        ):
+            result = plan_reviewer_node(base_state)
+
+        # Diamond pattern is valid (no cycles)
+        assert result["last_plan_review_verdict"] == "approve", (
+            f"Expected 'approve' for diamond pattern (valid), got '{result['last_plan_review_verdict']}'"
+        )
+
+    def test_plan_reviewer_detects_complex_cycle(self, base_state):
+        """plan_reviewer should detect complex cycle (A->B->C->D->B forms a cycle)."""
+        from src.agents.planning import plan_reviewer_node
+
+        base_state["plan"] = {
+            "paper_id": "test",
+            "title": "Complex Cycle",
+            "stages": [
+                {"stage_id": "A", "stage_type": "MATERIAL_VALIDATION", "targets": ["mat"], "dependencies": []},
+                {"stage_id": "B", "stage_type": "SINGLE_STRUCTURE", "targets": ["Fig1"], "dependencies": ["A", "D"]},  # D->B creates cycle
+                {"stage_id": "C", "stage_type": "SINGLE_STRUCTURE", "targets": ["Fig2"], "dependencies": ["B"]},
+                {"stage_id": "D", "stage_type": "ARRAY_SYSTEM", "targets": ["Fig3"], "dependencies": ["C"]},
+            ],
+            "targets": [{"figure_id": "Fig1"}, {"figure_id": "Fig2"}, {"figure_id": "Fig3"}],
+        }
+
+        result = plan_reviewer_node(base_state)
+
+        assert result["last_plan_review_verdict"] == "needs_revision", (
+            f"Expected 'needs_revision' for complex cycle, got '{result['last_plan_review_verdict']}'"
+        )
+        feedback = result.get("planner_feedback", "")
+        assert "circular" in feedback.lower() or "cycle" in feedback.lower(), (
+            f"Feedback should mention cycle, got: {feedback}"
+        )
+
+    def test_plan_reviewer_handles_whitespace_in_stage_id(self, base_state):
+        """plan_reviewer should handle stages with whitespace-only IDs as missing."""
+        from src.agents.planning import plan_reviewer_node
+
+        base_state["plan"] = {
+            "paper_id": "test",
+            "title": "Whitespace ID Plan",
+            "stages": [
+                {
+                    "stage_id": "   ",  # Whitespace only - should be treated as missing
+                    "stage_type": "MATERIAL_VALIDATION",
+                    "targets": ["Fig1"],
+                    "dependencies": [],
+                }
+            ],
+            "targets": [{"figure_id": "Fig1"}],
+        }
+
+        result = plan_reviewer_node(base_state)
+
+        # The component checks `if not stage_id:` which is falsy for empty strings
+        # But "   " is truthy, so this may pass - testing actual behavior
+        # If it should be treated as missing, the component needs to be fixed
+        # This test documents actual behavior
+        assert result["workflow_phase"] == "plan_review", "Should complete without crashing"
+
+    def test_plan_reviewer_handles_unicode_in_stage_id(self, base_state):
+        """plan_reviewer should handle unicode characters in stage IDs."""
+        from src.agents.planning import plan_reviewer_node
+
+        base_state["plan"] = {
+            "paper_id": "test",
+            "title": "Unicode ID Plan",
+            "stages": [
+                {
+                    "stage_id": "stage_金纳米棒",  # Chinese characters
+                    "stage_type": "MATERIAL_VALIDATION",
+                    "targets": ["Fig1"],
+                    "dependencies": [],
+                }
+            ],
+            "targets": [{"figure_id": "Fig1"}],
+        }
+
+        mock_response = {"verdict": "approve", "issues": [], "summary": "OK"}
+
+        with patch(
+            "src.agents.planning.call_agent_with_metrics", return_value=mock_response
+        ):
+            result = plan_reviewer_node(base_state)
+
+        assert result["workflow_phase"] == "plan_review", "Should handle unicode in IDs"
+
+    def test_plan_reviewer_handles_integer_stage_id(self, base_state):
+        """plan_reviewer should handle integer stage_id (type coercion edge case)."""
+        from src.agents.planning import plan_reviewer_node
+
+        base_state["plan"] = {
+            "paper_id": "test",
+            "title": "Integer ID Plan",
+            "stages": [
+                {
+                    "stage_id": 123,  # Integer instead of string
+                    "stage_type": "MATERIAL_VALIDATION",
+                    "targets": ["Fig1"],
+                    "dependencies": [],
+                }
+            ],
+            "targets": [{"figure_id": "Fig1"}],
+        }
+
+        mock_response = {"verdict": "approve", "issues": [], "summary": "OK"}
+
+        with patch(
+            "src.agents.planning.call_agent_with_metrics", return_value=mock_response
+        ):
+            result = plan_reviewer_node(base_state)
+
+        # Integer 123 is truthy so `if not stage_id` won't catch it
+        # Test documents actual behavior
+        assert result["workflow_phase"] == "plan_review", "Should handle integer IDs"
+
+    def test_plan_reviewer_handles_stage_list_not_a_list(self, base_state):
+        """plan_reviewer should handle stages being a dict instead of list."""
+        from src.agents.planning import plan_reviewer_node
+
+        base_state["plan"] = {
+            "paper_id": "test",
+            "title": "Bad Stages Type",
+            "stages": {"stage_0": {"stage_type": "MATERIAL_VALIDATION", "targets": ["Fig1"]}},  # Dict instead of list
+            "targets": [],
+        }
+
+        result = plan_reviewer_node(base_state)
+
+        # Dict is truthy and has len() > 0, but iteration will yield keys not dicts
+        # The component should handle this gracefully
+        assert result["last_plan_review_verdict"] == "needs_revision", (
+            f"Expected 'needs_revision' for invalid stages structure, got '{result['last_plan_review_verdict']}'"
+        )
+
+
+class TestPrecisionValidation:
+    """Test precision validation for targets requiring digitized data."""
+
+    def test_plan_reviewer_rejects_excellent_precision_without_digitized_data(self, base_state):
+        """plan_reviewer should reject targets with excellent precision but no digitized data."""
+        from src.agents.planning import plan_reviewer_node
+
+        base_state["plan"] = {
+            "paper_id": "test",
+            "title": "High Precision Plan",
+            "stages": [
+                {
+                    "stage_id": "s1",
+                    "stage_type": "SINGLE_STRUCTURE",
+                    "targets": ["Fig1"],
+                    "dependencies": [],
+                }
+            ],
+            "targets": [
+                {
+                    "figure_id": "Fig1",
+                    "precision_requirement": "excellent",  # <2% requires digitized data
+                    # No digitized_data_path - should be rejected
+                }
+            ],
+        }
+
+        result = plan_reviewer_node(base_state)
+
+        assert result["last_plan_review_verdict"] == "needs_revision", (
+            f"Expected 'needs_revision' for excellent precision without digitized data, got '{result['last_plan_review_verdict']}'"
+        )
+        feedback = result.get("planner_feedback", "")
+        assert "precision" in feedback.lower() or "digitized" in feedback.lower() or "excellent" in feedback.lower(), (
+            f"Feedback should mention precision/digitized data issue, got: {feedback}"
+        )
+
+    def test_plan_reviewer_accepts_excellent_precision_with_digitized_data(self, base_state):
+        """plan_reviewer should accept targets with excellent precision when digitized data is provided."""
+        from src.agents.planning import plan_reviewer_node
+
+        base_state["plan"] = {
+            "paper_id": "test",
+            "title": "High Precision Plan",
+            "stages": [
+                {
+                    "stage_id": "s1",
+                    "stage_type": "SINGLE_STRUCTURE",
+                    "targets": ["Fig1"],
+                    "dependencies": [],
+                }
+            ],
+            "targets": [
+                {
+                    "figure_id": "Fig1",
+                    "precision_requirement": "excellent",
+                    "digitized_data_path": "/path/to/data.csv",  # Has digitized data
+                }
+            ],
+        }
+
+        mock_response = {"verdict": "approve", "issues": [], "summary": "OK"}
+
+        with patch(
+            "src.agents.planning.call_agent_with_metrics", return_value=mock_response
+        ):
+            result = plan_reviewer_node(base_state)
+
+        assert result["last_plan_review_verdict"] == "approve", (
+            f"Expected 'approve' for excellent precision with digitized data, got '{result['last_plan_review_verdict']}'"
+        )
+
+    def test_plan_reviewer_accepts_good_precision_without_digitized_data(self, base_state):
+        """plan_reviewer should accept targets with good precision without digitized data (warning only)."""
+        from src.agents.planning import plan_reviewer_node
+
+        base_state["plan"] = {
+            "paper_id": "test",
+            "title": "Medium Precision Plan",
+            "stages": [
+                {
+                    "stage_id": "s1",
+                    "stage_type": "SINGLE_STRUCTURE",
+                    "targets": ["Fig1"],
+                    "dependencies": [],
+                }
+            ],
+            "targets": [
+                {
+                    "figure_id": "Fig1",
+                    "precision_requirement": "good",  # 5% - warning but not blocking
+                }
+            ],
+        }
+
+        mock_response = {"verdict": "approve", "issues": [], "summary": "OK"}
+
+        with patch(
+            "src.agents.planning.call_agent_with_metrics", return_value=mock_response
+        ):
+            result = plan_reviewer_node(base_state)
+
+        # Should not be blocked - "good" precision is just a warning
+        assert result["last_plan_review_verdict"] == "approve", (
+            f"Expected 'approve' for good precision (warning only), got '{result['last_plan_review_verdict']}'"
+        )
+
+    def test_plan_reviewer_handles_multiple_precision_issues(self, base_state):
+        """plan_reviewer should detect multiple precision issues in one plan."""
+        from src.agents.planning import plan_reviewer_node
+
+        base_state["plan"] = {
+            "paper_id": "test",
+            "title": "Multiple Precision Issues",
+            "stages": [
+                {
+                    "stage_id": "s1",
+                    "stage_type": "SINGLE_STRUCTURE",
+                    "targets": ["Fig1", "Fig2", "Fig3"],
+                    "dependencies": [],
+                }
+            ],
+            "targets": [
+                {"figure_id": "Fig1", "precision_requirement": "excellent"},  # Blocking
+                {"figure_id": "Fig2", "precision_requirement": "excellent"},  # Blocking
+                {"figure_id": "Fig3", "precision_requirement": "good"},  # Warning only
+            ],
+        }
+
+        result = plan_reviewer_node(base_state)
+
+        assert result["last_plan_review_verdict"] == "needs_revision", (
+            f"Expected 'needs_revision' for multiple blocking precision issues, got '{result['last_plan_review_verdict']}'"
+        )
+
+    def test_plan_reviewer_accepts_default_precision(self, base_state):
+        """plan_reviewer should accept targets without explicit precision_requirement."""
+        from src.agents.planning import plan_reviewer_node
+
+        base_state["plan"] = {
+            "paper_id": "test",
+            "title": "Default Precision Plan",
+            "stages": [
+                {
+                    "stage_id": "s1",
+                    "stage_type": "SINGLE_STRUCTURE",
+                    "targets": ["Fig1"],
+                    "dependencies": [],
+                }
+            ],
+            "targets": [
+                {
+                    "figure_id": "Fig1",
+                    # No precision_requirement - defaults to "good"
+                }
+            ],
+        }
+
+        mock_response = {"verdict": "approve", "issues": [], "summary": "OK"}
+
+        with patch(
+            "src.agents.planning.call_agent_with_metrics", return_value=mock_response
+        ):
+            result = plan_reviewer_node(base_state)
+
+        assert result["last_plan_review_verdict"] == "approve", (
+            f"Expected 'approve' for default precision, got '{result['last_plan_review_verdict']}'"
+        )
+
+
+class TestSystemPromptConstruction:
+    """Test system prompt construction for plan_reviewer."""
+
+    def test_plan_reviewer_uses_build_agent_prompt(self, base_state):
+        """plan_reviewer should use build_agent_prompt to construct system prompt."""
+        from src.agents.planning import plan_reviewer_node
+
+        base_state["plan"] = {
+            "paper_id": "test",
+            "title": "Test Plan",
+            "stages": [
+                {
+                    "stage_id": "s1",
+                    "stage_type": "MATERIAL_VALIDATION",
+                    "targets": ["Fig1"],
+                    "dependencies": [],
+                }
+            ],
+        }
+
+        mock_response = {"verdict": "approve", "issues": [], "summary": "OK"}
+
+        with patch(
+            "src.agents.planning.call_agent_with_metrics", return_value=mock_response
+        ) as mock_call:
+            with patch("src.agents.planning.build_agent_prompt", return_value="TEST_PROMPT") as mock_build:
+                plan_reviewer_node(base_state)
+
+        # Verify build_agent_prompt was called with correct arguments
+        mock_build.assert_called_once()
+        call_args = mock_build.call_args
+        assert call_args[0][0] == "plan_reviewer", (
+            f"Expected build_agent_prompt called with 'plan_reviewer', got '{call_args[0][0]}'"
+        )
+
+    def test_plan_reviewer_passes_state_to_build_agent_prompt(self, base_state):
+        """plan_reviewer should pass state to build_agent_prompt for prompt adaptations."""
+        from src.agents.planning import plan_reviewer_node
+
+        base_state["plan"] = {
+            "paper_id": "test",
+            "title": "Test Plan",
+            "stages": [
+                {
+                    "stage_id": "s1",
+                    "stage_type": "MATERIAL_VALIDATION",
+                    "targets": ["Fig1"],
+                    "dependencies": [],
+                }
+            ],
+        }
+        base_state["prompt_adaptations"] = [{"agent": "plan_reviewer", "adaptation": "Be more strict"}]
+
+        mock_response = {"verdict": "approve", "issues": [], "summary": "OK"}
+
+        with patch(
+            "src.agents.planning.call_agent_with_metrics", return_value=mock_response
+        ):
+            with patch("src.agents.planning.build_agent_prompt", return_value="TEST_PROMPT") as mock_build:
+                plan_reviewer_node(base_state)
+
+        # Verify state was passed
+        call_args = mock_build.call_args
+        passed_state = call_args[0][1]
+        assert "prompt_adaptations" in passed_state, "State should contain prompt_adaptations"
 

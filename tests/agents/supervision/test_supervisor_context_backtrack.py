@@ -52,9 +52,11 @@ class TestContextOverflowTrigger:
 
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_truncates_paper_at_exact_boundary(self, mock_context):
-        """Should truncate paper exactly at 20000 char boundary."""
+        """Should truncate paper just over 20039 char boundary (15000 + marker + 5000)."""
         mock_context.return_value = None
-        original_text = "A" * 20001  # Just over threshold
+        # Truncation threshold is 15000 + 39 (marker) + 5000 = 20039
+        # Only truncate if original > truncated result
+        original_text = "A" * 20040  # Just over truncated threshold
         state = {
             "ask_user_trigger": "context_overflow",
             "user_responses": {"Question": "TRUNCATE"},
@@ -72,9 +74,11 @@ class TestContextOverflowTrigger:
 
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_handles_paper_exactly_at_threshold(self, mock_context):
-        """Should handle paper exactly at 20000 char threshold."""
+        """Should NOT truncate paper at or below 20039 char threshold."""
         mock_context.return_value = None
-        original_text = "A" * 20000  # Exactly at threshold
+        # Truncation threshold is 15000 + 39 (marker) + 5000 = 20039
+        # Original must be LONGER than truncated result for truncation to occur
+        original_text = "A" * 20039  # Exactly at truncated threshold
         state = {
             "ask_user_trigger": "context_overflow",
             "user_responses": {"Question": "TRUNCATE"},
@@ -85,15 +89,10 @@ class TestContextOverflowTrigger:
         result = supervisor_node(state)
 
         assert result["supervisor_verdict"] == "ok_continue"
-        # Should truncate since len >= 20000 threshold
-        assert "[TRUNCATED BY USER REQUEST]" in result["paper_text"]
-        # Truncation preserves 15000 + 5000 chars plus marker, so result is longer than original
-        # but reduces the "content" by removing middle section
-        marker = "\n\n... [TRUNCATED BY USER REQUEST] ...\n\n"
-        expected_length = 15000 + len(marker) + 5000
-        assert len(result["paper_text"]) == expected_length
-        assert result["paper_text"].startswith("A" * 15000)
-        assert result["paper_text"].endswith("A" * 5000)
+        # Should NOT truncate since len(20039) is not > truncated_length(20039)
+        # Truncating would not reduce the text size
+        assert "short enough" in result["supervisor_feedback"].lower()
+        assert result.get("paper_text") == original_text  # Unchanged
 
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_handles_paper_just_below_threshold(self, mock_context):

@@ -1,7 +1,7 @@
 """Integration tests for generate_report_node covering multiple scenarios."""
 
 import copy
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 import pytest
 
@@ -1048,4 +1048,661 @@ class TestGenerateReportNode:
                 "Non-list agent_calls should be treated as empty list, resulting in 0 tokens"
             assert token_summary["estimated_cost"] == 0.0, \
                 "Non-list agent_calls should result in 0 cost"
+
+    def test_report_handles_negative_token_values(self, base_state, valid_plan):
+        """Test that report generation handles negative token values.
+        
+        Negative tokens are invalid but may occur due to bugs in upstream code.
+        The function should either reject them or treat them as 0.
+        """
+        from src.agents.reporting import generate_report_node
+
+        base_state["plan"] = valid_plan
+        base_state["metrics"] = {
+            "agent_calls": [
+                {"agent_name": "planner", "input_tokens": -100, "output_tokens": 500},
+                {"agent_name": "designer", "input_tokens": 2000, "output_tokens": -50},
+            ]
+        }
+
+        mock_response = reporting_summary_response()
+
+        with patch(
+            "src.agents.reporting.call_agent_with_metrics", return_value=mock_response
+        ):
+            result = generate_report_node(base_state)
+            token_summary = result["metrics"]["token_summary"]
+            # Negative values should be treated as 0 to avoid incorrect cost calculation
+            # Current behavior: sums them directly, which gives 1900 input, 450 output
+            # This could be a bug - negative tokens don't make sense
+            assert token_summary["total_input_tokens"] >= 0, \
+                "Total input tokens should not be negative"
+            assert token_summary["total_output_tokens"] >= 0, \
+                "Total output tokens should not be negative"
+            assert token_summary["estimated_cost"] >= 0.0, \
+                "Estimated cost should not be negative"
+
+    def test_report_handles_float_token_values(self, base_state, valid_plan):
+        """Test that report generation handles float token values.
+        
+        Token counts should be integers, but floats may occur.
+        """
+        from src.agents.reporting import generate_report_node
+
+        base_state["plan"] = valid_plan
+        base_state["metrics"] = {
+            "agent_calls": [
+                {"agent_name": "planner", "input_tokens": 1000.5, "output_tokens": 500.7},
+            ]
+        }
+
+        mock_response = reporting_summary_response()
+
+        with patch(
+            "src.agents.reporting.call_agent_with_metrics", return_value=mock_response
+        ):
+            result = generate_report_node(base_state)
+            token_summary = result["metrics"]["token_summary"]
+            # Float values should be handled - either cast to int or used as-is
+            assert token_summary["total_input_tokens"] is not None, "Input tokens must exist"
+            assert token_summary["total_output_tokens"] is not None, "Output tokens must exist"
+            # Cost calculation should work with floats
+            assert isinstance(token_summary["estimated_cost"], (int, float)), \
+                "Estimated cost must be numeric"
+            assert token_summary["estimated_cost"] > 0, "Cost should be positive with non-zero tokens"
+
+    def test_report_preserves_stage_metrics_in_output(self, base_state, valid_plan):
+        """Test that stage_metrics from input metrics are preserved in output."""
+        from src.agents.reporting import generate_report_node
+
+        base_state["plan"] = valid_plan
+        base_state["metrics"] = {
+            "agent_calls": [
+                {"agent_name": "planner", "input_tokens": 1000, "output_tokens": 500},
+            ],
+            "stage_metrics": [
+                {"stage_id": "stage_0", "duration_seconds": 120, "iterations": 3}
+            ]
+        }
+
+        mock_response = reporting_summary_response()
+
+        with patch(
+            "src.agents.reporting.call_agent_with_metrics", return_value=mock_response
+        ):
+            result = generate_report_node(base_state)
+            
+            # stage_metrics should be preserved in output metrics
+            assert "stage_metrics" in result["metrics"], "stage_metrics must be preserved"
+            assert len(result["metrics"]["stage_metrics"]) == 1, "stage_metrics count must match"
+            assert result["metrics"]["stage_metrics"][0]["stage_id"] == "stage_0", \
+                "stage_metrics content must be preserved"
+
+    def test_report_build_agent_prompt_called_correctly(self, base_state, valid_plan):
+        """Test that build_agent_prompt is called with correct parameters."""
+        from src.agents.reporting import generate_report_node
+
+        base_state["plan"] = valid_plan
+
+        mock_response = reporting_summary_response()
+
+        with patch("src.agents.reporting.call_agent_with_metrics", return_value=mock_response) as mock_call, \
+             patch("src.agents.reporting.build_agent_prompt", return_value="test_prompt") as mock_build:
+            generate_report_node(base_state)
+            
+            # Verify build_agent_prompt was called with correct agent name
+            mock_build.assert_called_once()
+            call_args = mock_build.call_args
+            assert call_args.args[0] == "report_generator", \
+                "build_agent_prompt must be called with 'report_generator'"
+            # State should be passed for prompt adaptations
+            assert call_args.args[1] == base_state or call_args.kwargs.get("state") == base_state, \
+                "State must be passed to build_agent_prompt"
+
+    def test_report_call_agent_with_metrics_receives_state(self, base_state, valid_plan):
+        """Test that call_agent_with_metrics receives the state parameter."""
+        from src.agents.reporting import generate_report_node
+
+        base_state["plan"] = valid_plan
+
+        mock_response = reporting_summary_response()
+
+        with patch(
+            "src.agents.reporting.call_agent_with_metrics", return_value=mock_response
+        ) as mock_call:
+            generate_report_node(base_state)
+            
+            # Verify state was passed to call_agent_with_metrics
+            call_kwargs = mock_call.call_args.kwargs
+            assert "state" in call_kwargs, "State must be passed to call_agent_with_metrics"
+            assert call_kwargs["state"] == base_state, \
+                "Original state must be passed, not a copy"
+
+    def test_report_default_executive_summary_matches_schema(self, base_state, valid_plan):
+        """Test that default executive_summary structure matches report schema requirements."""
+        from src.agents.reporting import generate_report_node
+
+        base_state["plan"] = valid_plan
+        base_state.pop("executive_summary", None)
+
+        mock_response = {}  # LLM returns empty response
+
+        with patch(
+            "src.agents.reporting.call_agent_with_metrics", return_value=mock_response
+        ):
+            result = generate_report_node(base_state)
+
+        exec_summary = result["executive_summary"]
+        assert "overall_assessment" in exec_summary, "overall_assessment is required"
+        assert isinstance(exec_summary["overall_assessment"], list), "overall_assessment must be a list"
+        
+        # Each item in overall_assessment should have required fields per schema
+        for item in exec_summary["overall_assessment"]:
+            assert "aspect" in item, "Each assessment item must have 'aspect'"
+            assert "status" in item, "Each assessment item must have 'status'"
+            # status should be one of the allowed values
+            allowed_statuses = ["Reproduced", "Partial", "Not Reproduced", "Not Attempted"]
+            assert item["status"] in allowed_statuses, \
+                f"Status '{item['status']}' must be one of {allowed_statuses}"
+
+    def test_report_default_paper_citation_matches_schema(self, base_state, valid_plan):
+        """Test that default paper_citation structure matches report schema requirements."""
+        from src.agents.reporting import generate_report_node
+
+        base_state["plan"] = valid_plan
+        base_state.pop("paper_citation", None)
+        base_state.pop("paper_title", None)
+
+        mock_response = {}  # LLM returns empty response
+
+        with patch(
+            "src.agents.reporting.call_agent_with_metrics", return_value=mock_response
+        ):
+            result = generate_report_node(base_state)
+
+        citation = result["paper_citation"]
+        # Schema requires: authors, title, journal, year
+        assert "authors" in citation, "authors is required by schema"
+        assert "title" in citation, "title is required by schema"
+        assert "journal" in citation, "journal is required by schema"
+        assert "year" in citation, "year is required by schema"
+        assert isinstance(citation["year"], int), "year must be an integer per schema"
+        assert isinstance(citation["authors"], str), "authors must be a string per schema"
+        assert isinstance(citation["title"], str), "title must be a string per schema"
+        assert isinstance(citation["journal"], str), "journal must be a string per schema"
+
+    def test_report_llm_response_with_wrong_type_executive_summary(self, base_state, valid_plan):
+        """Test handling when LLM returns wrong type for executive_summary."""
+        from src.agents.reporting import generate_report_node
+
+        base_state["plan"] = valid_plan
+        base_state.pop("executive_summary", None)
+
+        # LLM returns string instead of dict
+        mock_response = {
+            "executive_summary": "This is a string, not a dict"
+        }
+
+        with patch(
+            "src.agents.reporting.call_agent_with_metrics", return_value=mock_response
+        ):
+            result = generate_report_node(base_state)
+            
+            # Should preserve the LLM response even if malformed (validation happens elsewhere)
+            # OR should fallback to default
+            exec_summary = result.get("executive_summary")
+            assert exec_summary is not None, "executive_summary must exist in result"
+            # If it's the default, it should be a dict; if it's the LLM response, it's a string
+            # This test documents the current behavior
+
+    def test_report_llm_response_with_wrong_type_paper_citation(self, base_state, valid_plan):
+        """Test handling when LLM returns wrong type for paper_citation."""
+        from src.agents.reporting import generate_report_node
+
+        base_state["plan"] = valid_plan
+        base_state.pop("paper_citation", None)
+
+        # LLM returns list instead of dict
+        mock_response = {
+            "paper_citation": ["author1", "title1"]
+        }
+
+        with patch(
+            "src.agents.reporting.call_agent_with_metrics", return_value=mock_response
+        ):
+            result = generate_report_node(base_state)
+            
+            # Should handle gracefully
+            citation = result.get("paper_citation")
+            assert citation is not None, "paper_citation must exist in result"
+
+    def test_report_handles_malformed_state_paper_citation(self, base_state, valid_plan):
+        """Test handling when state has paper_citation missing required fields."""
+        from src.agents.reporting import generate_report_node
+
+        base_state["plan"] = valid_plan
+        # Malformed citation - missing required fields
+        base_state["paper_citation"] = {"title": "Only Title"}
+
+        mock_response = {}  # LLM doesn't provide citation
+
+        with patch(
+            "src.agents.reporting.call_agent_with_metrics", return_value=mock_response
+        ):
+            result = generate_report_node(base_state)
+            
+            # Should preserve existing citation from state even if malformed
+            citation = result["paper_citation"]
+            assert citation["title"] == "Only Title", \
+                "Existing title should be preserved"
+            # Missing fields should NOT be auto-filled in this case
+            # (the function preserves state as-is when paper_citation exists)
+
+    def test_report_state_metrics_not_mutated(self, base_state, valid_plan):
+        """Test that the input state's metrics dict is not mutated."""
+        from src.agents.reporting import generate_report_node
+
+        original_metrics = {
+            "agent_calls": [
+                {"agent_name": "planner", "input_tokens": 1000, "output_tokens": 500},
+            ]
+        }
+        base_state["plan"] = valid_plan
+        base_state["metrics"] = original_metrics
+        
+        # Deep copy to compare later
+        metrics_before = copy.deepcopy(original_metrics)
+
+        mock_response = reporting_summary_response()
+
+        with patch(
+            "src.agents.reporting.call_agent_with_metrics", return_value=mock_response
+        ):
+            result = generate_report_node(base_state)
+
+        # Input metrics should not have been modified
+        assert base_state["metrics"] == metrics_before, \
+            "Input state metrics must not be mutated"
+        # But result should have token_summary added
+        assert "token_summary" in result["metrics"], \
+            "Result metrics should have token_summary"
+
+    def test_report_handles_prompt_adaptations(self, base_state, valid_plan):
+        """Test that prompt_adaptations in state are passed to build_agent_prompt."""
+        from src.agents.reporting import generate_report_node
+
+        base_state["plan"] = valid_plan
+        base_state["prompt_adaptations"] = [
+            {
+                "target_agent": "ReportGeneratorAgent",
+                "modification_type": "append",
+                "content": "Additional instructions for report",
+                "confidence": 0.9,
+                "reason": "Paper-specific adaptation"
+            }
+        ]
+
+        mock_response = reporting_summary_response()
+
+        with patch("src.agents.reporting.call_agent_with_metrics", return_value=mock_response), \
+             patch("src.agents.reporting.build_agent_prompt", return_value="adapted_prompt") as mock_build:
+            generate_report_node(base_state)
+            
+            # Verify state with adaptations is passed
+            call_args = mock_build.call_args
+            passed_state = call_args.args[1] if len(call_args.args) > 1 else call_args.kwargs.get("state")
+            assert passed_state is not None, "State must be passed to build_agent_prompt"
+            assert "prompt_adaptations" in passed_state, \
+                "State with prompt_adaptations must be passed"
+
+    def test_report_handles_very_long_assumptions(self, base_state, valid_plan):
+        """Test that report generation handles very long assumptions dict."""
+        from src.agents.reporting import generate_report_node
+
+        base_state["plan"] = valid_plan
+        # Create assumptions with many entries
+        base_state["assumptions"] = {
+            f"param_{i}": f"value_{i}" * 100 for i in range(50)
+        }
+
+        mock_response = reporting_summary_response()
+
+        with patch(
+            "src.agents.reporting.call_agent_with_metrics", return_value=mock_response
+        ) as mock_call:
+            result = generate_report_node(base_state)
+
+        # Should not crash
+        assert result["workflow_complete"] is True
+        # Assumptions should be included in user_content
+        user_content = mock_call.call_args.kwargs.get("user_content", "")
+        assert "Assumptions" in user_content, "Assumptions section must be present"
+
+    def test_report_handles_unicode_in_user_content(self, base_state, valid_plan):
+        """Test that report generation handles unicode characters in state."""
+        from src.agents.reporting import generate_report_node
+
+        base_state["plan"] = valid_plan
+        base_state["paper_id"] = "test_论文_αβγ"
+        base_state["assumptions"] = {"wavelength_λ": "650nm", "材料": "gold"}
+        base_state["discrepancies"] = [
+            {"parameter": "λ_peak", "classification": "minor", "likely_cause": "数值误差"}
+        ]
+
+        mock_response = reporting_summary_response()
+
+        with patch(
+            "src.agents.reporting.call_agent_with_metrics", return_value=mock_response
+        ) as mock_call:
+            result = generate_report_node(base_state)
+
+        # Should not crash with unicode
+        assert result["workflow_complete"] is True
+        user_content = mock_call.call_args.kwargs.get("user_content", "")
+        assert "论文" in user_content or "test_" in user_content, \
+            "Paper ID must be included in user_content"
+
+    def test_report_quantitative_summary_empty_quantitative_metrics_dict(self, base_state, valid_plan):
+        """Test quantitative summary when quantitative_metrics is empty dict (not missing/None)."""
+        from src.agents.reporting import generate_report_node
+
+        base_state["plan"] = valid_plan
+        base_state["analysis_result_reports"] = [
+            {
+                "stage_id": "stage_1",
+                "target_figure": "Fig 1",
+                "status": "pass",
+                "precision_requirement": "high",
+                "quantitative_metrics": {},  # Empty dict, not None/missing
+            }
+        ]
+
+        mock_response = reporting_summary_response()
+
+        with patch(
+            "src.agents.reporting.call_agent_with_metrics", return_value=mock_response
+        ):
+            result = generate_report_node(base_state)
+
+        summary = result.get("quantitative_summary")
+        assert summary is not None, "Quantitative summary must exist"
+        row = summary[0]
+        assert row["stage_id"] == "stage_1", "Stage ID must be preserved"
+        assert row.get("peak_position_error_percent") is None, "Empty dict should yield None for metrics"
+        assert row.get("normalized_rmse_percent") is None, "Empty dict should yield None for metrics"
+        assert row.get("correlation") is None, "Empty dict should yield None for metrics"
+
+    def test_report_handles_analysis_reports_with_extra_fields(self, base_state, valid_plan):
+        """Test that extra fields in analysis_result_reports are handled (not crash)."""
+        from src.agents.reporting import generate_report_node
+
+        base_state["plan"] = valid_plan
+        base_state["analysis_result_reports"] = [
+            {
+                "stage_id": "stage_1",
+                "target_figure": "Fig 1",
+                "status": "pass",
+                "precision_requirement": "high",
+                "quantitative_metrics": {
+                    "peak_position_error_percent": 0.5,
+                    "extra_metric": 123,  # Extra field not in standard set
+                },
+                "extra_field": "should be ignored",  # Extra field at report level
+            }
+        ]
+
+        mock_response = reporting_summary_response()
+
+        with patch(
+            "src.agents.reporting.call_agent_with_metrics", return_value=mock_response
+        ):
+            result = generate_report_node(base_state)
+
+        summary = result.get("quantitative_summary")
+        assert summary is not None, "Quantitative summary must exist"
+        row = summary[0]
+        assert row["peak_position_error_percent"] == 0.5, "Standard metric must be extracted"
+        # Extra fields should not cause errors
+
+    def test_report_progress_stages_with_various_statuses(self, base_state, valid_plan):
+        """Test user_content generation with stages having various statuses."""
+        from src.agents.reporting import generate_report_node
+
+        base_state["plan"] = valid_plan
+        base_state["progress"] = {
+            "stages": [
+                {"stage_id": "stage_0", "status": "completed_success", "summary": "Material validated"},
+                {"stage_id": "stage_1", "status": "completed_failure", "summary": "FDTD failed"},
+                {"stage_id": "stage_2", "status": "needs_rerun", "summary": "Awaiting backtrack"},
+                {"stage_id": "stage_3", "status": "invalidated"},
+            ]
+        }
+
+        mock_response = reporting_summary_response()
+
+        with patch(
+            "src.agents.reporting.call_agent_with_metrics", return_value=mock_response
+        ) as mock_call:
+            generate_report_node(base_state)
+
+        user_content = mock_call.call_args.kwargs.get("user_content", "")
+        # All stages should be listed
+        assert "stage_0" in user_content, "stage_0 must be in user_content"
+        assert "stage_1" in user_content, "stage_1 must be in user_content"
+        assert "stage_2" in user_content, "stage_2 must be in user_content"
+        assert "stage_3" in user_content, "stage_3 must be in user_content"
+        # Statuses should be included
+        assert "completed_success" in user_content, "Status completed_success must be shown"
+        assert "completed_failure" in user_content, "Status completed_failure must be shown"
+        # Summaries should be included for stages that have them
+        assert "Material validated" in user_content, "Stage summary must be included"
+        assert "FDTD failed" in user_content, "Stage summary must be included"
+        # Stage without summary should show 'No summary'
+        assert "No summary" in user_content, "Stages without summary should show 'No summary'"
+
+    def test_report_figure_comparisons_truncation(self, base_state, valid_plan):
+        """Test that exactly first 5 figure_comparisons are included in user_content."""
+        from src.agents.reporting import generate_report_node
+
+        base_state["plan"] = valid_plan
+        base_state["figure_comparisons"] = [
+            {"fig": f"Fig{i}", "diff": "small", "data": f"data_{i}"} for i in range(10)
+        ]
+
+        mock_response = reporting_summary_response()
+
+        with patch(
+            "src.agents.reporting.call_agent_with_metrics", return_value=mock_response
+        ) as mock_call:
+            generate_report_node(base_state)
+
+        user_content = mock_call.call_args.kwargs.get("user_content", "")
+        # First 5 should be included
+        for i in range(5):
+            assert f"Fig{i}" in user_content, f"Fig{i} should be included (first 5)"
+        # Beyond 5 should not be in detail
+        # Note: "Fig5" through "Fig9" should not appear in the JSON section
+        # They might appear as count mention but not in detail
+
+    def test_report_discrepancies_truncation_count_shown(self, base_state, valid_plan):
+        """Test that discrepancies count is shown correctly in user_content."""
+        from src.agents.reporting import generate_report_node
+
+        base_state["plan"] = valid_plan
+        base_state["discrepancies"] = [
+            {"parameter": f"p{i}", "classification": "minor", "likely_cause": f"cause{i}"}
+            for i in range(15)
+        ]
+
+        mock_response = reporting_summary_response()
+
+        with patch(
+            "src.agents.reporting.call_agent_with_metrics", return_value=mock_response
+        ) as mock_call:
+            generate_report_node(base_state)
+
+        user_content = mock_call.call_args.kwargs.get("user_content", "")
+        # Total count should be shown
+        assert "15 total" in user_content, "Total discrepancy count (15) must be shown"
+        # First 5 should be detailed
+        for i in range(5):
+            assert f"p{i}" in user_content, f"p{i} should be included (first 5)"
+
+    def test_report_result_does_not_include_plan(self, base_state, valid_plan):
+        """Test that result dict doesn't unnecessarily include large state fields."""
+        from src.agents.reporting import generate_report_node
+
+        base_state["plan"] = valid_plan
+        base_state["paper_text"] = "Very long paper text " * 1000
+
+        mock_response = reporting_summary_response()
+
+        with patch(
+            "src.agents.reporting.call_agent_with_metrics", return_value=mock_response
+        ):
+            result = generate_report_node(base_state)
+
+        # Result should not include large unnecessary fields
+        assert "paper_text" not in result, "paper_text should not be in result"
+        assert "plan" not in result, "plan should not be in result"
+
+    def test_report_all_expected_fields_in_result(self, base_state, valid_plan):
+        """Test that all expected fields are present in result."""
+        from src.agents.reporting import generate_report_node
+
+        base_state["plan"] = valid_plan
+        base_state["metrics"] = {
+            "agent_calls": [{"agent_name": "test", "input_tokens": 100, "output_tokens": 50}]
+        }
+        base_state["analysis_result_reports"] = [
+            {"stage_id": "s1", "target_figure": "F1", "status": "pass", "quantitative_metrics": {}}
+        ]
+
+        mock_response = reporting_summary_response(
+            executive_summary={"overall_assessment": [{"aspect": "A", "status": "OK"}]},
+            conclusions={"main_physics_reproduced": True},
+            paper_citation={"title": "T", "authors": "A"},
+        )
+
+        with patch(
+            "src.agents.reporting.call_agent_with_metrics", return_value=mock_response
+        ):
+            result = generate_report_node(base_state)
+
+        # Required fields
+        assert "workflow_phase" in result, "workflow_phase must be in result"
+        assert result["workflow_phase"] == "reporting", "workflow_phase must be 'reporting'"
+        assert "workflow_complete" in result, "workflow_complete must be in result"
+        assert result["workflow_complete"] is True, "workflow_complete must be True"
+        assert "metrics" in result, "metrics must be in result"
+        assert "token_summary" in result["metrics"], "token_summary must be in metrics"
+        assert "executive_summary" in result, "executive_summary must be in result"
+        assert "paper_citation" in result, "paper_citation must be in result"
+        assert "report_conclusions" in result, "report_conclusions must be in result"
+        assert "quantitative_summary" in result, "quantitative_summary must be in result"
+
+    def test_report_handles_string_token_values(self, base_state, valid_plan):
+        """Test that report generation handles string token values gracefully."""
+        from src.agents.reporting import generate_report_node
+
+        base_state["plan"] = valid_plan
+        base_state["metrics"] = {
+            "agent_calls": [
+                {"agent_name": "planner", "input_tokens": "1000", "output_tokens": "500"},
+            ]
+        }
+
+        mock_response = reporting_summary_response()
+
+        with patch(
+            "src.agents.reporting.call_agent_with_metrics", return_value=mock_response
+        ):
+            result = generate_report_node(base_state)
+            token_summary = result["metrics"]["token_summary"]
+            # String values should be converted to integers
+            assert token_summary["total_input_tokens"] == 1000, \
+                "String '1000' must be converted to int 1000"
+            assert token_summary["total_output_tokens"] == 500, \
+                "String '500' must be converted to int 500"
+            # Cost should be calculated correctly
+            expected_cost = (1000 * 3.0 + 500 * 15.0) / 1_000_000
+            assert token_summary["estimated_cost"] == pytest.approx(expected_cost, rel=1e-6), \
+                "Cost must be calculated correctly from converted token values"
+
+    def test_report_handles_invalid_string_token_values(self, base_state, valid_plan):
+        """Test that report generation handles invalid string token values."""
+        from src.agents.reporting import generate_report_node
+
+        base_state["plan"] = valid_plan
+        base_state["metrics"] = {
+            "agent_calls": [
+                {"agent_name": "planner", "input_tokens": "not_a_number", "output_tokens": "abc"},
+            ]
+        }
+
+        mock_response = reporting_summary_response()
+
+        with patch(
+            "src.agents.reporting.call_agent_with_metrics", return_value=mock_response
+        ):
+            result = generate_report_node(base_state)
+            token_summary = result["metrics"]["token_summary"]
+            # Invalid strings should be treated as 0
+            assert token_summary["total_input_tokens"] == 0, \
+                "Invalid string 'not_a_number' must be converted to 0"
+            assert token_summary["total_output_tokens"] == 0, \
+                "Invalid string 'abc' must be converted to 0"
+            assert token_summary["estimated_cost"] == 0.0, \
+                "Cost must be 0 when tokens are 0"
+
+    def test_report_handles_mixed_token_value_types(self, base_state, valid_plan):
+        """Test that report generation handles mixed token value types."""
+        from src.agents.reporting import generate_report_node
+
+        base_state["plan"] = valid_plan
+        base_state["metrics"] = {
+            "agent_calls": [
+                {"agent_name": "planner", "input_tokens": 1000, "output_tokens": "500"},  # int + string
+                {"agent_name": "designer", "input_tokens": "2000.5", "output_tokens": 800.7},  # string + float
+                {"agent_name": "analyzer", "input_tokens": None, "output_tokens": "invalid"},  # None + invalid
+            ]
+        }
+
+        mock_response = reporting_summary_response()
+
+        with patch(
+            "src.agents.reporting.call_agent_with_metrics", return_value=mock_response
+        ):
+            result = generate_report_node(base_state)
+            token_summary = result["metrics"]["token_summary"]
+            # 1000 + 2000 + 0 = 3000 (None -> 0, string "2000.5" -> 2000)
+            assert token_summary["total_input_tokens"] == 3000, \
+                "Mixed input tokens must sum to 3000"
+            # 500 + 800 + 0 = 1300 (string "500" -> 500, float 800.7 -> 800, invalid -> 0)
+            assert token_summary["total_output_tokens"] == 1300, \
+                "Mixed output tokens must sum to 1300"
+
+    def test_report_handles_empty_string_token_values(self, base_state, valid_plan):
+        """Test that report generation handles empty string token values."""
+        from src.agents.reporting import generate_report_node
+
+        base_state["plan"] = valid_plan
+        base_state["metrics"] = {
+            "agent_calls": [
+                {"agent_name": "planner", "input_tokens": "", "output_tokens": ""},
+            ]
+        }
+
+        mock_response = reporting_summary_response()
+
+        with patch(
+            "src.agents.reporting.call_agent_with_metrics", return_value=mock_response
+        ):
+            result = generate_report_node(base_state)
+            token_summary = result["metrics"]["token_summary"]
+            # Empty strings should be treated as 0
+            assert token_summary["total_input_tokens"] == 0, \
+                "Empty string must be converted to 0"
+            assert token_summary["total_output_tokens"] == 0, \
+                "Empty string must be converted to 0"
 

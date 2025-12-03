@@ -196,11 +196,9 @@ class TestSelectStageEdgeCases:
     def test_missing_dependency_blocks_stage(self, base_state):
         """Test that missing dependency reference blocks stage."""
         plan = MockResponseFactory.planner_response()
-        # Set dependencies on PROGRESS stages (where select_stage_node reads from)
+        # Reference a non-existent dependency in plan stages (the correct location)
+        plan["stages"][1]["dependencies"] = ["non_existent_stage"]
         plan["progress"]["stages"][0]["status"] = "completed_success"
-        plan["progress"]["stages"][0]["dependencies"] = []
-        # Reference a non-existent dependency
-        plan["progress"]["stages"][1]["dependencies"] = ["non_existent_stage"]
         
         base_state["plan"] = plan
         base_state["progress"] = deepcopy(plan["progress"])

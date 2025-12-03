@@ -150,7 +150,7 @@ def execution_validator_node(state: ReproState) -> dict:
         max_failures = runtime_config.get("max_execution_failures", MAX_EXECUTION_FAILURES)
         
         if new_count >= max_failures:
-            result["ask_user_trigger"] = "execution_limit"
+            result["ask_user_trigger"] = "execution_failure_limit"
             result["pending_user_questions"] = [
                 f"Execution failed {new_count}/{max_failures} times. Last error: {run_error or 'Unknown'}. "
                 "Options: RETRY_WITH_GUIDANCE (provide hint), SKIP_STAGE, or STOP?"
@@ -250,7 +250,7 @@ def physics_sanity_node(state: ReproState) -> dict:
         stage_id = state.get("current_stage_id", "unknown")
         
         if new_count >= max_failures:
-            result["ask_user_trigger"] = "physics_limit"
+            result["ask_user_trigger"] = "physics_failure_limit"
             result["pending_user_questions"] = [
                 f"Physics sanity check failed {new_count}/{max_failures} times.\n\n"
                 f"- Stage: {stage_id}\n"

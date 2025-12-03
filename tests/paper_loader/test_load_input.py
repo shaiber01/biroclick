@@ -59,7 +59,7 @@ class TestLoadPaperInput:
             "paper_id": "full_paper",
             "paper_title": "Full Title",
             "paper_text": "A" * 150,
-            "paper_domain": "materials",
+            "paper_domain": "other",
             "figures": [{"id": "F1", "description": "D1", "image_path": "p1.png"}],
             "supplementary": {
                 "supplementary_text": "Supp text",
@@ -89,7 +89,7 @@ class TestLoadPaperInput:
         assert result["paper_id"] == "full_paper"
         assert result["paper_title"] == "Full Title"
         assert result["paper_text"] == "A" * 150
-        assert result["paper_domain"] == "materials"
+        assert result["paper_domain"] == "other"
         
         # Verify figures
         assert isinstance(result["figures"], list)
@@ -367,7 +367,7 @@ class TestLoadPaperInput:
             "paper_id": "exact_test",
             "paper_title": "Exact Title",
             "paper_text": "A" * 200,
-            "paper_domain": "exact_domain",
+            "paper_domain": "plasmonics",
             "figures": [
                 {
                     "id": "F1",

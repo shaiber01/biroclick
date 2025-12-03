@@ -198,16 +198,19 @@ def create_llm_error_auto_approve(
     error_truncate_len: int = 200,
 ) -> Dict[str, Any]:
     """
-    Create auto-approve response when reviewer LLM call fails.
+    Create fallback response when reviewer/validator LLM call fails.
     
     Used by reviewer nodes (code_reviewer, design_reviewer, plan_reviewer, etc.)
-    that should auto-approve and continue when LLM is unavailable, rather than
-    blocking the workflow.
+    and validator nodes (execution_validator, physics_sanity) when LLM is unavailable.
+    
+    IMPORTANT: Reviewers should use default_verdict="needs_revision" for fail-closed
+    safety. Validators should use default_verdict="pass" to not block execution.
     
     Args:
         agent_name: Name of the agent for logging/messaging
         error: The exception that was raised
-        default_verdict: Verdict to return ("approve" for reviewers, "pass" for validators)
+        default_verdict: Verdict to return. Use "needs_revision" for reviewers (safer),
+                        "pass" for validators (execution_validator, physics_sanity)
         error_truncate_len: Max length for error message in summary
         
     Returns:
@@ -218,7 +221,7 @@ def create_llm_error_auto_approve(
             agent_output = call_agent_with_metrics(...)
         except Exception as e:
             logger.error(f"Code reviewer LLM call failed: {e}")
-            agent_output = create_llm_error_auto_approve("code_reviewer", e)
+            agent_output = create_llm_error_auto_approve("code_reviewer", e, default_verdict="needs_revision")
     """
     verb_suffix = "d" if default_verdict.endswith("e") else "ed"
     # If default_verdict is "pass", -> "passed". If "approve" -> "approved".

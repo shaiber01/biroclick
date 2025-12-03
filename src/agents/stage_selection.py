@@ -118,10 +118,13 @@ def select_stage_node(state: ReproState) -> dict:
     for stage in stages:
         if stage.get("status") == "needs_rerun":
             # Guard against race condition
-            # Get dependencies from plan stage (design spec), not progress stage
+            # Get dependencies from plan stage (design spec) first, fall back to progress stage
             stage_id = stage.get("stage_id")
             plan_stage = get_plan_stage(state, stage_id) if stage_id else None
             dependencies = plan_stage.get("dependencies") if plan_stage else None
+            # Fall back to progress stage dependencies if plan doesn't have them
+            if dependencies is None:
+                dependencies = stage.get("dependencies")
             # Handle None dependencies - treat as empty list
             if dependencies is None:
                 dependencies = []
@@ -226,9 +229,11 @@ def select_stage_node(state: ReproState) -> dict:
                 continue
             
             # Stage has valid stage_type, check if dependencies are now satisfied
-            # Get dependencies from plan stage (design spec), not progress stage
+            # Get dependencies from plan stage (design spec), fall back to progress stage
             plan_stage_for_deps = get_plan_stage(state, stage.get("stage_id"))
-            dependencies = plan_stage_for_deps.get("dependencies", []) if plan_stage_for_deps else []
+            dependencies = plan_stage_for_deps.get("dependencies") if plan_stage_for_deps else None
+            if dependencies is None:
+                dependencies = stage.get("dependencies", [])
             # Only unblock if stage has dependencies that are now satisfied
             # Stages blocked for other reasons (budget, etc.) should remain blocked
             if not dependencies:
@@ -269,9 +274,11 @@ def select_stage_node(state: ReproState) -> dict:
             else:
                 continue
         
-        # Check dependencies - get from plan stage (design spec), not progress stage
+        # Check dependencies - get from plan stage (design spec), fall back to progress stage
         plan_stage_for_deps = get_plan_stage(state, stage.get("stage_id"))
-        dependencies = plan_stage_for_deps.get("dependencies", []) if plan_stage_for_deps else []
+        dependencies = plan_stage_for_deps.get("dependencies") if plan_stage_for_deps else None
+        if dependencies is None:
+            dependencies = stage.get("dependencies", [])
         
         if not dependencies:
             deps_satisfied = True
@@ -443,6 +450,8 @@ def select_stage_node(state: ReproState) -> dict:
                 continue
         
         # Type order enforcement
+        # NOTE: For type order purposes, completed_failed counts as "done" (just unsuccessfully).
+        # This allows the workflow to proceed to alternative paths when one path fails.
         if stage_type and stage_type in STAGE_TYPE_ORDER:
             current_type_index = STAGE_TYPE_ORDER.index(stage_type)
             skip_stage = False
@@ -452,7 +461,9 @@ def select_stage_node(state: ReproState) -> dict:
                 for other_stage in stages:
                     if other_stage.get("stage_type") == lower_type:
                         other_status = other_stage.get("status", "not_started")
-                        if other_status in ["completed_success", "completed_partial"]:
+                        # Include completed_failed - the stage is done, just not successfully
+                        # This allows alternative paths to be tried
+                        if other_status in ["completed_success", "completed_partial", "completed_failed"]:
                             has_completed_lower_type = True
                             break
                 if not has_completed_lower_type:
@@ -495,7 +506,7 @@ def select_stage_node(state: ReproState) -> dict:
         
         return result_updates
     
-    # Deadlock detection
+    # Deadlock detection - comprehensive check including transitive dependencies and hierarchy
     remaining_stages = [
         s for s in stages
         if s.get("status") not in ["completed_success", "completed_partial"]
@@ -511,29 +522,89 @@ def select_stage_node(state: ReproState) -> dict:
             if s.get("status") in ["completed_success", "completed_partial"]
         }
         
+        # Helper to recursively check if a stage can ever complete
+        def can_stage_ever_complete(stage_id: str, visited: set = None) -> bool:
+            """Check if a stage can ever complete, considering transitive dependencies."""
+            if visited is None:
+                visited = set()
+            
+            if stage_id in visited:
+                return False  # Circular dependency
+            visited.add(stage_id)
+            
+            stage = next((s for s in stages if s.get("stage_id") == stage_id), None)
+            if not stage:
+                return False  # Missing stage
+            
+            status = stage.get("status", "not_started")
+            
+            # Already completed
+            if status in ["completed_success", "completed_partial"]:
+                return True
+            
+            # Permanently blocked or failed
+            if status in ["blocked", "completed_failed"]:
+                return False
+            
+            # Check dependencies
+            plan_stage_for_deps = get_plan_stage(state, stage_id) if stage_id else None
+            dependencies = plan_stage_for_deps.get("dependencies") if plan_stage_for_deps else None
+            if dependencies is None:
+                dependencies = stage.get("dependencies", [])
+            
+            for dep_id in dependencies:
+                if not can_stage_ever_complete(dep_id, visited.copy()):
+                    return False
+            
+            return True
+        
+        # Get validation hierarchy once for checking
+        hierarchy = get_validation_hierarchy(state)
+        MAT_VAL_KEY = STAGE_TYPE_TO_HIERARCHY_KEY["MATERIAL_VALIDATION"]
+        SINGLE_STRUCT_KEY = STAGE_TYPE_TO_HIERARCHY_KEY["SINGLE_STRUCTURE"]
+        ARRAY_SYS_KEY = STAGE_TYPE_TO_HIERARCHY_KEY["ARRAY_SYSTEM"]
+        PARAM_SWEEP_KEY = STAGE_TYPE_TO_HIERARCHY_KEY["PARAMETER_SWEEP"]
+        
         for stage in remaining_stages:
             status = stage.get("status", "not_started")
             stage_id = stage.get("stage_id")
+            stage_type = stage.get("stage_type")
             
             if status in ["blocked", "completed_failed"]:
                 permanently_blocked.append(stage_id)
             elif status in ["not_started", "invalidated", "needs_rerun"]:
-                # Check if this stage's dependencies can ever be satisfied
-                dependencies = stage.get("dependencies") or []
+                # Check if this stage's dependencies can ever be satisfied (recursively)
+                # Get dependencies from plan stage (design spec), fall back to progress stage
+                plan_stage_for_deps = get_plan_stage(state, stage_id) if stage_id else None
+                dependencies = plan_stage_for_deps.get("dependencies") if plan_stage_for_deps else None
+                if dependencies is None:
+                    dependencies = stage.get("dependencies", [])
                 has_blocking_deps = False
                 
                 for dep_id in dependencies:
-                    dep_stage = next((s for s in stages if s.get("stage_id") == dep_id), None)
-                    if dep_stage:
-                        dep_status = dep_stage.get("status", "not_started")
-                        # If dependency is permanently blocked/failed, this stage can't run
-                        if dep_status in ["blocked", "completed_failed"]:
-                            has_blocking_deps = True
-                            break
-                    else:
-                        # Missing dependency - can't run
+                    if not can_stage_ever_complete(dep_id):
                         has_blocking_deps = True
                         break
+                
+                # Also check validation hierarchy constraints
+                if not has_blocking_deps and stage_type:
+                    hierarchy_blocks = False
+                    if stage_type == "SINGLE_STRUCTURE":
+                        if hierarchy.get(MAT_VAL_KEY) == "failed":
+                            hierarchy_blocks = True
+                    elif stage_type == "ARRAY_SYSTEM":
+                        if hierarchy.get(SINGLE_STRUCT_KEY) == "failed":
+                            hierarchy_blocks = True
+                    elif stage_type == "PARAMETER_SWEEP":
+                        if hierarchy.get(SINGLE_STRUCT_KEY) == "failed":
+                            hierarchy_blocks = True
+                    elif stage_type == "COMPLEX_PHYSICS":
+                        if (hierarchy.get(PARAM_SWEEP_KEY) == "failed" and 
+                            hierarchy.get(ARRAY_SYS_KEY) == "failed"):
+                            hierarchy_blocks = True
+                    
+                    if hierarchy_blocks:
+                        has_blocking_deps = True
                 
                 if has_blocking_deps:
                     permanently_blocked.append(stage_id)

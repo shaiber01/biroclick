@@ -1506,3 +1506,764 @@ class TestRoutingConsistency:
                     assert result in valid_routes, (
                         f"Router returned invalid route '{result}' for verdict '{verdict}'"
                     )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# INVALID VERDICT TYPE HANDLING TESTS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestInvalidVerdictTypes:
+    """Tests that routers handle non-string verdict types correctly."""
+
+    @pytest.mark.parametrize(
+        "invalid_verdict",
+        [
+            123,  # Integer
+            12.5,  # Float
+            True,  # Boolean
+            False,  # Boolean False
+            ["approve"],  # List
+            {"verdict": "approve"},  # Dict
+            ("approve",),  # Tuple
+        ],
+    )
+    @pytest.mark.parametrize(
+        "router_name,verdict_field",
+        [
+            ("route_after_plan_review", "last_plan_review_verdict"),
+            ("route_after_design_review", "last_design_review_verdict"),
+            ("route_after_code_review", "last_code_review_verdict"),
+            ("route_after_execution_check", "execution_verdict"),
+            ("route_after_physics_check", "physics_verdict"),
+            ("route_after_comparison_check", "comparison_verdict"),
+        ],
+    )
+    @patch("src.routing.save_checkpoint")
+    def test_router_handles_non_string_verdict(
+        self,
+        mock_checkpoint,
+        router_name: str,
+        verdict_field: str,
+        invalid_verdict,
+        test_state: ReproState,
+    ):
+        """Test that routers escalate on non-string verdict types."""
+        router = getattr(routing, router_name)
+        apply_state_overrides(test_state, **{verdict_field: invalid_verdict})
+
+        result = router(test_state)
+
+        # Non-string verdicts should escalate to ask_user
+        assert result == "ask_user", (
+            f"{router_name} should route to ask_user for non-string verdict type "
+            f"{type(invalid_verdict).__name__}"
+        )
+        mock_checkpoint.assert_called_once()
+        checkpoint_name = mock_checkpoint.call_args[0][1]
+        assert "error" in checkpoint_name
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# NEGATIVE AND BOUNDARY COUNT TESTS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestNegativeAndBoundaryCounts:
+    """Tests for negative count values and boundary conditions."""
+
+    @pytest.mark.parametrize(
+        "router_name,verdict_field,verdict_value,count_field,expected_route",
+        [
+            ("route_after_code_review", "last_code_review_verdict", "needs_revision", "code_revision_count", "generate_code"),
+            ("route_after_design_review", "last_design_review_verdict", "needs_revision", "design_revision_count", "design"),
+            ("route_after_plan_review", "last_plan_review_verdict", "needs_revision", "replan_count", "plan"),
+            ("route_after_execution_check", "execution_verdict", "fail", "execution_failure_count", "generate_code"),
+            ("route_after_physics_check", "physics_verdict", "fail", "physics_failure_count", "generate_code"),
+            ("route_after_comparison_check", "comparison_verdict", "needs_revision", "analysis_revision_count", "analyze"),
+        ],
+    )
+    @patch("src.routing.save_checkpoint")
+    def test_negative_count_allows_routing(
+        self,
+        mock_checkpoint,
+        router_name: str,
+        verdict_field: str,
+        verdict_value: str,
+        count_field: str,
+        expected_route: str,
+        test_state: ReproState,
+    ):
+        """Test that negative counts don't cause escalation (treated as under limit)."""
+        router = getattr(routing, router_name)
+        apply_state_overrides(
+            test_state,
+            **{verdict_field: verdict_value, count_field: -5},
+        )
+
+        result = router(test_state)
+
+        # Negative counts should be below limit, allowing normal routing
+        assert result == expected_route
+        mock_checkpoint.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "router_name,verdict_field,verdict_value,count_field,max_count",
+        [
+            ("route_after_code_review", "last_code_review_verdict", "needs_revision", "code_revision_count", MAX_CODE_REVISIONS),
+            ("route_after_design_review", "last_design_review_verdict", "needs_revision", "design_revision_count", MAX_DESIGN_REVISIONS),
+            ("route_after_execution_check", "execution_verdict", "fail", "execution_failure_count", MAX_EXECUTION_FAILURES),
+        ],
+    )
+    @patch("src.routing.save_checkpoint")
+    def test_count_well_above_limit_still_escalates(
+        self,
+        mock_checkpoint,
+        router_name: str,
+        verdict_field: str,
+        verdict_value: str,
+        count_field: str,
+        max_count: int,
+        test_state: ReproState,
+    ):
+        """Test that counts well above limit still trigger escalation."""
+        router = getattr(routing, router_name)
+        apply_state_overrides(
+            test_state,
+            **{verdict_field: verdict_value, count_field: max_count * 100},
+        )
+
+        result = router(test_state)
+
+        assert result == "ask_user"
+        mock_checkpoint.assert_called_once()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# RUNTIME CONFIG EDGE CASES
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestRuntimeConfigEdgeCases:
+    """Tests for edge cases in runtime configuration."""
+
+    @patch("src.routing.save_checkpoint")
+    def test_runtime_config_zero_limit_always_escalates(self, mock_checkpoint, test_state: ReproState):
+        """Test that zero limit in runtime_config causes immediate escalation."""
+        apply_state_overrides(
+            test_state,
+            last_code_review_verdict="needs_revision",
+            code_revision_count=0,
+            runtime_config={"max_code_revisions": 0},
+        )
+
+        result = routing.route_after_code_review(test_state)
+
+        assert result == "ask_user"
+        mock_checkpoint.assert_called_once()
+
+    @patch("src.routing.save_checkpoint")
+    def test_runtime_config_negative_limit_always_escalates(self, mock_checkpoint, test_state: ReproState):
+        """Test that negative limit in runtime_config causes immediate escalation."""
+        apply_state_overrides(
+            test_state,
+            last_code_review_verdict="needs_revision",
+            code_revision_count=0,
+            runtime_config={"max_code_revisions": -5},
+        )
+
+        result = routing.route_after_code_review(test_state)
+
+        # count (0) >= limit (-5), so escalates
+        assert result == "ask_user"
+        mock_checkpoint.assert_called_once()
+
+    @patch("src.routing.save_checkpoint")
+    def test_runtime_config_very_large_limit(self, mock_checkpoint, test_state: ReproState):
+        """Test that very large limit allows many revisions."""
+        apply_state_overrides(
+            test_state,
+            last_code_review_verdict="needs_revision",
+            code_revision_count=999999,
+            runtime_config={"max_code_revisions": 1000000},
+        )
+
+        result = routing.route_after_code_review(test_state)
+
+        assert result == "generate_code"
+        mock_checkpoint.assert_not_called()
+
+    @patch("src.routing.save_checkpoint")
+    def test_runtime_config_wrong_key_uses_default(self, mock_checkpoint, test_state: ReproState):
+        """Test that wrong key in runtime_config causes default limit to be used."""
+        apply_state_overrides(
+            test_state,
+            last_code_review_verdict="needs_revision",
+            code_revision_count=MAX_CODE_REVISIONS,
+            runtime_config={"wrong_key": 100},  # Wrong key, should use default
+        )
+
+        result = routing.route_after_code_review(test_state)
+
+        # Should use default MAX_CODE_REVISIONS limit
+        assert result == "ask_user"
+        mock_checkpoint.assert_called_once()
+
+    @patch("src.graph.save_checkpoint")
+    def test_supervisor_runtime_config_overrides_replan_limit(self, mock_checkpoint, test_state: ReproState):
+        """Test supervisor respects runtime_config for replan limit."""
+        apply_state_overrides(
+            test_state,
+            supervisor_verdict="replan_needed",
+            replan_count=MAX_REPLANS + 5,
+            runtime_config={"max_replans": MAX_REPLANS + 10},
+        )
+
+        result = route_after_supervisor(test_state)
+
+        assert result == "plan"  # Under the custom limit
+
+    @patch("src.graph.save_checkpoint")
+    def test_supervisor_runtime_config_zero_replan_limit(self, mock_checkpoint, test_state: ReproState):
+        """Test supervisor with zero replan limit always escalates."""
+        apply_state_overrides(
+            test_state,
+            supervisor_verdict="replan_needed",
+            replan_count=0,
+            runtime_config={"max_replans": 0},
+        )
+
+        result = route_after_supervisor(test_state)
+
+        assert result == "ask_user"
+        mock_checkpoint.assert_called()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CHECKPOINT STATE VERIFICATION TESTS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestCheckpointStateVerification:
+    """Tests that verify checkpoint receives correct state."""
+
+    @patch("src.routing.save_checkpoint")
+    def test_checkpoint_receives_state_on_error(self, mock_checkpoint, test_state: ReproState):
+        """Test that save_checkpoint receives the state dict on error escalation."""
+        apply_state_overrides(test_state, last_code_review_verdict=None)
+
+        routing.route_after_code_review(test_state)
+
+        mock_checkpoint.assert_called_once()
+        # First argument should be the state
+        state_arg = mock_checkpoint.call_args[0][0]
+        assert state_arg is test_state
+        # Second argument should be checkpoint name
+        checkpoint_name = mock_checkpoint.call_args[0][1]
+        assert isinstance(checkpoint_name, str)
+        assert len(checkpoint_name) > 0
+
+    @patch("src.routing.save_checkpoint")
+    def test_checkpoint_receives_state_on_limit(self, mock_checkpoint, test_state: ReproState):
+        """Test that save_checkpoint receives correct state on limit escalation."""
+        apply_state_overrides(
+            test_state,
+            last_code_review_verdict="needs_revision",
+            code_revision_count=MAX_CODE_REVISIONS,
+        )
+
+        routing.route_after_code_review(test_state)
+
+        mock_checkpoint.assert_called_once()
+        state_arg = mock_checkpoint.call_args[0][0]
+        assert state_arg is test_state
+        assert state_arg.get("code_revision_count") == MAX_CODE_REVISIONS
+
+    @patch("src.graph.save_checkpoint")
+    def test_route_after_plan_checkpoint_receives_state(self, mock_checkpoint, test_state: ReproState):
+        """Test that route_after_plan passes state to checkpoint."""
+        route_after_plan(test_state)
+
+        mock_checkpoint.assert_called_once()
+        state_arg = mock_checkpoint.call_args[0][0]
+        assert state_arg is test_state
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# STATE MUTATION SAFETY TESTS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestStateMutationSafety:
+    """Tests that routing functions don't unexpectedly mutate state."""
+
+    @patch("src.routing.save_checkpoint")
+    def test_router_does_not_mutate_verdict(self, mock_checkpoint, test_state: ReproState):
+        """Test that routing doesn't modify the verdict field."""
+        import copy
+
+        original_verdict = "approve"
+        apply_state_overrides(test_state, last_code_review_verdict=original_verdict)
+        state_before = copy.deepcopy(test_state)
+
+        routing.route_after_code_review(test_state)
+
+        assert test_state.get("last_code_review_verdict") == original_verdict
+        # The verdict should remain unchanged
+        assert test_state.get("last_code_review_verdict") == state_before.get("last_code_review_verdict")
+
+    @patch("src.routing.save_checkpoint")
+    def test_router_does_not_mutate_count(self, mock_checkpoint, test_state: ReproState):
+        """Test that routing doesn't modify the count field."""
+        import copy
+
+        original_count = 2
+        apply_state_overrides(
+            test_state,
+            last_code_review_verdict="needs_revision",
+            code_revision_count=original_count,
+        )
+        state_before = copy.deepcopy(test_state)
+
+        routing.route_after_code_review(test_state)
+
+        assert test_state.get("code_revision_count") == original_count
+        assert test_state.get("code_revision_count") == state_before.get("code_revision_count")
+
+    @patch("src.graph.save_checkpoint")
+    def test_supervisor_does_not_mutate_state(self, mock_checkpoint, test_state: ReproState):
+        """Test that supervisor routing doesn't unexpectedly mutate state."""
+        import copy
+
+        apply_state_overrides(
+            test_state,
+            supervisor_verdict="ok_continue",
+            replan_count=1,
+        )
+        state_before = copy.deepcopy(test_state)
+
+        route_after_supervisor(test_state)
+
+        # Key fields should remain unchanged
+        assert test_state.get("supervisor_verdict") == state_before.get("supervisor_verdict")
+        assert test_state.get("replan_count") == state_before.get("replan_count")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# LOGGING VERIFICATION TESTS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestLoggingBehavior:
+    """Tests that verify proper logging occurs."""
+
+    @patch("src.routing.save_checkpoint")
+    def test_error_logged_on_none_verdict(self, mock_checkpoint, test_state: ReproState, caplog):
+        """Test that error is logged when verdict is None."""
+        import logging
+        apply_state_overrides(test_state, last_code_review_verdict=None)
+
+        with caplog.at_level(logging.ERROR, logger="src.routing"):
+            routing.route_after_code_review(test_state)
+
+        assert any("None" in record.message for record in caplog.records)
+        assert any(record.levelno == logging.ERROR for record in caplog.records)
+
+    @patch("src.routing.save_checkpoint")
+    def test_error_logged_on_invalid_type(self, mock_checkpoint, test_state: ReproState, caplog):
+        """Test that error is logged when verdict has invalid type."""
+        import logging
+        apply_state_overrides(test_state, last_code_review_verdict=123)  # Integer
+
+        with caplog.at_level(logging.ERROR, logger="src.routing"):
+            routing.route_after_code_review(test_state)
+
+        assert any("invalid type" in record.message.lower() for record in caplog.records)
+
+    @patch("src.routing.save_checkpoint")
+    def test_warning_logged_on_unknown_verdict(self, mock_checkpoint, test_state: ReproState, caplog):
+        """Test that warning is logged when verdict is unknown."""
+        import logging
+        apply_state_overrides(test_state, last_code_review_verdict="invalid_unknown_value")
+
+        with caplog.at_level(logging.WARNING, logger="src.routing"):
+            routing.route_after_code_review(test_state)
+
+        assert any("not a recognized verdict" in record.message for record in caplog.records)
+
+    @patch("src.routing.save_checkpoint")
+    def test_warning_logged_on_limit_reached(self, mock_checkpoint, test_state: ReproState, caplog):
+        """Test that warning is logged when limit is reached."""
+        import logging
+        apply_state_overrides(
+            test_state,
+            last_code_review_verdict="needs_revision",
+            code_revision_count=MAX_CODE_REVISIONS,
+        )
+
+        with caplog.at_level(logging.WARNING, logger="src.routing"):
+            routing.route_after_code_review(test_state)
+
+        assert any("escalating" in record.message.lower() for record in caplog.records)
+
+    @patch("src.graph.save_checkpoint")
+    def test_supervisor_logs_warning_on_none_verdict(self, mock_checkpoint, test_state: ReproState, caplog):
+        """Test that supervisor logs warning on None verdict."""
+        import logging
+        apply_state_overrides(test_state, supervisor_verdict=None)
+
+        with caplog.at_level(logging.WARNING):
+            route_after_supervisor(test_state)
+
+        assert any("None" in record.message for record in caplog.records)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SUPERVISOR COMBINED CONDITIONS TESTS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestSupervisorCombinedConditions:
+    """Tests for supervisor with multiple state conditions."""
+
+    @patch("src.graph.save_checkpoint")
+    def test_material_validation_with_should_stop_goes_to_report(self, mock_checkpoint, test_state: ReproState):
+        """Test that should_stop takes precedence even for MATERIAL_VALIDATION."""
+        apply_state_overrides(
+            test_state,
+            supervisor_verdict="ok_continue",
+            current_stage_type="MATERIAL_VALIDATION",
+            should_stop=True,
+        )
+
+        result = route_after_supervisor(test_state)
+
+        # should_stop should take precedence
+        assert result == "generate_report"
+
+    @patch("src.graph.save_checkpoint")
+    def test_material_checkpoint_with_confirmed_false(self, mock_checkpoint, test_state: ReproState):
+        """Test material checkpoint when user response exists but confirmed is False."""
+        apply_state_overrides(
+            test_state,
+            supervisor_verdict="ok_continue",
+            current_stage_type="MATERIAL_VALIDATION",
+            user_responses={"material_checkpoint": {"confirmed": False}},
+        )
+
+        result = route_after_supervisor(test_state)
+
+        # The presence of material_checkpoint key should skip the checkpoint
+        # regardless of the confirmed value (the check is just for key presence)
+        assert result == "select_stage"
+
+    @patch("src.graph.save_checkpoint")
+    def test_material_checkpoint_with_other_responses(self, mock_checkpoint, test_state: ReproState):
+        """Test material checkpoint when user_responses has other keys but not material_checkpoint."""
+        apply_state_overrides(
+            test_state,
+            supervisor_verdict="ok_continue",
+            current_stage_type="MATERIAL_VALIDATION",
+            user_responses={"some_other_response": {"data": "value"}},
+        )
+
+        result = route_after_supervisor(test_state)
+
+        # Should still route to material_checkpoint since material_checkpoint key is missing
+        assert result == "material_checkpoint"
+
+    @patch("src.graph.save_checkpoint")
+    def test_replan_needed_with_should_stop_flag(self, mock_checkpoint, test_state: ReproState):
+        """Test that replan_needed verdict is processed before should_stop check."""
+        apply_state_overrides(
+            test_state,
+            supervisor_verdict="replan_needed",
+            should_stop=True,
+            replan_count=0,
+        )
+
+        result = route_after_supervisor(test_state)
+
+        # replan_needed should route to plan, not be affected by should_stop
+        # (should_stop is only checked for ok_continue and change_priority)
+        assert result == "plan"
+
+    @patch("src.graph.save_checkpoint")
+    def test_all_complete_overrides_material_validation(self, mock_checkpoint, test_state: ReproState):
+        """Test that all_complete goes to report regardless of stage type."""
+        apply_state_overrides(
+            test_state,
+            supervisor_verdict="all_complete",
+            current_stage_type="MATERIAL_VALIDATION",
+        )
+
+        result = route_after_supervisor(test_state)
+
+        assert result == "generate_report"
+
+    @patch("src.graph.save_checkpoint")
+    def test_backtrack_with_material_validation_stage(self, mock_checkpoint, test_state: ReproState):
+        """Test that backtrack routes to handle_backtrack regardless of stage."""
+        apply_state_overrides(
+            test_state,
+            supervisor_verdict="backtrack_to_stage",
+            current_stage_type="MATERIAL_VALIDATION",
+        )
+
+        result = route_after_supervisor(test_state)
+
+        assert result == "handle_backtrack"
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PHYSICS CHECK DESIGN_FLAW TESTS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestPhysicsCheckDesignFlaw:
+    """Comprehensive tests for design_flaw verdict in physics check."""
+
+    @patch("src.routing.save_checkpoint")
+    def test_design_flaw_just_under_design_limit(self, mock_checkpoint, test_state: ReproState):
+        """Test design_flaw continues just under the design revision limit."""
+        apply_state_overrides(
+            test_state,
+            physics_verdict="design_flaw",
+            design_revision_count=MAX_DESIGN_REVISIONS - 1,
+        )
+
+        result = routing.route_after_physics_check(test_state)
+
+        assert result == "design"
+        mock_checkpoint.assert_not_called()
+
+    @patch("src.routing.save_checkpoint")
+    def test_design_flaw_with_runtime_config_override(self, mock_checkpoint, test_state: ReproState):
+        """Test design_flaw respects runtime_config design revision limit."""
+        apply_state_overrides(
+            test_state,
+            physics_verdict="design_flaw",
+            design_revision_count=MAX_DESIGN_REVISIONS + 5,
+            runtime_config={"max_design_revisions": MAX_DESIGN_REVISIONS + 10},
+        )
+
+        result = routing.route_after_physics_check(test_state)
+
+        assert result == "design"
+        mock_checkpoint.assert_not_called()
+
+    @patch("src.routing.save_checkpoint")
+    def test_design_flaw_uses_design_limit_not_physics_limit(self, mock_checkpoint, test_state: ReproState):
+        """Test that design_flaw uses design revision limit, not physics failure limit."""
+        apply_state_overrides(
+            test_state,
+            physics_verdict="design_flaw",
+            design_revision_count=0,
+            physics_failure_count=MAX_PHYSICS_FAILURES + 100,  # This should be ignored
+        )
+
+        result = routing.route_after_physics_check(test_state)
+
+        # Should route to design based on design_revision_count, not physics_failure_count
+        assert result == "design"
+        mock_checkpoint.assert_not_called()
+
+    @patch("src.routing.save_checkpoint")
+    def test_design_flaw_escalates_at_exact_limit(self, mock_checkpoint, test_state: ReproState):
+        """Test design_flaw escalates exactly at the limit."""
+        apply_state_overrides(
+            test_state,
+            physics_verdict="design_flaw",
+            design_revision_count=MAX_DESIGN_REVISIONS,
+        )
+
+        result = routing.route_after_physics_check(test_state)
+
+        assert result == "ask_user"
+        mock_checkpoint.assert_called_once()
+        checkpoint_name = mock_checkpoint.call_args[0][1]
+        assert "limit" in checkpoint_name
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# COMPARISON CHECK SPECIAL CASE TESTS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestComparisonCheckSpecialCases:
+    """Tests for comparison_check special routing behavior."""
+
+    @patch("src.routing.save_checkpoint")
+    def test_comparison_limit_routes_to_supervisor_not_ask_user(self, mock_checkpoint, test_state: ReproState):
+        """Verify comparison_check routes to supervisor (not ask_user) at limit.
+
+        This is a critical difference from other routers - comparison_check
+        uses route_on_limit='supervisor' instead of 'ask_user'.
+        """
+        apply_state_overrides(
+            test_state,
+            comparison_verdict="needs_revision",
+            analysis_revision_count=MAX_ANALYSIS_REVISIONS + 10,  # Well over limit
+        )
+
+        result = routing.route_after_comparison_check(test_state)
+
+        # CRITICAL: Must be supervisor, not ask_user
+        assert result == "supervisor"
+        mock_checkpoint.assert_called_once()
+
+    @patch("src.routing.save_checkpoint")
+    def test_comparison_approve_ignores_count(self, mock_checkpoint, test_state: ReproState):
+        """Test that approve verdict routes to supervisor regardless of count."""
+        apply_state_overrides(
+            test_state,
+            comparison_verdict="approve",
+            analysis_revision_count=9999,
+        )
+
+        result = routing.route_after_comparison_check(test_state)
+
+        assert result == "supervisor"
+        mock_checkpoint.assert_not_called()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# EXECUTION AND PHYSICS PASS-THROUGH TESTS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestPassThroughVerdicts:
+    """Tests for pass-through verdicts that bypass count limits."""
+
+    @pytest.mark.parametrize("verdict", ["pass", "warning"])
+    @patch("src.routing.save_checkpoint")
+    def test_execution_pass_through_with_various_counts(
+        self, mock_checkpoint, verdict: str, test_state: ReproState
+    ):
+        """Test execution pass-through verdicts work with any failure count."""
+        for count in [0, 1, MAX_EXECUTION_FAILURES, MAX_EXECUTION_FAILURES * 100]:
+            apply_state_overrides(
+                test_state,
+                execution_verdict=verdict,
+                execution_failure_count=count,
+            )
+
+            result = routing.route_after_execution_check(test_state)
+
+            assert result == "physics_check", f"Failed for count={count}"
+            mock_checkpoint.assert_not_called()
+
+    @pytest.mark.parametrize("verdict", ["pass", "warning"])
+    @patch("src.routing.save_checkpoint")
+    def test_physics_pass_through_with_various_counts(
+        self, mock_checkpoint, verdict: str, test_state: ReproState
+    ):
+        """Test physics pass-through verdicts work with any failure count."""
+        for count in [0, 1, MAX_PHYSICS_FAILURES, MAX_PHYSICS_FAILURES * 100]:
+            apply_state_overrides(
+                test_state,
+                physics_verdict=verdict,
+                physics_failure_count=count,
+            )
+
+            result = routing.route_after_physics_check(test_state)
+
+            assert result == "analyze", f"Failed for count={count}"
+            mock_checkpoint.assert_not_called()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# EMPTY STRING VERDICT TESTS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestEmptyStringVerdicts:
+    """Tests for empty string verdict handling."""
+
+    @pytest.mark.parametrize(
+        "router_name,verdict_field",
+        [
+            ("route_after_plan_review", "last_plan_review_verdict"),
+            ("route_after_design_review", "last_design_review_verdict"),
+            ("route_after_code_review", "last_code_review_verdict"),
+            ("route_after_execution_check", "execution_verdict"),
+            ("route_after_physics_check", "physics_verdict"),
+            ("route_after_comparison_check", "comparison_verdict"),
+        ],
+    )
+    @patch("src.routing.save_checkpoint")
+    def test_empty_string_verdict_escalates(
+        self,
+        mock_checkpoint,
+        router_name: str,
+        verdict_field: str,
+        test_state: ReproState,
+    ):
+        """Test that empty string verdict escalates to ask_user."""
+        router = getattr(routing, router_name)
+        apply_state_overrides(test_state, **{verdict_field: ""})
+
+        result = router(test_state)
+
+        # Empty string is not a valid verdict, should escalate
+        assert result == "ask_user"
+        mock_checkpoint.assert_called_once()
+        checkpoint_name = mock_checkpoint.call_args[0][1]
+        assert "fallback" in checkpoint_name
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# WHITESPACE VERDICT TESTS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestWhitespaceVerdicts:
+    """Tests for whitespace-only verdict handling."""
+
+    @pytest.mark.parametrize("whitespace_verdict", [" ", "  ", "\t", "\n", "  \t\n  "])
+    @patch("src.routing.save_checkpoint")
+    def test_whitespace_verdict_escalates(
+        self,
+        mock_checkpoint,
+        whitespace_verdict: str,
+        test_state: ReproState,
+    ):
+        """Test that whitespace-only verdict escalates to ask_user."""
+        apply_state_overrides(test_state, last_code_review_verdict=whitespace_verdict)
+
+        result = routing.route_after_code_review(test_state)
+
+        # Whitespace is not a valid verdict, should escalate via fallback
+        assert result == "ask_user"
+        mock_checkpoint.assert_called_once()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CASE SENSITIVITY TESTS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestCaseSensitivity:
+    """Tests to verify verdict matching is case-sensitive."""
+
+    @pytest.mark.parametrize(
+        "wrong_case_verdict",
+        ["Approve", "APPROVE", "ApPrOvE", "NEEDS_REVISION", "Needs_Revision"],
+    )
+    @patch("src.routing.save_checkpoint")
+    def test_verdicts_are_case_sensitive(
+        self,
+        mock_checkpoint,
+        wrong_case_verdict: str,
+        test_state: ReproState,
+    ):
+        """Test that verdict matching is case-sensitive."""
+        apply_state_overrides(test_state, last_code_review_verdict=wrong_case_verdict)
+
+        result = routing.route_after_code_review(test_state)
+
+        # Wrong case should not match, should escalate via fallback
+        assert result == "ask_user"
+        mock_checkpoint.assert_called_once()
+        checkpoint_name = mock_checkpoint.call_args[0][1]
+        assert "fallback" in checkpoint_name

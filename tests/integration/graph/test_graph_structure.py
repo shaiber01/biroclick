@@ -1395,3 +1395,1034 @@ class TestRoutingTargetIntegrity:
                         f"State triggering this: {state}"
                     )
 
+
+# ═══════════════════════════════════════════════════════════════════════
+# Conditional Edge Completeness Tests (CRITICAL)
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestConditionalEdgeCompleteness:
+    """
+    CRITICAL: Tests that verify conditional edges include ALL possible router return values.
+    
+    If a router can return a value that's not in the conditional edges map, LangGraph will
+    raise a runtime error. These tests catch such mismatches BEFORE they hit production.
+    """
+
+    def test_comparison_check_edges_include_ask_user(self, graph_definition):
+        """
+        CRITICAL BUG DETECTOR: comparison_check router can return 'ask_user' on error,
+        but conditional edges must include it or LangGraph will fail at runtime.
+        
+        The router route_after_comparison_check returns 'ask_user' when:
+        - verdict is None
+        - verdict is an invalid type
+        - verdict is an unknown string
+        
+        The graph edges MUST include 'ask_user' as a valid target.
+        """
+        edges = list(graph_definition.edges)
+        comparison_targets = {e[1] for e in edges if e[0] == "comparison_check"}
+        
+        # The router CAN return ask_user, so the graph MUST have this edge
+        assert "ask_user" in comparison_targets, (
+            f"CRITICAL BUG: comparison_check router can return 'ask_user' on error, "
+            f"but the conditional_edges only include: {comparison_targets}. "
+            f"This WILL cause a runtime error in LangGraph when verdict is None!"
+        )
+
+    def _get_all_possible_router_returns(self, router, router_name):
+        """Helper to get all possible return values from a router by testing all code paths."""
+        returns = set()
+        
+        # Test states that trigger different return paths
+        test_states = [
+            # Normal verdicts
+            make_state(**{f"{router_name}_verdict": "approve"}),
+            make_state(**{f"{router_name}_verdict": "needs_revision"}),
+            make_state(**{f"{router_name}_verdict": "pass"}),
+            make_state(**{f"{router_name}_verdict": "warning"}),
+            make_state(**{f"{router_name}_verdict": "fail"}),
+            make_state(**{f"{router_name}_verdict": "design_flaw"}),
+            # Error conditions
+            make_state(**{f"{router_name}_verdict": None}),  # None verdict
+            make_state(**{f"{router_name}_verdict": "unknown_xyz"}),  # Unknown verdict
+            make_state(**{f"{router_name}_verdict": 123}),  # Invalid type
+            # Count limit triggers
+            make_state(**{f"{router_name}_verdict": "needs_revision", "replan_count": 100}),
+            make_state(**{f"{router_name}_verdict": "needs_revision", "design_revision_count": 100}),
+            make_state(**{f"{router_name}_verdict": "needs_revision", "code_revision_count": 100}),
+            make_state(**{f"{router_name}_verdict": "needs_revision", "analysis_revision_count": 100}),
+            make_state(**{f"{router_name}_verdict": "fail", "execution_failure_count": 100}),
+            make_state(**{f"{router_name}_verdict": "fail", "physics_failure_count": 100}),
+        ]
+        
+        with patch('src.routing.save_checkpoint'), patch('src.graph.save_checkpoint'):
+            for state in test_states:
+                try:
+                    result = router(state)
+                    returns.add(result)
+                except Exception:
+                    pass  # Some states won't be valid for all routers
+        
+        return returns
+
+    def test_plan_review_edges_cover_all_router_returns(self, graph_definition):
+        """Verify plan_review edges include all possible router return values."""
+        edges = list(graph_definition.edges)
+        edge_targets = {e[1] for e in edges if e[0] == "plan_review"}
+        
+        # All possible returns from route_after_plan_review
+        with patch('src.routing.save_checkpoint'):
+            possible_returns = {
+                route_after_plan_review(make_state(last_plan_review_verdict="approve")),
+                route_after_plan_review(make_state(last_plan_review_verdict="needs_revision", replan_count=0)),
+                route_after_plan_review(make_state(last_plan_review_verdict="needs_revision", replan_count=MAX_REPLANS)),
+                route_after_plan_review(make_state(last_plan_review_verdict=None)),
+                route_after_plan_review(make_state(last_plan_review_verdict="unknown")),
+            }
+        
+        missing = possible_returns - edge_targets
+        assert not missing, (
+            f"plan_review edges missing targets that router can return: {missing}. "
+            f"Current edges only go to: {edge_targets}"
+        )
+
+    def test_design_review_edges_cover_all_router_returns(self, graph_definition):
+        """Verify design_review edges include all possible router return values."""
+        edges = list(graph_definition.edges)
+        edge_targets = {e[1] for e in edges if e[0] == "design_review"}
+        
+        with patch('src.routing.save_checkpoint'):
+            possible_returns = {
+                route_after_design_review(make_state(last_design_review_verdict="approve")),
+                route_after_design_review(make_state(last_design_review_verdict="needs_revision", design_revision_count=0)),
+                route_after_design_review(make_state(last_design_review_verdict="needs_revision", design_revision_count=MAX_DESIGN_REVISIONS)),
+                route_after_design_review(make_state(last_design_review_verdict=None)),
+                route_after_design_review(make_state(last_design_review_verdict="unknown")),
+            }
+        
+        missing = possible_returns - edge_targets
+        assert not missing, (
+            f"design_review edges missing targets that router can return: {missing}. "
+            f"Current edges only go to: {edge_targets}"
+        )
+
+    def test_code_review_edges_cover_all_router_returns(self, graph_definition):
+        """Verify code_review edges include all possible router return values."""
+        edges = list(graph_definition.edges)
+        edge_targets = {e[1] for e in edges if e[0] == "code_review"}
+        
+        with patch('src.routing.save_checkpoint'):
+            possible_returns = {
+                route_after_code_review(make_state(last_code_review_verdict="approve")),
+                route_after_code_review(make_state(last_code_review_verdict="needs_revision", code_revision_count=0)),
+                route_after_code_review(make_state(last_code_review_verdict="needs_revision", code_revision_count=MAX_CODE_REVISIONS)),
+                route_after_code_review(make_state(last_code_review_verdict=None)),
+                route_after_code_review(make_state(last_code_review_verdict="unknown")),
+            }
+        
+        missing = possible_returns - edge_targets
+        assert not missing, (
+            f"code_review edges missing targets that router can return: {missing}. "
+            f"Current edges only go to: {edge_targets}"
+        )
+
+    def test_execution_check_edges_cover_all_router_returns(self, graph_definition):
+        """Verify execution_check edges include all possible router return values."""
+        edges = list(graph_definition.edges)
+        edge_targets = {e[1] for e in edges if e[0] == "execution_check"}
+        
+        with patch('src.routing.save_checkpoint'):
+            possible_returns = {
+                route_after_execution_check(make_state(execution_verdict="pass")),
+                route_after_execution_check(make_state(execution_verdict="warning")),
+                route_after_execution_check(make_state(execution_verdict="fail", execution_failure_count=0)),
+                route_after_execution_check(make_state(execution_verdict="fail", execution_failure_count=MAX_EXECUTION_FAILURES)),
+                route_after_execution_check(make_state(execution_verdict=None)),
+                route_after_execution_check(make_state(execution_verdict="unknown")),
+            }
+        
+        missing = possible_returns - edge_targets
+        assert not missing, (
+            f"execution_check edges missing targets that router can return: {missing}. "
+            f"Current edges only go to: {edge_targets}"
+        )
+
+    def test_physics_check_edges_cover_all_router_returns(self, graph_definition):
+        """Verify physics_check edges include all possible router return values."""
+        edges = list(graph_definition.edges)
+        edge_targets = {e[1] for e in edges if e[0] == "physics_check"}
+        
+        with patch('src.routing.save_checkpoint'):
+            possible_returns = {
+                route_after_physics_check(make_state(physics_verdict="pass")),
+                route_after_physics_check(make_state(physics_verdict="warning")),
+                route_after_physics_check(make_state(physics_verdict="fail", physics_failure_count=0)),
+                route_after_physics_check(make_state(physics_verdict="fail", physics_failure_count=MAX_PHYSICS_FAILURES)),
+                route_after_physics_check(make_state(physics_verdict="design_flaw", design_revision_count=0)),
+                route_after_physics_check(make_state(physics_verdict="design_flaw", design_revision_count=MAX_DESIGN_REVISIONS)),
+                route_after_physics_check(make_state(physics_verdict=None)),
+                route_after_physics_check(make_state(physics_verdict="unknown")),
+            }
+        
+        missing = possible_returns - edge_targets
+        assert not missing, (
+            f"physics_check edges missing targets that router can return: {missing}. "
+            f"Current edges only go to: {edge_targets}"
+        )
+
+    def test_comparison_check_edges_cover_all_router_returns(self, graph_definition):
+        """
+        CRITICAL: Verify comparison_check edges include all possible router return values.
+        
+        This specifically tests for the bug where ask_user is not in the edge map.
+        """
+        edges = list(graph_definition.edges)
+        edge_targets = {e[1] for e in edges if e[0] == "comparison_check"}
+        
+        with patch('src.routing.save_checkpoint'):
+            possible_returns = {
+                route_after_comparison_check(make_state(comparison_verdict="approve")),
+                route_after_comparison_check(make_state(comparison_verdict="needs_revision", analysis_revision_count=0)),
+                route_after_comparison_check(make_state(comparison_verdict="needs_revision", analysis_revision_count=MAX_ANALYSIS_REVISIONS)),
+                route_after_comparison_check(make_state(comparison_verdict=None)),  # Returns ask_user!
+                route_after_comparison_check(make_state(comparison_verdict="unknown")),  # Returns ask_user!
+            }
+        
+        missing = possible_returns - edge_targets
+        assert not missing, (
+            f"CRITICAL BUG: comparison_check edges missing targets that router can return: {missing}. "
+            f"Current edges only go to: {edge_targets}. "
+            f"This will cause LangGraph to fail at runtime when comparison_verdict is None or invalid!"
+        )
+
+    def test_supervisor_edges_cover_all_router_returns(self, graph_definition):
+        """Verify supervisor edges include all possible router return values."""
+        edges = list(graph_definition.edges)
+        edge_targets = {e[1] for e in edges if e[0] == "supervisor"}
+        
+        with patch('src.graph.save_checkpoint'):
+            possible_returns = {
+                route_after_supervisor(make_state(supervisor_verdict="ok_continue", should_stop=False, current_stage_type="SINGLE_STRUCTURE")),
+                route_after_supervisor(make_state(supervisor_verdict="ok_continue", should_stop=True)),
+                route_after_supervisor(make_state(supervisor_verdict="ok_continue", current_stage_type="MATERIAL_VALIDATION", user_responses={})),
+                route_after_supervisor(make_state(supervisor_verdict="change_priority", should_stop=False, current_stage_type="SINGLE_STRUCTURE")),
+                route_after_supervisor(make_state(supervisor_verdict="replan_needed", replan_count=0)),
+                route_after_supervisor(make_state(supervisor_verdict="replan_needed", replan_count=MAX_REPLANS)),
+                route_after_supervisor(make_state(supervisor_verdict="ask_user")),
+                route_after_supervisor(make_state(supervisor_verdict="backtrack_to_stage")),
+                route_after_supervisor(make_state(supervisor_verdict="all_complete")),
+                route_after_supervisor(make_state(supervisor_verdict=None)),  # Error case
+                route_after_supervisor(make_state(supervisor_verdict="unknown")),  # Fallback
+            }
+        
+        missing = possible_returns - edge_targets
+        assert not missing, (
+            f"supervisor edges missing targets that router can return: {missing}. "
+            f"Current edges only go to: {edge_targets}"
+        )
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Invalid Verdict Type Tests
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestInvalidVerdictTypes:
+    """Tests that routers handle invalid verdict types (not just None)."""
+
+    @patch('src.routing.save_checkpoint')
+    def test_integer_verdict_escalates_to_ask_user(self, mock_checkpoint):
+        """Test that integer verdict type escalates to ask_user."""
+        state = make_state(last_code_review_verdict=123)
+        result = route_after_code_review(state)
+        assert result == "ask_user", f"Integer verdict should escalate to ask_user, got {result}"
+
+    @patch('src.routing.save_checkpoint')
+    def test_list_verdict_escalates_to_ask_user(self, mock_checkpoint):
+        """Test that list verdict type escalates to ask_user."""
+        state = make_state(last_code_review_verdict=["approve", "needs_revision"])
+        result = route_after_code_review(state)
+        assert result == "ask_user", f"List verdict should escalate to ask_user, got {result}"
+
+    @patch('src.routing.save_checkpoint')
+    def test_dict_verdict_escalates_to_ask_user(self, mock_checkpoint):
+        """Test that dict verdict type escalates to ask_user."""
+        state = make_state(last_code_review_verdict={"verdict": "approve"})
+        result = route_after_code_review(state)
+        assert result == "ask_user", f"Dict verdict should escalate to ask_user, got {result}"
+
+    @patch('src.routing.save_checkpoint')
+    def test_boolean_verdict_escalates_to_ask_user(self, mock_checkpoint):
+        """Test that boolean verdict type escalates to ask_user."""
+        state = make_state(last_code_review_verdict=True)
+        result = route_after_code_review(state)
+        assert result == "ask_user", f"Boolean verdict should escalate to ask_user, got {result}"
+
+    @patch('src.routing.save_checkpoint')
+    def test_float_verdict_escalates_to_ask_user(self, mock_checkpoint):
+        """Test that float verdict type escalates to ask_user."""
+        state = make_state(execution_verdict=1.5)
+        result = route_after_execution_check(state)
+        assert result == "ask_user", f"Float verdict should escalate to ask_user, got {result}"
+
+    @patch('src.routing.save_checkpoint')
+    def test_empty_string_verdict_escalates_to_ask_user(self, mock_checkpoint):
+        """Test that empty string verdict escalates to ask_user (not a valid verdict)."""
+        state = make_state(last_design_review_verdict="")
+        result = route_after_design_review(state)
+        assert result == "ask_user", f"Empty string verdict should escalate to ask_user, got {result}"
+
+    @patch('src.routing.save_checkpoint')
+    def test_whitespace_verdict_escalates_to_ask_user(self, mock_checkpoint):
+        """Test that whitespace-only verdict escalates to ask_user."""
+        state = make_state(physics_verdict="   ")
+        result = route_after_physics_check(state)
+        assert result == "ask_user", f"Whitespace verdict should escalate to ask_user, got {result}"
+
+    @patch('src.routing.save_checkpoint')
+    def test_case_sensitive_verdict_escalates(self, mock_checkpoint):
+        """Test that case-mismatched verdict escalates (e.g., 'APPROVE' instead of 'approve')."""
+        state = make_state(last_plan_review_verdict="APPROVE")
+        result = route_after_plan_review(state)
+        assert result == "ask_user", (
+            f"Case-mismatched verdict 'APPROVE' should escalate to ask_user, got {result}"
+        )
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Pass-Through Verdict Tests
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestPassThroughVerdicts:
+    """Tests that pass_through_verdicts skip count checks even when count is high."""
+
+    @patch('src.routing.save_checkpoint')
+    def test_execution_pass_ignores_high_failure_count(self, mock_checkpoint):
+        """Test that 'pass' verdict ignores execution_failure_count even when high."""
+        state = make_state(
+            execution_verdict="pass",
+            execution_failure_count=100,  # Way over limit
+        )
+        result = route_after_execution_check(state)
+        assert result == "physics_check", (
+            f"'pass' is pass-through and should ignore count limit, got {result}"
+        )
+
+    @patch('src.routing.save_checkpoint')
+    def test_execution_warning_ignores_high_failure_count(self, mock_checkpoint):
+        """Test that 'warning' verdict ignores execution_failure_count even when high."""
+        state = make_state(
+            execution_verdict="warning",
+            execution_failure_count=100,
+        )
+        result = route_after_execution_check(state)
+        assert result == "physics_check", (
+            f"'warning' is pass-through and should ignore count limit, got {result}"
+        )
+
+    @patch('src.routing.save_checkpoint')
+    def test_physics_pass_ignores_high_failure_count(self, mock_checkpoint):
+        """Test that 'pass' verdict ignores physics_failure_count even when high."""
+        state = make_state(
+            physics_verdict="pass",
+            physics_failure_count=100,
+        )
+        result = route_after_physics_check(state)
+        assert result == "analyze", (
+            f"'pass' is pass-through and should ignore count limit, got {result}"
+        )
+
+    @patch('src.routing.save_checkpoint')
+    def test_physics_warning_ignores_high_failure_count(self, mock_checkpoint):
+        """Test that 'warning' verdict ignores physics_failure_count even when high."""
+        state = make_state(
+            physics_verdict="warning",
+            physics_failure_count=100,
+        )
+        result = route_after_physics_check(state)
+        assert result == "analyze", (
+            f"'warning' is pass-through and should ignore count limit, got {result}"
+        )
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Negative and Invalid Count Tests
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestNegativeAndInvalidCounts:
+    """Tests for handling of negative or invalid count values."""
+
+    @patch('src.routing.save_checkpoint')
+    def test_negative_count_allows_revision(self, mock_checkpoint):
+        """Test that negative count (which is < limit) allows revision."""
+        state = make_state(
+            last_code_review_verdict="needs_revision",
+            code_revision_count=-5,
+        )
+        result = route_after_code_review(state)
+        assert result == "generate_code", (
+            f"Negative count should be < limit and allow revision, got {result}"
+        )
+
+    @patch('src.routing.save_checkpoint')
+    def test_very_large_count_escalates(self, mock_checkpoint):
+        """Test that very large count escalates to ask_user."""
+        state = make_state(
+            last_design_review_verdict="needs_revision",
+            design_revision_count=999999,
+        )
+        result = route_after_design_review(state)
+        assert result == "ask_user", (
+            f"Very large count should escalate to ask_user, got {result}"
+        )
+
+    @patch('src.routing.save_checkpoint')
+    def test_string_count_treated_as_zero(self, mock_checkpoint):
+        """Test that invalid string count value is converted to 0 gracefully."""
+        state = make_state(
+            last_code_review_verdict="needs_revision",
+            code_revision_count="three",  # Invalid type - should be converted to 0
+        )
+        # The router should convert invalid types to 0 and allow revision
+        result = route_after_code_review(state)
+        assert result == "generate_code", (
+            f"Invalid count type should default to 0 and allow revision, got {result}"
+        )
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Graph Connectivity Tests - No Orphan Nodes
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestGraphConnectivity:
+    """Tests for overall graph connectivity."""
+
+    def test_all_nodes_except_start_have_incoming_edges(self, graph_definition):
+        """Test that all nodes (except __start__) have at least one incoming edge."""
+        edges = list(graph_definition.edges)
+        nodes_with_incoming = {edge[1] for edge in edges}
+        all_nodes = set(graph_definition.nodes.keys())
+        
+        # __start__ should not have incoming edges
+        nodes_needing_incoming = all_nodes - {"__start__"}
+        orphan_nodes = nodes_needing_incoming - nodes_with_incoming
+        
+        assert not orphan_nodes, (
+            f"Orphan nodes (no incoming edges): {orphan_nodes}. "
+            f"These nodes can never be reached!"
+        )
+
+    def test_no_self_loops(self, graph_definition):
+        """Test that no node has an edge to itself."""
+        edges = list(graph_definition.edges)
+        # Edge tuples may have more than 2 elements, take first two (source, target)
+        self_loops = [edge for edge in edges if edge[0] == edge[1]]
+        
+        assert not self_loops, f"Self-loops detected: {self_loops}"
+
+    def test_end_node_has_no_outgoing_edges(self, graph_definition):
+        """Test that __end__ has no outgoing edges."""
+        edges = list(graph_definition.edges)
+        end_outgoing = [edge for edge in edges if edge[0] == "__end__"]
+        
+        assert not end_outgoing, (
+            f"__end__ should not have outgoing edges, but has: {end_outgoing}"
+        )
+
+    def test_start_node_has_no_incoming_edges(self, graph_definition):
+        """Test that __start__ has no incoming edges."""
+        edges = list(graph_definition.edges)
+        start_incoming = [edge for edge in edges if edge[1] == "__start__"]
+        
+        assert not start_incoming, (
+            f"__start__ should not have incoming edges, but has: {start_incoming}"
+        )
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Checkpoint Saving Tests
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestCheckpointSaving:
+    """Tests for checkpoint saving behavior in routers."""
+
+    @patch('src.routing.save_checkpoint')
+    def test_checkpoint_saved_on_none_verdict(self, mock_checkpoint):
+        """Test that checkpoint is saved when verdict is None."""
+        state = make_state(last_code_review_verdict=None)
+        route_after_code_review(state)
+        mock_checkpoint.assert_called_once()
+        # Verify checkpoint name contains error indicator
+        checkpoint_name = mock_checkpoint.call_args[0][1]
+        assert "error" in checkpoint_name, (
+            f"Checkpoint name for None verdict should contain 'error', got {checkpoint_name}"
+        )
+
+    @patch('src.routing.save_checkpoint')
+    def test_checkpoint_saved_on_count_limit(self, mock_checkpoint):
+        """Test that checkpoint is saved when count limit is reached."""
+        state = make_state(
+            last_code_review_verdict="needs_revision",
+            code_revision_count=MAX_CODE_REVISIONS,
+        )
+        route_after_code_review(state)
+        mock_checkpoint.assert_called_once()
+        # Verify checkpoint name contains limit indicator
+        checkpoint_name = mock_checkpoint.call_args[0][1]
+        assert "limit" in checkpoint_name, (
+            f"Checkpoint name for limit should contain 'limit', got {checkpoint_name}"
+        )
+
+    @patch('src.routing.save_checkpoint')
+    def test_checkpoint_saved_on_unknown_verdict(self, mock_checkpoint):
+        """Test that checkpoint is saved when verdict is unknown."""
+        state = make_state(last_code_review_verdict="unknown_xyz")
+        route_after_code_review(state)
+        mock_checkpoint.assert_called_once()
+        # Verify checkpoint name contains fallback indicator
+        checkpoint_name = mock_checkpoint.call_args[0][1]
+        assert "fallback" in checkpoint_name, (
+            f"Checkpoint name for unknown verdict should contain 'fallback', got {checkpoint_name}"
+        )
+
+    @patch('src.routing.save_checkpoint')
+    def test_no_checkpoint_on_normal_approve(self, mock_checkpoint):
+        """Test that no checkpoint is saved on normal approve verdict."""
+        state = make_state(last_code_review_verdict="approve")
+        route_after_code_review(state)
+        mock_checkpoint.assert_not_called()
+
+    @patch('src.routing.save_checkpoint')
+    def test_no_checkpoint_on_normal_revision(self, mock_checkpoint):
+        """Test that no checkpoint is saved on normal revision (under limit)."""
+        state = make_state(
+            last_code_review_verdict="needs_revision",
+            code_revision_count=0,
+        )
+        route_after_code_review(state)
+        mock_checkpoint.assert_not_called()
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Route On Limit Customization Tests
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestRouteOnLimitCustomization:
+    """Tests for customized route_on_limit behavior."""
+
+    @patch('src.routing.save_checkpoint')
+    def test_comparison_check_routes_to_supervisor_on_limit(self, mock_checkpoint):
+        """Test that comparison_check routes to supervisor (not ask_user) when limit reached."""
+        state = make_state(
+            comparison_verdict="needs_revision",
+            analysis_revision_count=MAX_ANALYSIS_REVISIONS,
+        )
+        result = route_after_comparison_check(state)
+        # comparison_check has route_on_limit="supervisor", not the default "ask_user"
+        assert result == "supervisor", (
+            f"comparison_check should route to supervisor on limit, got {result}"
+        )
+
+    @patch('src.routing.save_checkpoint')
+    def test_code_review_routes_to_ask_user_on_limit(self, mock_checkpoint):
+        """Test that code_review routes to ask_user (default) when limit reached."""
+        state = make_state(
+            last_code_review_verdict="needs_revision",
+            code_revision_count=MAX_CODE_REVISIONS,
+        )
+        result = route_after_code_review(state)
+        assert result == "ask_user", (
+            f"code_review should route to ask_user on limit, got {result}"
+        )
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Supervisor Router Complex Cases Tests
+# ═══════════════════════════════════════════════════════════════════════
+
+# ═══════════════════════════════════════════════════════════════════════
+# Factory Router Direct Tests
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestFactoryRouterDirect:
+    """Tests for the create_verdict_router factory function directly."""
+
+    def test_factory_creates_callable_router(self):
+        """Test that the factory creates a callable routing function."""
+        from src.routing import create_verdict_router
+        
+        router = create_verdict_router(
+            verdict_field="test_verdict",
+            routes={"approve": {"route": "next_node"}},
+            checkpoint_prefix="test",
+        )
+        
+        assert callable(router), "Factory should create a callable"
+
+    @patch('src.routing.save_checkpoint')
+    def test_factory_router_uses_configured_verdict_field(self, mock_checkpoint):
+        """Test that factory router reads from the configured verdict field."""
+        from src.routing import create_verdict_router
+        
+        router = create_verdict_router(
+            verdict_field="my_custom_verdict",
+            routes={"approve": {"route": "next_node"}},
+            checkpoint_prefix="test",
+        )
+        
+        state = make_state(my_custom_verdict="approve")
+        result = router(state)
+        assert result == "next_node", f"Router should use configured verdict field, got {result}"
+
+    @patch('src.routing.save_checkpoint')
+    def test_factory_router_uses_configured_count_field(self, mock_checkpoint):
+        """Test that factory router uses configured count field for limits."""
+        from src.routing import create_verdict_router
+        
+        router = create_verdict_router(
+            verdict_field="test_verdict",
+            routes={
+                "needs_revision": {
+                    "route": "retry",
+                    "count_limit": {
+                        "count_field": "my_count",
+                        "max_count_key": "max_my_count",
+                        "default_max": 2,
+                    }
+                }
+            },
+            checkpoint_prefix="test",
+        )
+        
+        # Under limit
+        state = make_state(test_verdict="needs_revision", my_count=1)
+        assert router(state) == "retry"
+        
+        # At limit
+        state = make_state(test_verdict="needs_revision", my_count=2)
+        assert router(state) == "ask_user"
+
+    @patch('src.routing.save_checkpoint')
+    def test_factory_router_custom_route_on_limit(self, mock_checkpoint):
+        """Test that factory router uses custom route_on_limit."""
+        from src.routing import create_verdict_router
+        
+        router = create_verdict_router(
+            verdict_field="test_verdict",
+            routes={
+                "needs_revision": {
+                    "route": "retry",
+                    "count_limit": {
+                        "count_field": "my_count",
+                        "max_count_key": "max_my_count",
+                        "default_max": 2,
+                        "route_on_limit": "supervisor",
+                    }
+                }
+            },
+            checkpoint_prefix="test",
+        )
+        
+        state = make_state(test_verdict="needs_revision", my_count=5)
+        result = router(state)
+        assert result == "supervisor", (
+            f"Router should use custom route_on_limit, got {result}"
+        )
+
+    @patch('src.routing.save_checkpoint')
+    def test_factory_router_pass_through_verdicts(self, mock_checkpoint):
+        """Test that pass_through_verdicts skip count checks."""
+        from src.routing import create_verdict_router
+        
+        router = create_verdict_router(
+            verdict_field="test_verdict",
+            routes={
+                "pass": {
+                    "route": "success",
+                    "count_limit": {
+                        "count_field": "fail_count",
+                        "max_count_key": "max_fails",
+                        "default_max": 0,  # Would always trigger if checked
+                    }
+                }
+            },
+            checkpoint_prefix="test",
+            pass_through_verdicts=["pass"],
+        )
+        
+        state = make_state(test_verdict="pass", fail_count=100)
+        result = router(state)
+        assert result == "success", (
+            f"Pass-through verdict should skip count check, got {result}"
+        )
+
+
+class TestSupervisorComplexCases:
+    """Additional tests for complex supervisor routing scenarios."""
+
+    @patch('src.graph.save_checkpoint')
+    def test_material_validation_with_empty_user_responses(self, mock_checkpoint):
+        """Test MATERIAL_VALIDATION routes to checkpoint when user_responses is empty dict."""
+        state = make_state(
+            supervisor_verdict="ok_continue",
+            should_stop=False,
+            current_stage_type="MATERIAL_VALIDATION",
+            user_responses={},  # Empty, no material_checkpoint key
+        )
+        result = route_after_supervisor(state)
+        assert result == "material_checkpoint", (
+            f"Empty user_responses should trigger material_checkpoint, got {result}"
+        )
+
+    @patch('src.graph.save_checkpoint')
+    def test_material_validation_with_other_user_response(self, mock_checkpoint):
+        """Test MATERIAL_VALIDATION routes to checkpoint when user_responses has other keys."""
+        state = make_state(
+            supervisor_verdict="ok_continue",
+            should_stop=False,
+            current_stage_type="MATERIAL_VALIDATION",
+            user_responses={"some_other_key": "value"},  # No material_checkpoint
+        )
+        result = route_after_supervisor(state)
+        assert result == "material_checkpoint", (
+            f"user_responses without material_checkpoint key should trigger checkpoint, got {result}"
+        )
+
+    @patch('src.graph.save_checkpoint')
+    def test_change_priority_with_material_validation(self, mock_checkpoint):
+        """Test change_priority verdict with MATERIAL_VALIDATION stage."""
+        state = make_state(
+            supervisor_verdict="change_priority",
+            should_stop=False,
+            current_stage_type="MATERIAL_VALIDATION",
+            user_responses={},
+        )
+        result = route_after_supervisor(state)
+        # change_priority behaves like ok_continue
+        assert result == "material_checkpoint", (
+            f"change_priority + MATERIAL_VALIDATION should route to material_checkpoint, got {result}"
+        )
+
+    @patch('src.graph.save_checkpoint')
+    def test_ok_continue_with_none_current_stage_type(self, mock_checkpoint):
+        """Test ok_continue when current_stage_type is None."""
+        state = make_state(
+            supervisor_verdict="ok_continue",
+            should_stop=False,
+            current_stage_type=None,
+        )
+        result = route_after_supervisor(state)
+        # None stage type shouldn't match MATERIAL_VALIDATION
+        assert result == "select_stage", (
+            f"ok_continue with None stage type should route to select_stage, got {result}"
+        )
+
+    @patch('src.graph.save_checkpoint')
+    def test_ok_continue_with_missing_current_stage_type(self, mock_checkpoint):
+        """Test ok_continue when current_stage_type key is missing."""
+        state = make_state(
+            supervisor_verdict="ok_continue",
+            should_stop=False,
+        )
+        state.pop("current_stage_type", None)
+        result = route_after_supervisor(state)
+        # Missing stage type defaults to empty string, shouldn't match MATERIAL_VALIDATION
+        assert result == "select_stage", (
+            f"ok_continue with missing stage type should route to select_stage, got {result}"
+        )
+
+    @patch('src.graph.save_checkpoint')
+    def test_replan_with_zero_replan_count(self, mock_checkpoint):
+        """Test replan_needed with exactly 0 replan_count."""
+        state = make_state(
+            supervisor_verdict="replan_needed",
+            replan_count=0,
+        )
+        result = route_after_supervisor(state)
+        assert result == "plan", f"0 replan_count should allow replan, got {result}"
+
+    @patch('src.graph.save_checkpoint')
+    def test_replan_with_custom_runtime_limit(self, mock_checkpoint):
+        """Test replan_needed respects runtime_config max_replans."""
+        state = make_state(
+            supervisor_verdict="replan_needed",
+            replan_count=5,  # Would exceed default limit
+            runtime_config={"max_replans": 10},  # Custom higher limit
+        )
+        result = route_after_supervisor(state)
+        assert result == "plan", (
+            f"Custom runtime_config limit should allow replan, got {result}"
+        )
+
+    @patch('src.graph.save_checkpoint')
+    def test_should_stop_true_overrides_stage_type(self, mock_checkpoint):
+        """Test should_stop=True takes precedence over MATERIAL_VALIDATION."""
+        state = make_state(
+            supervisor_verdict="ok_continue",
+            should_stop=True,
+            current_stage_type="MATERIAL_VALIDATION",
+            user_responses={},
+        )
+        result = route_after_supervisor(state)
+        assert result == "generate_report", (
+            f"should_stop=True should override stage type logic, got {result}"
+        )
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Graph Structure Invariant Tests
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestGraphStructureInvariants:
+    """Tests for structural invariants that must always hold."""
+
+    def test_exactly_one_start_edge(self, graph_definition):
+        """Test that __start__ has exactly one outgoing edge."""
+        edges = list(graph_definition.edges)
+        start_edges = [e for e in edges if e[0] == "__start__"]
+        assert len(start_edges) == 1, (
+            f"__start__ should have exactly 1 outgoing edge, has {len(start_edges)}: {start_edges}"
+        )
+
+    def test_exactly_one_end_connection(self, graph_definition):
+        """Test that only generate_report connects to __end__."""
+        edges = list(graph_definition.edges)
+        end_connections = [e for e in edges if e[1] == "__end__"]
+        sources = {e[0] for e in end_connections}
+        
+        assert sources == {"generate_report"}, (
+            f"Only generate_report should connect to __end__, got: {sources}"
+        )
+
+    def test_all_workflow_nodes_are_reachable_from_start(self, graph_definition):
+        """Test that all workflow nodes can be reached from __start__."""
+        edges = list(graph_definition.edges)
+        
+        # Build adjacency list
+        adjacency = {}
+        for edge in edges:
+            src, dst = edge[0], edge[1]
+            if src not in adjacency:
+                adjacency[src] = set()
+            adjacency[src].add(dst)
+        
+        # BFS from __start__
+        reachable = set()
+        queue = ["__start__"]
+        while queue:
+            node = queue.pop(0)
+            if node in reachable:
+                continue
+            reachable.add(node)
+            for neighbor in adjacency.get(node, []):
+                if neighbor not in reachable:
+                    queue.append(neighbor)
+        
+        all_nodes = set(graph_definition.nodes.keys())
+        unreachable = all_nodes - reachable
+        
+        assert not unreachable, (
+            f"Nodes unreachable from __start__: {unreachable}"
+        )
+
+    def test_all_workflow_nodes_can_reach_end(self, graph_definition):
+        """Test that all workflow nodes (except __end__) can reach __end__."""
+        edges = list(graph_definition.edges)
+        
+        # Build reverse adjacency list (for backward search from __end__)
+        reverse_adj = {}
+        for edge in edges:
+            src, dst = edge[0], edge[1]
+            if dst not in reverse_adj:
+                reverse_adj[dst] = set()
+            reverse_adj[dst].add(src)
+        
+        # BFS backward from __end__
+        can_reach_end = set()
+        queue = ["__end__"]
+        while queue:
+            node = queue.pop(0)
+            if node in can_reach_end:
+                continue
+            can_reach_end.add(node)
+            for predecessor in reverse_adj.get(node, []):
+                if predecessor not in can_reach_end:
+                    queue.append(predecessor)
+        
+        all_nodes = set(graph_definition.nodes.keys())
+        cannot_reach_end = all_nodes - can_reach_end
+        
+        # Filter out __end__ itself (it doesn't need to reach itself)
+        cannot_reach_end.discard("__end__")
+        
+        assert not cannot_reach_end, (
+            f"Nodes that cannot reach __end__: {cannot_reach_end}. "
+            f"These nodes may cause workflow to hang!"
+        )
+
+    def test_ask_user_node_exists_for_escalation(self, graph_definition):
+        """Test that ask_user node exists for escalation paths."""
+        assert "ask_user" in graph_definition.nodes, (
+            "ask_user node must exist for escalation/error handling"
+        )
+
+    def test_supervisor_node_is_central_hub(self, graph_definition):
+        """Test that supervisor node is reachable from ask_user and can reach multiple targets."""
+        edges = list(graph_definition.edges)
+        
+        # Check ask_user -> supervisor
+        ask_user_targets = {e[1] for e in edges if e[0] == "ask_user"}
+        assert "supervisor" in ask_user_targets, (
+            "ask_user must be able to route to supervisor"
+        )
+        
+        # Check supervisor has multiple outgoing options
+        supervisor_targets = {e[1] for e in edges if e[0] == "supervisor"}
+        assert len(supervisor_targets) >= 4, (
+            f"supervisor should have at least 4 routing options, has: {supervisor_targets}"
+        )
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Runtime Config Override Tests
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestRuntimeConfigOverrides:
+    """Tests for runtime_config limit overrides across all routers."""
+
+    @patch('src.routing.save_checkpoint')
+    def test_design_review_runtime_override(self, mock_checkpoint):
+        """Test design_review respects runtime_config max_design_revisions."""
+        state = make_state(
+            last_design_review_verdict="needs_revision",
+            design_revision_count=3,  # At default limit
+            runtime_config={"max_design_revisions": 10},
+        )
+        result = route_after_design_review(state)
+        assert result == "design", (
+            f"Custom limit should allow revision, got {result}"
+        )
+
+    @patch('src.routing.save_checkpoint')
+    def test_execution_check_runtime_override(self, mock_checkpoint):
+        """Test execution_check respects runtime_config max_execution_failures."""
+        state = make_state(
+            execution_verdict="fail",
+            execution_failure_count=2,  # At default limit
+            runtime_config={"max_execution_failures": 10},
+        )
+        result = route_after_execution_check(state)
+        assert result == "generate_code", (
+            f"Custom limit should allow retry, got {result}"
+        )
+
+    @patch('src.routing.save_checkpoint')
+    def test_physics_check_runtime_override(self, mock_checkpoint):
+        """Test physics_check respects runtime_config max_physics_failures."""
+        state = make_state(
+            physics_verdict="fail",
+            physics_failure_count=2,  # At default limit
+            runtime_config={"max_physics_failures": 10},
+        )
+        result = route_after_physics_check(state)
+        assert result == "generate_code", (
+            f"Custom limit should allow retry, got {result}"
+        )
+
+    @patch('src.routing.save_checkpoint')
+    def test_plan_review_runtime_override(self, mock_checkpoint):
+        """Test plan_review respects runtime_config max_replans."""
+        state = make_state(
+            last_plan_review_verdict="needs_revision",
+            replan_count=2,  # At default limit
+            runtime_config={"max_replans": 10},
+        )
+        result = route_after_plan_review(state)
+        assert result == "plan", (
+            f"Custom limit should allow replan, got {result}"
+        )
+
+    @patch('src.routing.save_checkpoint')
+    def test_comparison_check_runtime_override(self, mock_checkpoint):
+        """Test comparison_check respects runtime_config max_analysis_revisions."""
+        state = make_state(
+            comparison_verdict="needs_revision",
+            analysis_revision_count=2,  # At default limit
+            runtime_config={"max_analysis_revisions": 10},
+        )
+        result = route_after_comparison_check(state)
+        assert result == "analyze", (
+            f"Custom limit should allow re-analyze, got {result}"
+        )
+
+    @patch('src.routing.save_checkpoint')
+    def test_runtime_config_zero_always_escalates(self, mock_checkpoint):
+        """Test that runtime_config limit of 0 always escalates."""
+        state = make_state(
+            last_code_review_verdict="needs_revision",
+            code_revision_count=0,
+            runtime_config={"max_code_revisions": 0},
+        )
+        result = route_after_code_review(state)
+        assert result == "ask_user", (
+            f"Zero limit should always escalate, got {result}"
+        )
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Edge Count Verification Tests
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestEdgeCountVerification:
+    """Tests that verify expected edge counts for each node."""
+
+    def test_static_edge_nodes_have_single_outgoing(self, graph_definition):
+        """Test that nodes with static edges have exactly one outgoing edge."""
+        static_edge_nodes = [
+            ("adapt_prompts", "plan"),
+            ("design", "design_review"),
+            ("generate_code", "code_review"),
+            ("run_code", "execution_check"),
+            ("analyze", "comparison_check"),
+            ("handle_backtrack", "select_stage"),
+            ("material_checkpoint", "ask_user"),
+            ("generate_report", "__end__"),
+        ]
+        
+        edges = list(graph_definition.edges)
+        
+        for source, expected_target in static_edge_nodes:
+            source_edges = [e for e in edges if e[0] == source]
+            assert len(source_edges) == 1, (
+                f"{source} should have exactly 1 outgoing edge (static), "
+                f"has {len(source_edges)}: {source_edges}"
+            )
+            assert source_edges[0][1] == expected_target, (
+                f"{source} should connect to {expected_target}, "
+                f"connects to {source_edges[0][1]}"
+            )
+
+    def test_conditional_edge_nodes_have_multiple_outgoing(self, graph_definition):
+        """Test that nodes with conditional edges have appropriate number of outgoing edges."""
+        conditional_edge_configs = {
+            "plan": 1,  # plan_review only
+            "plan_review": 3,  # select_stage, plan, ask_user
+            "select_stage": 2,  # design, generate_report
+            "design_review": 3,  # generate_code, design, ask_user
+            "code_review": 3,  # run_code, generate_code, ask_user
+            "execution_check": 3,  # physics_check, generate_code, ask_user
+            "physics_check": 4,  # analyze, generate_code, design, ask_user
+            "comparison_check": 3,  # supervisor, analyze, ask_user
+            "supervisor": 6,  # select_stage, plan, ask_user, handle_backtrack, generate_report, material_checkpoint
+            "ask_user": 1,  # supervisor
+        }
+        
+        edges = list(graph_definition.edges)
+        
+        for source, expected_count in conditional_edge_configs.items():
+            source_edges = [e for e in edges if e[0] == source]
+            assert len(source_edges) == expected_count, (
+                f"{source} should have {expected_count} outgoing edges, "
+                f"has {len(source_edges)}: {[e[1] for e in source_edges]}"
+            )
+

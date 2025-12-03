@@ -1,6 +1,7 @@
 """Matching/output validation helper tests."""
 
 import pytest
+from pathlib import Path
 
 from src.agents.helpers.validation import (
     analysis_reports_for_stage,
@@ -16,8 +17,10 @@ from src.agents.helpers.validation import (
     normalize_output_file_entry,
     stage_comparisons_for_stage,
     validate_analysis_reports,
+    CRITERIA_PATTERNS,
 )
 from src.agents.constants import AnalysisClassification
+from schemas.state import DISCREPANCY_THRESHOLDS
 
 
 class TestExtractTargetsFromFeedback:
@@ -120,6 +123,155 @@ class TestExtractTargetsFromFeedback:
         result = extract_targets_from_feedback(feedback, known)
         
         assert result == []
+
+    def test_figures_with_punctuation(self):
+        """Should extract figures surrounded by punctuation."""
+        feedback = "Check (Fig1) and [Fig2], also Fig3."
+        known = ["Fig1", "Fig2", "Fig3"]
+        
+        result = extract_targets_from_feedback(feedback, known)
+        
+        assert len(result) == 3
+        assert "Fig1" in result
+        assert "Fig2" in result
+        assert "Fig3" in result
+
+    def test_figures_in_sentences(self):
+        """Should extract figures embedded in sentences."""
+        feedback = "The results for Fig1 show that Fig2 needs attention."
+        known = ["Fig1", "Fig2", "Fig3"]
+        
+        result = extract_targets_from_feedback(feedback, known)
+        
+        assert len(result) == 2
+        assert result[0] == "Fig1"
+        assert result[1] == "Fig2"
+
+    def test_multiline_feedback(self):
+        """Should extract figures from multiline feedback."""
+        feedback = """
+        First, check Fig1 for the spectral response.
+        Then, verify Fig2 for absorption.
+        Finally, compare with Fig3.
+        """
+        known = ["Fig1", "Fig2", "Fig3", "Fig4"]
+        
+        result = extract_targets_from_feedback(feedback, known)
+        
+        assert len(result) == 3
+        assert result == ["Fig1", "Fig2", "Fig3"]
+
+    def test_double_digit_figure_numbers(self):
+        """Should handle double digit figure numbers."""
+        feedback = "Check Fig10, Fig11, and Fig12"
+        known = ["Fig10", "Fig11", "Fig12", "Fig1"]
+        
+        result = extract_targets_from_feedback(feedback, known)
+        
+        # Should find Fig10, Fig11, Fig12
+        # Should NOT incorrectly split Fig10 into Fig1 and 0
+        assert "Fig10" in result
+        assert "Fig11" in result
+        assert "Fig12" in result
+
+    def test_figure_at_start_of_feedback(self):
+        """Should extract figure at the very start of feedback."""
+        feedback = "Fig1 is incorrect."
+        known = ["Fig1", "Fig2"]
+        
+        result = extract_targets_from_feedback(feedback, known)
+        
+        assert len(result) == 1
+        assert result[0] == "Fig1"
+
+    def test_figure_at_end_of_feedback(self):
+        """Should extract figure at the very end of feedback."""
+        feedback = "The issue is with Fig1"
+        known = ["Fig1", "Fig2"]
+        
+        result = extract_targets_from_feedback(feedback, known)
+        
+        assert len(result) == 1
+        assert result[0] == "Fig1"
+
+    def test_only_figure_in_feedback(self):
+        """Should extract when feedback is just a figure reference."""
+        feedback = "Fig1"
+        known = ["Fig1", "Fig2"]
+        
+        result = extract_targets_from_feedback(feedback, known)
+        
+        assert len(result) == 1
+        assert result[0] == "Fig1"
+
+    def test_figures_with_colon(self):
+        """Should extract figures followed by colon."""
+        feedback = "Fig1: needs revision. Fig2: looks good."
+        known = ["Fig1", "Fig2"]
+        
+        result = extract_targets_from_feedback(feedback, known)
+        
+        assert len(result) == 2
+
+    def test_mixed_case_duplicates(self):
+        """Should remove duplicates even with different cases."""
+        feedback = "Check Fig1, FIG1, and fig1"
+        known = ["Fig1"]
+        
+        result = extract_targets_from_feedback(feedback, known)
+        
+        assert len(result) == 1
+        assert result[0] == "Fig1"
+
+    def test_figures_with_suffix_letters(self):
+        """Should handle figures with suffix letters correctly."""
+        feedback = "Compare Fig1a with Fig1b"
+        known = ["Fig1a", "Fig1b", "Fig1"]
+        
+        result = extract_targets_from_feedback(feedback, known)
+        
+        assert len(result) == 2
+        assert "Fig1a" in result
+        assert "Fig1b" in result
+
+    def test_subset_figure_not_extracted_from_larger(self):
+        """Should not extract Fig1 when only Fig10 appears."""
+        feedback = "Check Fig10"
+        known = ["Fig1", "Fig10"]
+        
+        result = extract_targets_from_feedback(feedback, known)
+        
+        # The regex should match "Fig10" not "Fig1" followed by "0"
+        assert "Fig10" in result
+
+    def test_newlines_and_tabs_in_feedback(self):
+        """Should handle feedback with various whitespace."""
+        feedback = "Check\tFig1\nand\rFig2"
+        known = ["Fig1", "Fig2"]
+        
+        result = extract_targets_from_feedback(feedback, known)
+        
+        assert len(result) == 2
+
+    def test_many_figures(self):
+        """Should handle many figure references."""
+        figures = [f"Fig{i}" for i in range(1, 11)]
+        feedback = " ".join(figures)
+        known = figures
+        
+        result = extract_targets_from_feedback(feedback, known)
+        
+        assert len(result) == 10
+
+    def test_empty_string_in_known_targets(self):
+        """Should handle empty string in known targets gracefully."""
+        feedback = "Check Fig1"
+        known = ["", "Fig1", "Fig2"]
+        
+        result = extract_targets_from_feedback(feedback, known)
+        
+        assert len(result) == 1
+        assert result[0] == "Fig1"
 
 
 class TestMatchOutputFile:
@@ -730,6 +882,8 @@ class TestClassifyPercentError:
 class TestClassificationFromMetrics:
     """Tests for classification_from_metrics function."""
 
+    # ===== No Reference Tests =====
+    
     def test_no_reference_qualitative(self):
         """Should return PENDING_VALIDATION when no reference and qualitative."""
         metrics = {}
@@ -748,11 +902,56 @@ class TestClassificationFromMetrics:
         result = classification_from_metrics(metrics, "acceptable", False)
         assert result == AnalysisClassification.PENDING_VALIDATION
 
+    def test_no_reference_with_metrics_still_pending(self):
+        """Should return PENDING_VALIDATION when no reference even with metrics."""
+        metrics = {"peak_position_error_percent": 1.0}
+        result = classification_from_metrics(metrics, "excellent", False)
+        assert result == AnalysisClassification.PENDING_VALIDATION
+
+    # ===== Qualitative With Reference =====
+    
     def test_qualitative_with_reference(self):
         """Should return MATCH when qualitative requirement with reference."""
         metrics = {}
         result = classification_from_metrics(metrics, "qualitative", True)
         assert result == AnalysisClassification.MATCH
+
+    def test_qualitative_with_reference_ignores_metrics(self):
+        """Should return MATCH for qualitative even with bad metrics."""
+        metrics = {"peak_position_error_percent": 100.0}
+        result = classification_from_metrics(metrics, "qualitative", True)
+        # Qualitative doesn't care about metrics - just needs reference
+        assert result == AnalysisClassification.MATCH
+
+    # ===== Peak Error Boundary Tests =====
+    
+    def test_peak_error_at_excellent_threshold(self):
+        """Should return MATCH when peak error exactly at excellent threshold (2%)."""
+        excellent = DISCREPANCY_THRESHOLDS["resonance_wavelength"]["excellent"]
+        metrics = {"peak_position_error_percent": excellent}
+        result = classification_from_metrics(metrics, "excellent", True)
+        assert result == AnalysisClassification.MATCH
+
+    def test_peak_error_just_above_excellent_threshold(self):
+        """Should return PARTIAL_MATCH when peak error just above excellent threshold."""
+        excellent = DISCREPANCY_THRESHOLDS["resonance_wavelength"]["excellent"]
+        metrics = {"peak_position_error_percent": excellent + 0.01}
+        result = classification_from_metrics(metrics, "excellent", True)
+        assert result == AnalysisClassification.PARTIAL_MATCH
+
+    def test_peak_error_at_acceptable_threshold(self):
+        """Should return PARTIAL_MATCH when peak error exactly at acceptable threshold (5%)."""
+        acceptable = DISCREPANCY_THRESHOLDS["resonance_wavelength"]["acceptable"]
+        metrics = {"peak_position_error_percent": acceptable}
+        result = classification_from_metrics(metrics, "excellent", True)
+        assert result == AnalysisClassification.PARTIAL_MATCH
+
+    def test_peak_error_just_above_acceptable_threshold(self):
+        """Should return MISMATCH when peak error just above acceptable threshold."""
+        acceptable = DISCREPANCY_THRESHOLDS["resonance_wavelength"]["acceptable"]
+        metrics = {"peak_position_error_percent": acceptable + 0.01}
+        result = classification_from_metrics(metrics, "excellent", True)
+        assert result == AnalysisClassification.MISMATCH
 
     def test_excellent_with_peak_error_match(self):
         """Should return MATCH when peak error within excellent threshold."""
@@ -772,11 +971,19 @@ class TestClassificationFromMetrics:
         result = classification_from_metrics(metrics, "excellent", True)
         assert result == AnalysisClassification.MISMATCH
 
+    # ===== RMSE Tests =====
+    
     def test_rmse_match(self):
         """Should return MATCH when RMSE <= 5%."""
         metrics = {"normalized_rmse_percent": 5.0}
         result = classification_from_metrics(metrics, "excellent", True)
         assert result == AnalysisClassification.MATCH
+
+    def test_rmse_just_above_match_threshold(self):
+        """Should return PARTIAL_MATCH when RMSE just above 5%."""
+        metrics = {"normalized_rmse_percent": 5.01}
+        result = classification_from_metrics(metrics, "excellent", True)
+        assert result == AnalysisClassification.PARTIAL_MATCH
 
     def test_rmse_partial_match(self):
         """Should return PARTIAL_MATCH when RMSE <= 15%."""
@@ -790,6 +997,14 @@ class TestClassificationFromMetrics:
         result = classification_from_metrics(metrics, "excellent", True)
         assert result == AnalysisClassification.MISMATCH
 
+    def test_rmse_zero(self):
+        """Should return MATCH when RMSE is zero."""
+        metrics = {"normalized_rmse_percent": 0.0}
+        result = classification_from_metrics(metrics, "excellent", True)
+        assert result == AnalysisClassification.MATCH
+
+    # ===== Precedence Tests =====
+    
     def test_peak_error_takes_precedence_over_rmse(self):
         """Should prefer peak_error over RMSE when both present."""
         metrics = {
@@ -799,6 +1014,17 @@ class TestClassificationFromMetrics:
         result = classification_from_metrics(metrics, "excellent", True)
         assert result == AnalysisClassification.MATCH  # Based on peak_error
 
+    def test_peak_error_mismatch_even_with_good_rmse(self):
+        """Should use peak_error result even when RMSE would be better."""
+        metrics = {
+            "peak_position_error_percent": 10.0,
+            "normalized_rmse_percent": 3.0
+        }
+        result = classification_from_metrics(metrics, "excellent", True)
+        assert result == AnalysisClassification.MISMATCH  # Based on peak_error, not RMSE
+
+    # ===== Fallback Tests =====
+    
     def test_no_metrics_returns_pending(self):
         """Should return PENDING_VALIDATION when no metrics available."""
         metrics = {}
@@ -815,6 +1041,61 @@ class TestClassificationFromMetrics:
         """Should use RMSE when peak_error key is missing."""
         metrics = {"normalized_rmse_percent": 10.0}
         result = classification_from_metrics(metrics, "excellent", True)
+        assert result == AnalysisClassification.PARTIAL_MATCH
+
+    def test_both_none_returns_pending(self):
+        """Should return PENDING_VALIDATION when both metrics are None."""
+        metrics = {"peak_position_error_percent": None, "normalized_rmse_percent": None}
+        result = classification_from_metrics(metrics, "excellent", True)
+        assert result == AnalysisClassification.PENDING_VALIDATION
+
+    # ===== Precision Requirement Variations =====
+    
+    def test_acceptable_precision_with_good_metrics(self):
+        """Should classify correctly with acceptable precision requirement."""
+        metrics = {"peak_position_error_percent": 1.0}
+        result = classification_from_metrics(metrics, "acceptable", True)
+        assert result == AnalysisClassification.MATCH
+
+    def test_acceptable_precision_with_partial_metrics(self):
+        """Should classify correctly with acceptable precision requirement."""
+        metrics = {"peak_position_error_percent": 3.5}
+        result = classification_from_metrics(metrics, "acceptable", True)
+        assert result == AnalysisClassification.PARTIAL_MATCH
+
+    def test_empty_string_precision_requirement(self):
+        """Should handle empty string precision requirement."""
+        metrics = {"peak_position_error_percent": 1.0}
+        result = classification_from_metrics(metrics, "", True)
+        # Empty string is not "qualitative", so should evaluate metrics
+        assert result == AnalysisClassification.MATCH
+
+    def test_unknown_precision_requirement(self):
+        """Should handle unknown precision requirement."""
+        metrics = {"peak_position_error_percent": 1.0}
+        result = classification_from_metrics(metrics, "unknown_precision", True)
+        # Should still evaluate metrics
+        assert result == AnalysisClassification.MATCH
+
+    # ===== Edge Cases =====
+    
+    def test_zero_peak_error(self):
+        """Should return MATCH for zero peak error."""
+        metrics = {"peak_position_error_percent": 0.0}
+        result = classification_from_metrics(metrics, "excellent", True)
+        assert result == AnalysisClassification.MATCH
+
+    def test_very_large_peak_error(self):
+        """Should return MISMATCH for very large peak error."""
+        metrics = {"peak_position_error_percent": 1000.0}
+        result = classification_from_metrics(metrics, "excellent", True)
+        assert result == AnalysisClassification.MISMATCH
+
+    def test_negative_peak_error(self):
+        """Should handle negative peak error using absolute value."""
+        metrics = {"peak_position_error_percent": -3.0}
+        result = classification_from_metrics(metrics, "excellent", True)
+        # After our fix, should use abs(-3.0) = 3.0, which is PARTIAL_MATCH
         assert result == AnalysisClassification.PARTIAL_MATCH
 
 
@@ -1201,33 +1482,36 @@ class TestBreakdownComparisonClassifications:
         """Should return empty breakdown for empty comparisons."""
         result = breakdown_comparison_classifications([])
         assert result == {"missing": [], "pending": [], "matches": []}
+        assert isinstance(result, dict)
+        assert all(isinstance(v, list) for v in result.values())
 
-    def test_missing_classifications(self):
-        """Should categorize missing classifications correctly."""
+    def test_missing_classifications_string_values(self):
+        """Should categorize string missing classifications correctly."""
         comparisons = [
             {"figure_id": "Fig1", "classification": "missing_output"},
             {"figure_id": "Fig2", "classification": "fail"},
-            {"figure_id": "Fig3", "classification": "mismatch"}
+            {"figure_id": "Fig3", "classification": "mismatch"},
+            {"figure_id": "Fig4", "classification": "not_reproduced"},
+            {"figure_id": "Fig5", "classification": "poor_match"}
         ]
         result = breakdown_comparison_classifications(comparisons)
-        assert len(result["missing"]) == 3
-        assert "Fig1" in result["missing"]
-        assert "Fig2" in result["missing"]
-        assert "Fig3" in result["missing"]
+        assert len(result["missing"]) == 5
+        assert all(f"Fig{i}" in result["missing"] for i in range(1, 6))
 
-    def test_pending_classifications(self):
-        """Should categorize pending classifications correctly."""
+    def test_pending_classifications_string_values(self):
+        """Should categorize string pending classifications correctly."""
         comparisons = [
             {"figure_id": "Fig1", "classification": "pending_validation"},
-            {"figure_id": "Fig2", "classification": "partial_match"}
+            {"figure_id": "Fig2", "classification": "partial_match"},
+            {"figure_id": "Fig3", "classification": "match_pending"},
+            {"figure_id": "Fig4", "classification": "partial"}
         ]
         result = breakdown_comparison_classifications(comparisons)
-        assert len(result["pending"]) == 2
-        assert "Fig1" in result["pending"]
-        assert "Fig2" in result["pending"]
+        assert len(result["pending"]) == 4
+        assert all(f"Fig{i}" in result["pending"] for i in range(1, 5))
 
-    def test_match_classifications(self):
-        """Should categorize match classifications correctly."""
+    def test_match_classifications_string_values(self):
+        """Should categorize string match classifications correctly."""
         comparisons = [
             {"figure_id": "Fig1", "classification": "match"},
             {"figure_id": "Fig2", "classification": "excellent_match"}
@@ -1237,15 +1521,33 @@ class TestBreakdownComparisonClassifications:
         assert "Fig1" in result["matches"]
         assert "Fig2" in result["matches"]
 
-    def test_case_insensitive(self):
-        """Should handle case-insensitive classifications."""
+    def test_case_insensitive_missing(self):
+        """Should handle case-insensitive missing classifications."""
         comparisons = [
-            {"figure_id": "Fig1", "classification": "MATCH"},
-            {"figure_id": "Fig2", "classification": "Pending_Validation"}
+            {"figure_id": "Fig1", "classification": "MISMATCH"},
+            {"figure_id": "Fig2", "classification": "Fail"},
+            {"figure_id": "Fig3", "classification": "MISSING_OUTPUT"}
         ]
         result = breakdown_comparison_classifications(comparisons)
-        assert "Fig1" in result["matches"]
-        assert "Fig2" in result["pending"]
+        assert len(result["missing"]) == 3
+
+    def test_case_insensitive_pending(self):
+        """Should handle case-insensitive pending classifications."""
+        comparisons = [
+            {"figure_id": "Fig1", "classification": "PENDING_VALIDATION"},
+            {"figure_id": "Fig2", "classification": "Partial_Match"}
+        ]
+        result = breakdown_comparison_classifications(comparisons)
+        assert len(result["pending"]) == 2
+
+    def test_case_insensitive_match(self):
+        """Should handle case-insensitive match classifications."""
+        comparisons = [
+            {"figure_id": "Fig1", "classification": "MATCH"},
+            {"figure_id": "Fig2", "classification": "Match"}
+        ]
+        result = breakdown_comparison_classifications(comparisons)
+        assert len(result["matches"]) == 2
 
     def test_mixed_classifications(self):
         """Should correctly categorize mixed classifications."""
@@ -1259,52 +1561,169 @@ class TestBreakdownComparisonClassifications:
         assert len(result["matches"]) == 2
         assert len(result["pending"]) == 1
         assert len(result["missing"]) == 1
+        assert "Fig1" in result["matches"]
+        assert "Fig4" in result["matches"]
+        assert "Fig2" in result["pending"]
+        assert "Fig3" in result["missing"]
 
-    def test_missing_classification_field(self):
-        """Should handle comparisons without classification field."""
+    def test_missing_classification_field_defaults_to_matches(self):
+        """Should default to matches bucket when classification field missing."""
         comparisons = [
             {"figure_id": "Fig1"},
             {"figure_id": "Fig2", "classification": "match"}
         ]
         result = breakdown_comparison_classifications(comparisons)
-        # Missing classification should default to matches bucket
+        # Missing classification defaults to matches (unknown classification)
+        assert "Fig1" in result["matches"]
         assert "Fig2" in result["matches"]
 
-    def test_none_classification(self):
-        """Should handle None classification."""
+    def test_none_classification_defaults_to_matches(self):
+        """Should default to matches bucket when classification is None."""
         comparisons = [
             {"figure_id": "Fig1", "classification": None},
             {"figure_id": "Fig2", "classification": "match"}
         ]
         result = breakdown_comparison_classifications(comparisons)
+        assert "Fig1" in result["matches"]
         assert "Fig2" in result["matches"]
 
-    def test_empty_classification(self):
-        """Should handle empty string classification."""
+    def test_empty_classification_defaults_to_matches(self):
+        """Should default to matches bucket when classification is empty string."""
         comparisons = [
             {"figure_id": "Fig1", "classification": ""},
             {"figure_id": "Fig2", "classification": "match"}
         ]
         result = breakdown_comparison_classifications(comparisons)
+        assert "Fig1" in result["matches"]
         assert "Fig2" in result["matches"]
 
-    def test_enum_classifications(self):
-        """Should handle AnalysisClassification enum values."""
+    def test_enum_match(self):
+        """Should handle AnalysisClassification.MATCH enum value."""
         comparisons = [
-            {"figure_id": "Fig1", "classification": AnalysisClassification.MATCH},
-            {"figure_id": "Fig2", "classification": AnalysisClassification.PENDING_VALIDATION},
-            {"figure_id": "Fig3", "classification": AnalysisClassification.MISMATCH}
+            {"figure_id": "Fig1", "classification": AnalysisClassification.MATCH}
         ]
         result = breakdown_comparison_classifications(comparisons)
         assert "Fig1" in result["matches"]
-        assert "Fig2" in result["pending"]
-        assert "Fig3" in result["missing"]
 
-    def test_missing_figure_id(self):
-        """Should handle comparisons without figure_id."""
+    def test_enum_excellent_match(self):
+        """Should handle AnalysisClassification.EXCELLENT_MATCH enum value."""
         comparisons = [
-            {"classification": "match"},
-            {"figure_id": "Fig2", "classification": "match"}
+            {"figure_id": "Fig1", "classification": AnalysisClassification.EXCELLENT_MATCH}
         ]
         result = breakdown_comparison_classifications(comparisons)
-        assert "unknown" in result["matches"] or "Fig2" in result["matches"]
+        assert "Fig1" in result["matches"]
+
+    def test_enum_acceptable_match(self):
+        """Should handle AnalysisClassification.ACCEPTABLE_MATCH enum value."""
+        comparisons = [
+            {"figure_id": "Fig1", "classification": AnalysisClassification.ACCEPTABLE_MATCH}
+        ]
+        result = breakdown_comparison_classifications(comparisons)
+        assert "Fig1" in result["matches"]
+
+    def test_enum_pending_validation(self):
+        """Should handle AnalysisClassification.PENDING_VALIDATION enum value."""
+        comparisons = [
+            {"figure_id": "Fig1", "classification": AnalysisClassification.PENDING_VALIDATION}
+        ]
+        result = breakdown_comparison_classifications(comparisons)
+        assert "Fig1" in result["pending"]
+
+    def test_enum_partial_match(self):
+        """Should handle AnalysisClassification.PARTIAL_MATCH enum value."""
+        comparisons = [
+            {"figure_id": "Fig1", "classification": AnalysisClassification.PARTIAL_MATCH}
+        ]
+        result = breakdown_comparison_classifications(comparisons)
+        assert "Fig1" in result["pending"]
+
+    def test_enum_mismatch(self):
+        """Should handle AnalysisClassification.MISMATCH enum value."""
+        comparisons = [
+            {"figure_id": "Fig1", "classification": AnalysisClassification.MISMATCH}
+        ]
+        result = breakdown_comparison_classifications(comparisons)
+        assert "Fig1" in result["missing"]
+
+    def test_enum_poor_match(self):
+        """Should handle AnalysisClassification.POOR_MATCH enum value."""
+        comparisons = [
+            {"figure_id": "Fig1", "classification": AnalysisClassification.POOR_MATCH}
+        ]
+        result = breakdown_comparison_classifications(comparisons)
+        assert "Fig1" in result["missing"]
+
+    def test_enum_failed(self):
+        """Should handle AnalysisClassification.FAILED enum value."""
+        comparisons = [
+            {"figure_id": "Fig1", "classification": AnalysisClassification.FAILED}
+        ]
+        result = breakdown_comparison_classifications(comparisons)
+        assert "Fig1" in result["missing"]
+
+    def test_enum_no_targets(self):
+        """Should handle AnalysisClassification.NO_TARGETS enum value."""
+        comparisons = [
+            {"figure_id": "Fig1", "classification": AnalysisClassification.NO_TARGETS}
+        ]
+        result = breakdown_comparison_classifications(comparisons)
+        assert "Fig1" in result["missing"]
+
+    def test_all_enum_values_categorized(self):
+        """Should correctly categorize all AnalysisClassification enum values."""
+        comparisons = [
+            {"figure_id": "Fig_EXCELLENT_MATCH", "classification": AnalysisClassification.EXCELLENT_MATCH},
+            {"figure_id": "Fig_ACCEPTABLE_MATCH", "classification": AnalysisClassification.ACCEPTABLE_MATCH},
+            {"figure_id": "Fig_PARTIAL_MATCH", "classification": AnalysisClassification.PARTIAL_MATCH},
+            {"figure_id": "Fig_POOR_MATCH", "classification": AnalysisClassification.POOR_MATCH},
+            {"figure_id": "Fig_FAILED", "classification": AnalysisClassification.FAILED},
+            {"figure_id": "Fig_NO_TARGETS", "classification": AnalysisClassification.NO_TARGETS},
+            {"figure_id": "Fig_PENDING_VALIDATION", "classification": AnalysisClassification.PENDING_VALIDATION},
+            {"figure_id": "Fig_MATCH", "classification": AnalysisClassification.MATCH},
+            {"figure_id": "Fig_MISMATCH", "classification": AnalysisClassification.MISMATCH},
+        ]
+        result = breakdown_comparison_classifications(comparisons)
+        
+        # Verify matches bucket
+        assert "Fig_EXCELLENT_MATCH" in result["matches"]
+        assert "Fig_ACCEPTABLE_MATCH" in result["matches"]
+        assert "Fig_MATCH" in result["matches"]
+        
+        # Verify pending bucket
+        assert "Fig_PARTIAL_MATCH" in result["pending"]
+        assert "Fig_PENDING_VALIDATION" in result["pending"]
+        
+        # Verify missing bucket  
+        assert "Fig_POOR_MATCH" in result["missing"]
+        assert "Fig_FAILED" in result["missing"]
+        assert "Fig_NO_TARGETS" in result["missing"]
+        assert "Fig_MISMATCH" in result["missing"]
+
+    def test_missing_figure_id_uses_unknown(self):
+        """Should use 'unknown' when figure_id is missing."""
+        comparisons = [
+            {"classification": "match"}
+        ]
+        result = breakdown_comparison_classifications(comparisons)
+        assert "unknown" in result["matches"]
+
+    def test_preserves_figure_id_order(self):
+        """Should preserve order of figure_ids within each bucket."""
+        comparisons = [
+            {"figure_id": "A", "classification": "match"},
+            {"figure_id": "B", "classification": "match"},
+            {"figure_id": "C", "classification": "match"}
+        ]
+        result = breakdown_comparison_classifications(comparisons)
+        assert result["matches"] == ["A", "B", "C"]
+
+    def test_large_number_of_comparisons(self):
+        """Should handle large number of comparisons efficiently."""
+        comparisons = [
+            {"figure_id": f"Fig{i}", "classification": "match"}
+            for i in range(100)
+        ]
+        result = breakdown_comparison_classifications(comparisons)
+        assert len(result["matches"]) == 100
+        assert len(result["pending"]) == 0
+        assert len(result["missing"]) == 0

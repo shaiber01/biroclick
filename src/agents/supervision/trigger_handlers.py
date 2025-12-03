@@ -92,7 +92,8 @@ def handle_material_checkpoint(
     
     # Check for CHANGE_DATABASE/CHANGE_MATERIAL FIRST (before approval)
     # These take precedence even if approval keywords are present
-    if "CHANGE_DATABASE" in response_text or (is_rejection and "DATABASE" in response_text):
+    # Use word boundary matching to avoid false positives
+    if check_keywords(response_text, ["CHANGE_DATABASE"]) or (is_rejection and check_keywords(response_text, ["DATABASE"])):
         result["supervisor_verdict"] = "replan_needed"
         result["planner_feedback"] = f"User rejected material validation and requested database change: {response_text}."
         if current_stage_id:
@@ -103,7 +104,7 @@ def handle_material_checkpoint(
         result["pending_validated_materials"] = []
         result["validated_materials"] = []
     
-    elif "CHANGE_MATERIAL" in response_text or (is_rejection and "MATERIAL" in response_text):
+    elif check_keywords(response_text, ["CHANGE_MATERIAL"]) or (is_rejection and check_keywords(response_text, ["MATERIAL"])):
         result["supervisor_verdict"] = "replan_needed"
         result["planner_feedback"] = f"User indicated wrong material: {response_text}. Please update plan."
         if current_stage_id:
@@ -137,13 +138,13 @@ def handle_material_checkpoint(
             _archive_with_error_handling(state, result, current_stage_id)
             _update_progress_with_error_handling(state, result, current_stage_id, "completed_success")
     
-    elif "NEED_HELP" in response_text or "HELP" in response_text:
+    elif check_keywords(response_text, ["NEED_HELP", "HELP"]):
         result["supervisor_verdict"] = "ask_user"
         result["pending_user_questions"] = [
             "Please provide more details about the material issue."
         ]
     
-    elif "STOP" in response_text:
+    elif check_keywords(response_text, ["STOP"]):
         result["supervisor_verdict"] = "all_complete"
         result["should_stop"] = True
     
@@ -176,14 +177,15 @@ def handle_code_review_limit(
     """
     response_text = parse_user_response(user_responses)
     
-    if "PROVIDE_HINT" in response_text or "HINT" in response_text:
+    # Use word boundary matching to avoid false positives
+    if check_keywords(response_text, ["PROVIDE_HINT", "HINT"]):
         result["code_revision_count"] = 0
         raw_response = list(user_responses.values())[-1] if user_responses else ""
         result["reviewer_feedback"] = f"User hint: {raw_response}"
         result["supervisor_verdict"] = "ok_continue"
         result["supervisor_feedback"] = "Retrying code generation with user hint."
     
-    elif "SKIP" in response_text:
+    elif check_keywords(response_text, ["SKIP"]):
         result["supervisor_verdict"] = "ok_continue"
         if current_stage_id:
             _update_progress_with_error_handling(
@@ -191,7 +193,7 @@ def handle_code_review_limit(
                 summary="Skipped by user due to code review issues"
             )
     
-    elif "STOP" in response_text:
+    elif check_keywords(response_text, ["STOP"]):
         result["supervisor_verdict"] = "all_complete"
         result["should_stop"] = True
     
@@ -218,13 +220,14 @@ def handle_design_review_limit(
     """
     response_text = parse_user_response(user_responses)
     
-    if "PROVIDE_HINT" in response_text or "HINT" in response_text:
+    # Use word boundary matching to avoid false positives
+    if check_keywords(response_text, ["PROVIDE_HINT", "HINT"]):
         result["design_revision_count"] = 0
         raw_response = list(user_responses.values())[-1] if user_responses else ""
         result["reviewer_feedback"] = f"User hint: {raw_response}"
         result["supervisor_verdict"] = "ok_continue"
     
-    elif "SKIP" in response_text:
+    elif check_keywords(response_text, ["SKIP"]):
         result["supervisor_verdict"] = "ok_continue"
         if current_stage_id:
             _update_progress_with_error_handling(
@@ -232,7 +235,7 @@ def handle_design_review_limit(
                 summary="Skipped by user due to design review issues"
             )
     
-    elif "STOP" in response_text:
+    elif check_keywords(response_text, ["STOP"]):
         result["supervisor_verdict"] = "all_complete"
         result["should_stop"] = True
     
@@ -259,21 +262,22 @@ def handle_execution_failure_limit(
     """
     response_text = parse_user_response(user_responses)
     
-    if "RETRY" in response_text or "GUIDANCE" in response_text:
+    # Use word boundary matching to avoid false positives (e.g., "RETRYING" matching "RETRY")
+    if check_keywords(response_text, ["RETRY", "GUIDANCE"]):
         result["execution_failure_count"] = 0
         raw_response = list(user_responses.values())[-1] if user_responses else ""
         result["supervisor_feedback"] = f"User guidance: {raw_response}"
         result["supervisor_verdict"] = "ok_continue"
     
-    elif "SKIP" in response_text:
+    elif check_keywords(response_text, ["SKIP"]):
         result["supervisor_verdict"] = "ok_continue"
         if current_stage_id:
-            update_progress_stage_status(
-                state, current_stage_id, "blocked",
+            _update_progress_with_error_handling(
+                state, result, current_stage_id, "blocked",
                 summary="Skipped by user due to execution failures"
             )
     
-    elif "STOP" in response_text:
+    elif check_keywords(response_text, ["STOP"]):
         result["supervisor_verdict"] = "all_complete"
         result["should_stop"] = True
     
@@ -301,13 +305,14 @@ def handle_physics_failure_limit(
     """
     response_text = parse_user_response(user_responses)
     
-    if "RETRY" in response_text:
+    # Use word boundary matching to avoid false positives (e.g., "ACCEPTABLE" matching "ACCEPT")
+    if check_keywords(response_text, ["RETRY"]):
         result["physics_failure_count"] = 0
         raw_response = list(user_responses.values())[-1] if user_responses else ""
         result["supervisor_feedback"] = f"User guidance: {raw_response}"
         result["supervisor_verdict"] = "ok_continue"
     
-    elif "ACCEPT" in response_text or "PARTIAL" in response_text:
+    elif check_keywords(response_text, ["ACCEPT", "PARTIAL"]):
         result["supervisor_verdict"] = "ok_continue"
         if current_stage_id:
             _update_progress_with_error_handling(
@@ -315,15 +320,15 @@ def handle_physics_failure_limit(
                 summary="Accepted as partial by user despite physics issues"
             )
     
-    elif "SKIP" in response_text:
+    elif check_keywords(response_text, ["SKIP"]):
         result["supervisor_verdict"] = "ok_continue"
         if current_stage_id:
-            update_progress_stage_status(
-                state, current_stage_id, "blocked",
+            _update_progress_with_error_handling(
+                state, result, current_stage_id, "blocked",
                 summary="Skipped by user due to physics check failures"
             )
     
-    elif "STOP" in response_text:
+    elif check_keywords(response_text, ["STOP"]):
         result["supervisor_verdict"] = "all_complete"
         result["should_stop"] = True
     
@@ -351,11 +356,12 @@ def handle_context_overflow(
     """
     response_text = parse_user_response(user_responses)
     
-    if "SUMMARIZE" in response_text:
+    # Use word boundary matching to avoid false positives
+    if check_keywords(response_text, ["SUMMARIZE"]):
         result["supervisor_verdict"] = "ok_continue"
         result["supervisor_feedback"] = "Applying feedback summarization for context management."
     
-    elif "TRUNCATE" in response_text:
+    elif check_keywords(response_text, ["TRUNCATE"]):
         current_text = state.get("paper_text", "")
         # Truncation marker adds 39 chars, so truncated length = 15000 + 39 + 5000 = 20039
         # Only truncate if original is longer than truncated result would be
@@ -375,15 +381,15 @@ def handle_context_overflow(
             result["supervisor_feedback"] = "Paper already short enough, proceeding."
         result["supervisor_verdict"] = "ok_continue"
     
-    elif "SKIP" in response_text:
+    elif check_keywords(response_text, ["SKIP"]):
         result["supervisor_verdict"] = "ok_continue"
         if current_stage_id:
-            update_progress_stage_status(
-                state, current_stage_id, "blocked",
+            _update_progress_with_error_handling(
+                state, result, current_stage_id, "blocked",
                 summary="Skipped due to context overflow"
             )
     
-    elif "STOP" in response_text:
+    elif check_keywords(response_text, ["STOP"]):
         result["supervisor_verdict"] = "all_complete"
         result["should_stop"] = True
     
@@ -410,11 +416,12 @@ def handle_replan_limit(
     """
     response_text = parse_user_response(user_responses)
     
-    if "FORCE" in response_text or "ACCEPT" in response_text:
+    # Use word boundary matching to avoid false positives
+    if check_keywords(response_text, ["FORCE", "ACCEPT"]):
         result["supervisor_verdict"] = "ok_continue"
         result["supervisor_feedback"] = "Plan force-accepted by user."
     
-    elif "GUIDANCE" in response_text:
+    elif check_keywords(response_text, ["GUIDANCE"]):
         result["replan_count"] = 0
         raw_response = list(user_responses.values())[-1] if user_responses else ""
         # Strip "GUIDANCE:" prefix (case-insensitive) from the raw response
@@ -433,7 +440,7 @@ def handle_replan_limit(
         result["planner_feedback"] = f"User guidance: {guidance_text}"
         result["supervisor_verdict"] = "replan_needed"
     
-    elif "STOP" in response_text:
+    elif check_keywords(response_text, ["STOP"]):
         result["supervisor_verdict"] = "all_complete"
         result["should_stop"] = True
     
@@ -502,16 +509,17 @@ def handle_deadlock_detected(
     """
     response_text = parse_user_response(user_responses)
     
-    if "GENERATE_REPORT" in response_text or "REPORT" in response_text:
+    # Use word boundary matching to avoid false positives
+    if check_keywords(response_text, ["GENERATE_REPORT", "REPORT"]):
         result["supervisor_verdict"] = "all_complete"
         result["should_stop"] = True
     
-    elif "REPLAN" in response_text:
+    elif check_keywords(response_text, ["REPLAN"]):
         result["supervisor_verdict"] = "replan_needed"
         raw_response = list(user_responses.values())[-1] if user_responses else ""
         result["planner_feedback"] = f"User requested replan due to deadlock: {raw_response}."
     
-    elif "STOP" in response_text:
+    elif check_keywords(response_text, ["STOP"]):
         result["supervisor_verdict"] = "all_complete"
         result["should_stop"] = True
     
@@ -538,11 +546,12 @@ def handle_llm_error(
     """
     response_text = parse_user_response(user_responses)
     
-    if "RETRY" in response_text:
+    # Use word boundary matching to avoid false positives
+    if check_keywords(response_text, ["RETRY"]):
         result["supervisor_verdict"] = "ok_continue"
         result["supervisor_feedback"] = "Retrying after user acknowledged LLM error."
     
-    elif "SKIP" in response_text:
+    elif check_keywords(response_text, ["SKIP"]):
         result["supervisor_verdict"] = "ok_continue"
         if current_stage_id:
             _update_progress_with_error_handling(
@@ -550,7 +559,7 @@ def handle_llm_error(
                 summary="Skipped by user after LLM error"
             )
     
-    elif "STOP" in response_text:
+    elif check_keywords(response_text, ["STOP"]):
         result["supervisor_verdict"] = "all_complete"
         result["should_stop"] = True
     
@@ -603,11 +612,12 @@ def handle_critical_error_retry(
     """
     response_text = parse_user_response(user_responses)
     
-    if "RETRY" in response_text:
+    # Use word boundary matching to avoid false positives
+    if check_keywords(response_text, ["RETRY"]):
         result["supervisor_verdict"] = "ok_continue"
         result["supervisor_feedback"] = "Retrying after critical error acknowledged by user."
         
-    elif "STOP" in response_text:
+    elif check_keywords(response_text, ["STOP"]):
         result["supervisor_verdict"] = "all_complete"
         result["should_stop"] = True
         
@@ -634,11 +644,12 @@ def handle_planning_error_retry(
     """
     response_text = parse_user_response(user_responses)
     
-    if "REPLAN" in response_text:
+    # Use word boundary matching to avoid false positives
+    if check_keywords(response_text, ["REPLAN"]):
         result["supervisor_verdict"] = "replan_needed"
         result["planner_feedback"] = f"User requested replan after error: {response_text}"
         
-    elif "STOP" in response_text:
+    elif check_keywords(response_text, ["STOP"]):
         result["supervisor_verdict"] = "all_complete"
         result["should_stop"] = True
         
@@ -664,12 +675,13 @@ def handle_backtrack_limit(
     """
     response_text = parse_user_response(user_responses)
     
-    if "FORCE" in response_text or "CONTINUE" in response_text:
+    # Use word boundary matching to avoid false positives
+    if check_keywords(response_text, ["FORCE", "CONTINUE"]):
         result["supervisor_verdict"] = "ok_continue"
         result["supervisor_feedback"] = "Continuing despite backtrack limit as per user request."
         # Reset or increment limit? Logic usually handles count, we just unblock verdict.
         
-    elif "STOP" in response_text:
+    elif check_keywords(response_text, ["STOP"]):
         result["supervisor_verdict"] = "all_complete"
         result["should_stop"] = True
         
@@ -695,11 +707,12 @@ def handle_invalid_backtrack_decision(
     """
     response_text = parse_user_response(user_responses)
     
-    if "CONTINUE" in response_text:
+    # Use word boundary matching to avoid false positives
+    if check_keywords(response_text, ["CONTINUE"]):
         result["supervisor_verdict"] = "ok_continue"
         result["backtrack_decision"] = None  # Clear invalid decision
         
-    elif "STOP" in response_text:
+    elif check_keywords(response_text, ["STOP"]):
         result["supervisor_verdict"] = "all_complete"
         result["should_stop"] = True
         

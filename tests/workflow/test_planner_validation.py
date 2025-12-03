@@ -518,16 +518,19 @@ class TestPlanReviewerVerdictNormalization:
 
         assert result["last_plan_review_verdict"] == "approve"
 
-    def test_unknown_verdict_defaults_to_approve(self, base_state):
-        """Test that unknown verdict defaults to 'approve' with warning."""
+    def test_unknown_verdict_defaults_to_needs_revision(self, base_state):
+        """Test that unknown verdict defaults to 'needs_revision' for safety."""
         plan = MockResponseFactory.planner_response()
         base_state["plan"] = plan
+        base_state["replan_count"] = 0
 
         with patch("src.agents.planning.call_agent_with_metrics") as mock_llm:
             mock_llm.return_value = {"verdict": "unknown_verdict", "summary": "OK"}
             result = plan_reviewer_node(base_state)
 
-        assert result["last_plan_review_verdict"] == "approve"
+        # Unknown verdicts should trigger revision, not auto-approve
+        assert result["last_plan_review_verdict"] == "needs_revision"
+        assert result["replan_count"] == 1
 
 
 class TestPlanReviewerReplanCounter:
@@ -590,17 +593,19 @@ class TestPlanReviewerReplanCounter:
 class TestPlanReviewerLLMErrorHandling:
     """Test plan_reviewer_node LLM error handling."""
 
-    def test_llm_error_auto_approves(self, base_state):
-        """Test that LLM error results in auto-approve."""
+    def test_llm_error_defaults_to_needs_revision(self, base_state):
+        """Test that LLM error results in needs_revision (safer than auto-approve)."""
         plan = MockResponseFactory.planner_response()
         base_state["plan"] = plan
+        base_state["replan_count"] = 0
 
         with patch("src.agents.planning.call_agent_with_metrics") as mock_llm:
             mock_llm.side_effect = Exception("API error")
             result = plan_reviewer_node(base_state)
 
-        # Should auto-approve on LLM failure
-        assert result["last_plan_review_verdict"] == "approve"
+        # On LLM failure, default to needs_revision for safety
+        assert result["last_plan_review_verdict"] == "needs_revision"
+        assert result["replan_count"] == 1
 
 
 class TestPlanReviewerFeedbackExtraction:

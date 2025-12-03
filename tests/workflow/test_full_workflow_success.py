@@ -319,17 +319,19 @@ class TestPlanReviewPhase:
         assert result["last_plan_review_verdict"] == "needs_revision"
         assert "missing" in result["planner_feedback"].lower()
 
-    def test_plan_review_llm_failure_auto_approves(self, base_state):
-        """Test that LLM failure in reviewer auto-approves."""
+    def test_plan_review_llm_failure_defaults_to_needs_revision(self, base_state):
+        """Test that LLM failure in reviewer defaults to needs_revision for safety."""
         base_state["plan"] = MockResponseFactory.planner_response()
+        base_state["replan_count"] = 0
 
         with patch("src.agents.planning.call_agent_with_metrics") as mock_llm:
             mock_llm.side_effect = Exception("API Error")
 
             result = plan_reviewer_node(base_state)
 
-            # Review failures should auto-approve to not block workflow
-            assert result["last_plan_review_verdict"] == "approve"
+            # LLM failures should default to needs_revision (safer than auto-approve)
+            assert result["last_plan_review_verdict"] == "needs_revision"
+            assert result["replan_count"] == 1
 
 
 class TestStageSelection:
@@ -598,18 +600,20 @@ class TestDesignReviewer:
             result = design_reviewer_node(base_state)
             assert result["last_design_review_verdict"] == "approve"
 
-    def test_design_review_llm_failure_auto_approves(self, base_state):
-        """Test that LLM failure auto-approves design review."""
+    def test_design_review_llm_failure_defaults_to_needs_revision(self, base_state):
+        """Test that LLM failure defaults to needs_revision for safety."""
         base_state["design_description"] = MockResponseFactory.designer_response()
         base_state["current_stage_id"] = "stage_1_extinction"
+        base_state["design_revision_count"] = 0
 
         with patch("src.agents.design.call_agent_with_metrics") as mock_llm:
             mock_llm.side_effect = Exception("API Error")
 
             result = design_reviewer_node(base_state)
 
-            # Review failures should auto-approve
-            assert result["last_design_review_verdict"] == "approve"
+            # LLM failures should default to needs_revision (safer than auto-approve)
+            assert result["last_design_review_verdict"] == "needs_revision"
+            assert result["design_revision_count"] == 1
 
 
 class TestCodeGenerator:
@@ -784,18 +788,20 @@ class TestCodeReviewer:
             assert result.get("awaiting_user_input") is True
             assert result.get("ask_user_trigger") == "code_review_limit"
 
-    def test_code_review_llm_failure_auto_approves(self, base_state):
-        """Test that LLM failure auto-approves code review."""
+    def test_code_review_llm_failure_defaults_to_needs_revision(self, base_state):
+        """Test that LLM failure defaults to needs_revision for safety."""
         base_state["code"] = MockResponseFactory.code_generator_response()["code"]
         base_state["current_stage_id"] = "stage_1_extinction"
+        base_state["code_revision_count"] = 0
 
         with patch("src.agents.code.call_agent_with_metrics") as mock_llm:
             mock_llm.side_effect = Exception("API Error")
 
             result = code_reviewer_node(base_state)
 
-            # Review failures should auto-approve
-            assert result["last_code_review_verdict"] == "approve"
+            # LLM failures should default to needs_revision (safer than auto-approve)
+            assert result["last_code_review_verdict"] == "needs_revision"
+            assert result["code_revision_count"] == 1
 
     def test_code_review_verdict_normalization(self, base_state):
         """Test code review verdict normalization."""

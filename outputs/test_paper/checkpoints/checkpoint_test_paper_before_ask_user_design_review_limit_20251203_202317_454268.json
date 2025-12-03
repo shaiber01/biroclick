@@ -1,0 +1,286 @@
+{
+  "paper_id": "test_paper",
+  "paper_domain": "other",
+  "paper_text": "Gold nanorods have LSPR at 700nm.Gold nanorods have LSPR at 700nm.Gold nanorods have LSPR at 700nm.Gold nanorods have LSPR at 700nm.Gold nanorods have LSPR at 700nm.Gold nanorods have LSPR at 700nm.Gold nanorods have LSPR at 700nm.Gold nanorods have LSPR at 700nm.Gold nanorods have LSPR at 700nm.Gold nanorods have LSPR at 700nm.",
+  "paper_title": "",
+  "runtime_config": {
+    "max_design_revisions": 5
+  },
+  "hardware_config": {
+    "cpu_cores": 8,
+    "ram_gb": 32,
+    "gpu_available": false
+  },
+  "plan": {
+    "paper_id": "test_gold_nanorod",
+    "paper_domain": "plasmonics",
+    "title": "Gold Nanorod Optical Properties",
+    "summary": "Reproduce extinction spectrum using FDTD",
+    "main_system": "Gold nanorod in water",
+    "main_claims": [
+      "Longitudinal plasmon at 700nm"
+    ],
+    "simulation_approach": "FDTD with Meep",
+    "extracted_parameters": [
+      {
+        "name": "length",
+        "value": 100,
+        "unit": "nm",
+        "source": "text",
+        "location": "p1"
+      },
+      {
+        "name": "diameter",
+        "value": 40,
+        "unit": "nm",
+        "source": "text",
+        "location": "p1"
+      }
+    ],
+    "planned_materials": [
+      {
+        "material_id": "gold_jc",
+        "name": "Gold (Johnson-Christy)"
+      }
+    ],
+    "targets": [
+      {
+        "figure_id": "Fig1",
+        "description": "Extinction spectrum",
+        "type": "spectrum",
+        "simulation_class": "FDTD_DIRECT",
+        "precision_requirement": "acceptable"
+      }
+    ],
+    "stages": [
+      {
+        "stage_id": "stage_0_materials",
+        "stage_type": "MATERIAL_VALIDATION",
+        "name": "Material Validation",
+        "description": "Validate gold optical constants",
+        "targets": [
+          "Fig1"
+        ],
+        "dependencies": [],
+        "runtime_budget_minutes": 5
+      }
+    ],
+    "assumptions": {},
+    "reproduction_scope": {
+      "total_figures": 1,
+      "reproducible_figures": 1,
+      "attempted_figures": [
+        "Fig1"
+      ],
+      "skipped_figures": []
+    },
+    "progress": {
+      "stages": [
+        {
+          "stage_id": "stage_0_materials",
+          "status": "not_started",
+          "summary": ""
+        }
+      ]
+    }
+  },
+  "assumptions": {},
+  "progress": {},
+  "extracted_parameters": [],
+  "planned_materials": [],
+  "validated_materials": [],
+  "pending_validated_materials": [],
+  "geometry_interpretations": {},
+  "discrepancies_log": [],
+  "systematic_shifts": [],
+  "current_stage_id": "stage_0_materials",
+  "current_stage_type": "MATERIAL_VALIDATION",
+  "workflow_phase": "design",
+  "design_revision_count": 5,
+  "code_revision_count": 0,
+  "execution_failure_count": 0,
+  "total_execution_failures": 0,
+  "physics_failure_count": 0,
+  "analysis_revision_count": 0,
+  "replan_count": 0,
+  "backtrack_suggestion": null,
+  "invalidated_stages": [],
+  "backtrack_count": 0,
+  "last_plan_review_verdict": null,
+  "last_design_review_verdict": "needs_revision",
+  "last_code_review_verdict": null,
+  "reviewer_issues": [],
+  "execution_verdict": null,
+  "physics_verdict": null,
+  "comparison_verdict": null,
+  "supervisor_verdict": null,
+  "backtrack_decision": null,
+  "code": null,
+  "design_description": {
+    "stage_id": "stage_0_materials",
+    "design_description": "Gold nanorod FDTD simulation for extinction spectrum",
+    "unit_system": {
+      "characteristic_length_m": 1e-09,
+      "length_unit": "nm",
+      "example_conversions": {
+        "100nm_to_meep": 100
+      }
+    },
+    "geometry": {
+      "dimensionality": "3D",
+      "cell_size": {
+        "x": 400,
+        "y": 400,
+        "z": 800
+      },
+      "resolution": 20,
+      "structures": [
+        {
+          "name": "nanorod",
+          "type": "cylinder",
+          "material_ref": "gold_jc",
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "dimensions": {
+            "radius": 20,
+            "height": 100
+          },
+          "real_dimensions": {
+            "radius_nm": 20,
+            "height_nm": 100
+          }
+        }
+      ],
+      "symmetries": []
+    },
+    "materials": [
+      {
+        "id": "gold_jc",
+        "name": "Gold (Johnson-Christy)",
+        "model_type": "drude_lorentz",
+        "source": "johnson_christy",
+        "data_file": "materials/johnson_christy_gold.csv",
+        "parameters": {},
+        "wavelength_range": {
+          "min_nm": 400,
+          "max_nm": 900
+        }
+      },
+      {
+        "id": "water",
+        "name": "Water",
+        "model_type": "constant",
+        "source": "assumed",
+        "data_file": null,
+        "parameters": {
+          "epsilon": 1.77
+        }
+      }
+    ],
+    "sources": [
+      {
+        "type": "gaussian",
+        "component": "Ex",
+        "center": {
+          "x": 0,
+          "y": 0,
+          "z": -300
+        },
+        "size": {
+          "x": 400,
+          "y": 400,
+          "z": 0
+        },
+        "wavelength_center_nm": 650,
+        "wavelength_width_nm": 400,
+        "frequency_center_meep": 1.54,
+        "frequency_width_meep": 0.95
+      }
+    ],
+    "monitors": [
+      {
+        "name": "flux_monitor",
+        "type": "flux",
+        "center": {
+          "x": 0,
+          "y": 0,
+          "z": 300
+        },
+        "size": {
+          "x": 200,
+          "y": 200,
+          "z": 0
+        }
+      }
+    ],
+    "post_processing": [
+      {
+        "type": "spectrum",
+        "input_monitor": "flux_monitor",
+        "output_name": "extinction_spectrum"
+      }
+    ]
+  },
+  "performance_estimate": null,
+  "stage_outputs": {},
+  "run_error": null,
+  "analysis_summary": null,
+  "reviewer_feedback": null,
+  "supervisor_feedback": null,
+  "planner_feedback": null,
+  "runtime_budget_remaining_seconds": 7200.0,
+  "total_runtime_seconds": 0.0,
+  "stage_start_time": null,
+  "pending_user_questions": [],
+  "user_responses": {},
+  "awaiting_user_input": false,
+  "user_interactions": [],
+  "ask_user_trigger": null,
+  "last_node_before_ask_user": null,
+  "figure_comparisons": [],
+  "overall_assessment": [],
+  "systematic_discrepancies_identified": [],
+  "report_conclusions": null,
+  "final_report_markdown": null,
+  "metrics": {
+    "paper_id": "test_paper",
+    "started_at": "2025-12-03T18:23:17.454098+00:00",
+    "completed_at": null,
+    "total_duration_seconds": null,
+    "final_status": "in_progress",
+    "agent_calls": [],
+    "stage_metrics": [],
+    "revision_summary": {
+      "total_design_revisions": 0,
+      "total_code_revisions": 0,
+      "total_analysis_revisions": 0,
+      "replans": 0,
+      "user_interventions": 0,
+      "revision_reasons": []
+    },
+    "token_summary": {
+      "total_input_tokens": 0,
+      "total_output_tokens": 0,
+      "by_agent": {},
+      "by_model": {}
+    },
+    "prompt_adaptations": {
+      "adaptations_count": 0,
+      "agents_modified": [],
+      "adaptation_types": {}
+    },
+    "reproduction_quality": {
+      "figures_targeted": 0,
+      "figures_reproduced": 0,
+      "success_count": 0,
+      "partial_count": 0,
+      "failure_count": 0,
+      "success_rate": 0.0
+    }
+  },
+  "paper_figures": [],
+  "prompt_adaptations": []
+}

@@ -2208,8 +2208,21 @@ def load_checkpoint(
         checkpoints = list(checkpoint_dir.glob("checkpoint_*.json"))
         if not checkpoints:
             return None
+        # Filter out broken symlinks and _latest pointer files
+        valid_checkpoints = []
+        for cp in checkpoints:
+            if "_latest" in cp.name:
+                continue  # Skip latest pointer files
+            try:
+                # Try to stat the file to ensure it's not a broken symlink
+                cp.stat()
+                valid_checkpoints.append(cp)
+            except (OSError, FileNotFoundError):
+                continue  # Skip broken symlinks
+        if not valid_checkpoints:
+            return None
         # Sort by modification time, get most recent
-        latest = max(checkpoints, key=lambda p: p.stat().st_mtime)
+        latest = max(valid_checkpoints, key=lambda p: p.stat().st_mtime)
         filepath = latest
     else:
         # Look for specific checkpoint
@@ -2247,16 +2260,39 @@ def list_checkpoints(paper_id: str, output_dir: str = "outputs") -> List[Dict[st
     
     checkpoints = []
     for cp_file in checkpoint_dir.glob("checkpoint_*.json"):
-        if "_latest" in cp_file.name:
-            continue  # Skip "latest" symlinks
+        # Skip "latest" pointer files (symlinks or copies)
+        # These end with _latest.json, e.g., checkpoint_my_checkpoint_latest.json
+        if cp_file.name.endswith("_latest.json"):
+            continue
         
-        # Parse filename: checkpoint_<paper_id>_<name>_<timestamp>.json
-        parts = cp_file.stem.split("_")
-        if len(parts) >= 4:
-            name = "_".join(parts[2:-2])  # Everything between paper_id and timestamp
-            timestamp = "_".join(parts[-2:])  # Last two parts are timestamp
+        # Parse filename: checkpoint_<paper_id>_<name>_<YYYYMMDD>_<HHMMSS>_<microseconds>.json
+        # The timestamp has 3 underscore-separated parts at the end
+        # Example: checkpoint_test_paper_my_checkpoint_20251203_203659_291967.json
+        #          parts[0] = 'checkpoint'
+        #          parts[1:N-3] contains paper_id + checkpoint_name
+        #          parts[-3:] contains timestamp (YYYYMMDD_HHMMSS_microseconds)
+        
+        # Use known paper_id to find where checkpoint_name starts
+        # prefix = "checkpoint_{paper_id}_"
+        prefix = f"checkpoint_{paper_id}_"
+        
+        stem = cp_file.stem  # filename without extension
+        if stem.startswith(prefix):
+            # Remove prefix to get "{checkpoint_name}_{timestamp}"
+            remaining = stem[len(prefix):]
+            # Split and extract timestamp (last 3 parts)
+            parts = remaining.split("_")
+            if len(parts) >= 4:
+                # Timestamp is last 3 parts
+                name = "_".join(parts[:-3])
+                timestamp = "_".join(parts[-3:])
+            else:
+                # Fallback for unexpected format
+                name = remaining
+                timestamp = "unknown"
         else:
-            name = cp_file.stem
+            # Filename doesn't match expected format
+            name = stem
             timestamp = "unknown"
         
         checkpoints.append({

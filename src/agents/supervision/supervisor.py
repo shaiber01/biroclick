@@ -279,8 +279,9 @@ def _log_user_interaction(
     current_stage_id: Optional[str],
 ) -> None:
     """Log user interaction to progress."""
-    progress = state.get("progress", {})
-    user_interactions = progress.get("user_interactions", [])
+    # Use `or {}` to handle both missing key AND None value
+    progress = state.get("progress") or {}
+    user_interactions = progress.get("user_interactions") or []
     
     # Safely get question text (may be empty after ask_user clears it)
     pending_questions = state.get("pending_user_questions", [])

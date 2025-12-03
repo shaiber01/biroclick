@@ -185,7 +185,15 @@ def create_verdict_router(
                 # Check current count against limit
                 runtime_config = state.get("runtime_config") or {}
                 max_count = runtime_config.get(max_count_key, default_max)
-                current_count = state.get(count_field) or 0
+                raw_count = state.get(count_field)
+                # Handle invalid count types (None, strings, etc.) by defaulting to 0
+                try:
+                    current_count = int(raw_count) if raw_count is not None else 0
+                except (TypeError, ValueError):
+                    logger.warning(
+                        f"{checkpoint_prefix}: {count_field} has invalid value {raw_count!r}, treating as 0"
+                    )
+                    current_count = 0
                 
                 if current_count >= max_count:
                     logger.warning(

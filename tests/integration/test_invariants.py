@@ -511,7 +511,17 @@ class TestRegressionPrevention:
             assert isinstance(result.get("pending_user_questions"), list), \
                 "pending_user_questions must be a list"
 
-    def test_llm_error_in_reviewers_auto_approves(self, base_state, valid_plan):
+    def test_llm_error_in_reviewers_uses_fail_closed_safety(self, base_state, valid_plan):
+        """Test that reviewer nodes use fail-closed safety on LLM errors.
+        
+        IMPORTANT: Reviewers should NOT auto-approve on LLM error. They should
+        default to 'needs_revision' for fail-closed safety. This prevents
+        potentially buggy code/designs from being auto-approved when LLM
+        review is unavailable.
+        
+        This is the opposite of validators (execution, physics) which auto-pass
+        to not block execution when LLM is unavailable.
+        """
         from src.agents.planning import plan_reviewer_node
         from src.agents.design import design_reviewer_node
         from src.agents.code import code_reviewer_node
@@ -521,6 +531,7 @@ class TestRegressionPrevention:
         base_state["current_design"] = {"stage_id": "stage_0"}
         base_state["code"] = "print('test')"
 
+        # Plan reviewer should use fail-closed safety (needs_revision on error)
         with patch(
             "src.agents.planning.call_agent_with_metrics",
             side_effect=RuntimeError("API Error"),
@@ -528,11 +539,13 @@ class TestRegressionPrevention:
             result = plan_reviewer_node(base_state)
             assert isinstance(result, dict), \
                 "plan_reviewer_node must return dict even on error"
-            assert result.get("last_plan_review_verdict") == "approve", \
-                f"Expected auto-approve on LLM error, got '{result.get('last_plan_review_verdict')}'"
+            # FAIL-CLOSED: Reviewers default to needs_revision, not approve
+            assert result.get("last_plan_review_verdict") == "needs_revision", \
+                f"Expected fail-closed needs_revision on LLM error, got '{result.get('last_plan_review_verdict')}'"
             assert result.get("workflow_phase") == "plan_review", \
                 f"Expected workflow_phase 'plan_review', got '{result.get('workflow_phase')}'"
 
+        # Design reviewer should use fail-closed safety (needs_revision on error)
         with patch(
             "src.agents.design.call_agent_with_metrics",
             side_effect=RuntimeError("API Error"),
@@ -540,11 +553,13 @@ class TestRegressionPrevention:
             result = design_reviewer_node(base_state)
             assert isinstance(result, dict), \
                 "design_reviewer_node must return dict even on error"
-            assert result.get("last_design_review_verdict") == "approve", \
-                f"Expected auto-approve on LLM error, got '{result.get('last_design_review_verdict')}'"
+            # FAIL-CLOSED: Reviewers default to needs_revision, not approve
+            assert result.get("last_design_review_verdict") == "needs_revision", \
+                f"Expected fail-closed needs_revision on LLM error, got '{result.get('last_design_review_verdict')}'"
             assert result.get("workflow_phase") == "design_review", \
                 f"Expected workflow_phase 'design_review', got '{result.get('workflow_phase')}'"
 
+        # Code reviewer should use fail-closed safety (needs_revision on error)
         with patch(
             "src.agents.code.call_agent_with_metrics",
             side_effect=RuntimeError("API Error"),
@@ -552,8 +567,9 @@ class TestRegressionPrevention:
             result = code_reviewer_node(base_state)
             assert isinstance(result, dict), \
                 "code_reviewer_node must return dict even on error"
-            assert result.get("last_code_review_verdict") == "approve", \
-                f"Expected auto-approve on LLM error, got '{result.get('last_code_review_verdict')}'"
+            # FAIL-CLOSED: Reviewers default to needs_revision, not approve
+            assert result.get("last_code_review_verdict") == "needs_revision", \
+                f"Expected fail-closed needs_revision on LLM error, got '{result.get('last_code_review_verdict')}'"
             assert result.get("workflow_phase") == "code_review", \
                 f"Expected workflow_phase 'code_review', got '{result.get('workflow_phase')}'"
 
@@ -589,7 +605,11 @@ class TestRegressionPrevention:
                 f"Expected workflow_phase 'physics_validation', got '{result.get('workflow_phase')}'"
 
     def test_different_exception_types_handled_gracefully(self, base_state, valid_plan):
-        """Test that different exception types are handled without crashing."""
+        """Test that different exception types are handled without crashing.
+        
+        Reviewers should use fail-closed safety (needs_revision) for all exception types.
+        The key invariant is that no exception type should cause a crash.
+        """
         from src.agents.planning import plan_reviewer_node
         from src.agents.design import design_reviewer_node
 
@@ -612,8 +632,12 @@ class TestRegressionPrevention:
                 result = plan_reviewer_node(base_state)
                 assert isinstance(result, dict), \
                     f"plan_reviewer_node must handle {type(exc).__name__} gracefully"
-                assert result.get("last_plan_review_verdict") == "approve", \
-                    f"Should auto-approve on {type(exc).__name__}"
+                # FAIL-CLOSED: Reviewers default to needs_revision on any error
+                assert result.get("last_plan_review_verdict") == "needs_revision", \
+                    f"Should use fail-closed needs_revision on {type(exc).__name__}"
+                # Verify workflow_phase is preserved
+                assert result.get("workflow_phase") == "plan_review", \
+                    f"workflow_phase should be set even on {type(exc).__name__}"
 
             with patch(
                 "src.agents.design.call_agent_with_metrics",
@@ -622,8 +646,12 @@ class TestRegressionPrevention:
                 result = design_reviewer_node(base_state)
                 assert isinstance(result, dict), \
                     f"design_reviewer_node must handle {type(exc).__name__} gracefully"
-                assert result.get("last_design_review_verdict") == "approve", \
-                    f"Should auto-approve on {type(exc).__name__}"
+                # FAIL-CLOSED: Reviewers default to needs_revision on any error
+                assert result.get("last_design_review_verdict") == "needs_revision", \
+                    f"Should use fail-closed needs_revision on {type(exc).__name__}"
+                # Verify workflow_phase is preserved
+                assert result.get("workflow_phase") == "design_review", \
+                    f"workflow_phase should be set even on {type(exc).__name__}"
 
 
 class TestEdgeCases:
@@ -888,4 +916,1076 @@ class TestEdgeCases:
                 f"execution_feedback must be string, got {type(result['execution_feedback'])}"
             assert result["execution_feedback"], \
                 "execution_feedback should not be empty string"
+
+
+class TestRoutingInvariants:
+    """Test that routing functions respect invariant rules."""
+
+    def test_plan_review_router_maps_verdicts_correctly(self, base_state, valid_plan):
+        """Test plan review router routes verdicts to correct nodes."""
+        from src.routing import route_after_plan_review
+
+        base_state["plan"] = valid_plan
+        base_state["replan_count"] = 0
+
+        # Test approve → select_stage
+        base_state["last_plan_review_verdict"] = "approve"
+        route = route_after_plan_review(base_state)
+        assert route == "select_stage", \
+            f"approve should route to select_stage, got {route}"
+
+        # Test needs_revision → plan
+        base_state["last_plan_review_verdict"] = "needs_revision"
+        route = route_after_plan_review(base_state)
+        assert route == "plan", \
+            f"needs_revision should route to plan, got {route}"
+
+    def test_design_review_router_maps_verdicts_correctly(self, base_state):
+        """Test design review router routes verdicts to correct nodes."""
+        from src.routing import route_after_design_review
+
+        base_state["design_revision_count"] = 0
+
+        # Test approve → generate_code
+        base_state["last_design_review_verdict"] = "approve"
+        route = route_after_design_review(base_state)
+        assert route == "generate_code", \
+            f"approve should route to generate_code, got {route}"
+
+        # Test needs_revision → design
+        base_state["last_design_review_verdict"] = "needs_revision"
+        route = route_after_design_review(base_state)
+        assert route == "design", \
+            f"needs_revision should route to design, got {route}"
+
+    def test_code_review_router_maps_verdicts_correctly(self, base_state):
+        """Test code review router routes verdicts to correct nodes."""
+        from src.routing import route_after_code_review
+
+        base_state["code_revision_count"] = 0
+
+        # Test approve → run_code
+        base_state["last_code_review_verdict"] = "approve"
+        route = route_after_code_review(base_state)
+        assert route == "run_code", \
+            f"approve should route to run_code, got {route}"
+
+        # Test needs_revision → generate_code
+        base_state["last_code_review_verdict"] = "needs_revision"
+        route = route_after_code_review(base_state)
+        assert route == "generate_code", \
+            f"needs_revision should route to generate_code, got {route}"
+
+    def test_execution_router_maps_verdicts_correctly(self, base_state):
+        """Test execution check router routes verdicts to correct nodes."""
+        from src.routing import route_after_execution_check
+
+        base_state["execution_failure_count"] = 0
+
+        # Test pass → physics_check
+        base_state["execution_verdict"] = "pass"
+        route = route_after_execution_check(base_state)
+        assert route == "physics_check", \
+            f"pass should route to physics_check, got {route}"
+
+        # Test warning → physics_check (also proceeds)
+        base_state["execution_verdict"] = "warning"
+        route = route_after_execution_check(base_state)
+        assert route == "physics_check", \
+            f"warning should route to physics_check, got {route}"
+
+        # Test fail → generate_code
+        base_state["execution_verdict"] = "fail"
+        route = route_after_execution_check(base_state)
+        assert route == "generate_code", \
+            f"fail should route to generate_code, got {route}"
+
+    def test_physics_router_maps_verdicts_correctly(self, base_state):
+        """Test physics check router routes verdicts to correct nodes."""
+        from src.routing import route_after_physics_check
+
+        base_state["physics_failure_count"] = 0
+        base_state["design_revision_count"] = 0
+
+        # Test pass → analyze
+        base_state["physics_verdict"] = "pass"
+        route = route_after_physics_check(base_state)
+        assert route == "analyze", \
+            f"pass should route to analyze, got {route}"
+
+        # Test warning → analyze (proceeds with warning)
+        base_state["physics_verdict"] = "warning"
+        route = route_after_physics_check(base_state)
+        assert route == "analyze", \
+            f"warning should route to analyze, got {route}"
+
+        # Test fail → generate_code
+        base_state["physics_verdict"] = "fail"
+        route = route_after_physics_check(base_state)
+        assert route == "generate_code", \
+            f"fail should route to generate_code, got {route}"
+
+        # Test design_flaw → design
+        base_state["physics_verdict"] = "design_flaw"
+        route = route_after_physics_check(base_state)
+        assert route == "design", \
+            f"design_flaw should route to design, got {route}"
+
+    def test_router_escalates_on_none_verdict(self, base_state):
+        """Test that routers escalate to ask_user when verdict is None."""
+        from src.routing import (
+            route_after_plan_review,
+            route_after_design_review,
+            route_after_code_review,
+            route_after_execution_check,
+            route_after_physics_check,
+        )
+
+        routers_and_fields = [
+            (route_after_plan_review, "last_plan_review_verdict"),
+            (route_after_design_review, "last_design_review_verdict"),
+            (route_after_code_review, "last_code_review_verdict"),
+            (route_after_execution_check, "execution_verdict"),
+            (route_after_physics_check, "physics_verdict"),
+        ]
+
+        for router, verdict_field in routers_and_fields:
+            base_state[verdict_field] = None
+            route = router(base_state)
+            assert route == "ask_user", \
+                f"Router should escalate to ask_user when {verdict_field} is None, got {route}"
+
+    def test_router_escalates_on_unknown_verdict(self, base_state):
+        """Test that routers escalate to ask_user for unknown verdict values."""
+        from src.routing import route_after_plan_review
+
+        base_state["last_plan_review_verdict"] = "invalid_verdict"
+        route = route_after_plan_review(base_state)
+        assert route == "ask_user", \
+            f"Router should escalate to ask_user for unknown verdict, got {route}"
+
+    def test_router_escalates_on_count_limit_exceeded(self, base_state):
+        """Test that routers escalate when revision limits are exceeded."""
+        from src.routing import route_after_code_review
+
+        # Set revision count at max
+        base_state["code_revision_count"] = 10
+        base_state["runtime_config"] = {"max_code_revisions": 3}
+        base_state["last_code_review_verdict"] = "needs_revision"
+
+        route = route_after_code_review(base_state)
+        assert route == "ask_user", \
+            f"Router should escalate to ask_user when count >= max, got {route}"
+
+
+class TestBacktrackInvariants:
+    """Test backtrack decision handling invariants."""
+
+    def test_backtrack_node_requires_accepted_decision(self, base_state):
+        """Test that backtrack node requires an accepted decision."""
+        from src.agents.reporting import handle_backtrack_node
+
+        # Test with missing backtrack_decision
+        result = handle_backtrack_node(base_state)
+        assert result.get("awaiting_user_input") is True, \
+            "handle_backtrack_node should escalate when decision is missing"
+        assert result.get("ask_user_trigger") == "invalid_backtrack_decision", \
+            "Should set ask_user_trigger for invalid decision"
+
+        # Test with decision not accepted
+        base_state["backtrack_decision"] = {"accepted": False, "target_stage_id": "stage_0"}
+        result = handle_backtrack_node(base_state)
+        assert result.get("awaiting_user_input") is True, \
+            "handle_backtrack_node should escalate when decision is not accepted"
+
+    def test_backtrack_node_requires_target_stage_id(self, base_state, valid_plan):
+        """Test that backtrack node requires a target stage ID."""
+        from src.agents.reporting import handle_backtrack_node
+
+        base_state["plan"] = valid_plan
+        base_state["progress"] = {
+            "stages": [{"stage_id": "stage_0", "status": "completed_success"}]
+        }
+
+        # Test with empty target_stage_id
+        base_state["backtrack_decision"] = {"accepted": True, "target_stage_id": ""}
+        result = handle_backtrack_node(base_state)
+        assert result.get("awaiting_user_input") is True, \
+            "handle_backtrack_node should escalate when target_stage_id is empty"
+        assert result.get("ask_user_trigger") == "invalid_backtrack_target", \
+            "Should set ask_user_trigger for invalid target"
+
+    def test_backtrack_node_validates_target_stage_exists(self, base_state, valid_plan):
+        """Test that backtrack node validates target stage exists."""
+        from src.agents.reporting import handle_backtrack_node
+
+        base_state["plan"] = valid_plan
+        base_state["progress"] = {
+            "stages": [{"stage_id": "stage_0", "status": "completed_success"}]
+        }
+
+        # Test with non-existent target stage
+        base_state["backtrack_decision"] = {
+            "accepted": True,
+            "target_stage_id": "stage_nonexistent",
+            "stages_to_invalidate": []
+        }
+        result = handle_backtrack_node(base_state)
+        assert result.get("awaiting_user_input") is True, \
+            "handle_backtrack_node should escalate when target stage doesn't exist"
+        assert result.get("ask_user_trigger") == "backtrack_target_not_found", \
+            "Should set ask_user_trigger for not found target"
+
+    def test_backtrack_node_respects_max_backtracks(self, base_state, valid_plan):
+        """Test that backtrack node respects max backtrack limit."""
+        from src.agents.reporting import handle_backtrack_node
+
+        base_state["plan"] = valid_plan
+        base_state["progress"] = {
+            "stages": [{"stage_id": "stage_0", "status": "completed_success"}]
+        }
+        base_state["backtrack_count"] = 2
+        base_state["runtime_config"] = {"max_backtracks": 2}
+        base_state["backtrack_decision"] = {
+            "accepted": True,
+            "target_stage_id": "stage_0",
+            "stages_to_invalidate": []
+        }
+
+        result = handle_backtrack_node(base_state)
+        assert result.get("awaiting_user_input") is True, \
+            "handle_backtrack_node should escalate when max backtracks exceeded"
+        assert result.get("ask_user_trigger") == "backtrack_limit", \
+            "Should set ask_user_trigger for backtrack limit"
+        assert result.get("workflow_phase") == "backtracking_limit", \
+            f"Expected workflow_phase 'backtracking_limit', got '{result.get('workflow_phase')}'"
+
+    def test_backtrack_node_increments_counter(self, base_state, valid_plan):
+        """Test that backtrack node increments backtrack counter."""
+        from src.agents.reporting import handle_backtrack_node
+
+        base_state["plan"] = valid_plan
+        base_state["progress"] = {
+            "stages": [{"stage_id": "stage_0", "status": "completed_success"}]
+        }
+        base_state["backtrack_count"] = 0
+        base_state["runtime_config"] = {"max_backtracks": 5}
+        base_state["backtrack_decision"] = {
+            "accepted": True,
+            "target_stage_id": "stage_0",
+            "stages_to_invalidate": []
+        }
+
+        result = handle_backtrack_node(base_state)
+        assert result.get("backtrack_count") == 1, \
+            f"Expected backtrack_count=1, got {result.get('backtrack_count')}"
+
+    def test_backtrack_node_handles_none_backtrack_count(self, base_state, valid_plan):
+        """Test that backtrack node handles None backtrack_count."""
+        from src.agents.reporting import handle_backtrack_node
+
+        base_state["plan"] = valid_plan
+        base_state["progress"] = {
+            "stages": [{"stage_id": "stage_0", "status": "completed_success"}]
+        }
+        base_state["backtrack_count"] = None
+        base_state["runtime_config"] = {"max_backtracks": 5}
+        base_state["backtrack_decision"] = {
+            "accepted": True,
+            "target_stage_id": "stage_0",
+            "stages_to_invalidate": []
+        }
+
+        result = handle_backtrack_node(base_state)
+        assert result.get("backtrack_count") == 1, \
+            f"Expected backtrack_count=1 when starting from None, got {result.get('backtrack_count')}"
+
+
+class TestPromptAdaptorInvariants:
+    """Test prompt adaptor node invariants."""
+
+    def test_adapt_prompts_returns_workflow_phase(self, base_state):
+        """Test that adapt_prompts_node returns workflow_phase."""
+        from src.agents.planning import adapt_prompts_node
+
+        mock_response = {"adaptations": [], "paper_domain": "plasmonics"}
+
+        with patch("src.agents.planning.call_agent_with_metrics", return_value=mock_response):
+            result = adapt_prompts_node(base_state)
+            assert "workflow_phase" in result, \
+                "adapt_prompts_node must return workflow_phase"
+            assert result["workflow_phase"] == "adapting_prompts", \
+                f"Expected workflow_phase 'adapting_prompts', got '{result['workflow_phase']}'"
+
+    def test_adapt_prompts_handles_llm_error_gracefully(self, base_state):
+        """Test that adapt_prompts_node handles LLM errors gracefully."""
+        from src.agents.planning import adapt_prompts_node
+
+        with patch(
+            "src.agents.planning.call_agent_with_metrics",
+            side_effect=RuntimeError("API Error"),
+        ):
+            result = adapt_prompts_node(base_state)
+            # Should not raise, should return default adaptations
+            assert isinstance(result, dict), \
+                "adapt_prompts_node must return dict even on error"
+            assert "workflow_phase" in result, \
+                "adapt_prompts_node must return workflow_phase even on error"
+            assert result.get("prompt_adaptations") == [], \
+                "adapt_prompts_node should return empty adaptations on error"
+
+    def test_adapt_prompts_handles_invalid_adaptations(self, base_state):
+        """Test that adapt_prompts_node handles invalid adaptations gracefully."""
+        from src.agents.planning import adapt_prompts_node
+
+        # Test with adaptations as non-list (dict)
+        mock_response = {"adaptations": {"invalid": "dict"}, "paper_domain": "plasmonics"}
+
+        with patch("src.agents.planning.call_agent_with_metrics", return_value=mock_response):
+            result = adapt_prompts_node(base_state)
+            # Should handle gracefully
+            assert isinstance(result.get("prompt_adaptations"), list), \
+                f"prompt_adaptations should be list, got {type(result.get('prompt_adaptations'))}"
+
+    def test_adapt_prompts_handles_none_adaptations(self, base_state):
+        """Test that adapt_prompts_node handles None adaptations."""
+        from src.agents.planning import adapt_prompts_node
+
+        mock_response = {"adaptations": None, "paper_domain": "plasmonics"}
+
+        with patch("src.agents.planning.call_agent_with_metrics", return_value=mock_response):
+            result = adapt_prompts_node(base_state)
+            assert result.get("prompt_adaptations") == [], \
+                "adapt_prompts_node should return empty list when adaptations is None"
+
+    def test_adapt_prompts_preserves_paper_domain(self, base_state):
+        """Test that adapt_prompts_node preserves paper domain from response."""
+        from src.agents.planning import adapt_prompts_node
+
+        mock_response = {"adaptations": [], "paper_domain": "quantum_optics"}
+
+        with patch("src.agents.planning.call_agent_with_metrics", return_value=mock_response):
+            result = adapt_prompts_node(base_state)
+            assert result.get("paper_domain") == "quantum_optics", \
+                f"Expected paper_domain 'quantum_optics', got '{result.get('paper_domain')}'"
+
+
+class TestComparisonValidatorInvariants:
+    """Test comparison_validator_node invariants."""
+
+    def test_comparison_validator_returns_required_fields(self, base_state, valid_plan):
+        """Test that comparison_validator_node returns all required fields."""
+        from src.agents.analysis import comparison_validator_node
+
+        base_state["plan"] = valid_plan
+        base_state["current_stage_id"] = "stage_0"
+        base_state["figure_comparisons"] = []
+        base_state["analysis_result_reports"] = []
+        base_state["progress"] = {"stages": []}
+
+        result = comparison_validator_node(base_state)
+        assert "workflow_phase" in result, \
+            "comparison_validator_node must return workflow_phase"
+        assert result["workflow_phase"] == "comparison_validation", \
+            f"Expected workflow_phase 'comparison_validation', got '{result['workflow_phase']}'"
+        assert "comparison_verdict" in result, \
+            "comparison_validator_node must return comparison_verdict"
+        assert "comparison_feedback" in result, \
+            "comparison_validator_node must return comparison_feedback"
+
+    def test_comparison_validator_approves_when_no_targets(self, base_state, valid_plan):
+        """Test that comparison_validator approves when stage has no targets."""
+        from src.agents.analysis import comparison_validator_node
+
+        # Create plan with empty targets
+        plan_no_targets = {**valid_plan}
+        plan_no_targets["stages"] = [{
+            "stage_id": "stage_0",
+            "stage_type": "MATERIAL_VALIDATION",
+            "description": "Test",
+            "targets": [],  # Empty targets
+            "dependencies": [],
+        }]
+
+        base_state["plan"] = plan_no_targets
+        base_state["current_stage_id"] = "stage_0"
+        base_state["figure_comparisons"] = []
+        base_state["progress"] = {"stages": []}
+
+        result = comparison_validator_node(base_state)
+        assert result.get("comparison_verdict") == "approve", \
+            f"Should approve when stage has no targets, got '{result.get('comparison_verdict')}'"
+
+    def test_comparison_validator_rejects_when_comparisons_missing(self, base_state, valid_plan):
+        """Test that comparison_validator rejects when comparisons are missing."""
+        from src.agents.analysis import comparison_validator_node
+
+        # Plan with targets but no comparisons
+        base_state["plan"] = valid_plan
+        base_state["current_stage_id"] = "stage_0"
+        base_state["figure_comparisons"] = []  # No comparisons
+        base_state["analysis_result_reports"] = []
+        base_state["progress"] = {"stages": []}
+
+        result = comparison_validator_node(base_state)
+        assert result.get("comparison_verdict") == "needs_revision", \
+            f"Should need revision when comparisons missing, got '{result.get('comparison_verdict')}'"
+
+    def test_comparison_validator_increments_count_on_needs_revision(self, base_state, valid_plan):
+        """Test that comparison_validator increments count on needs_revision."""
+        from src.agents.analysis import comparison_validator_node
+
+        base_state["plan"] = valid_plan
+        base_state["current_stage_id"] = "stage_0"
+        base_state["figure_comparisons"] = []
+        base_state["analysis_result_reports"] = []
+        base_state["analysis_revision_count"] = 0
+        base_state["progress"] = {"stages": []}
+
+        result = comparison_validator_node(base_state)
+        if result.get("comparison_verdict") == "needs_revision":
+            assert "analysis_revision_count" in result, \
+                "comparison_validator should update analysis_revision_count on needs_revision"
+            assert result["analysis_revision_count"] == 1, \
+                f"Expected analysis_revision_count=1, got {result['analysis_revision_count']}"
+
+    def test_comparison_validator_skips_when_awaiting_user_input(self, base_state, valid_plan):
+        """Test that comparison_validator skips processing when awaiting user input."""
+        from src.agents.analysis import comparison_validator_node
+
+        base_state["plan"] = valid_plan
+        base_state["current_stage_id"] = "stage_0"
+        base_state["awaiting_user_input"] = True  # Already waiting for user
+
+        result = comparison_validator_node(base_state)
+        # Should return empty dict (no processing)
+        assert result == {}, \
+            "comparison_validator should return empty dict when awaiting_user_input is True"
+
+
+class TestSchemaConsistencyInvariants:
+    """Test that schema files are consistent with code expectations."""
+
+    REQUIRED_SCHEMA_FIELDS = {
+        "planner_output_schema.json": ["stages", "paper_domain"],
+        "plan_reviewer_output_schema.json": ["verdict"],
+        "simulation_designer_output_schema.json": ["design_description", "geometry"],
+        "design_reviewer_output_schema.json": ["verdict"],
+        "code_generator_output_schema.json": ["code"],
+        "code_reviewer_output_schema.json": ["verdict"],
+        "execution_validator_output_schema.json": ["verdict"],
+        "physics_sanity_output_schema.json": ["verdict"],
+        "results_analyzer_output_schema.json": ["figure_comparisons"],
+        "supervisor_output_schema.json": ["verdict"],
+    }
+
+    @pytest.mark.parametrize("schema_name,required_fields", REQUIRED_SCHEMA_FIELDS.items())
+    def test_schema_has_required_fields(self, schema_name, required_fields):
+        """Test that each schema has its required fields in properties."""
+        schema_path = PROJECT_ROOT / "schemas" / schema_name
+        if not schema_path.exists():
+            pytest.skip(f"Schema {schema_name} does not exist")
+
+        content = schema_path.read_text()
+        schema = json.loads(content)
+        properties = schema.get("properties", {})
+
+        for field in required_fields:
+            assert field in properties, \
+                f"Schema {schema_name} missing required field '{field}' in properties"
+
+    def test_all_verdict_schemas_have_consistent_types(self):
+        """Test that all verdict fields have consistent type definitions."""
+        verdict_schemas = [
+            "plan_reviewer_output_schema.json",
+            "design_reviewer_output_schema.json",
+            "code_reviewer_output_schema.json",
+            "execution_validator_output_schema.json",
+            "physics_sanity_output_schema.json",
+            "supervisor_output_schema.json",
+        ]
+
+        for schema_name in verdict_schemas:
+            schema_path = PROJECT_ROOT / "schemas" / schema_name
+            if not schema_path.exists():
+                continue
+
+            content = schema_path.read_text()
+            schema = json.loads(content)
+            properties = schema.get("properties", {})
+
+            if "verdict" in properties:
+                verdict_prop = properties["verdict"]
+                # Verdict should be either string type or enum
+                assert verdict_prop.get("type") == "string" or "enum" in verdict_prop, \
+                    f"Verdict in {schema_name} should be string type or enum"
+
+
+class TestStageProgressionInvariants:
+    """Test stage progression invariants."""
+
+    def test_stage_selection_requires_plan(self, base_state):
+        """Test that stage selection cannot proceed without a plan."""
+        from src.agents.stage_selection import select_stage_node
+
+        # Remove plan from state
+        base_state["plan"] = None
+        base_state["progress"] = {"stages": []}
+
+        result = select_stage_node(base_state)
+        # Should escalate or return error state
+        assert isinstance(result, dict), \
+            "select_stage_node must return dict even without plan"
+        # Should either set current_stage_id to None or escalate
+        assert result.get("current_stage_id") is None or result.get("awaiting_user_input"), \
+            "select_stage_node should not set current_stage_id without plan"
+
+    def test_validation_hierarchy_is_computed_not_stored(self, base_state, valid_plan):
+        """Test that validation hierarchy is computed on demand."""
+        from schemas.state import get_validation_hierarchy
+
+        base_state["plan"] = valid_plan
+        base_state["progress"] = {
+            "stages": [
+                {"stage_id": "stage_0", "stage_type": "MATERIAL_VALIDATION", "status": "completed_success"}
+            ]
+        }
+
+        hierarchy = get_validation_hierarchy(base_state)
+        assert isinstance(hierarchy, dict), \
+            "get_validation_hierarchy must return dict"
+        assert "material_validation" in hierarchy, \
+            "hierarchy must include material_validation"
+        assert hierarchy["material_validation"] == "passed", \
+            f"Expected material_validation='passed' for completed_success, got '{hierarchy['material_validation']}'"
+
+    def test_validation_hierarchy_handles_empty_progress(self, base_state):
+        """Test that validation hierarchy handles empty progress gracefully."""
+        from schemas.state import get_validation_hierarchy
+
+        base_state["progress"] = {}
+
+        hierarchy = get_validation_hierarchy(base_state)
+        assert isinstance(hierarchy, dict), \
+            "get_validation_hierarchy must return dict even with empty progress"
+        assert all(v == "not_done" for v in hierarchy.values()), \
+            "All hierarchy values should be 'not_done' for empty progress"
+
+    def test_validation_hierarchy_handles_missing_progress(self, base_state):
+        """Test that validation hierarchy handles missing progress gracefully."""
+        from schemas.state import get_validation_hierarchy
+
+        # Remove progress entirely
+        if "progress" in base_state:
+            del base_state["progress"]
+
+        hierarchy = get_validation_hierarchy(base_state)
+        assert isinstance(hierarchy, dict), \
+            "get_validation_hierarchy must return dict even without progress"
+
+
+class TestSupervisorInvariants:
+    """Test supervisor node invariants."""
+
+    def test_supervisor_returns_workflow_phase(self, base_state, valid_plan):
+        """Test that supervisor_node always returns workflow_phase."""
+        from src.agents.supervision.supervisor import supervisor_node
+
+        base_state["plan"] = valid_plan
+        base_state["current_stage_id"] = "stage_0"
+        base_state["progress"] = {"stages": []}
+
+        mock_response = {"verdict": "ok_continue", "reasoning": "OK"}
+
+        with patch("src.agents.supervision.supervisor.call_agent_with_metrics", return_value=mock_response):
+            result = supervisor_node(base_state)
+            assert "workflow_phase" in result, \
+                "supervisor_node must return workflow_phase"
+            assert result["workflow_phase"] == "supervision", \
+                f"Expected workflow_phase 'supervision', got '{result['workflow_phase']}'"
+
+    def test_supervisor_clears_trigger_after_handling(self, base_state, valid_plan):
+        """Test that supervisor clears ask_user_trigger after handling."""
+        from src.agents.supervision.supervisor import supervisor_node
+
+        base_state["plan"] = valid_plan
+        base_state["current_stage_id"] = "stage_0"
+        base_state["progress"] = {"stages": []}
+        base_state["ask_user_trigger"] = "test_trigger"
+        base_state["user_responses"] = {"question": "APPROVE"}
+
+        # Just need supervisor to process the trigger - mock will prevent LLM call
+        with patch("src.agents.supervision.supervisor.call_agent_with_metrics", return_value={"verdict": "ok_continue"}):
+            result = supervisor_node(base_state)
+            assert result.get("ask_user_trigger") is None, \
+                "supervisor_node should clear ask_user_trigger after handling"
+
+    def test_supervisor_handles_invalid_user_responses_type(self, base_state, valid_plan):
+        """Test that supervisor handles invalid user_responses type gracefully."""
+        from src.agents.supervision.supervisor import supervisor_node
+
+        base_state["plan"] = valid_plan
+        base_state["current_stage_id"] = "stage_0"
+        base_state["progress"] = {"stages": []}
+        base_state["user_responses"] = "invalid_string"  # Should be dict
+
+        mock_response = {"verdict": "ok_continue", "reasoning": "OK"}
+
+        with patch("src.agents.supervision.supervisor.call_agent_with_metrics", return_value=mock_response):
+            result = supervisor_node(base_state)
+            # Should not crash, should handle gracefully
+            assert isinstance(result, dict), \
+                "supervisor_node must return dict even with invalid user_responses type"
+
+    def test_supervisor_handles_llm_error_gracefully(self, base_state, valid_plan):
+        """Test that supervisor handles LLM errors gracefully."""
+        from src.agents.supervision.supervisor import supervisor_node
+
+        base_state["plan"] = valid_plan
+        base_state["current_stage_id"] = "stage_0"
+        base_state["progress"] = {"stages": []}
+
+        with patch(
+            "src.agents.supervision.supervisor.call_agent_with_metrics",
+            side_effect=RuntimeError("API Error"),
+        ):
+            result = supervisor_node(base_state)
+            assert isinstance(result, dict), \
+                "supervisor_node must return dict even on LLM error"
+            assert result.get("supervisor_verdict") == "ok_continue", \
+                f"supervisor_node should default to 'ok_continue' on error, got '{result.get('supervisor_verdict')}'"
+
+
+class TestPlanValidationInvariants:
+    """Test plan validation invariants in plan_reviewer_node."""
+
+    def test_plan_reviewer_rejects_empty_stages(self, base_state, valid_plan):
+        """Test that plan_reviewer rejects plans with empty stages."""
+        from src.agents.planning import plan_reviewer_node
+
+        # Create plan with empty stages
+        plan_empty_stages = {**valid_plan, "stages": []}
+        base_state["plan"] = plan_empty_stages
+
+        mock_response = {"verdict": "approve", "issues": [], "summary": "OK"}
+
+        with patch("src.agents.planning.call_agent_with_metrics", return_value=mock_response):
+            result = plan_reviewer_node(base_state)
+            # Should reject because stages is empty
+            assert result.get("last_plan_review_verdict") == "needs_revision", \
+                "Should reject plan with empty stages"
+
+    def test_plan_reviewer_detects_missing_stage_id(self, base_state, valid_plan):
+        """Test that plan_reviewer detects stages without stage_id."""
+        from src.agents.planning import plan_reviewer_node
+
+        # Create plan with stage missing stage_id
+        plan_missing_id = {**valid_plan}
+        plan_missing_id["stages"] = [{
+            "stage_type": "MATERIAL_VALIDATION",
+            "targets": ["Fig1"],
+            "dependencies": [],
+        }]
+        base_state["plan"] = plan_missing_id
+
+        mock_response = {"verdict": "approve", "issues": [], "summary": "OK"}
+
+        with patch("src.agents.planning.call_agent_with_metrics", return_value=mock_response):
+            result = plan_reviewer_node(base_state)
+            assert result.get("last_plan_review_verdict") == "needs_revision", \
+                "Should reject stage without stage_id"
+
+    def test_plan_reviewer_detects_duplicate_stage_ids(self, base_state, valid_plan):
+        """Test that plan_reviewer detects duplicate stage IDs."""
+        from src.agents.planning import plan_reviewer_node
+
+        # Create plan with duplicate stage IDs
+        plan_dupes = {**valid_plan}
+        plan_dupes["stages"] = [
+            {"stage_id": "stage_0", "stage_type": "MATERIAL_VALIDATION", "targets": ["Fig1"], "dependencies": []},
+            {"stage_id": "stage_0", "stage_type": "SINGLE_STRUCTURE", "targets": ["Fig2"], "dependencies": []},
+        ]
+        base_state["plan"] = plan_dupes
+
+        mock_response = {"verdict": "approve", "issues": [], "summary": "OK"}
+
+        with patch("src.agents.planning.call_agent_with_metrics", return_value=mock_response):
+            result = plan_reviewer_node(base_state)
+            assert result.get("last_plan_review_verdict") == "needs_revision", \
+                "Should reject plan with duplicate stage IDs"
+
+    def test_plan_reviewer_detects_missing_dependencies(self, base_state, valid_plan):
+        """Test that plan_reviewer detects references to non-existent dependencies."""
+        from src.agents.planning import plan_reviewer_node
+
+        # Create plan with dependency on non-existent stage
+        plan_bad_deps = {**valid_plan}
+        plan_bad_deps["stages"] = [{
+            "stage_id": "stage_1",
+            "stage_type": "SINGLE_STRUCTURE",
+            "targets": ["Fig1"],
+            "dependencies": ["nonexistent_stage"],
+        }]
+        base_state["plan"] = plan_bad_deps
+
+        mock_response = {"verdict": "approve", "issues": [], "summary": "OK"}
+
+        with patch("src.agents.planning.call_agent_with_metrics", return_value=mock_response):
+            result = plan_reviewer_node(base_state)
+            assert result.get("last_plan_review_verdict") == "needs_revision", \
+                "Should reject plan with missing dependency"
+
+    def test_plan_reviewer_detects_circular_dependencies(self, base_state, valid_plan):
+        """Test that plan_reviewer detects circular dependencies."""
+        from src.agents.planning import plan_reviewer_node
+
+        # Create plan with circular dependencies
+        plan_circular = {**valid_plan}
+        plan_circular["stages"] = [
+            {"stage_id": "stage_a", "stage_type": "MATERIAL_VALIDATION", "targets": ["Fig1"], "dependencies": ["stage_b"]},
+            {"stage_id": "stage_b", "stage_type": "SINGLE_STRUCTURE", "targets": ["Fig2"], "dependencies": ["stage_a"]},
+        ]
+        base_state["plan"] = plan_circular
+
+        mock_response = {"verdict": "approve", "issues": [], "summary": "OK"}
+
+        with patch("src.agents.planning.call_agent_with_metrics", return_value=mock_response):
+            result = plan_reviewer_node(base_state)
+            assert result.get("last_plan_review_verdict") == "needs_revision", \
+                "Should reject plan with circular dependencies"
+
+    def test_plan_reviewer_detects_self_dependency(self, base_state, valid_plan):
+        """Test that plan_reviewer detects stages that depend on themselves."""
+        from src.agents.planning import plan_reviewer_node
+
+        # Create plan with self-dependency
+        plan_self_dep = {**valid_plan}
+        plan_self_dep["stages"] = [{
+            "stage_id": "stage_0",
+            "stage_type": "MATERIAL_VALIDATION",
+            "targets": ["Fig1"],
+            "dependencies": ["stage_0"],  # Self-reference
+        }]
+        base_state["plan"] = plan_self_dep
+
+        mock_response = {"verdict": "approve", "issues": [], "summary": "OK"}
+
+        with patch("src.agents.planning.call_agent_with_metrics", return_value=mock_response):
+            result = plan_reviewer_node(base_state)
+            assert result.get("last_plan_review_verdict") == "needs_revision", \
+                "Should reject stage with self-dependency"
+
+    def test_plan_reviewer_handles_none_dependencies(self, base_state, valid_plan):
+        """Test that plan_reviewer handles None dependencies gracefully."""
+        from src.agents.planning import plan_reviewer_node
+
+        # Create plan with None dependencies
+        plan_none_deps = {**valid_plan}
+        plan_none_deps["stages"] = [{
+            "stage_id": "stage_0",
+            "stage_type": "MATERIAL_VALIDATION",
+            "targets": ["Fig1"],
+            "dependencies": None,  # None instead of empty list
+        }]
+        base_state["plan"] = plan_none_deps
+
+        mock_response = {"verdict": "approve", "issues": [], "summary": "OK"}
+
+        with patch("src.agents.planning.call_agent_with_metrics", return_value=mock_response):
+            result = plan_reviewer_node(base_state)
+            # Should not crash with None dependencies
+            assert isinstance(result, dict), \
+                "plan_reviewer should handle None dependencies gracefully"
+
+
+class TestReportGenerationInvariants:
+    """Test report generation invariants."""
+
+    def test_report_node_returns_workflow_phase(self, base_state, valid_plan):
+        """Test that report node always returns workflow_phase."""
+        from src.agents.reporting import generate_report_node
+
+        base_state["plan"] = valid_plan
+        base_state["progress"] = {"stages": []}
+        base_state["metrics"] = {}
+
+        mock_response = {}
+
+        with patch("src.agents.reporting.call_agent_with_metrics", return_value=mock_response):
+            result = generate_report_node(base_state)
+            assert "workflow_phase" in result, \
+                "generate_report_node must return workflow_phase"
+            assert result["workflow_phase"] == "reporting", \
+                f"Expected workflow_phase 'reporting', got '{result['workflow_phase']}'"
+
+    def test_report_node_sets_workflow_complete(self, base_state, valid_plan):
+        """Test that report node sets workflow_complete flag."""
+        from src.agents.reporting import generate_report_node
+
+        base_state["plan"] = valid_plan
+        base_state["progress"] = {"stages": []}
+        base_state["metrics"] = {}
+
+        mock_response = {}
+
+        with patch("src.agents.reporting.call_agent_with_metrics", return_value=mock_response):
+            result = generate_report_node(base_state)
+            assert result.get("workflow_complete") is True, \
+                "generate_report_node must set workflow_complete=True"
+
+    def test_report_node_handles_empty_metrics(self, base_state, valid_plan):
+        """Test that report node handles empty/missing metrics gracefully."""
+        from src.agents.reporting import generate_report_node
+
+        base_state["plan"] = valid_plan
+        base_state["progress"] = {"stages": []}
+        base_state["metrics"] = None
+
+        mock_response = {}
+
+        with patch("src.agents.reporting.call_agent_with_metrics", return_value=mock_response):
+            result = generate_report_node(base_state)
+            # Should not crash, should set default metrics
+            assert "metrics" in result, \
+                "generate_report_node must include metrics in result"
+
+    def test_report_node_handles_invalid_agent_calls_type(self, base_state, valid_plan):
+        """Test that report node handles invalid agent_calls type gracefully."""
+        from src.agents.reporting import generate_report_node
+
+        base_state["plan"] = valid_plan
+        base_state["progress"] = {"stages": []}
+        base_state["metrics"] = {"agent_calls": "invalid_string"}  # Should be list
+
+        mock_response = {}
+
+        with patch("src.agents.reporting.call_agent_with_metrics", return_value=mock_response):
+            result = generate_report_node(base_state)
+            # Should not crash, should handle gracefully
+            assert isinstance(result, dict), \
+                "generate_report_node must return dict even with invalid agent_calls type"
+
+    def test_report_node_handles_llm_error_gracefully(self, base_state, valid_plan):
+        """Test that report node handles LLM errors gracefully."""
+        from src.agents.reporting import generate_report_node
+
+        base_state["plan"] = valid_plan
+        base_state["progress"] = {"stages": []}
+        base_state["metrics"] = {}
+
+        with patch(
+            "src.agents.reporting.call_agent_with_metrics",
+            side_effect=RuntimeError("API Error"),
+        ):
+            result = generate_report_node(base_state)
+            # Should not crash, should complete with stub report
+            assert isinstance(result, dict), \
+                "generate_report_node must return dict even on LLM error"
+            assert result.get("workflow_complete") is True, \
+                "generate_report_node must set workflow_complete even on error"
+
+
+class TestBaseUtilityInvariants:
+    """Test base utility function invariants."""
+
+    def test_increment_counter_with_max_handles_none_state(self):
+        """Test that increment_counter_with_max raises on None state."""
+        from src.agents.base import increment_counter_with_max
+
+        with pytest.raises(TypeError):
+            increment_counter_with_max(None, "counter", "max", 3)
+
+    def test_increment_counter_with_max_handles_non_dict_state(self):
+        """Test that increment_counter_with_max raises on non-dict state."""
+        from src.agents.base import increment_counter_with_max
+
+        with pytest.raises(TypeError):
+            increment_counter_with_max("not_a_dict", "counter", "max", 3)
+
+    def test_increment_counter_with_max_handles_none_counter(self, base_state):
+        """Test that increment_counter_with_max handles None counter value."""
+        from src.agents.base import increment_counter_with_max
+
+        base_state["test_counter"] = None
+
+        new_count, incremented = increment_counter_with_max(
+            base_state, "test_counter", "max_test", 3
+        )
+        assert new_count == 1, \
+            f"Expected count=1 when starting from None, got {new_count}"
+        assert incremented is True, \
+            "Should return incremented=True when starting from None"
+
+    def test_increment_counter_with_max_respects_max(self, base_state):
+        """Test that increment_counter_with_max respects maximum value."""
+        from src.agents.base import increment_counter_with_max
+
+        base_state["test_counter"] = 3
+        base_state["runtime_config"] = {"max_test": 3}
+
+        new_count, incremented = increment_counter_with_max(
+            base_state, "test_counter", "max_test", 5
+        )
+        assert new_count == 3, \
+            f"Expected count=3 (not incremented), got {new_count}"
+        assert incremented is False, \
+            "Should return incremented=False when at max"
+
+    def test_check_keywords_handles_none_response(self):
+        """Test that check_keywords handles None response."""
+        from src.agents.base import check_keywords
+
+        result = check_keywords(None, ["TEST"])
+        assert result is False, \
+            "check_keywords should return False for None response"
+
+    def test_check_keywords_handles_none_keywords(self):
+        """Test that check_keywords raises on None keywords."""
+        from src.agents.base import check_keywords
+
+        with pytest.raises(TypeError):
+            check_keywords("test", None)
+
+    def test_check_keywords_handles_empty_response(self):
+        """Test that check_keywords handles empty response."""
+        from src.agents.base import check_keywords
+
+        result = check_keywords("", ["TEST"])
+        assert result is False, \
+            "check_keywords should return False for empty response"
+
+    def test_check_keywords_case_insensitive(self):
+        """Test that check_keywords is case insensitive."""
+        from src.agents.base import check_keywords
+
+        # Test lowercase
+        assert check_keywords("approve", ["APPROVE"]) is True
+        # Test uppercase
+        assert check_keywords("APPROVE", ["approve"]) is True
+        # Test mixed
+        assert check_keywords("ApPrOvE", ["APPROVE"]) is True
+
+    def test_check_keywords_word_boundaries(self):
+        """Test that check_keywords respects word boundaries."""
+        from src.agents.base import check_keywords
+
+        # "DISAPPROVE" should not match "APPROVE"
+        assert check_keywords("DISAPPROVE", ["APPROVE"]) is False, \
+            "check_keywords should not match partial words"
+        # But "APPROVE" alone should match
+        assert check_keywords("I APPROVE this", ["APPROVE"]) is True
+
+    def test_parse_user_response_handles_none(self):
+        """Test that parse_user_response handles None."""
+        from src.agents.base import parse_user_response
+
+        result = parse_user_response(None)
+        assert result == "", \
+            "parse_user_response should return empty string for None"
+
+    def test_parse_user_response_handles_empty_dict(self):
+        """Test that parse_user_response handles empty dict."""
+        from src.agents.base import parse_user_response
+
+        result = parse_user_response({})
+        assert result == "", \
+            "parse_user_response should return empty string for empty dict"
+
+    def test_parse_user_response_handles_non_dict(self):
+        """Test that parse_user_response raises on non-dict."""
+        from src.agents.base import parse_user_response
+
+        with pytest.raises(TypeError):
+            parse_user_response("not_a_dict")
+
+
+class TestCodeGeneratorInvariants:
+    """Test code generator node invariants."""
+
+    def test_code_generator_requires_stage_id(self, base_state, valid_plan):
+        """Test that code_generator requires current_stage_id."""
+        from src.agents.code import code_generator_node
+
+        base_state["plan"] = valid_plan
+        base_state["current_stage_id"] = None
+        base_state["design_description"] = {"design": "test"}
+
+        result = code_generator_node(base_state)
+        assert result.get("awaiting_user_input") is True, \
+            "code_generator should escalate when current_stage_id is None"
+
+    def test_code_generator_requires_design_description(self, base_state, valid_plan):
+        """Test that code_generator requires design_description."""
+        from src.agents.code import code_generator_node
+
+        base_state["plan"] = valid_plan
+        base_state["current_stage_id"] = "stage_0"
+        base_state["design_description"] = None
+
+        result = code_generator_node(base_state)
+        # Should reject because design_description is None
+        assert "supervisor_verdict" in result or "reviewer_feedback" in result, \
+            "code_generator should indicate error when design_description is missing"
+
+    def test_code_generator_rejects_stub_design(self, base_state, valid_plan):
+        """Test that code_generator rejects stub design descriptions."""
+        from src.agents.code import code_generator_node
+
+        base_state["plan"] = valid_plan
+        base_state["current_stage_id"] = "stage_0"
+        base_state["design_description"] = "TODO: implement design"  # Stub marker
+
+        result = code_generator_node(base_state)
+        # Should reject stub design
+        assert "reviewer_feedback" in result or "supervisor_verdict" in result, \
+            "code_generator should reject stub design descriptions"
+
+    def test_code_generator_validates_generated_code(self, base_state, valid_plan):
+        """Test that code_generator validates generated code is not empty/stub."""
+        from src.agents.code import code_generator_node
+
+        base_state["plan"] = valid_plan
+        base_state["current_stage_id"] = "stage_0"
+        # Set stage type to MATERIAL_VALIDATION to avoid validated_materials check
+        base_state["current_stage_type"] = "MATERIAL_VALIDATION"
+        base_state["design_description"] = {
+            "design_description": "Full valid design for testing that is long enough to pass length check",
+            "geometry": [{"type": "box"}],
+            "sources": [],
+            "monitors": []
+        }
+
+        # Mock LLM returning stub code
+        mock_response = {"code": "# TODO: implement", "expected_outputs": []}
+
+        with patch("src.agents.code.call_agent_with_metrics", return_value=mock_response):
+            result = code_generator_node(base_state)
+            # Should detect stub code
+            assert "reviewer_feedback" in result, \
+                "code_generator should provide feedback when generated code is stub"
+
+    def test_code_generator_handles_llm_error(self, base_state, valid_plan):
+        """Test that code_generator escalates on LLM error."""
+        from src.agents.code import code_generator_node
+
+        base_state["plan"] = valid_plan
+        base_state["current_stage_id"] = "stage_0"
+        # Set stage type to MATERIAL_VALIDATION to avoid validated_materials check
+        base_state["current_stage_type"] = "MATERIAL_VALIDATION"
+        base_state["design_description"] = {
+            "design_description": "Full valid design for testing that is long enough to pass length check",
+            "geometry": [{"type": "box"}],
+            "sources": [],
+            "monitors": []
+        }
+
+        with patch(
+            "src.agents.code.call_agent_with_metrics",
+            side_effect=RuntimeError("API Error"),
+        ):
+            result = code_generator_node(base_state)
+            assert result.get("awaiting_user_input") is True, \
+                "code_generator should escalate to user on LLM error"
+            assert result.get("ask_user_trigger") == "llm_error", \
+                f"Expected ask_user_trigger 'llm_error', got '{result.get('ask_user_trigger')}'"
 

@@ -446,24 +446,27 @@ def plan_reviewer_node(state: ReproState) -> dict:
             )
         except Exception as e:
             logger.error(f"Plan reviewer LLM call failed: {e}")
-            agent_output = create_llm_error_auto_approve("plan_reviewer", e)
+            agent_output = create_llm_error_auto_approve("plan_reviewer", e, default_verdict="needs_revision")
     
     # Normalize verdict to allowed values
-    raw_verdict = agent_output.get("verdict", "approve")
+    raw_verdict = agent_output.get("verdict")
+    if not raw_verdict:
+        logger.warning("Plan reviewer output missing 'verdict'. Defaulting to 'needs_revision'.")
+        verdict = "needs_revision"
     # Normalize common variations: "pass" -> "approve", "reject" -> "needs_revision"
-    if raw_verdict in ["pass", "approved", "accept"]:
+    elif raw_verdict in ["pass", "approved", "accept"]:
         verdict = "approve"
     elif raw_verdict in ["reject", "revision_needed", "needs_work"]:
         verdict = "needs_revision"
     elif raw_verdict in ["approve", "needs_revision"]:
         verdict = raw_verdict
     else:
-        # Unknown verdict - log warning and default to approve
+        # Unknown verdict - log warning and default to needs_revision (safer)
         logger.warning(
             f"Plan reviewer returned unexpected verdict '{raw_verdict}'. "
-            "Normalizing to 'approve'. Allowed values: 'approve', 'needs_revision'."
+            "Normalizing to 'needs_revision'. Allowed values: 'approve', 'needs_revision'."
         )
-        verdict = "approve"
+        verdict = "needs_revision"
     
     result: Dict[str, Any] = {
         "workflow_phase": "plan_review",

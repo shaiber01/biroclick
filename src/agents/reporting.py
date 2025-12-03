@@ -29,6 +29,30 @@ from src.prompts import build_agent_prompt
 from src.llm_client import call_agent_with_metrics
 
 
+def _safe_int(value: Any, default: int = 0) -> int:
+    """Safely convert a value to int, handling None, strings, and floats.
+    
+    Args:
+        value: The value to convert (can be int, float, str, None, or other)
+        default: The default value to return if conversion fails
+        
+    Returns:
+        Integer value, or default if conversion fails
+    """
+    if value is None:
+        return default
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str):
+        try:
+            return int(float(value))  # Handle "1000" and "1000.5"
+        except (ValueError, TypeError):
+            return default
+    return default
+
+
 def generate_report_node(state: ReproState) -> Dict[str, Any]:
     """Generate final reproduction report."""
     logger = logging.getLogger(__name__)
@@ -45,8 +69,8 @@ def generate_report_node(state: ReproState) -> Dict[str, Any]:
         if not isinstance(agent_calls, list):
             logger.warning(f"agent_calls is not a list (got {type(agent_calls)}), using empty list")
             agent_calls = []
-        total_input = sum(call.get("input_tokens", 0) or 0 for call in agent_calls)
-        total_output = sum(call.get("output_tokens", 0) or 0 for call in agent_calls)
+        total_input = sum(_safe_int(call.get("input_tokens", 0)) for call in agent_calls)
+        total_output = sum(_safe_int(call.get("output_tokens", 0)) for call in agent_calls)
         
         result["metrics"] = {
             **metrics,

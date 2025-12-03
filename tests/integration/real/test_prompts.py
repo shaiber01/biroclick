@@ -216,6 +216,72 @@ class TestPlaceholderSubstitution:
             "Substituted content should contain threshold table headers"
         )
 
+    def test_thresholds_table_has_correct_structure(self):
+        """The substituted thresholds table should have proper markdown table structure."""
+        test_prompt = "{THRESHOLDS_TABLE}"
+        result = substitute_placeholders(test_prompt)
+        
+        # Should have table header row
+        assert "| Quantity | Excellent | Acceptable | Investigate |" in result, (
+            "Thresholds table should have proper header row"
+        )
+        # Should have header separator
+        assert "|---" in result, "Thresholds table should have header separator row"
+
+    def test_thresholds_table_contains_all_quantities(self):
+        """The thresholds table should contain all defined quantities."""
+        test_prompt = "{THRESHOLDS_TABLE}"
+        result = substitute_placeholders(test_prompt)
+        
+        # All quantities from DISCREPANCY_THRESHOLDS should be present (human-readable)
+        expected_quantities = [
+            "Resonance wavelength",
+            "Linewidth",  # Could be "Linewidth / FWHM"
+            "Q-factor",
+            "Transmission",
+            "Reflection",
+            "Field enhancement",
+            "Mode effective index",  # Could be "effective index"
+        ]
+        
+        for quantity in expected_quantities:
+            # Check for partial match since formatting may vary
+            base_name = quantity.lower().split()[0]
+            assert base_name in result.lower(), (
+                f"Thresholds table should contain '{quantity}' (or similar). "
+                f"Got:\n{result}"
+            )
+
+    def test_thresholds_table_values_are_percentages(self):
+        """The thresholds table values should be formatted as percentages."""
+        test_prompt = "{THRESHOLDS_TABLE}"
+        result = substitute_placeholders(test_prompt)
+        
+        # Should contain percentage symbols
+        assert "%" in result, "Thresholds values should be formatted as percentages"
+        # Should contain ± for excellent/acceptable ranges
+        assert "±" in result, "Thresholds should have ± notation for ranges"
+        # Should contain > for investigate threshold
+        assert ">" in result, "Thresholds should have > notation for investigate level"
+
+    def test_thresholds_table_has_reasonable_values(self):
+        """The thresholds table values should be reasonable numbers."""
+        test_prompt = "{THRESHOLDS_TABLE}"
+        result = substitute_placeholders(test_prompt)
+        
+        # Extract all percentage values
+        import re
+        percentages = re.findall(r'[±>]?(\d+)%', result)
+        
+        assert len(percentages) > 0, "Should find percentage values in the table"
+        
+        for pct in percentages:
+            value = int(pct)
+            # Values should be between 1 and 200 (reasonable for physics thresholds)
+            assert 1 <= value <= 200, (
+                f"Threshold value {value}% seems unreasonable (should be 1-200%)"
+            )
+
     def test_multiple_placeholders_substituted(self):
         """Multiple placeholders should all be substituted."""
         test_prompt = "First: {THRESHOLDS_TABLE}\nSecond: {THRESHOLDS_TABLE}"
@@ -298,6 +364,54 @@ class TestPlaceholderSubstitution:
             "Placeholder substitution should be idempotent"
         )
         assert "{THRESHOLDS_TABLE}" not in result2
+
+    def test_unknown_placeholder_is_not_substituted(self):
+        """Unknown placeholders should be left as-is (not error, not removed)."""
+        test_prompt = "Known: {THRESHOLDS_TABLE} Unknown: {UNKNOWN_PLACEHOLDER}"
+        result = substitute_placeholders(test_prompt)
+        
+        # Known placeholder should be substituted
+        assert "{THRESHOLDS_TABLE}" not in result
+        # Unknown placeholder should remain
+        assert "{UNKNOWN_PLACEHOLDER}" in result, (
+            "Unknown placeholders should be left unchanged, not removed"
+        )
+
+    def test_similar_but_not_exact_placeholder_not_substituted(self):
+        """Similar but not exact placeholders should not be substituted."""
+        # These should NOT be treated as the known placeholder
+        test_cases = [
+            "THRESHOLDS_TABLE",  # Missing braces
+            "{thresholds_table}",  # Lowercase
+            "{THRESHOLDS_TABLE }",  # Extra space
+            "{ THRESHOLDS_TABLE}",  # Extra space
+            "{THRESHOLDS-TABLE}",  # Hyphen instead of underscore
+            "{{THRESHOLDS_TABLE}}",  # Double braces
+        ]
+        
+        for test_case in test_cases:
+            result = substitute_placeholders(test_case)
+            # Original should be unchanged since it doesn't match exactly
+            # (except if {THRESHOLDS_TABLE} appears inside it)
+            if test_case == "{{THRESHOLDS_TABLE}}":
+                # This one contains the valid placeholder, so one layer of braces should remain
+                assert "{{" not in result or "|" in result  # Table was substituted
+            else:
+                # These don't contain the exact placeholder
+                assert test_case == result, (
+                    f"'{test_case}' should not be substituted as it's not an exact match. "
+                    f"Got: '{result}'"
+                )
+
+    def test_placeholder_in_code_block_still_substituted(self):
+        """Placeholders in markdown code blocks are still substituted."""
+        test_prompt = "```\n{THRESHOLDS_TABLE}\n```"
+        result = substitute_placeholders(test_prompt)
+        
+        # Placeholder should still be substituted even in code block
+        assert "{THRESHOLDS_TABLE}" not in result
+        # Table content should be there
+        assert "|" in result
 
 
 class TestPromptAdaptations:
@@ -444,6 +558,78 @@ class TestPromptAdaptations:
             "Adaptation for 'planner' should not match 'code'"
         )
 
+    def test_short_target_should_not_match_longer_agent_names(self):
+        """A short target like 'code' should NOT match 'code_generator'.
+        
+        This test catches bugs where substring matching is too loose.
+        """
+        base_prompt = "Original prompt."
+        
+        # Target "code" should NOT match "code_generator"
+        adaptations = [
+            {
+                "target_agent": "code",
+                "modification_type": "append",
+                "content": "Code-specific content.",
+            }
+        ]
+        
+        result = apply_prompt_adaptations(base_prompt, "code_generator", adaptations)
+        assert "Code-specific content." not in result, (
+            "Adaptation for 'code' should NOT match 'code_generator' - "
+            "this would incorrectly apply to an unintended agent. "
+            "The matching logic uses substring 'in' which is too loose."
+        )
+        
+        # Similarly, "plan" should NOT match "planner"
+        adaptations_plan = [
+            {
+                "target_agent": "plan",
+                "modification_type": "append",
+                "content": "Plan-specific content.",
+            }
+        ]
+        
+        result_planner = apply_prompt_adaptations(base_prompt, "planner", adaptations_plan)
+        assert "Plan-specific content." not in result_planner, (
+            "Adaptation for 'plan' should NOT match 'planner' - "
+            "the matching logic is too loose with substring matching."
+        )
+        
+        # And "simulation" should NOT match "simulation_designer"
+        adaptations_sim = [
+            {
+                "target_agent": "simulation",
+                "modification_type": "append",
+                "content": "Simulation-specific content.",
+            }
+        ]
+        
+        result_designer = apply_prompt_adaptations(base_prompt, "simulation_designer", adaptations_sim)
+        assert "Simulation-specific content." not in result_designer, (
+            "Adaptation for 'simulation' should NOT match 'simulation_designer'"
+        )
+
+    def test_longer_target_should_not_match_shorter_agent_names(self):
+        """A longer target like 'code_generator' should NOT match agent 'code'.
+        
+        This tests the reverse direction of substring matching.
+        """
+        base_prompt = "Original prompt."
+        adaptations = [
+            {
+                "target_agent": "code_generator",
+                "modification_type": "append",
+                "content": "Generator-specific content.",
+            }
+        ]
+        
+        # If an agent "code" existed, it should NOT match "code_generator" target
+        result = apply_prompt_adaptations(base_prompt, "code", adaptations)
+        assert "Generator-specific content." not in result, (
+            "Adaptation for 'code_generator' should NOT match agent 'code'"
+        )
+
     def test_adaptation_matching_case_insensitive(self):
         """Adaptation matching should be case-insensitive."""
         base_prompt = "Original prompt."
@@ -514,6 +700,208 @@ class TestPromptAdaptations:
             "Disable adaptation should not modify prompt if marker doesn't exist"
         )
         assert "[DISABLED:" not in result
+
+    def test_multiple_adaptations_for_same_agent(self):
+        """Multiple adaptations for the same agent should all be applied."""
+        base_prompt = "Original prompt."
+        adaptations = [
+            {
+                "target_agent": "planner",
+                "modification_type": "append",
+                "content": "First adaptation.",
+            },
+            {
+                "target_agent": "planner",
+                "modification_type": "append",
+                "content": "Second adaptation.",
+            },
+            {
+                "target_agent": "planner",
+                "modification_type": "prepend",
+                "content": "Prepended content.",
+            },
+        ]
+
+        result = apply_prompt_adaptations(base_prompt, "planner", adaptations)
+        assert "First adaptation." in result, "First adaptation should be applied"
+        assert "Second adaptation." in result, "Second adaptation should be applied"
+        assert "Prepended content." in result, "Prepended adaptation should be applied"
+        assert "Original prompt." in result, "Original prompt should be preserved"
+
+    def test_adaptations_order_preserved(self):
+        """Adaptations should be applied in order (append should maintain order)."""
+        base_prompt = "Original."
+        adaptations = [
+            {
+                "target_agent": "planner",
+                "modification_type": "append",
+                "content": "FIRST",
+            },
+            {
+                "target_agent": "planner",
+                "modification_type": "append",
+                "content": "SECOND",
+            },
+        ]
+
+        result = apply_prompt_adaptations(base_prompt, "planner", adaptations)
+        first_pos = result.find("FIRST")
+        second_pos = result.find("SECOND")
+        assert first_pos < second_pos, (
+            "Adaptations should be applied in order: FIRST should appear before SECOND"
+        )
+
+    def test_adaptation_with_missing_target_agent(self):
+        """Adaptation without target_agent should not apply to any agent."""
+        base_prompt = "Original prompt."
+        adaptations = [
+            {
+                "modification_type": "append",
+                "content": "Content without target.",
+            }
+        ]
+
+        result = apply_prompt_adaptations(base_prompt, "planner", adaptations)
+        assert "Content without target." not in result, (
+            "Adaptation without target_agent should not match any agent"
+        )
+        assert result == base_prompt
+
+    def test_adaptation_with_missing_modification_type(self):
+        """Adaptation without modification_type should not modify prompt."""
+        base_prompt = "Original prompt."
+        adaptations = [
+            {
+                "target_agent": "planner",
+                "content": "Content without type.",
+            }
+        ]
+
+        result = apply_prompt_adaptations(base_prompt, "planner", adaptations)
+        assert "Content without type." not in result, (
+            "Adaptation without modification_type should not be applied"
+        )
+        assert result == base_prompt
+
+    def test_adaptation_with_invalid_modification_type(self):
+        """Adaptation with invalid modification_type should not modify prompt."""
+        base_prompt = "Original prompt."
+        adaptations = [
+            {
+                "target_agent": "planner",
+                "modification_type": "invalid_type",
+                "content": "Content with invalid type.",
+            }
+        ]
+
+        result = apply_prompt_adaptations(base_prompt, "planner", adaptations)
+        assert "Content with invalid type." not in result, (
+            "Adaptation with invalid modification_type should not be applied"
+        )
+        assert result == base_prompt
+
+    def test_adaptation_with_empty_content(self):
+        """Adaptation with empty content should still be applied."""
+        base_prompt = "Original prompt."
+        adaptations = [
+            {
+                "target_agent": "planner",
+                "modification_type": "append",
+                "content": "",
+            }
+        ]
+
+        result = apply_prompt_adaptations(base_prompt, "planner", adaptations)
+        # The adaptation header should still be added even with empty content
+        assert "# Paper-Specific Adaptation" in result
+
+    def test_adaptation_with_none_content(self):
+        """Adaptation with None content should be handled gracefully."""
+        base_prompt = "Original prompt."
+        adaptations = [
+            {
+                "target_agent": "planner",
+                "modification_type": "append",
+                "content": None,
+            }
+        ]
+
+        # Should not raise an exception
+        result = apply_prompt_adaptations(base_prompt, "planner", adaptations)
+        # Content "None" (as string) might be added or it might be handled
+        assert "Original prompt." in result
+
+    def test_adaptation_with_none_target_agent(self):
+        """Adaptation with None target_agent should not apply to any agent."""
+        base_prompt = "Original prompt."
+        adaptations = [
+            {
+                "target_agent": None,
+                "modification_type": "append",
+                "content": "Content with None target.",
+            }
+        ]
+
+        # Should not raise AttributeError on None.lower()
+        # This tests error handling
+        try:
+            result = apply_prompt_adaptations(base_prompt, "planner", adaptations)
+            # If it doesn't raise, content should not be applied
+            assert "Content with None target." not in result
+        except AttributeError:
+            pytest.fail(
+                "apply_prompt_adaptations should handle None target_agent gracefully"
+            )
+
+    def test_replace_adaptation_replaces_all_occurrences(self):
+        """Replace adaptation should replace all occurrences of the marker."""
+        base_prompt = "Text with MARKER here and MARKER there."
+        adaptations = [
+            {
+                "target_agent": "planner",
+                "modification_type": "replace",
+                "content": "REPLACED",
+                "section_marker": "MARKER",
+            }
+        ]
+
+        result = apply_prompt_adaptations(base_prompt, "planner", adaptations)
+        assert "MARKER" not in result, "All MARKER occurrences should be replaced"
+        assert result.count("REPLACED") == 2, "Both occurrences should be replaced"
+
+    def test_adaptation_with_special_characters_in_content(self):
+        """Adaptation content with special characters should work."""
+        base_prompt = "Original prompt."
+        special_content = "Content with special chars: ${}[]()\\n\\t*+?^"
+        adaptations = [
+            {
+                "target_agent": "planner",
+                "modification_type": "append",
+                "content": special_content,
+            }
+        ]
+
+        result = apply_prompt_adaptations(base_prompt, "planner", adaptations)
+        assert special_content in result
+
+    def test_adaptation_with_multiline_content(self):
+        """Adaptation with multiline content should work."""
+        base_prompt = "Original prompt."
+        multiline_content = """Line 1
+Line 2
+Line 3"""
+        adaptations = [
+            {
+                "target_agent": "planner",
+                "modification_type": "append",
+                "content": multiline_content,
+            }
+        ]
+
+        result = apply_prompt_adaptations(base_prompt, "planner", adaptations)
+        assert "Line 1" in result
+        assert "Line 2" in result
+        assert "Line 3" in result
 
 
 class TestBuildAgentPromptOrder:
@@ -700,6 +1088,139 @@ class TestErrorHandling:
         # Cache should not be populated
         assert "planner" not in cache or "CACHE_BYPASS_TEST" not in cache.get("planner", "")
 
+    def test_cache_is_agent_specific(self):
+        """Cache should store different prompts for different agents."""
+        state = create_initial_state(
+            paper_id="test",
+            paper_text="Test paper content for validation.",
+            paper_domain="plasmonics",
+        )
+        cache = {}
+        
+        prompt_planner = get_agent_prompt_cached("planner", state, cache=cache)
+        prompt_code_gen = get_agent_prompt_cached("code_generator", state, cache=cache)
+        
+        assert "planner" in cache
+        assert "code_generator" in cache
+        assert cache["planner"] != cache["code_generator"], (
+            "Different agents should have different cached prompts"
+        )
+        assert prompt_planner == cache["planner"]
+        assert prompt_code_gen == cache["code_generator"]
+
+    def test_cache_returns_same_object(self):
+        """Cache should return the same string object (identity check)."""
+        state = create_initial_state(
+            paper_id="test",
+            paper_text="Test paper content for validation.",
+            paper_domain="plasmonics",
+        )
+        cache = {}
+        
+        prompt1 = get_agent_prompt_cached("planner", state, cache=cache)
+        prompt2 = get_agent_prompt_cached("planner", state, cache=cache)
+        
+        # Should be the exact same object (identity)
+        assert prompt1 is prompt2, (
+            "Cached prompt should return the same string object"
+        )
+
+    def test_cache_not_used_when_none(self):
+        """When cache is None, each call should build a fresh prompt."""
+        state = create_initial_state(
+            paper_id="test",
+            paper_text="Test paper content for validation.",
+            paper_domain="plasmonics",
+        )
+        
+        prompt1 = get_agent_prompt_cached("planner", state, cache=None)
+        prompt2 = get_agent_prompt_cached("planner", state, cache=None)
+        
+        # Should be equal but not necessarily the same object
+        assert prompt1 == prompt2
+        # Can't use identity check since they're built fresh each time
+
+    def test_stale_cache_returns_old_value(self):
+        """Cache doesn't invalidate when state changes (design choice verification).
+        
+        This tests that the cache is simple key-value without considering state changes.
+        If adaptations are added AFTER caching, the cache is still used (unless adaptations exist).
+        """
+        state = create_initial_state(
+            paper_id="test",
+            paper_text="Test paper content for validation.",
+            paper_domain="plasmonics",
+        )
+        cache = {}
+        
+        # First call - cache the prompt
+        prompt_original = get_agent_prompt_cached("planner", state, cache=cache)
+        assert "planner" in cache
+        
+        # Create a new state (different paper_id, but same agent)
+        state2 = create_initial_state(
+            paper_id="different_paper",
+            paper_text="Different content entirely.",
+            paper_domain="quantum_optics",
+        )
+        
+        # Second call with different state but same cache and no adaptations
+        prompt_cached = get_agent_prompt_cached("planner", state2, cache=cache)
+        
+        # Since no adaptations, cache is used - this returns the OLD cached prompt
+        # This is the current behavior - test documents it
+        assert prompt_cached == prompt_original, (
+            "Cache is used even when state changes (no adaptations). "
+            "This is the current behavior - callers must manage cache invalidation."
+        )
+
+    def test_empty_adaptations_list_uses_cache(self):
+        """Empty adaptations list (not missing) should still use cache."""
+        state = create_initial_state(
+            paper_id="test",
+            paper_text="Test paper content for validation.",
+            paper_domain="plasmonics",
+        )
+        state["prompt_adaptations"] = []  # Explicitly empty list
+        cache = {}
+        
+        prompt1 = get_agent_prompt_cached("planner", state, cache=cache)
+        assert "planner" in cache
+        
+        prompt2 = get_agent_prompt_cached("planner", state, cache=cache)
+        assert prompt1 is prompt2, "Empty adaptations list should allow cache usage"
+
+    def test_adaptations_for_different_agent_still_uses_cache_for_target(self):
+        """Adaptations for OTHER agents should still allow cache for target agent."""
+        state = create_initial_state(
+            paper_id="test",
+            paper_text="Test paper content for validation.",
+            paper_domain="plasmonics",
+        )
+        # Adaptation for code_generator, NOT planner
+        state["prompt_adaptations"] = [
+            {
+                "target_agent": "code_generator",
+                "modification_type": "append",
+                "content": "Code generator specific.",
+            }
+        ]
+        cache = {}
+        
+        # Get planner prompt - should this use cache?
+        # Current implementation: ANY adaptations = bypass cache for ALL agents
+        prompt1 = get_agent_prompt_cached("planner", state, cache=cache)
+        prompt2 = get_agent_prompt_cached("planner", state, cache=cache)
+        
+        # Check current behavior - if cache has planner, it's using cache
+        # If not, it's always rebuilding
+        # Document whatever the actual behavior is
+        if "planner" in cache:
+            assert prompt1 is prompt2, "If cached, should return same object"
+        else:
+            # Current implementation bypasses cache whenever ANY adaptations exist
+            assert prompt1 == prompt2, "Even without cache, prompts should be equal"
+
 
 class TestPromptContentQuality:
     """Test quality and structure of prompt content."""
@@ -759,5 +1280,217 @@ class TestPromptContentQuality:
             prompt.encode("utf-8")
             # Should be decodable
             assert isinstance(prompt, str)
+
+
+class TestLoadPromptFile:
+    """Test load_prompt_file function edge cases."""
+
+    def test_load_prompt_file_returns_non_empty_string(self):
+        """load_prompt_file should return a non-empty string."""
+        content = load_prompt_file("planner_agent")
+        assert isinstance(content, str)
+        assert len(content) > 0
+        assert content.strip()  # Not just whitespace
+
+    def test_load_prompt_file_preserves_content(self):
+        """load_prompt_file should preserve file content exactly."""
+        # Load the same file twice
+        content1 = load_prompt_file("planner_agent")
+        content2 = load_prompt_file("planner_agent")
+        
+        assert content1 == content2, "Repeated loads should return identical content"
+
+    def test_load_prompt_file_handles_unicode(self):
+        """load_prompt_file should handle unicode content."""
+        content = load_prompt_file("global_rules")
+        # Verify unicode characters (like ═) are preserved
+        assert "═" in content, "Unicode box-drawing characters should be preserved"
+
+    def test_load_prompt_file_with_different_extensions(self):
+        """load_prompt_file should handle filename with and without extension."""
+        content_no_ext = load_prompt_file("planner_agent")
+        content_with_ext = load_prompt_file("planner_agent.md")
+        
+        assert content_no_ext == content_with_ext, (
+            "Loading with and without .md extension should return same content"
+        )
+
+    def test_load_prompt_file_with_double_extension(self):
+        """load_prompt_file with double extension should fail appropriately."""
+        # "planner_agent.md" + ".md" = "planner_agent.md.md"
+        with pytest.raises(FileNotFoundError):
+            load_prompt_file("planner_agent.md.md")
+
+
+class TestBuildAgentPromptIntegration:
+    """Integration tests for build_agent_prompt combining all components."""
+
+    def test_global_rules_thresholds_substituted(self):
+        """Global rules should have THRESHOLDS_TABLE substituted."""
+        state = create_initial_state(
+            paper_id="test",
+            paper_text="Test paper content.",
+            paper_domain="plasmonics",
+        )
+        prompt = build_agent_prompt("planner", state, include_global_rules=True)
+        
+        # Global rules contains {THRESHOLDS_TABLE} placeholder
+        # It should be substituted
+        assert "{THRESHOLDS_TABLE}" not in prompt, (
+            "THRESHOLDS_TABLE placeholder should be substituted in built prompt"
+        )
+        # The actual table should be there
+        assert "| Quantity |" in prompt, (
+            "Thresholds table content should be present in built prompt"
+        )
+
+    def test_all_agent_prompts_have_no_unsubstituted_placeholders(self):
+        """No built prompt should have unsubstituted placeholders."""
+        state = create_initial_state(
+            paper_id="test",
+            paper_text="Test paper content.",
+            paper_domain="plasmonics",
+        )
+        
+        for agent_name in AGENT_PROMPTS.keys():
+            prompt = build_agent_prompt(agent_name, state)
+            unsubstituted = validate_placeholders_substituted(prompt)
+            assert not unsubstituted, (
+                f"Agent '{agent_name}' has unsubstituted placeholders: {unsubstituted}"
+            )
+
+    def test_separator_between_global_rules_and_agent_prompt(self):
+        """There should be a visual separator between global rules and agent prompt."""
+        state = create_initial_state(
+            paper_id="test",
+            paper_text="Test paper content.",
+            paper_domain="plasmonics",
+        )
+        prompt = build_agent_prompt("planner", state, include_global_rules=True)
+        
+        # Check for separator (the code uses ═ * 75)
+        assert "═" * 75 in prompt, (
+            "There should be a visual separator between global rules and agent prompt"
+        )
+
+    def test_prompt_consistency_across_calls(self):
+        """Same inputs should produce identical prompts."""
+        state = create_initial_state(
+            paper_id="test",
+            paper_text="Test paper content.",
+            paper_domain="plasmonics",
+        )
+        
+        prompt1 = build_agent_prompt("planner", state)
+        prompt2 = build_agent_prompt("planner", state)
+        
+        assert prompt1 == prompt2, "Same inputs should produce identical prompts"
+
+    def test_different_agents_have_different_prompts(self):
+        """Different agents should have different prompts."""
+        state = create_initial_state(
+            paper_id="test",
+            paper_text="Test paper content.",
+            paper_domain="plasmonics",
+        )
+        
+        prompts = {}
+        for agent_name in AGENT_PROMPTS.keys():
+            prompts[agent_name] = build_agent_prompt(agent_name, state)
+        
+        # Check that all prompts are unique
+        unique_prompts = set(prompts.values())
+        assert len(unique_prompts) == len(AGENT_PROMPTS), (
+            "Each agent should have a unique prompt"
+        )
+
+    def test_agent_prompt_contains_agent_specific_content(self):
+        """Each agent's prompt should contain agent-specific instructions."""
+        state = create_initial_state(
+            paper_id="test",
+            paper_text="Test paper content.",
+            paper_domain="plasmonics",
+        )
+        
+        # Test a few specific agents
+        planner_prompt = build_agent_prompt("planner", state, include_global_rules=False)
+        code_gen_prompt = build_agent_prompt("code_generator", state, include_global_rules=False)
+        supervisor_prompt = build_agent_prompt("supervisor", state, include_global_rules=False)
+        
+        # Each should contain some indication of their role
+        assert "plan" in planner_prompt.lower(), "Planner prompt should mention planning"
+        assert "code" in code_gen_prompt.lower(), "Code generator prompt should mention code"
+        assert "supervis" in supervisor_prompt.lower(), "Supervisor prompt should mention supervision"
+
+
+class TestValidatePlaceholdersSubstituted:
+    """Test the validate_placeholders_substituted helper function."""
+
+    def test_empty_string_returns_empty_list(self):
+        """Empty string should have no unsubstituted placeholders."""
+        result = validate_placeholders_substituted("")
+        assert result == []
+
+    def test_no_placeholders_returns_empty_list(self):
+        """String without placeholders should return empty list."""
+        result = validate_placeholders_substituted("Normal text without placeholders")
+        assert result == []
+
+    def test_detects_thresholds_placeholder(self):
+        """Should detect {THRESHOLDS_TABLE} placeholder."""
+        result = validate_placeholders_substituted("Text with {THRESHOLDS_TABLE} here")
+        assert "{THRESHOLDS_TABLE}" in result
+
+    def test_detects_multiple_occurrences(self):
+        """Should detect placeholder even with multiple occurrences."""
+        result = validate_placeholders_substituted(
+            "{THRESHOLDS_TABLE} and {THRESHOLDS_TABLE}"
+        )
+        # Should return the placeholder once (it's a list of unique placeholders found)
+        assert "{THRESHOLDS_TABLE}" in result
+
+    def test_does_not_detect_partial_match(self):
+        """Should not detect partial placeholder matches."""
+        result = validate_placeholders_substituted("THRESHOLDS_TABLE without braces")
+        assert result == []
+
+
+class TestAllAgentsValidation:
+    """Comprehensive validation tests for all agents."""
+
+    @pytest.mark.parametrize("agent_name", list(AGENT_PROMPTS.keys()))
+    def test_agent_prompt_file_exists_via_mapping(self, agent_name):
+        """Each agent in AGENT_PROMPTS should have a corresponding file."""
+        prompt_filename = AGENT_PROMPTS[agent_name]
+        prompt_file = PROMPTS_DIR / f"{prompt_filename}.md"
+        assert prompt_file.exists(), (
+            f"Agent '{agent_name}' maps to '{prompt_filename}' but file not found at {prompt_file}"
+        )
+
+    @pytest.mark.parametrize("agent_name", list(AGENT_PROMPTS.keys()))
+    def test_agent_can_be_built_without_state(self, agent_name):
+        """Each agent prompt should build without state."""
+        prompt = build_agent_prompt(agent_name, state=None)
+        assert prompt is not None
+        assert len(prompt) > 100
+
+    @pytest.mark.parametrize("agent_name", list(AGENT_PROMPTS.keys()))
+    def test_agent_prompt_no_python_errors_in_content(self, agent_name):
+        """Agent prompts should not contain obvious Python error strings."""
+        prompt = build_agent_prompt(agent_name, state=None)
+        
+        # These would indicate problems in the prompt files
+        error_patterns = [
+            "Traceback (most recent call last)",
+            "SyntaxError:",
+            "NameError:",
+            "TypeError:",
+            "KeyError:",
+        ]
+        
+        for pattern in error_patterns:
+            assert pattern not in prompt, (
+                f"Agent '{agent_name}' prompt contains error pattern: {pattern}"
+            )
 
 

@@ -730,8 +730,8 @@ class TestExecutionFailureLimit:
             )
             
             # Verify ask_user trigger
-            assert limit_state.get("ask_user_trigger") == "execution_limit", (
-                f"Expected ask_user_trigger='execution_limit', got '{limit_state.get('ask_user_trigger')}'"
+            assert limit_state.get("ask_user_trigger") == "execution_failure_limit", (
+                f"Expected ask_user_trigger='execution_failure_limit', got '{limit_state.get('ask_user_trigger')}'"
             )
             assert limit_state.get("awaiting_user_input") is True
 
@@ -884,8 +884,8 @@ class TestPhysicsFailureLimit:
             )
             
             # Verify ask_user trigger
-            assert limit_state.get("ask_user_trigger") == "physics_limit", (
-                f"Expected ask_user_trigger='physics_limit', got '{limit_state.get('ask_user_trigger')}'"
+            assert limit_state.get("ask_user_trigger") == "physics_failure_limit", (
+                f"Expected ask_user_trigger='physics_failure_limit', got '{limit_state.get('ask_user_trigger')}'"
             )
             assert limit_state.get("awaiting_user_input") is True
 

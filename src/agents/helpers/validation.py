@@ -22,11 +22,20 @@ CRITERIA_PATTERNS = [
 
 
 def classify_percent_error(error_percent: float) -> str:
-    """Classify error percentage into match/partial_match/mismatch."""
+    """Classify error percentage into match/partial_match/mismatch.
+    
+    Args:
+        error_percent: The error percentage (absolute value is used for classification).
+    
+    Returns:
+        Classification: MATCH (<=excellent), PARTIAL_MATCH (<=acceptable), or MISMATCH.
+    """
     thresholds = DISCREPANCY_THRESHOLDS["resonance_wavelength"]
-    if error_percent <= thresholds["excellent"]:
+    # Use absolute value since percent error is inherently non-negative
+    error = abs(error_percent)
+    if error <= thresholds["excellent"]:
         return AnalysisClassification.MATCH
-    if error_percent <= thresholds["acceptable"]:
+    if error <= thresholds["acceptable"]:
         return AnalysisClassification.PARTIAL_MATCH
     return AnalysisClassification.MISMATCH
 

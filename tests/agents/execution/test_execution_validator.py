@@ -412,7 +412,12 @@ class TestExecutionValidatorNode:
     @patch("src.agents.execution.check_context_or_escalate")
     @patch("src.agents.execution.call_agent_with_metrics")
     def test_validator_fail_counter_at_max_minus_one(self, mock_llm, mock_check, mock_prompt, base_state):
-        """Test counter increment when at max-1 (should increment to max)."""
+        """Test counter increment when at max-1 triggers escalation when reaching max.
+        
+        With max=3 and count=2:
+        - Failure increments count to 3
+        - 3 >= 3 triggers escalation
+        """
         mock_check.return_value = None
         mock_prompt.return_value = "Prompt"
         mock_llm.return_value = {"verdict": "fail", "summary": "Error occurred"}
@@ -426,8 +431,9 @@ class TestExecutionValidatorNode:
         assert result["execution_verdict"] == "fail"
         assert result["execution_failure_count"] == 3  # Should increment to max
         assert result["total_execution_failures"] == 3
-        # Should NOT trigger user ask (only triggers when at max and fails again)
-        assert "ask_user_trigger" not in result
+        # SHOULD trigger user ask when count reaches max
+        assert result["ask_user_trigger"] == "execution_failure_limit"
+        assert result["awaiting_user_input"] is True
 
     @patch("src.agents.execution.build_agent_prompt")
     @patch("src.agents.execution.check_context_or_escalate")

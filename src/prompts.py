@@ -168,7 +168,7 @@ def apply_prompt_adaptations(
     if not adaptations:
         return prompt
     
-    # Normalize agent name for matching
+    # Normalize agent name for matching (remove underscores, lowercase)
     agent_name_normalized = agent_name.lower().replace("_", "")
     
     result = prompt
@@ -176,9 +176,21 @@ def apply_prompt_adaptations(
     for adaptation in adaptations:
         # Check if this adaptation applies to this agent
         target = adaptation.get("target_agent", "")
+        
+        # Handle None or empty target_agent - skip this adaptation
+        if not target:
+            continue
+            
+        # Normalize target: lowercase, remove underscores, remove "agent" suffix
         target_normalized = target.lower().replace("_", "").replace("agent", "")
         
-        if agent_name_normalized not in target_normalized and target_normalized not in agent_name_normalized:
+        # Skip if target is empty after normalization
+        if not target_normalized:
+            continue
+        
+        # Require exact match after normalization, not substring matching
+        # This prevents "code" from matching "code_generator" or vice versa
+        if agent_name_normalized != target_normalized:
             continue
         
         mod_type = adaptation.get("modification_type", "")

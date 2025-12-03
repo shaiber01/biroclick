@@ -542,6 +542,7 @@ def build_user_content_for_planner(state: Dict[str, Any]) -> str:
         fig_desc = "\n".join([
             f"- {fig.get('id', 'unknown')}: {fig.get('description', 'No description')}"
             for fig in figures
+            if isinstance(fig, dict)  # Skip non-dict items gracefully
         ])
         parts.append(f"# FIGURES\n\n{fig_desc}")
     
@@ -566,25 +567,28 @@ def build_user_content_for_designer(state: Dict[str, Any]) -> str:
     # Plan stage details
     plan = state.get("plan") or {}
     stages = plan.get("stages", []) if isinstance(plan, dict) else []
-    current_stage = next((s for s in stages if s.get("stage_id") == stage_id), None)
+    # Ensure stages is a list before iterating
+    if not isinstance(stages, list):
+        stages = []
+    current_stage = next((s for s in stages if isinstance(s, dict) and s.get("stage_id") == stage_id), None)
     
     if current_stage:
-        parts.append(f"## Stage Details\n```json\n{json.dumps(current_stage, indent=2)}\n```")
+        parts.append(f"## Stage Details\n```json\n{json.dumps(current_stage, indent=2, ensure_ascii=False)}\n```")
     
     # Extracted parameters
     params = state.get("extracted_parameters") or []
     if params:
-        parts.append(f"## Extracted Parameters\n```json\n{json.dumps(params[:20], indent=2)}\n```")
+        parts.append(f"## Extracted Parameters\n```json\n{json.dumps(params[:20], indent=2, ensure_ascii=False)}\n```")
     
     # Assumptions
     assumptions = state.get("assumptions") or {}
     if assumptions and isinstance(assumptions, dict):
-        parts.append(f"## Assumptions\n```json\n{json.dumps(assumptions, indent=2)}\n```")
+        parts.append(f"## Assumptions\n```json\n{json.dumps(assumptions, indent=2, ensure_ascii=False)}\n```")
     
     # Validated materials (for Stage 1+)
     materials = state.get("validated_materials") or []
     if materials:
-        parts.append(f"## Validated Materials\n```json\n{json.dumps(materials, indent=2)}\n```")
+        parts.append(f"## Validated Materials\n```json\n{json.dumps(materials, indent=2, ensure_ascii=False)}\n```")
     
     # Revision feedback if any
     feedback = state.get("reviewer_feedback") or ""
@@ -608,14 +612,14 @@ def build_user_content_for_code_generator(state: Dict[str, Any]) -> str:
     design = state.get("design_description") or ""
     if design:
         if isinstance(design, dict):
-            parts.append(f"## Design Specification\n```json\n{json.dumps(design, indent=2)}\n```")
+            parts.append(f"## Design Specification\n```json\n{json.dumps(design, indent=2, ensure_ascii=False)}\n```")
         else:
             parts.append(f"## Design Specification\n\n{design}")
     
     # Validated materials
     materials = state.get("validated_materials") or []
     if materials:
-        parts.append(f"## Validated Materials (use these paths!)\n```json\n{json.dumps(materials, indent=2)}\n```")
+        parts.append(f"## Validated Materials (use these paths!)\n```json\n{json.dumps(materials, indent=2, ensure_ascii=False)}\n```")
     
     # Revision feedback if any
     feedback = state.get("reviewer_feedback") or ""
@@ -665,6 +669,7 @@ def get_images_for_analyzer(state: Dict[str, Any]) -> List[Path]:
     Returns paths to both paper figures and simulation output plots.
     """
     images = []
+    image_extensions = [".png", ".jpg", ".jpeg", ".gif", ".webp"]
     
     # Paper figures
     paper_figures = state.get("paper_figures") or []
@@ -673,8 +678,10 @@ def get_images_for_analyzer(state: Dict[str, Any]) -> List[Path]:
             if not isinstance(fig, dict):
                 continue
             path = fig.get("image_path")
-            if path and Path(path).exists():
-                images.append(Path(path))
+            if path:
+                path_obj = Path(path)
+                if path_obj.exists() and path_obj.suffix.lower() in image_extensions:
+                    images.append(path_obj)
     
     # Simulation output plots
     stage_outputs = state.get("stage_outputs") or {}
@@ -695,7 +702,7 @@ def get_images_for_analyzer(state: Dict[str, Any]) -> List[Path]:
             # Fallback: try to convert to Path
             path = Path(str(file_path))
         
-        if path.exists() and path.suffix.lower() in [".png", ".jpg", ".jpeg", ".gif", ".webp"]:
+        if path.exists() and path.suffix.lower() in image_extensions:
             images.append(path)
     
     return images

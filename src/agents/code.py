@@ -92,7 +92,7 @@ def code_reviewer_node(state: ReproState) -> dict:
         )
     except Exception as e:
         logger.error(f"Code reviewer LLM call failed: {e}")
-        agent_output = create_llm_error_auto_approve("code_reviewer", e)
+        agent_output = create_llm_error_auto_approve("code_reviewer", e, default_verdict="needs_revision")
     
     # Normalize verdict to allowed values
     raw_verdict = agent_output.get("verdict", "needs_revision")

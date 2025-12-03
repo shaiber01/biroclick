@@ -69,6 +69,17 @@ def validate_paper_input(paper_input: Dict[str, Any]) -> List[str]:
         if paper_title is None or not isinstance(paper_title, str):
             errors.append("paper_title must be a string")
     
+    # Validate paper_domain
+    if "paper_domain" in paper_input:
+        paper_domain = paper_input["paper_domain"]
+        if paper_domain is None or not isinstance(paper_domain, str):
+            errors.append("paper_domain must be a string")
+        elif paper_domain not in VALID_DOMAINS:
+            errors.append(
+                f"Invalid paper_domain '{paper_domain}'. "
+                f"Valid domains are: {', '.join(VALID_DOMAINS)}"
+            )
+    
     # Validate paper_text is not empty
     if "paper_text" in paper_input:
         paper_text = paper_input["paper_text"]
@@ -110,7 +121,7 @@ def validate_paper_input(paper_input: Dict[str, Any]) -> List[str]:
                     errors.append(f"Figure {i}: missing 'id' field")
                 elif not isinstance(fig["id"], str):
                     errors.append(f"Figure {i}: 'id' must be a string, got {type(fig['id']).__name__}")
-                elif len(fig["id"]) == 0:
+                elif len(fig["id"].strip()) == 0:
                     errors.append(f"Figure {i}: 'id' must be non-empty")
                 
                 # image_path is optional if source_url is present, but usually required for processing
@@ -123,7 +134,7 @@ def validate_paper_input(paper_input: Dict[str, Any]) -> List[str]:
                     if image_path is None:
                         errors.append(f"Figure {i} ({fig.get('id', 'unknown')}): 'image_path' cannot be None")
                     elif not isinstance(image_path, str):
-                        errors.append(f"Figure {i} ({fig.get('id', 'unknown')}): 'image_path' must be a string")
+                        errors.append(f"Figure {i} ({fig.get('id', 'unknown')}): 'image_path' must be a string, got {type(image_path).__name__}")
                     else:
                         # Check if image file exists (empty string will be treated as non-existent)
                         img_path = Path(image_path)
@@ -161,7 +172,7 @@ def validate_paper_input(paper_input: Dict[str, Any]) -> List[str]:
                     errors.append(f"Supplementary figure {i}: missing 'id' field")
                 elif not isinstance(fig["id"], str):
                     errors.append(f"Supplementary figure {i}: 'id' must be a string, got {type(fig['id']).__name__}")
-                elif len(fig["id"]) == 0:
+                elif len(fig["id"].strip()) == 0:
                     errors.append(f"Supplementary figure {i}: 'id' must be non-empty")
                 
                 if "image_path" not in fig:
@@ -172,7 +183,7 @@ def validate_paper_input(paper_input: Dict[str, Any]) -> List[str]:
                     if image_path is None:
                         errors.append(f"Supplementary figure {i} ({fig.get('id', 'unknown')}): 'image_path' cannot be None")
                     elif not isinstance(image_path, str):
-                        errors.append(f"Supplementary figure {i} ({fig.get('id', 'unknown')}): 'image_path' must be a string")
+                        errors.append(f"Supplementary figure {i} ({fig.get('id', 'unknown')}): 'image_path' must be a string, got {type(image_path).__name__}")
                     else:
                         # Check if image file exists (empty string will be treated as non-existent)
                         img_path = Path(image_path)

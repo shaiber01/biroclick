@@ -756,3 +756,1458 @@ class TestSupervisorNode:
         assert result.get("ask_user_trigger") is None
         # STRICT: Verify verdict set
         assert result.get("supervisor_verdict") == "ok_continue"
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # SUPERVISOR CALL COUNT TESTS
+    # ═══════════════════════════════════════════════════════════════════════
+
+    @patch("src.agents.supervision.supervisor.call_agent_with_metrics")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.build_agent_prompt")
+    @patch("src.agents.supervision.supervisor.archive_stage_outputs_to_progress")
+    @patch("src.agents.supervision.supervisor.update_progress_stage_status")
+    @patch("src.agents.supervision.supervisor._derive_stage_completion_outcome")
+    def test_supervisor_call_count_passed_to_state(self, mock_derive, mock_update, mock_archive, mock_prompt, mock_context, mock_call, validated_supervisor_response):
+        """Should correctly pass supervisor_call_count to LLM in state."""
+        mock_context.return_value = None
+        mock_prompt.return_value = "prompt"
+        mock_derive.return_value = ("completed_success", "OK")
+        mock_response = validated_supervisor_response.copy()
+        mock_response["verdict"] = "ok_continue"
+        mock_call.return_value = mock_response
+        
+        state = {
+            "current_stage_id": "stage1",
+            "supervisor_call_count": 5,
+            "plan": {"stages": []},
+            "progress": {"stages": []},
+        }
+        
+        supervisor_node(state)
+        
+        # STRICT: Verify LLM was called with state containing correct supervisor_call_count
+        mock_call.assert_called_once()
+        call_kwargs = mock_call.call_args[1]
+        assert call_kwargs["state"]["supervisor_call_count"] == 5
+
+    @patch("src.agents.supervision.supervisor.call_agent_with_metrics")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.build_agent_prompt")
+    @patch("src.agents.supervision.supervisor.archive_stage_outputs_to_progress")
+    @patch("src.agents.supervision.supervisor.update_progress_stage_status")
+    @patch("src.agents.supervision.supervisor._derive_stage_completion_outcome")
+    def test_supervisor_call_count_zero(self, mock_derive, mock_update, mock_archive, mock_prompt, mock_context, mock_call, validated_supervisor_response):
+        """Should handle supervisor_call_count of 0."""
+        mock_context.return_value = None
+        mock_prompt.return_value = "prompt"
+        mock_derive.return_value = ("completed_success", "OK")
+        mock_response = validated_supervisor_response.copy()
+        mock_response["verdict"] = "ok_continue"
+        mock_call.return_value = mock_response
+        
+        state = {
+            "current_stage_id": "stage1",
+            "supervisor_call_count": 0,
+            "plan": {"stages": []},
+            "progress": {"stages": []},
+        }
+        
+        result = supervisor_node(state)
+        
+        # STRICT: Verify function completes without error
+        assert result.get("supervisor_verdict") == "ok_continue"
+
+    @patch("src.agents.supervision.supervisor.call_agent_with_metrics")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.build_agent_prompt")
+    @patch("src.agents.supervision.supervisor.archive_stage_outputs_to_progress")
+    @patch("src.agents.supervision.supervisor.update_progress_stage_status")
+    @patch("src.agents.supervision.supervisor._derive_stage_completion_outcome")
+    def test_supervisor_call_count_missing(self, mock_derive, mock_update, mock_archive, mock_prompt, mock_context, mock_call, validated_supervisor_response):
+        """Should handle missing supervisor_call_count gracefully."""
+        mock_context.return_value = None
+        mock_prompt.return_value = "prompt"
+        mock_derive.return_value = ("completed_success", "OK")
+        mock_response = validated_supervisor_response.copy()
+        mock_response["verdict"] = "ok_continue"
+        mock_call.return_value = mock_response
+        
+        state = {
+            "current_stage_id": "stage1",
+            # supervisor_call_count is missing
+            "plan": {"stages": []},
+            "progress": {"stages": []},
+        }
+        
+        result = supervisor_node(state)
+        
+        # STRICT: Should complete without error
+        assert result.get("supervisor_verdict") == "ok_continue"
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # UNKNOWN TRIGGER HANDLING TESTS
+    # ═══════════════════════════════════════════════════════════════════════
+
+    @patch("src.agents.supervision.supervisor.handle_trigger")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.build_agent_prompt")
+    def test_handles_unknown_trigger(self, mock_prompt, mock_context, mock_handle_trigger):
+        """Should handle unknown trigger types gracefully via handle_trigger default behavior."""
+        mock_context.return_value = None
+        mock_prompt.return_value = "prompt"
+        
+        # handle_trigger defaults to ok_continue for unknown triggers
+        def mock_trigger_handler(*args, **kwargs):
+            kwargs["result"]["supervisor_verdict"] = "ok_continue"
+            kwargs["result"]["supervisor_feedback"] = "Handled unknown trigger: unknown_trigger_xyz"
+        
+        mock_handle_trigger.side_effect = mock_trigger_handler
+        
+        state = {
+            "current_stage_id": "stage1",
+            "ask_user_trigger": "unknown_trigger_xyz",
+            "user_responses": {"q1": "some response"},
+            "progress": {"stages": [], "user_interactions": []},
+        }
+        
+        result = supervisor_node(state)
+        
+        # STRICT: Verify trigger handler was called with unknown trigger
+        mock_handle_trigger.assert_called_once()
+        call_kwargs = mock_handle_trigger.call_args[1]
+        assert call_kwargs["trigger"] == "unknown_trigger_xyz"
+        # STRICT: Verify verdict is set (default behavior is ok_continue)
+        assert result.get("supervisor_verdict") == "ok_continue"
+        # STRICT: Verify trigger is cleared
+        assert result.get("ask_user_trigger") is None
+
+    @patch("src.agents.supervision.supervisor.handle_trigger")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.build_agent_prompt")
+    def test_handles_empty_string_trigger(self, mock_prompt, mock_context, mock_handle_trigger):
+        """Should handle empty string trigger (truthy check should fail)."""
+        mock_context.return_value = None
+        mock_prompt.return_value = "prompt"
+        
+        # Empty string is falsy, so should NOT call handle_trigger
+        state = {
+            "current_stage_id": "stage1",
+            "ask_user_trigger": "",  # Empty string is falsy
+            "user_responses": {},
+            "progress": {"stages": []},
+        }
+        
+        # Since ask_user_trigger is empty string (falsy), handle_trigger should NOT be called
+        # Normal supervision will be run instead
+        # But we need to mock call_agent_with_metrics since normal supervision calls it
+        with patch("src.agents.supervision.supervisor.call_agent_with_metrics") as mock_call, \
+             patch("src.agents.supervision.supervisor.archive_stage_outputs_to_progress"), \
+             patch("src.agents.supervision.supervisor.update_progress_stage_status"), \
+             patch("src.agents.supervision.supervisor._derive_stage_completion_outcome") as mock_derive:
+            mock_derive.return_value = ("completed_success", "OK")
+            mock_call.return_value = {"verdict": "ok_continue", "reasoning": "OK"}
+            
+            result = supervisor_node(state)
+            
+            # STRICT: handle_trigger should NOT be called for empty string
+            mock_handle_trigger.assert_not_called()
+            # STRICT: Normal supervision (LLM call) should happen instead
+            mock_call.assert_called_once()
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # BACKTRACK DECISION TESTS
+    # ═══════════════════════════════════════════════════════════════════════
+
+    @patch("src.agents.supervision.supervisor.handle_trigger")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.build_agent_prompt")
+    def test_backtrack_approval_with_stages_to_invalidate(self, mock_prompt, mock_context, mock_handle_trigger):
+        """Should properly set stages_to_invalidate in backtrack_decision."""
+        mock_context.return_value = None
+        mock_prompt.return_value = "prompt"
+        
+        def mock_trigger_handler(*args, **kwargs):
+            # Simulate backtrack_approval handler setting up backtrack
+            kwargs["result"]["supervisor_verdict"] = "backtrack_to_stage"
+            kwargs["result"]["backtrack_decision"] = {
+                "target_stage_id": "design",
+                "reason": "User approved backtrack",
+                "stages_to_invalidate": ["stage1", "stage2"]
+            }
+        
+        mock_handle_trigger.side_effect = mock_trigger_handler
+        
+        state = {
+            "current_stage_id": "stage1",
+            "ask_user_trigger": "backtrack_approval",
+            "user_responses": {"q1": "APPROVE"},
+            "backtrack_decision": {"target_stage_id": "design"},
+            "plan": {
+                "stages": [
+                    {"stage_id": "design", "dependencies": []},
+                    {"stage_id": "stage1", "dependencies": ["design"]},
+                    {"stage_id": "stage2", "dependencies": ["stage1"]},
+                ]
+            },
+            "progress": {"stages": [], "user_interactions": []},
+        }
+        
+        result = supervisor_node(state)
+        
+        # STRICT: Verify backtrack_decision is properly set
+        assert result.get("supervisor_verdict") == "backtrack_to_stage"
+        assert "backtrack_decision" in result
+        assert result["backtrack_decision"]["target_stage_id"] == "design"
+        assert "stages_to_invalidate" in result["backtrack_decision"]
+        # STRICT: Verify stages_to_invalidate is a list
+        assert isinstance(result["backtrack_decision"]["stages_to_invalidate"], list)
+
+    @patch("src.agents.supervision.supervisor.call_agent_with_metrics")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.build_agent_prompt")
+    def test_backtrack_verdict_from_llm(self, mock_prompt, mock_context, mock_call, validated_supervisor_response):
+        """Should properly handle backtrack_to_stage verdict from LLM."""
+        mock_context.return_value = None
+        mock_prompt.return_value = "prompt"
+        
+        mock_response = validated_supervisor_response.copy()
+        mock_response["verdict"] = "backtrack_to_stage"
+        mock_response["backtrack_target"] = "stage_0"
+        mock_response["reasoning"] = "Design flaw detected"
+        mock_call.return_value = mock_response
+        
+        state = {
+            "current_stage_id": "stage1",
+            "supervisor_call_count": 0,
+            "plan": {"stages": []},
+            "progress": {"stages": []},
+        }
+        
+        result = supervisor_node(state)
+        
+        # STRICT: Verify verdict
+        assert result["supervisor_verdict"] == "backtrack_to_stage"
+        # STRICT: Verify backtrack_decision structure
+        assert "backtrack_decision" in result
+        assert result["backtrack_decision"]["target_stage_id"] == "stage_0"
+        assert result["backtrack_decision"]["reason"] == "Design flaw detected"
+
+    @patch("src.agents.supervision.supervisor.call_agent_with_metrics")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.build_agent_prompt")
+    def test_backtrack_verdict_without_target(self, mock_prompt, mock_context, mock_call, validated_supervisor_response):
+        """Should handle backtrack_to_stage verdict without backtrack_target."""
+        mock_context.return_value = None
+        mock_prompt.return_value = "prompt"
+        
+        mock_response = validated_supervisor_response.copy()
+        mock_response["verdict"] = "backtrack_to_stage"
+        mock_response.pop("backtrack_target", None)  # No target
+        mock_response["reasoning"] = "Needs backtrack"
+        mock_call.return_value = mock_response
+        
+        state = {
+            "current_stage_id": "stage1",
+            "supervisor_call_count": 0,
+            "plan": {"stages": []},
+            "progress": {"stages": []},
+        }
+        
+        result = supervisor_node(state)
+        
+        # STRICT: Verify verdict is set
+        assert result["supervisor_verdict"] == "backtrack_to_stage"
+        # STRICT: backtrack_decision should NOT be set when target is missing
+        assert "backtrack_decision" not in result or result.get("backtrack_decision") is None
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # ARCHIVE RETRY TESTS
+    # ═══════════════════════════════════════════════════════════════════════
+
+    @patch("src.agents.supervision.supervisor.call_agent_with_metrics")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.build_agent_prompt")
+    @patch("src.agents.supervision.supervisor.archive_stage_outputs_to_progress")
+    @patch("src.agents.supervision.supervisor.update_progress_stage_status")
+    @patch("src.agents.supervision.supervisor._derive_stage_completion_outcome")
+    def test_archive_retry_partial_failure(self, mock_derive, mock_update, mock_archive, mock_prompt, mock_context, mock_call, validated_supervisor_response):
+        """Should handle partial archive retry failures (some succeed, some fail)."""
+        mock_context.return_value = None
+        mock_prompt.return_value = "prompt"
+        mock_derive.return_value = ("completed_success", "OK")
+        mock_response = validated_supervisor_response.copy()
+        mock_response["verdict"] = "ok_continue"
+        mock_call.return_value = mock_response
+        
+        # First call fails (retry), second succeeds (retry), third succeeds (current)
+        mock_archive.side_effect = [
+            Exception("Retry 1 failed"),  # stage0 retry fails
+            None,                          # stage1 retry succeeds
+            None,                          # current stage succeeds
+        ]
+        
+        state = {
+            "current_stage_id": "stage2",
+            "supervisor_call_count": 0,
+            "plan": {"stages": []},
+            "progress": {"stages": []},
+            "archive_errors": [
+                {"stage_id": "stage0", "error": "Previous error", "timestamp": "2024-01-01T00:00:00Z"},
+                {"stage_id": "stage1", "error": "Another error", "timestamp": "2024-01-01T00:00:00Z"},
+            ],
+        }
+        
+        result = supervisor_node(state)
+        
+        # STRICT: Verify archive was called 3 times (2 retries + 1 current)
+        assert mock_archive.call_count == 3
+        # STRICT: archive_errors should contain only the one that failed
+        assert len(result.get("archive_errors", [])) == 1
+        assert result["archive_errors"][0]["stage_id"] == "stage0"
+
+    @patch("src.agents.supervision.supervisor.call_agent_with_metrics")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.build_agent_prompt")
+    @patch("src.agents.supervision.supervisor.archive_stage_outputs_to_progress")
+    @patch("src.agents.supervision.supervisor.update_progress_stage_status")
+    @patch("src.agents.supervision.supervisor._derive_stage_completion_outcome")
+    def test_archive_errors_invalid_type(self, mock_derive, mock_update, mock_archive, mock_prompt, mock_context, mock_call, validated_supervisor_response):
+        """Should handle invalid archive_errors type gracefully."""
+        mock_context.return_value = None
+        mock_prompt.return_value = "prompt"
+        mock_derive.return_value = ("completed_success", "OK")
+        mock_response = validated_supervisor_response.copy()
+        mock_response["verdict"] = "ok_continue"
+        mock_call.return_value = mock_response
+        
+        state = {
+            "current_stage_id": "stage1",
+            "supervisor_call_count": 0,
+            "plan": {"stages": []},
+            "progress": {"stages": []},
+            "archive_errors": "not a list",  # Invalid type
+        }
+        
+        result = supervisor_node(state)
+        
+        # STRICT: Should handle gracefully and reset archive_errors to empty list
+        assert result.get("archive_errors") == []
+        # STRICT: Should still complete successfully
+        assert result.get("supervisor_verdict") == "ok_continue"
+
+    @patch("src.agents.supervision.supervisor.call_agent_with_metrics")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.build_agent_prompt")
+    @patch("src.agents.supervision.supervisor.archive_stage_outputs_to_progress")
+    @patch("src.agents.supervision.supervisor.update_progress_stage_status")
+    @patch("src.agents.supervision.supervisor._derive_stage_completion_outcome")
+    def test_archive_errors_with_invalid_entries(self, mock_derive, mock_update, mock_archive, mock_prompt, mock_context, mock_call, validated_supervisor_response):
+        """Should handle invalid entries in archive_errors list."""
+        mock_context.return_value = None
+        mock_prompt.return_value = "prompt"
+        mock_derive.return_value = ("completed_success", "OK")
+        mock_response = validated_supervisor_response.copy()
+        mock_response["verdict"] = "ok_continue"
+        mock_call.return_value = mock_response
+        
+        state = {
+            "current_stage_id": "stage1",
+            "supervisor_call_count": 0,
+            "plan": {"stages": []},
+            "progress": {"stages": []},
+            "archive_errors": [
+                "not a dict",  # Invalid entry
+                {"stage_id": "stage0", "error": "Valid error", "timestamp": "2024-01-01T00:00:00Z"},
+                None,  # Invalid entry
+                {"no_stage_id": True},  # Missing stage_id
+            ],
+        }
+        
+        result = supervisor_node(state)
+        
+        # STRICT: Should handle gracefully - invalid entries are preserved but not retried
+        # The function should complete without error
+        assert result.get("supervisor_verdict") == "ok_continue"
+
+    @patch("src.agents.supervision.supervisor.call_agent_with_metrics")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.build_agent_prompt")
+    @patch("src.agents.supervision.supervisor.archive_stage_outputs_to_progress")
+    @patch("src.agents.supervision.supervisor.update_progress_stage_status")
+    @patch("src.agents.supervision.supervisor._derive_stage_completion_outcome")
+    def test_archive_error_accumulation(self, mock_derive, mock_update, mock_archive, mock_prompt, mock_context, mock_call, validated_supervisor_response):
+        """Should accumulate archive errors when multiple failures occur."""
+        mock_context.return_value = None
+        mock_prompt.return_value = "prompt"
+        mock_derive.return_value = ("completed_success", "OK")
+        mock_response = validated_supervisor_response.copy()
+        mock_response["verdict"] = "ok_continue"
+        mock_call.return_value = mock_response
+        
+        # Both retry and current archiving fail
+        mock_archive.side_effect = [
+            Exception("Retry failed"),   # stage0 retry fails
+            Exception("Current failed"), # current stage fails
+        ]
+        
+        state = {
+            "current_stage_id": "stage1",
+            "supervisor_call_count": 0,
+            "plan": {"stages": []},
+            "progress": {"stages": []},
+            "archive_errors": [
+                {"stage_id": "stage0", "error": "Previous error", "timestamp": "2024-01-01T00:00:00Z"},
+            ],
+        }
+        
+        result = supervisor_node(state)
+        
+        # STRICT: archive_errors should contain both the retry failure and new failure
+        assert len(result.get("archive_errors", [])) == 2
+        stage_ids = [e.get("stage_id") for e in result["archive_errors"]]
+        assert "stage0" in stage_ids
+        assert "stage1" in stage_ids
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # USER INTERACTION LOGGING EDGE CASES
+    # ═══════════════════════════════════════════════════════════════════════
+
+    @patch("src.agents.supervision.supervisor.handle_trigger")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.build_agent_prompt")
+    def test_user_interaction_with_empty_pending_questions(self, mock_prompt, mock_context, mock_handle_trigger):
+        """Should handle user interaction logging when pending_user_questions is empty."""
+        mock_context.return_value = None
+        mock_prompt.return_value = "prompt"
+        
+        def mock_trigger_handler(*args, **kwargs):
+            kwargs["result"]["supervisor_verdict"] = "ok_continue"
+        
+        mock_handle_trigger.side_effect = mock_trigger_handler
+        
+        state = {
+            "current_stage_id": "stage1",
+            "ask_user_trigger": "material_checkpoint",
+            "user_responses": {"q1": "APPROVE"},
+            "pending_user_questions": [],  # Empty
+            "progress": {"stages": [], "user_interactions": []},
+        }
+        
+        result = supervisor_node(state)
+        
+        # STRICT: Should still log interaction with placeholder question text
+        assert len(result["progress"]["user_interactions"]) == 1
+        interaction = result["progress"]["user_interactions"][0]
+        assert interaction["question"] == "(question cleared)"
+
+    @patch("src.agents.supervision.supervisor.handle_trigger")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.build_agent_prompt")
+    def test_user_interaction_with_empty_user_responses(self, mock_prompt, mock_context, mock_handle_trigger):
+        """Should handle user interaction logging when user_responses is empty."""
+        mock_context.return_value = None
+        mock_prompt.return_value = "prompt"
+        
+        def mock_trigger_handler(*args, **kwargs):
+            kwargs["result"]["supervisor_verdict"] = "ok_continue"
+        
+        mock_handle_trigger.side_effect = mock_trigger_handler
+        
+        state = {
+            "current_stage_id": "stage1",
+            "ask_user_trigger": "material_checkpoint",
+            "user_responses": {},  # Empty
+            "pending_user_questions": ["Please approve"],
+            "progress": {"stages": [], "user_interactions": []},
+        }
+        
+        result = supervisor_node(state)
+        
+        # STRICT: Should still log interaction with empty user_response
+        assert len(result["progress"]["user_interactions"]) == 1
+        interaction = result["progress"]["user_interactions"][0]
+        assert interaction["user_response"] == ""
+
+    @patch("src.agents.supervision.supervisor.handle_trigger")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.build_agent_prompt")
+    def test_user_interaction_with_multiple_responses(self, mock_prompt, mock_context, mock_handle_trigger):
+        """Should use last user response when multiple responses provided."""
+        mock_context.return_value = None
+        mock_prompt.return_value = "prompt"
+        
+        def mock_trigger_handler(*args, **kwargs):
+            kwargs["result"]["supervisor_verdict"] = "ok_continue"
+        
+        mock_handle_trigger.side_effect = mock_trigger_handler
+        
+        state = {
+            "current_stage_id": "stage1",
+            "ask_user_trigger": "clarification",
+            "user_responses": {
+                "q1": "First response",
+                "q2": "Second response",
+                "q3": "Final response",
+            },
+            "pending_user_questions": ["Question"],
+            "progress": {"stages": [], "user_interactions": []},
+        }
+        
+        result = supervisor_node(state)
+        
+        # STRICT: Should use the last response value
+        assert len(result["progress"]["user_interactions"]) == 1
+        interaction = result["progress"]["user_interactions"][0]
+        assert interaction["user_response"] == "Final response"
+
+    @patch("src.agents.supervision.supervisor.handle_trigger")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.build_agent_prompt")
+    def test_user_interaction_increments_id_correctly(self, mock_prompt, mock_context, mock_handle_trigger):
+        """Should correctly increment user interaction IDs."""
+        mock_context.return_value = None
+        mock_prompt.return_value = "prompt"
+        
+        def mock_trigger_handler(*args, **kwargs):
+            kwargs["result"]["supervisor_verdict"] = "ok_continue"
+        
+        mock_handle_trigger.side_effect = mock_trigger_handler
+        
+        state = {
+            "current_stage_id": "stage1",
+            "ask_user_trigger": "material_checkpoint",
+            "user_responses": {"q1": "APPROVE"},
+            "pending_user_questions": ["Approve?"],
+            "progress": {
+                "stages": [],
+                "user_interactions": [
+                    {"id": "U1"},
+                    {"id": "U2"},
+                    {"id": "U3"},
+                    {"id": "U10"},
+                    {"id": "U99"},
+                ]
+            },
+        }
+        
+        result = supervisor_node(state)
+        
+        # STRICT: New interaction should have ID based on count, not parsing
+        assert len(result["progress"]["user_interactions"]) == 6
+        new_interaction = result["progress"]["user_interactions"][5]
+        assert new_interaction["id"] == "U6"  # Based on len() + 1
+
+    @patch("src.agents.supervision.supervisor.handle_trigger")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.build_agent_prompt")
+    def test_user_interaction_without_progress_key(self, mock_prompt, mock_context, mock_handle_trigger):
+        """Should handle missing progress key in state."""
+        mock_context.return_value = None
+        mock_prompt.return_value = "prompt"
+        
+        def mock_trigger_handler(*args, **kwargs):
+            kwargs["result"]["supervisor_verdict"] = "ok_continue"
+        
+        mock_handle_trigger.side_effect = mock_trigger_handler
+        
+        state = {
+            "current_stage_id": "stage1",
+            "ask_user_trigger": "material_checkpoint",
+            "user_responses": {"q1": "APPROVE"},
+            "pending_user_questions": ["Approve?"],
+            # No progress key
+        }
+        
+        result = supervisor_node(state)
+        
+        # STRICT: Should create progress with user_interactions
+        assert "progress" in result
+        assert "user_interactions" in result["progress"]
+        assert len(result["progress"]["user_interactions"]) == 1
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # MORE VERDICT TYPES TESTS
+    # ═══════════════════════════════════════════════════════════════════════
+
+    @patch("src.agents.supervision.supervisor.call_agent_with_metrics")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.build_agent_prompt")
+    def test_replan_needed_verdict(self, mock_prompt, mock_context, mock_call, validated_supervisor_response):
+        """Should handle replan_needed verdict from LLM."""
+        mock_context.return_value = None
+        mock_prompt.return_value = "prompt"
+        
+        mock_response = validated_supervisor_response.copy()
+        mock_response["verdict"] = "replan_needed"
+        mock_response["reasoning"] = "Plan needs revision due to new findings"
+        mock_call.return_value = mock_response
+        
+        state = {
+            "current_stage_id": "stage1",
+            "supervisor_call_count": 0,
+            "plan": {"stages": []},
+            "progress": {"stages": []},
+        }
+        
+        result = supervisor_node(state)
+        
+        # STRICT: Verify replan_needed verdict is passed through
+        assert result["supervisor_verdict"] == "replan_needed"
+        assert result["supervisor_feedback"] == "Plan needs revision due to new findings"
+
+    @patch("src.agents.supervision.supervisor.call_agent_with_metrics")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.build_agent_prompt")
+    def test_ask_user_verdict(self, mock_prompt, mock_context, mock_call, validated_supervisor_response):
+        """Should handle ask_user verdict from LLM."""
+        mock_context.return_value = None
+        mock_prompt.return_value = "prompt"
+        
+        mock_response = validated_supervisor_response.copy()
+        mock_response["verdict"] = "ask_user"
+        mock_response["reasoning"] = "Need user clarification"
+        mock_call.return_value = mock_response
+        
+        state = {
+            "current_stage_id": "stage1",
+            "supervisor_call_count": 0,
+            "plan": {"stages": []},
+            "progress": {"stages": []},
+        }
+        
+        result = supervisor_node(state)
+        
+        # STRICT: Verify ask_user verdict is passed through
+        assert result["supervisor_verdict"] == "ask_user"
+
+    @patch("src.agents.supervision.supervisor.call_agent_with_metrics")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.build_agent_prompt")
+    @patch("src.agents.supervision.supervisor.archive_stage_outputs_to_progress")
+    @patch("src.agents.supervision.supervisor.update_progress_stage_status")
+    @patch("src.agents.supervision.supervisor._derive_stage_completion_outcome")
+    def test_all_complete_verdict_with_should_stop(self, mock_derive, mock_update, mock_archive, mock_prompt, mock_context, mock_call, validated_supervisor_response):
+        """Should propagate should_stop when all_complete verdict."""
+        mock_context.return_value = None
+        mock_prompt.return_value = "prompt"
+        mock_derive.return_value = ("completed_success", "OK")
+        
+        mock_response = validated_supervisor_response.copy()
+        mock_response["verdict"] = "all_complete"
+        mock_response["should_stop"] = True
+        mock_response["reasoning"] = "All stages completed successfully"
+        mock_call.return_value = mock_response
+        
+        state = {
+            "current_stage_id": "stage1",
+            "supervisor_call_count": 0,
+            "plan": {"stages": []},
+            "progress": {"stages": []},
+        }
+        
+        result = supervisor_node(state)
+        
+        # STRICT: Verify verdict and should_stop
+        assert result["supervisor_verdict"] == "all_complete"
+        assert result["should_stop"] is True
+
+    @patch("src.agents.supervision.supervisor.call_agent_with_metrics")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.build_agent_prompt")
+    @patch("src.agents.supervision.supervisor.archive_stage_outputs_to_progress")
+    @patch("src.agents.supervision.supervisor.update_progress_stage_status")
+    @patch("src.agents.supervision.supervisor._derive_stage_completion_outcome")
+    def test_should_stop_false_is_not_propagated(self, mock_derive, mock_update, mock_archive, mock_prompt, mock_context, mock_call, validated_supervisor_response):
+        """Should propagate should_stop only when True."""
+        mock_context.return_value = None
+        mock_prompt.return_value = "prompt"
+        mock_derive.return_value = ("completed_success", "OK")
+        
+        mock_response = validated_supervisor_response.copy()
+        mock_response["verdict"] = "ok_continue"
+        mock_response["should_stop"] = False
+        mock_call.return_value = mock_response
+        
+        state = {
+            "current_stage_id": "stage1",
+            "supervisor_call_count": 0,
+            "plan": {"stages": []},
+            "progress": {"stages": []},
+        }
+        
+        result = supervisor_node(state)
+        
+        # STRICT: should_stop should be set to False when False
+        assert result["should_stop"] is False
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # USER CONTENT CONSTRUCTION TESTS
+    # ═══════════════════════════════════════════════════════════════════════
+
+    @patch("src.agents.supervision.supervisor.call_agent_with_metrics")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.build_agent_prompt")
+    @patch("src.agents.supervision.supervisor.archive_stage_outputs_to_progress")
+    @patch("src.agents.supervision.supervisor.update_progress_stage_status")
+    @patch("src.agents.supervision.supervisor._derive_stage_completion_outcome")
+    @patch("src.agents.supervision.supervisor.get_validation_hierarchy")
+    def test_user_content_includes_analysis_summary(self, mock_hierarchy, mock_derive, mock_update, mock_archive, mock_prompt, mock_context, mock_call, validated_supervisor_response):
+        """Should include analysis_summary in user content when present."""
+        mock_context.return_value = None
+        mock_prompt.return_value = "prompt"
+        mock_derive.return_value = ("completed_success", "OK")
+        mock_hierarchy.return_value = {"material_validation": "passed"}
+        
+        mock_response = validated_supervisor_response.copy()
+        mock_response["verdict"] = "ok_continue"
+        mock_call.return_value = mock_response
+        
+        state = {
+            "current_stage_id": "stage1",
+            "supervisor_call_count": 0,
+            "plan": {"stages": []},
+            "progress": {"stages": []},
+            "analysis_summary": {"status": "match", "score": 0.95},
+        }
+        
+        supervisor_node(state)
+        
+        # STRICT: Verify user_content was passed with analysis_summary
+        mock_call.assert_called_once()
+        call_kwargs = mock_call.call_args[1]
+        user_content = call_kwargs["user_content"]
+        assert "Analysis Summary" in user_content
+        assert "match" in user_content or "status" in user_content
+
+    @patch("src.agents.supervision.supervisor.call_agent_with_metrics")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.build_agent_prompt")
+    @patch("src.agents.supervision.supervisor.archive_stage_outputs_to_progress")
+    @patch("src.agents.supervision.supervisor.update_progress_stage_status")
+    @patch("src.agents.supervision.supervisor._derive_stage_completion_outcome")
+    @patch("src.agents.supervision.supervisor.get_validation_hierarchy")
+    def test_user_content_includes_progress_summary(self, mock_hierarchy, mock_derive, mock_update, mock_archive, mock_prompt, mock_context, mock_call, validated_supervisor_response):
+        """Should include progress summary in user content."""
+        mock_context.return_value = None
+        mock_prompt.return_value = "prompt"
+        mock_derive.return_value = ("completed_success", "OK")
+        mock_hierarchy.return_value = {}
+        
+        mock_response = validated_supervisor_response.copy()
+        mock_response["verdict"] = "ok_continue"
+        mock_call.return_value = mock_response
+        
+        state = {
+            "current_stage_id": "stage1",
+            "supervisor_call_count": 0,
+            "plan": {"stages": []},
+            "progress": {
+                "stages": [
+                    {"stage_id": "stage0", "status": "completed_success"},
+                    {"stage_id": "stage1", "status": "in_progress"},
+                    {"stage_id": "stage2", "status": "not_started"},
+                ]
+            },
+        }
+        
+        supervisor_node(state)
+        
+        # STRICT: Verify user_content includes progress summary
+        mock_call.assert_called_once()
+        call_kwargs = mock_call.call_args[1]
+        user_content = call_kwargs["user_content"]
+        assert "Progress" in user_content
+        assert "Completed" in user_content
+        assert "Pending" in user_content
+
+    @patch("src.agents.supervision.supervisor.call_agent_with_metrics")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.build_agent_prompt")
+    @patch("src.agents.supervision.supervisor.archive_stage_outputs_to_progress")
+    @patch("src.agents.supervision.supervisor.update_progress_stage_status")
+    @patch("src.agents.supervision.supervisor._derive_stage_completion_outcome")
+    @patch("src.agents.supervision.supervisor.get_validation_hierarchy")
+    def test_user_content_with_none_current_stage(self, mock_hierarchy, mock_derive, mock_update, mock_archive, mock_prompt, mock_context, mock_call, validated_supervisor_response):
+        """Should handle None current_stage_id in user content."""
+        mock_context.return_value = None
+        mock_prompt.return_value = "prompt"
+        mock_derive.return_value = ("completed_success", "OK")
+        mock_hierarchy.return_value = {}
+        
+        mock_response = validated_supervisor_response.copy()
+        mock_response["verdict"] = "ok_continue"
+        mock_call.return_value = mock_response
+        
+        state = {
+            "current_stage_id": None,
+            "supervisor_call_count": 0,
+            "plan": {"stages": []},
+            "progress": {"stages": []},
+        }
+        
+        supervisor_node(state)
+        
+        # STRICT: Verify user_content is constructed with None stage
+        mock_call.assert_called_once()
+        call_kwargs = mock_call.call_args[1]
+        user_content = call_kwargs["user_content"]
+        assert "Current Stage: None" in user_content
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # TRIGGER DISPATCH VERIFICATION TESTS
+    # ═══════════════════════════════════════════════════════════════════════
+
+    @patch("src.agents.supervision.supervisor.handle_trigger")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.build_agent_prompt")
+    def test_trigger_dispatch_passes_all_required_kwargs(self, mock_prompt, mock_context, mock_handle_trigger):
+        """Should pass all required kwargs to handle_trigger."""
+        mock_context.return_value = None
+        mock_prompt.return_value = "prompt"
+        
+        def mock_trigger_handler(*args, **kwargs):
+            kwargs["result"]["supervisor_verdict"] = "ok_continue"
+        
+        mock_handle_trigger.side_effect = mock_trigger_handler
+        
+        state = {
+            "current_stage_id": "stage1",
+            "ask_user_trigger": "code_review_limit",
+            "user_responses": {"q1": "PROVIDE_HINT: Use numpy instead"},
+            "plan": {"stages": [{"stage_id": "stage0"}, {"stage_id": "stage1"}]},
+            "progress": {"stages": [], "user_interactions": []},
+        }
+        
+        supervisor_node(state)
+        
+        # STRICT: Verify all required kwargs are passed
+        mock_handle_trigger.assert_called_once()
+        call_kwargs = mock_handle_trigger.call_args[1]
+        
+        assert "trigger" in call_kwargs
+        assert call_kwargs["trigger"] == "code_review_limit"
+        
+        assert "state" in call_kwargs
+        assert call_kwargs["state"]["current_stage_id"] == "stage1"
+        
+        assert "result" in call_kwargs
+        assert isinstance(call_kwargs["result"], dict)
+        
+        assert "user_responses" in call_kwargs
+        assert call_kwargs["user_responses"] == {"q1": "PROVIDE_HINT: Use numpy instead"}
+        
+        assert "current_stage_id" in call_kwargs
+        assert call_kwargs["current_stage_id"] == "stage1"
+        
+        assert "get_dependent_stages_fn" in call_kwargs
+        assert callable(call_kwargs["get_dependent_stages_fn"])
+
+    @patch("src.agents.supervision.supervisor.handle_trigger")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.build_agent_prompt")
+    def test_all_trigger_types_are_dispatched(self, mock_prompt, mock_context, mock_handle_trigger):
+        """Verify multiple trigger types are all dispatched to handle_trigger."""
+        mock_context.return_value = None
+        mock_prompt.return_value = "prompt"
+        
+        triggers = [
+            "material_checkpoint",
+            "code_review_limit",
+            "design_review_limit",
+            "execution_failure_limit",
+            "physics_failure_limit",
+            "context_overflow",
+            "replan_limit",
+            "backtrack_approval",
+            "deadlock_detected",
+            "llm_error",
+            "clarification",
+        ]
+        
+        for trigger in triggers:
+            mock_handle_trigger.reset_mock()
+            
+            def mock_trigger_handler(*args, **kwargs):
+                kwargs["result"]["supervisor_verdict"] = "ok_continue"
+            
+            mock_handle_trigger.side_effect = mock_trigger_handler
+            
+            state = {
+                "current_stage_id": "stage1",
+                "ask_user_trigger": trigger,
+                "user_responses": {"q1": "APPROVE"},
+                "plan": {"stages": []},
+                "progress": {"stages": [], "user_interactions": []},
+            }
+            
+            result = supervisor_node(state)
+            
+            # STRICT: Each trigger should be dispatched
+            mock_handle_trigger.assert_called_once()
+            call_kwargs = mock_handle_trigger.call_args[1]
+            assert call_kwargs["trigger"] == trigger, f"Trigger {trigger} was not dispatched correctly"
+            # STRICT: Trigger should be cleared
+            assert result.get("ask_user_trigger") is None, f"Trigger {trigger} was not cleared"
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # CONTEXT MERGE TESTS
+    # ═══════════════════════════════════════════════════════════════════════
+
+    @patch("src.agents.supervision.supervisor.call_agent_with_metrics")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.build_agent_prompt")
+    @patch("src.agents.supervision.supervisor.archive_stage_outputs_to_progress")
+    @patch("src.agents.supervision.supervisor.update_progress_stage_status")
+    @patch("src.agents.supervision.supervisor._derive_stage_completion_outcome")
+    def test_context_update_preserves_original_keys(self, mock_derive, mock_update, mock_archive, mock_prompt, mock_context, mock_call, validated_supervisor_response):
+        """Should preserve original state keys when merging context update."""
+        mock_context.return_value = {"new_key": "new_value"}
+        mock_prompt.return_value = "prompt"
+        mock_derive.return_value = ("completed_success", "OK")
+        mock_response = validated_supervisor_response.copy()
+        mock_response["verdict"] = "ok_continue"
+        mock_call.return_value = mock_response
+        
+        state = {
+            "current_stage_id": "stage1",
+            "supervisor_call_count": 5,
+            "original_key": "original_value",
+            "plan": {"stages": []},
+            "progress": {"stages": []},
+        }
+        
+        supervisor_node(state)
+        
+        # STRICT: Verify prompt building used merged state
+        mock_prompt.assert_called_once()
+        args, _ = mock_prompt.call_args
+        passed_state = args[1]
+        assert passed_state.get("original_key") == "original_value"
+        assert passed_state.get("new_key") == "new_value"
+        assert passed_state.get("supervisor_call_count") == 5
+
+    @patch("src.agents.supervision.supervisor.call_agent_with_metrics")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.build_agent_prompt")
+    @patch("src.agents.supervision.supervisor.archive_stage_outputs_to_progress")
+    @patch("src.agents.supervision.supervisor.update_progress_stage_status")
+    @patch("src.agents.supervision.supervisor._derive_stage_completion_outcome")
+    def test_context_update_overwrites_conflicting_keys(self, mock_derive, mock_update, mock_archive, mock_prompt, mock_context, mock_call, validated_supervisor_response):
+        """Should overwrite conflicting keys with context update values."""
+        mock_context.return_value = {"current_stage_id": "updated_stage"}
+        mock_prompt.return_value = "prompt"
+        mock_derive.return_value = ("completed_success", "OK")
+        mock_response = validated_supervisor_response.copy()
+        mock_response["verdict"] = "ok_continue"
+        mock_call.return_value = mock_response
+        
+        state = {
+            "current_stage_id": "original_stage",
+            "supervisor_call_count": 0,
+            "plan": {"stages": []},
+            "progress": {"stages": []},
+        }
+        
+        supervisor_node(state)
+        
+        # STRICT: Verify context update overwrote the key
+        mock_prompt.assert_called_once()
+        args, _ = mock_prompt.call_args
+        passed_state = args[1]
+        assert passed_state.get("current_stage_id") == "updated_stage"
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # ERROR HANDLING EDGE CASES
+    # ═══════════════════════════════════════════════════════════════════════
+
+    @patch("src.agents.supervision.supervisor.call_agent_with_metrics")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.build_agent_prompt")
+    @patch("src.agents.supervision.supervisor.archive_stage_outputs_to_progress")
+    @patch("src.agents.supervision.supervisor.update_progress_stage_status")
+    @patch("src.agents.supervision.supervisor._derive_stage_completion_outcome")
+    def test_llm_returns_none(self, mock_derive, mock_update, mock_archive, mock_prompt, mock_context, mock_call):
+        """Should handle LLM returning None gracefully by falling back to ok_continue."""
+        mock_context.return_value = None
+        mock_prompt.return_value = "prompt"
+        mock_derive.return_value = ("completed_success", "OK")
+        mock_call.return_value = None  # LLM returns None
+        
+        state = {
+            "current_stage_id": "stage1",
+            "supervisor_call_count": 0,
+            "plan": {"stages": []},
+            "progress": {"stages": []},
+        }
+        
+        # The exception from None.get() is caught by the try-except in _run_normal_supervision
+        # and should fall back to ok_continue
+        result = supervisor_node(state)
+        
+        # STRICT: Should fall back to ok_continue on error
+        assert result["supervisor_verdict"] == "ok_continue"
+        # STRICT: Should include error info in feedback
+        assert "LLM unavailable" in result.get("supervisor_feedback", "")
+
+    @patch("src.agents.supervision.supervisor.call_agent_with_metrics")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.build_agent_prompt")
+    @patch("src.agents.supervision.supervisor.archive_stage_outputs_to_progress")
+    @patch("src.agents.supervision.supervisor.update_progress_stage_status")
+    @patch("src.agents.supervision.supervisor._derive_stage_completion_outcome")
+    def test_build_agent_prompt_raises_exception(self, mock_derive, mock_update, mock_archive, mock_prompt, mock_context, mock_call, validated_supervisor_response):
+        """Should handle build_agent_prompt exception gracefully."""
+        mock_context.return_value = None
+        mock_prompt.side_effect = Exception("Prompt building failed")
+        mock_derive.return_value = ("completed_success", "OK")
+        mock_call.return_value = validated_supervisor_response.copy()
+        
+        state = {
+            "current_stage_id": "stage1",
+            "supervisor_call_count": 0,
+            "plan": {"stages": []},
+            "progress": {"stages": []},
+        }
+        
+        # This exception is not caught in the component
+        with pytest.raises(Exception) as exc_info:
+            supervisor_node(state)
+        
+        assert "Prompt building failed" in str(exc_info.value)
+
+    @patch("src.agents.supervision.supervisor.call_agent_with_metrics")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.build_agent_prompt")
+    @patch("src.agents.supervision.supervisor.archive_stage_outputs_to_progress")
+    @patch("src.agents.supervision.supervisor.update_progress_stage_status")
+    @patch("src.agents.supervision.supervisor._derive_stage_completion_outcome")
+    def test_derive_stage_completion_raises_exception(self, mock_derive, mock_update, mock_archive, mock_prompt, mock_context, mock_call, validated_supervisor_response):
+        """Should handle _derive_stage_completion_outcome exception."""
+        mock_context.return_value = None
+        mock_prompt.return_value = "prompt"
+        mock_derive.side_effect = Exception("Derivation failed")
+        mock_response = validated_supervisor_response.copy()
+        mock_response["verdict"] = "ok_continue"
+        mock_call.return_value = mock_response
+        
+        state = {
+            "current_stage_id": "stage1",
+            "supervisor_call_count": 0,
+            "plan": {"stages": []},
+            "progress": {"stages": []},
+        }
+        
+        # This exception is not caught in the component
+        with pytest.raises(Exception) as exc_info:
+            supervisor_node(state)
+        
+        assert "Derivation failed" in str(exc_info.value)
+
+    @patch("src.agents.supervision.supervisor.call_agent_with_metrics")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.build_agent_prompt")
+    @patch("src.agents.supervision.supervisor.archive_stage_outputs_to_progress")
+    @patch("src.agents.supervision.supervisor.update_progress_stage_status")
+    @patch("src.agents.supervision.supervisor._derive_stage_completion_outcome")
+    def test_update_progress_stage_status_exception_handled(self, mock_derive, mock_update, mock_archive, mock_prompt, mock_context, mock_call, validated_supervisor_response):
+        """Should handle update_progress_stage_status exception - not caught in supervisor."""
+        mock_context.return_value = None
+        mock_prompt.return_value = "prompt"
+        mock_derive.return_value = ("completed_success", "OK")
+        mock_update.side_effect = Exception("Update failed")
+        mock_response = validated_supervisor_response.copy()
+        mock_response["verdict"] = "ok_continue"
+        mock_call.return_value = mock_response
+        
+        state = {
+            "current_stage_id": "stage1",
+            "supervisor_call_count": 0,
+            "plan": {"stages": []},
+            "progress": {"stages": []},
+        }
+        
+        # This exception is not caught in the component - it will propagate
+        with pytest.raises(Exception) as exc_info:
+            supervisor_node(state)
+        
+        assert "Update failed" in str(exc_info.value)
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # ADDITIONAL EDGE CASES
+    # ═══════════════════════════════════════════════════════════════════════
+
+    @patch("src.agents.supervision.supervisor.handle_trigger")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.build_agent_prompt")
+    def test_user_interaction_with_progress_none(self, mock_prompt, mock_context, mock_handle_trigger):
+        """Should handle progress being None in state."""
+        mock_context.return_value = None
+        mock_prompt.return_value = "prompt"
+        
+        def mock_trigger_handler(*args, **kwargs):
+            kwargs["result"]["supervisor_verdict"] = "ok_continue"
+        
+        mock_handle_trigger.side_effect = mock_trigger_handler
+        
+        state = {
+            "current_stage_id": "stage1",
+            "ask_user_trigger": "material_checkpoint",
+            "user_responses": {"q1": "APPROVE"},
+            "pending_user_questions": ["Approve?"],
+            "progress": None,  # Explicitly None
+        }
+        
+        # This might raise AttributeError if not handled
+        # Progress being None causes progress.get() to fail
+        try:
+            result = supervisor_node(state)
+            # If it succeeds, verify progress was created
+            assert "progress" in result
+        except AttributeError:
+            # This reveals a bug - progress=None is not handled
+            pytest.fail("Component should handle progress=None gracefully")
+
+    @patch("src.agents.supervision.supervisor.handle_trigger")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.build_agent_prompt")
+    def test_user_interaction_with_pending_questions_none(self, mock_prompt, mock_context, mock_handle_trigger):
+        """Should handle pending_user_questions being None."""
+        mock_context.return_value = None
+        mock_prompt.return_value = "prompt"
+        
+        def mock_trigger_handler(*args, **kwargs):
+            kwargs["result"]["supervisor_verdict"] = "ok_continue"
+        
+        mock_handle_trigger.side_effect = mock_trigger_handler
+        
+        state = {
+            "current_stage_id": "stage1",
+            "ask_user_trigger": "material_checkpoint",
+            "user_responses": {"q1": "APPROVE"},
+            "pending_user_questions": None,  # Explicitly None
+            "progress": {"stages": [], "user_interactions": []},
+        }
+        
+        result = supervisor_node(state)
+        
+        # STRICT: Should handle None gracefully
+        assert result.get("supervisor_verdict") == "ok_continue"
+        # STRICT: Question should be placeholder
+        if "progress" in result and "user_interactions" in result["progress"]:
+            assert len(result["progress"]["user_interactions"]) == 1
+            assert result["progress"]["user_interactions"][0]["question"] == "(question cleared)"
+
+    @patch("src.agents.supervision.supervisor.call_agent_with_metrics")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.build_agent_prompt")
+    @patch("src.agents.supervision.supervisor.archive_stage_outputs_to_progress")
+    @patch("src.agents.supervision.supervisor.update_progress_stage_status")
+    @patch("src.agents.supervision.supervisor._derive_stage_completion_outcome")
+    def test_does_not_mutate_nested_state_objects(self, mock_derive, mock_update, mock_archive, mock_prompt, mock_context, mock_call, validated_supervisor_response):
+        """Should not mutate nested objects in input state."""
+        mock_context.return_value = None
+        mock_prompt.return_value = "prompt"
+        mock_derive.return_value = ("completed_success", "OK")
+        mock_call.return_value = validated_supervisor_response.copy()
+        
+        original_progress = {"stages": [{"id": "s1"}], "user_interactions": []}
+        original_plan = {"stages": [{"stage_id": "stage0"}]}
+        
+        state = {
+            "current_stage_id": "stage1",
+            "supervisor_call_count": 0,
+            "plan": original_plan,
+            "progress": original_progress,
+        }
+        
+        supervisor_node(state)
+        
+        # STRICT: Verify nested objects were not mutated
+        assert original_progress == {"stages": [{"id": "s1"}], "user_interactions": []}
+        assert original_plan == {"stages": [{"stage_id": "stage0"}]}
+
+    @patch("src.agents.supervision.supervisor.call_agent_with_metrics")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.build_agent_prompt")
+    @patch("src.agents.supervision.supervisor.archive_stage_outputs_to_progress")
+    @patch("src.agents.supervision.supervisor.update_progress_stage_status")
+    @patch("src.agents.supervision.supervisor._derive_stage_completion_outcome")
+    def test_large_supervisor_call_count(self, mock_derive, mock_update, mock_archive, mock_prompt, mock_context, mock_call, validated_supervisor_response):
+        """Should handle large supervisor_call_count values."""
+        mock_context.return_value = None
+        mock_prompt.return_value = "prompt"
+        mock_derive.return_value = ("completed_success", "OK")
+        mock_response = validated_supervisor_response.copy()
+        mock_response["verdict"] = "ok_continue"
+        mock_call.return_value = mock_response
+        
+        state = {
+            "current_stage_id": "stage1",
+            "supervisor_call_count": 999999,
+            "plan": {"stages": []},
+            "progress": {"stages": []},
+        }
+        
+        result = supervisor_node(state)
+        
+        # STRICT: Should handle large count without issues
+        assert result.get("supervisor_verdict") == "ok_continue"
+
+    @patch("src.agents.supervision.supervisor.call_agent_with_metrics")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.build_agent_prompt")
+    @patch("src.agents.supervision.supervisor.archive_stage_outputs_to_progress")
+    @patch("src.agents.supervision.supervisor.update_progress_stage_status")
+    @patch("src.agents.supervision.supervisor._derive_stage_completion_outcome")
+    def test_handles_analysis_summary_with_datetime(self, mock_derive, mock_update, mock_archive, mock_prompt, mock_context, mock_call, validated_supervisor_response):
+        """Should handle analysis_summary containing datetime objects (json serialization)."""
+        mock_context.return_value = None
+        mock_prompt.return_value = "prompt"
+        mock_derive.return_value = ("completed_success", "OK")
+        mock_response = validated_supervisor_response.copy()
+        mock_response["verdict"] = "ok_continue"
+        mock_call.return_value = mock_response
+        
+        state = {
+            "current_stage_id": "stage1",
+            "supervisor_call_count": 0,
+            "plan": {"stages": []},
+            "progress": {"stages": []},
+            "analysis_summary": {
+                "timestamp": datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
+                "status": "match"
+            },
+        }
+        
+        # json.dumps in user_content construction should handle datetime via default=str
+        result = supervisor_node(state)
+        
+        # STRICT: Should complete without json serialization error
+        assert result.get("supervisor_verdict") == "ok_continue"
+
+    @patch("src.agents.supervision.supervisor.call_agent_with_metrics")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.build_agent_prompt")
+    @patch("src.agents.supervision.supervisor.archive_stage_outputs_to_progress")
+    @patch("src.agents.supervision.supervisor.update_progress_stage_status")
+    @patch("src.agents.supervision.supervisor._derive_stage_completion_outcome")
+    def test_special_characters_in_stage_id(self, mock_derive, mock_update, mock_archive, mock_prompt, mock_context, mock_call, validated_supervisor_response):
+        """Should handle special characters in stage_id."""
+        mock_context.return_value = None
+        mock_prompt.return_value = "prompt"
+        mock_derive.return_value = ("completed_success", "OK")
+        mock_response = validated_supervisor_response.copy()
+        mock_response["verdict"] = "ok_continue"
+        mock_call.return_value = mock_response
+        
+        state = {
+            "current_stage_id": "stage-1_αβγ",  # Hyphens, underscores, unicode
+            "supervisor_call_count": 0,
+            "plan": {"stages": []},
+            "progress": {"stages": []},
+        }
+        
+        result = supervisor_node(state)
+        
+        # STRICT: Should handle special characters
+        assert result.get("supervisor_verdict") == "ok_continue"
+        # STRICT: Archiving should be called with correct stage_id
+        mock_archive.assert_called_once()
+        archive_args = mock_archive.call_args[0]
+        assert archive_args[1] == "stage-1_αβγ"
+
+    @patch("src.agents.supervision.supervisor.call_agent_with_metrics")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.build_agent_prompt")
+    @patch("src.agents.supervision.supervisor.archive_stage_outputs_to_progress")
+    @patch("src.agents.supervision.supervisor.update_progress_stage_status")
+    @patch("src.agents.supervision.supervisor._derive_stage_completion_outcome")
+    def test_verdict_with_extra_whitespace(self, mock_derive, mock_update, mock_archive, mock_prompt, mock_context, mock_call, validated_supervisor_response):
+        """Should handle verdict with extra whitespace (not trimmed by component)."""
+        mock_context.return_value = None
+        mock_prompt.return_value = "prompt"
+        mock_derive.return_value = ("completed_success", "OK")
+        mock_response = validated_supervisor_response.copy()
+        mock_response["verdict"] = "  ok_continue  "  # Whitespace
+        mock_call.return_value = mock_response
+        
+        state = {
+            "current_stage_id": "stage1",
+            "supervisor_call_count": 0,
+            "plan": {"stages": []},
+            "progress": {"stages": []},
+        }
+        
+        result = supervisor_node(state)
+        
+        # STRICT: Component does NOT trim whitespace - it passes through as-is
+        # This might be a bug if downstream expects exact strings
+        assert result.get("supervisor_verdict") == "  ok_continue  "
+
+    @patch("src.agents.supervision.supervisor.call_agent_with_metrics")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.build_agent_prompt")
+    @patch("src.agents.supervision.supervisor.archive_stage_outputs_to_progress")
+    @patch("src.agents.supervision.supervisor.update_progress_stage_status")
+    @patch("src.agents.supervision.supervisor._derive_stage_completion_outcome")
+    def test_reasoning_with_newlines_and_special_chars(self, mock_derive, mock_update, mock_archive, mock_prompt, mock_context, mock_call, validated_supervisor_response):
+        """Should preserve newlines and special characters in reasoning/feedback."""
+        mock_context.return_value = None
+        mock_prompt.return_value = "prompt"
+        mock_derive.return_value = ("completed_success", "OK")
+        mock_response = validated_supervisor_response.copy()
+        mock_response["verdict"] = "ok_continue"
+        mock_response["reasoning"] = "Line 1\nLine 2\n\tIndented\n\"Quoted\""
+        mock_call.return_value = mock_response
+        
+        state = {
+            "current_stage_id": "stage1",
+            "supervisor_call_count": 0,
+            "plan": {"stages": []},
+            "progress": {"stages": []},
+        }
+        
+        result = supervisor_node(state)
+        
+        # STRICT: Special characters should be preserved
+        assert result.get("supervisor_feedback") == "Line 1\nLine 2\n\tIndented\n\"Quoted\""
+
+    @patch("src.agents.supervision.supervisor.call_agent_with_metrics")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.build_agent_prompt")
+    @patch("src.agents.supervision.supervisor.archive_stage_outputs_to_progress")
+    @patch("src.agents.supervision.supervisor.update_progress_stage_status")
+    @patch("src.agents.supervision.supervisor._derive_stage_completion_outcome")
+    @patch("src.agents.supervision.supervisor.get_validation_hierarchy")
+    def test_validation_hierarchy_is_called(self, mock_hierarchy, mock_derive, mock_update, mock_archive, mock_prompt, mock_context, mock_call, validated_supervisor_response):
+        """Should call get_validation_hierarchy to build user content."""
+        mock_context.return_value = None
+        mock_prompt.return_value = "prompt"
+        mock_derive.return_value = ("completed_success", "OK")
+        mock_hierarchy.return_value = {"level1": "done", "level2": "pending"}
+        mock_response = validated_supervisor_response.copy()
+        mock_response["verdict"] = "ok_continue"
+        mock_call.return_value = mock_response
+        
+        state = {
+            "current_stage_id": "stage1",
+            "supervisor_call_count": 0,
+            "plan": {"stages": []},
+            "progress": {"stages": []},
+        }
+        
+        supervisor_node(state)
+        
+        # STRICT: get_validation_hierarchy should be called with state
+        mock_hierarchy.assert_called_once_with(state)
+        
+        # STRICT: User content should include the hierarchy
+        call_kwargs = mock_call.call_args[1]
+        user_content = call_kwargs["user_content"]
+        assert "Validation Hierarchy" in user_content
+        assert "level1" in user_content or "done" in user_content
+
+    @patch("src.agents.supervision.supervisor.handle_trigger")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.build_agent_prompt")
+    def test_trigger_handler_can_set_multiple_result_fields(self, mock_prompt, mock_context, mock_handle_trigger):
+        """Should preserve multiple fields set by trigger handler."""
+        mock_context.return_value = None
+        mock_prompt.return_value = "prompt"
+        
+        def mock_trigger_handler(*args, **kwargs):
+            # Handler sets many fields
+            kwargs["result"]["supervisor_verdict"] = "replan_needed"
+            kwargs["result"]["supervisor_feedback"] = "Trigger feedback"
+            kwargs["result"]["planner_feedback"] = "Planner guidance"
+            kwargs["result"]["replan_count"] = 0
+            kwargs["result"]["custom_field"] = "custom_value"
+        
+        mock_handle_trigger.side_effect = mock_trigger_handler
+        
+        state = {
+            "current_stage_id": "stage1",
+            "ask_user_trigger": "replan_limit",
+            "user_responses": {"q1": "GUIDANCE: some hint"},
+            "progress": {"stages": [], "user_interactions": []},
+        }
+        
+        result = supervisor_node(state)
+        
+        # STRICT: All fields set by handler should be in result
+        assert result.get("supervisor_verdict") == "replan_needed"
+        assert result.get("supervisor_feedback") == "Trigger feedback"
+        assert result.get("planner_feedback") == "Planner guidance"
+        assert result.get("replan_count") == 0
+        assert result.get("custom_field") == "custom_value"
+
+    @patch("src.agents.supervision.supervisor.call_agent_with_metrics")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.build_agent_prompt")
+    @patch("src.agents.supervision.supervisor.archive_stage_outputs_to_progress")
+    @patch("src.agents.supervision.supervisor.update_progress_stage_status")
+    @patch("src.agents.supervision.supervisor._derive_stage_completion_outcome")
+    def test_empty_progress_stages(self, mock_derive, mock_update, mock_archive, mock_prompt, mock_context, mock_call, validated_supervisor_response):
+        """Should handle empty progress stages list in user content."""
+        mock_context.return_value = None
+        mock_prompt.return_value = "prompt"
+        mock_derive.return_value = ("completed_success", "OK")
+        mock_response = validated_supervisor_response.copy()
+        mock_response["verdict"] = "ok_continue"
+        mock_call.return_value = mock_response
+        
+        state = {
+            "current_stage_id": "stage1",
+            "supervisor_call_count": 0,
+            "plan": {"stages": []},
+            "progress": {"stages": []},
+        }
+        
+        supervisor_node(state)
+        
+        # STRICT: User content should show 0 completed, 0 pending
+        call_kwargs = mock_call.call_args[1]
+        user_content = call_kwargs["user_content"]
+        assert "Completed: 0" in user_content
+        assert "Pending: 0" in user_content
+        assert "Total: 0" in user_content
+
+    @patch("src.agents.supervision.supervisor.call_agent_with_metrics")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.build_agent_prompt")
+    @patch("src.agents.supervision.supervisor.archive_stage_outputs_to_progress")
+    @patch("src.agents.supervision.supervisor.update_progress_stage_status")
+    @patch("src.agents.supervision.supervisor._derive_stage_completion_outcome")
+    def test_progress_with_various_statuses(self, mock_derive, mock_update, mock_archive, mock_prompt, mock_context, mock_call, validated_supervisor_response):
+        """Should correctly count stages by status category."""
+        mock_context.return_value = None
+        mock_prompt.return_value = "prompt"
+        mock_derive.return_value = ("completed_success", "OK")
+        mock_response = validated_supervisor_response.copy()
+        mock_response["verdict"] = "ok_continue"
+        mock_call.return_value = mock_response
+        
+        state = {
+            "current_stage_id": "stage1",
+            "supervisor_call_count": 0,
+            "plan": {"stages": []},
+            "progress": {
+                "stages": [
+                    {"stage_id": "s0", "status": "completed_success"},
+                    {"stage_id": "s1", "status": "completed_partial"},
+                    {"stage_id": "s2", "status": "completed_failed"},
+                    {"stage_id": "s3", "status": "in_progress"},
+                    {"stage_id": "s4", "status": "not_started"},
+                    {"stage_id": "s5", "status": "blocked"},
+                ]
+            },
+        }
+        
+        supervisor_node(state)
+        
+        # STRICT: Completed = 3 (completed_*), Pending = 2 (in_progress, not_started), Total = 6
+        call_kwargs = mock_call.call_args[1]
+        user_content = call_kwargs["user_content"]
+        assert "Completed: 3" in user_content
+        assert "Pending: 2" in user_content
+        assert "Total: 6" in user_content

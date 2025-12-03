@@ -803,12 +803,12 @@ class TestMaterialCheckpointFlow:
 class TestVerdictNormalization:
     """Test that verdict normalization handles edge cases correctly."""
 
-    def test_missing_verdict_defaults_to_approve(self, initial_state):
+    def test_missing_verdict_defaults_to_needs_revision(self, initial_state):
         """
-        Missing verdict from plan_reviewer should default to 'approve' (fail-safe behavior).
+        Missing verdict from plan_reviewer should default to 'needs_revision' (fail-closed behavior).
         
-        The plan_reviewer_node normalizes missing verdicts to 'approve' to prevent
-        workflow stalls. This is intentional fail-safe behavior.
+        The plan_reviewer_node normalizes missing verdicts to 'needs_revision' to ensure
+        safety - better to re-review than to pass through a potentially bad plan.
         """
         visited_nodes = []
 
@@ -816,7 +816,7 @@ class TestVerdictNormalization:
             agent = kwargs.get("agent_name", "unknown")
 
             if agent == "plan_reviewer":
-                # Return dict without verdict key - should default to approve
+                # Return dict without verdict key - should default to needs_revision
                 return {"summary": "Looks okay I guess"}
 
             responses = {
@@ -825,39 +825,47 @@ class TestVerdictNormalization:
             }
             return responses.get(agent, {})
 
+        mock_ask_user = create_mock_ask_user_node()
+
         with MultiPatch(LLM_PATCH_LOCATIONS, side_effect=mock_llm), MultiPatch(
             CHECKPOINT_PATCH_LOCATIONS, return_value="/tmp/cp.json"
+        ), patch("src.agents.user_interaction.ask_user_node", side_effect=mock_ask_user), patch(
+            "src.graph.ask_user_node", side_effect=mock_ask_user
         ):
             print("\n" + "=" * 60)
-            print("TEST: Missing Verdict Defaults to Approve")
+            print("TEST: Missing Verdict Defaults to needs_revision")
             print("=" * 60)
 
             graph = create_repro_graph()
             config = {"configurable": {"thread_id": unique_thread_id("missing_verdict")}}
 
+            interrupt_detected = False
             for event in graph.stream(initial_state, config):
                 for node_name, _ in event.items():
                     visited_nodes.append(node_name)
                     print(f"  → {node_name}")
                     
-                    # Stop at design (after plan approved)
-                    if node_name == "design":
+                    if node_name == "__interrupt__":
+                        interrupt_detected = True
                         break
                 else:
                     continue
                 break
 
-            # Verify workflow proceeded (missing verdict defaulted to approve)
+            # Missing verdict defaults to needs_revision, triggering revision loop
             assert "plan_review" in visited_nodes, "plan_review should be visited"
-            assert "select_stage" in visited_nodes, \
-                "select_stage should be visited when missing verdict defaults to approve"
-            assert "design" in visited_nodes, \
-                "design should be visited after plan approval"
             
-            # Verify state has approve verdict
+            # Should NOT reach select_stage (plan needs revision)
+            assert "select_stage" not in visited_nodes, \
+                "select_stage should NOT be visited when missing verdict defaults to needs_revision"
+            
+            # Verify state has needs_revision verdict
             state = graph.get_state(config).values
-            assert state.get("last_plan_review_verdict") == "approve", \
-                f"Missing verdict should default to 'approve', got: {state.get('last_plan_review_verdict')}"
+            assert state.get("last_plan_review_verdict") == "needs_revision", \
+                f"Missing verdict should default to 'needs_revision', got: {state.get('last_plan_review_verdict')}"
+            
+            # Should eventually hit replan limit and escalate
+            assert interrupt_detected, "Should hit replan limit and escalate to ask_user"
 
             print("\n✅ Missing verdict normalization test passed!")
 

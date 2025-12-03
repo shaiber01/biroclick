@@ -406,7 +406,11 @@ class TestCodeReviewerNode:
     @patch("src.agents.code.build_agent_prompt")
     @patch("src.agents.code.call_agent_with_metrics")
     def test_reviewer_invalid_verdict_value(self, mock_llm, mock_prompt, base_state):
-        """Test handling when LLM returns invalid verdict value."""
+        """Test handling when LLM returns invalid verdict value.
+        
+        Invalid verdicts should be normalized to 'needs_revision' (safer default)
+        to avoid passing invalid values through the workflow.
+        """
         mock_prompt.return_value = "Prompt"
         mock_llm.return_value = {
             "verdict": "invalid_verdict",
@@ -415,10 +419,10 @@ class TestCodeReviewerNode:
         
         result = code_reviewer_node(base_state)
         
-        # Should accept any verdict value (validation happens elsewhere)
-        assert result["last_code_review_verdict"] == "invalid_verdict"
-        # If verdict is not "needs_revision", should not increment counter
-        assert result["code_revision_count"] == base_state.get("code_revision_count", 0)
+        # Invalid verdicts should be normalized to 'needs_revision' (safer for code)
+        assert result["last_code_review_verdict"] == "needs_revision"
+        # Should increment counter since normalized to needs_revision
+        assert result["code_revision_count"] == base_state.get("code_revision_count", 0) + 1
 
     @patch("src.agents.code.build_agent_prompt")
     @patch("src.agents.code.call_agent_with_metrics")

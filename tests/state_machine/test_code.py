@@ -712,15 +712,15 @@ class TestCodeReviewerNode:
             f"got {result.get('last_node_before_ask_user')}"
         )
 
-    def test_llm_error_auto_approves(self, base_state):
-        """When LLM fails, code reviewer should auto-approve to not block."""
+    def test_llm_error_defaults_to_needs_revision(self, base_state):
+        """When LLM fails, code reviewer should default to needs_revision (fail-closed)."""
         with patch("src.agents.code.call_agent_with_metrics") as mock_llm:
             mock_llm.side_effect = RuntimeError("API error")
             result = code_reviewer_node(base_state)
         
-        # Should auto-approve
-        assert result.get("last_code_review_verdict") == "approve", (
-            f"LLM error should result in auto-approve, got {result.get('last_code_review_verdict')}"
+        # Should default to needs_revision for safety
+        assert result.get("last_code_review_verdict") == "needs_revision", (
+            f"LLM error should result in needs_revision (fail-closed), got {result.get('last_code_review_verdict')}"
         )
         # Should have issues noting the LLM unavailability
         issues = result.get("reviewer_issues", [])

@@ -684,36 +684,40 @@ class TestPlanReviewerNode:
 
     @patch("src.agents.planning.validate_state_or_warn")
     @patch("src.agents.planning.call_agent_with_metrics")
-    def test_reviewer_llm_failure_auto_approve(self, mock_llm, mock_validate):
-        """Test that LLM failure results in auto-approval."""
+    def test_reviewer_llm_failure_defaults_to_needs_revision(self, mock_llm, mock_validate):
+        """Test that LLM failure results in needs_revision (safer than auto-approve)."""
         mock_validate.return_value = []
         mock_llm.side_effect = Exception("LLM fail")
         state = {
-            "plan": {"stages": [{"stage_id": "s1", "targets": ["t"]}]}
+            "plan": {"stages": [{"stage_id": "s1", "targets": ["t"]}]},
+            "replan_count": 0,
         }
         
         result = plan_reviewer_node(state)
         
         assert result["workflow_phase"] == "plan_review"
-        assert result["last_plan_review_verdict"] == "approve"
-        assert "planner_feedback" not in result
-        assert "replan_count" not in result
+        # On LLM failure, default to needs_revision for safety
+        assert result["last_plan_review_verdict"] == "needs_revision"
+        # Should increment replan_count
+        assert result["replan_count"] == 1
 
     @patch("src.agents.planning.validate_state_or_warn")
     @patch("src.agents.planning.call_agent_with_metrics")
     def test_reviewer_llm_failure_different_exception_types(self, mock_llm, mock_validate):
-        """Test that different exception types are handled."""
+        """Test that different exception types are handled safely."""
         mock_validate.return_value = []
         
         for exc_type in [ValueError("test"), KeyError("test"), RuntimeError("test")]:
             mock_llm.side_effect = exc_type
             state = {
-                "plan": {"stages": [{"stage_id": "s1", "targets": ["t"]}]}
+                "plan": {"stages": [{"stage_id": "s1", "targets": ["t"]}]},
+                "replan_count": 0,
             }
             
             result = plan_reviewer_node(state)
             
-            assert result["last_plan_review_verdict"] == "approve"
+            # All exception types should result in needs_revision (safer)
+            assert result["last_plan_review_verdict"] == "needs_revision"
 
     @patch("src.agents.planning.validate_state_or_warn")
     def test_reviewer_blocking_issues_from_validate_state(self, mock_validate):
@@ -778,42 +782,44 @@ class TestPlanReviewerNode:
     def test_reviewer_llm_unexpected_verdict(self, mock_llm, mock_validate):
         """Test handling of unexpected verdict value from LLM.
         
-        Unknown verdicts are normalized to 'approve' for safety, to avoid
-        blocking workflow on malformed LLM responses.
+        Unknown verdicts are normalized to 'needs_revision' for safety,
+        to avoid auto-approving potentially problematic plans.
         """
         mock_validate.return_value = []
         mock_llm.return_value = {"verdict": "unknown_verdict"}
         state = {
-            "plan": {"stages": [{"stage_id": "s1", "targets": ["t"]}]}
+            "plan": {"stages": [{"stage_id": "s1", "targets": ["t"]}]},
+            "replan_count": 0,
         }
         
         result = plan_reviewer_node(state)
         
-        # Unknown verdicts are normalized to 'approve' (logs warning)
-        assert result["last_plan_review_verdict"] == "approve"
-        # Should not increment replan_count for approve verdicts
-        assert "replan_count" not in result
+        # Unknown verdicts are normalized to 'needs_revision' (logs warning)
+        assert result["last_plan_review_verdict"] == "needs_revision"
+        # Should increment replan_count for needs_revision verdicts
+        assert result["replan_count"] == 1
 
     @patch("src.agents.planning.validate_state_or_warn")
     @patch("src.agents.planning.call_agent_with_metrics")
     def test_reviewer_llm_missing_verdict_key(self, mock_llm, mock_validate):
         """Test handling when LLM response is missing verdict key.
         
-        When verdict key is missing, the component defaults to 'approve'
-        to avoid blocking workflow on malformed LLM responses.
+        When verdict key is missing, the component defaults to 'needs_revision'
+        for safety, to avoid auto-approving on malformed LLM responses.
         """
         mock_validate.return_value = []
         mock_llm.return_value = {"feedback": "Some feedback"}
         state = {
-            "plan": {"stages": [{"stage_id": "s1", "targets": ["t"]}]}
+            "plan": {"stages": [{"stage_id": "s1", "targets": ["t"]}]},
+            "replan_count": 0,
         }
         
         result = plan_reviewer_node(state)
         
-        # Missing verdict defaults to 'approve' (uses .get("verdict", "approve"))
-        assert result["last_plan_review_verdict"] == "approve"
-        # Should not increment replan_count for approve verdicts
-        assert "replan_count" not in result
+        # Missing verdict defaults to 'needs_revision' (safer than auto-approve)
+        assert result["last_plan_review_verdict"] == "needs_revision"
+        # Should increment replan_count for needs_revision verdicts
+        assert result["replan_count"] == 1
 
     @patch("src.agents.planning.validate_state_or_warn")
     def test_reviewer_blocking_issues_verdict_structure(self, mock_validate):

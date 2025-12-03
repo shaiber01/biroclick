@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from src.agents.supervision import supervisor_node, trigger_handlers
+from src.agents.supervision.supervisor import _get_dependent_stages
 
 
 class TestBacktrackApprovalTrigger:
@@ -265,7 +266,11 @@ class TestBacktrackApprovalTrigger:
 
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_approval_overrides_rejection_when_both_present(self, mock_context):
-        """Should prioritize approval when both approval and rejection keywords present."""
+        """Should NOT approve when both approval and rejection keywords present.
+        
+        According to the code logic: `if is_approval and not is_rejection:`
+        When both keywords are present, is_rejection is True, so approval is blocked.
+        """
         mock_context.return_value = None
         
         state = {
@@ -282,10 +287,216 @@ class TestBacktrackApprovalTrigger:
         
         result = supervisor_node(state)
         
-        # Logic checks: is_approval and not is_rejection
-        # If both are present, should not approve
-        # But let's test what actually happens
-        assert result["supervisor_verdict"] in ["backtrack_to_stage", "ok_continue"]
+        # Logic: is_approval and not is_rejection
+        # When both present: is_approval=True, is_rejection=True
+        # So condition is False, falls through to rejection branch
+        # This clears backtrack_suggestion and continues
+        assert result["supervisor_verdict"] == "ok_continue", \
+            "When both APPROVE and REJECT present, rejection should take precedence"
+        assert result.get("backtrack_suggestion") is None, \
+            "backtrack_suggestion should be cleared on rejection"
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_approval_keyword_false_positive_disapprove(self, mock_context):
+        """Should NOT treat DISAPPROVE as APPROVE - tests word boundary matching."""
+        mock_context.return_value = None
+        
+        state = {
+            "ask_user_trigger": "backtrack_approval",
+            "user_responses": {"Question": "I DISAPPROVE of this backtrack"},
+            "backtrack_decision": {"target_stage_id": "stage1"},
+            "plan": {
+                "stages": [
+                    {"stage_id": "stage0", "dependencies": []},
+                    {"stage_id": "stage1", "dependencies": ["stage0"]},
+                ]
+            },
+        }
+        
+        result = supervisor_node(state)
+        
+        # DISAPPROVE contains "APPROVE" substring but shouldn't match as approval
+        # The check_keywords function uses word boundaries
+        assert result["supervisor_verdict"] == "ok_continue", \
+            "DISAPPROVE should not be treated as APPROVE (word boundary check)"
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_rejection_keyword_false_positive_know(self, mock_context):
+        """Should NOT treat KNOW as NO - tests word boundary matching."""
+        mock_context.return_value = None
+        
+        state = {
+            "ask_user_trigger": "backtrack_approval",
+            "user_responses": {"Question": "I know this is fine, APPROVE it"},
+            "backtrack_decision": {"target_stage_id": "stage1"},
+            "backtrack_suggestion": {"target": "stage1"},  # Should remain intact
+            "plan": {
+                "stages": [
+                    {"stage_id": "stage0", "dependencies": []},
+                    {"stage_id": "stage1", "dependencies": ["stage0"]},
+                ]
+            },
+        }
+        
+        result = supervisor_node(state)
+        
+        # "KNOW" contains "NO" but shouldn't match as rejection keyword
+        assert result["supervisor_verdict"] == "backtrack_to_stage", \
+            "KNOW should not be treated as NO rejection (word boundary check)"
+
+
+class TestGetDependentStages:
+    """Tests for _get_dependent_stages helper function used by backtrack handling."""
+
+    def test_simple_linear_chain(self):
+        """Should find all stages depending on target in a linear chain."""
+        plan = {
+            "stages": [
+                {"stage_id": "s0", "dependencies": []},
+                {"stage_id": "s1", "dependencies": ["s0"]},
+                {"stage_id": "s2", "dependencies": ["s1"]},
+                {"stage_id": "s3", "dependencies": ["s2"]},
+            ]
+        }
+        
+        result = _get_dependent_stages(plan, "s0")
+        
+        assert set(result) == {"s1", "s2", "s3"}, \
+            "All stages after s0 in chain should be marked as dependents"
+        
+        result_s1 = _get_dependent_stages(plan, "s1")
+        assert set(result_s1) == {"s2", "s3"}, \
+            "Only s2 and s3 depend on s1"
+        
+        result_s3 = _get_dependent_stages(plan, "s3")
+        assert result_s3 == [], \
+            "s3 has no dependents (last in chain)"
+
+    def test_diamond_dependency_structure(self, complex_dependency_state):
+        """Should find all transitive dependents in diamond structure."""
+        plan = complex_dependency_state["plan"]
+        
+        # Backtrack to base: everything depends on it
+        result = _get_dependent_stages(plan, "base")
+        assert set(result) == {"left", "right", "merge", "final"}, \
+            "All stages depend transitively on base"
+        
+        # Backtrack to left: merge and final depend on it
+        result_left = _get_dependent_stages(plan, "left")
+        assert set(result_left) == {"merge", "final"}, \
+            "merge and final depend on left"
+        
+        # Backtrack to right: merge and final depend on it too
+        result_right = _get_dependent_stages(plan, "right")
+        assert set(result_right) == {"merge", "final"}, \
+            "merge and final depend on right"
+
+    def test_multiple_independent_branches(self):
+        """Should handle multiple independent branches correctly."""
+        plan = {
+            "stages": [
+                {"stage_id": "root", "dependencies": []},
+                {"stage_id": "branch1_a", "dependencies": ["root"]},
+                {"stage_id": "branch1_b", "dependencies": ["branch1_a"]},
+                {"stage_id": "branch2_a", "dependencies": ["root"]},
+                {"stage_id": "branch2_b", "dependencies": ["branch2_a"]},
+            ]
+        }
+        
+        result = _get_dependent_stages(plan, "root")
+        assert set(result) == {"branch1_a", "branch1_b", "branch2_a", "branch2_b"}, \
+            "All branches depend on root"
+        
+        result_b1a = _get_dependent_stages(plan, "branch1_a")
+        assert set(result_b1a) == {"branch1_b"}, \
+            "Only branch1_b depends on branch1_a"
+        
+        result_b2a = _get_dependent_stages(plan, "branch2_a")
+        assert set(result_b2a) == {"branch2_b"}, \
+            "Only branch2_b depends on branch2_a"
+
+    def test_empty_plan(self):
+        """Should return empty list for empty plan."""
+        result = _get_dependent_stages({}, "any_stage")
+        assert result == [], "Empty plan has no dependents"
+        
+        result_no_stages = _get_dependent_stages({"stages": []}, "any_stage")
+        assert result_no_stages == [], "Plan with empty stages has no dependents"
+
+    def test_none_stages(self):
+        """Should handle None stages gracefully."""
+        plan = {"stages": None}
+        result = _get_dependent_stages(plan, "any_stage")
+        assert result == [], "None stages should return empty list"
+
+    def test_nonexistent_target_stage(self):
+        """Should return empty list for nonexistent target stage."""
+        plan = {
+            "stages": [
+                {"stage_id": "s0", "dependencies": []},
+                {"stage_id": "s1", "dependencies": ["s0"]},
+            ]
+        }
+        
+        result = _get_dependent_stages(plan, "nonexistent")
+        assert result == [], "Nonexistent stage has no dependents"
+
+    def test_stage_without_stage_id(self):
+        """Should skip stages that don't have stage_id field."""
+        plan = {
+            "stages": [
+                {"stage_id": "s0", "dependencies": []},
+                {"name": "invalid_stage"},  # Missing stage_id
+                {"stage_id": "s1", "dependencies": ["s0"]},
+            ]
+        }
+        
+        result = _get_dependent_stages(plan, "s0")
+        assert set(result) == {"s1"}, \
+            "Should skip invalid stage and still find s1 as dependent"
+
+    def test_stage_with_none_dependencies(self):
+        """Should handle stages with None dependencies."""
+        plan = {
+            "stages": [
+                {"stage_id": "s0", "dependencies": None},  # None dependencies
+                {"stage_id": "s1", "dependencies": ["s0"]},
+            ]
+        }
+        
+        result = _get_dependent_stages(plan, "s0")
+        assert set(result) == {"s1"}, \
+            "Should handle None dependencies and find s1 as dependent"
+
+    def test_non_list_dependencies(self):
+        """Should handle non-list dependencies gracefully."""
+        plan = {
+            "stages": [
+                {"stage_id": "s0", "dependencies": []},
+                {"stage_id": "s1", "dependencies": "s0"},  # String instead of list
+                {"stage_id": "s2", "dependencies": ["s0"]},
+            ]
+        }
+        
+        result = _get_dependent_stages(plan, "s0")
+        # s1 has invalid deps (string), should be skipped
+        # s2 has valid deps
+        assert "s2" in result, "Should find s2 as dependent of s0"
+
+    def test_non_dict_stage_entries(self):
+        """Should skip non-dict stage entries."""
+        plan = {
+            "stages": [
+                {"stage_id": "s0", "dependencies": []},
+                "invalid_stage_string",  # Not a dict
+                None,  # Also not a dict
+                {"stage_id": "s1", "dependencies": ["s0"]},
+            ]
+        }
+        
+        result = _get_dependent_stages(plan, "s0")
+        assert set(result) == {"s1"}, \
+            "Should skip non-dict entries and find s1"
 
 
 class TestDeadlockTrigger:
@@ -797,3 +1008,479 @@ class TestHandleBacktrackAndDeadlockHandlers:
         
         assert mock_result["supervisor_verdict"] == "replan_needed"
         # Should not crash with None stage_id
+
+
+class TestHandleTriggerDispatcher:
+    """Tests for handle_trigger dispatcher function."""
+
+    def test_dispatches_to_backtrack_approval_handler(self, mock_state, mock_result):
+        """Should dispatch backtrack_approval to correct handler."""
+        user_responses = {"q1": "APPROVE"}
+        mock_get_deps = MagicMock(return_value=["stage1"])
+        
+        trigger_handlers.handle_trigger(
+            trigger="backtrack_approval",
+            state=mock_state,
+            result=mock_result,
+            user_responses=user_responses,
+            current_stage_id="stage0",
+            get_dependent_stages_fn=mock_get_deps,
+        )
+        
+        assert mock_result["supervisor_verdict"] == "backtrack_to_stage"
+        # Verify get_dependent_stages_fn was called for backtrack_approval
+        mock_get_deps.assert_called_once()
+
+    def test_dispatches_to_deadlock_detected_handler(self, mock_state, mock_result):
+        """Should dispatch deadlock_detected to correct handler."""
+        user_responses = {"q1": "STOP"}
+        
+        trigger_handlers.handle_trigger(
+            trigger="deadlock_detected",
+            state=mock_state,
+            result=mock_result,
+            user_responses=user_responses,
+            current_stage_id="stage0",
+        )
+        
+        assert mock_result["supervisor_verdict"] == "all_complete"
+        assert mock_result["should_stop"] is True
+
+    def test_unknown_trigger_defaults_to_continue(self, mock_state, mock_result):
+        """Should default to ok_continue for unknown triggers."""
+        user_responses = {"q1": "anything"}
+        
+        trigger_handlers.handle_trigger(
+            trigger="unknown_trigger_xyz",
+            state=mock_state,
+            result=mock_result,
+            user_responses=user_responses,
+            current_stage_id="stage0",
+        )
+        
+        assert mock_result["supervisor_verdict"] == "ok_continue"
+        assert "unknown trigger" in mock_result["supervisor_feedback"].lower()
+
+    def test_does_not_pass_get_deps_fn_to_non_backtrack_handlers(self, mock_state, mock_result):
+        """Should not pass get_dependent_stages_fn to handlers that don't need it."""
+        user_responses = {"q1": "STOP"}
+        mock_get_deps = MagicMock(return_value=["stage1"])
+        
+        trigger_handlers.handle_trigger(
+            trigger="deadlock_detected",
+            state=mock_state,
+            result=mock_result,
+            user_responses=user_responses,
+            current_stage_id="stage0",
+            get_dependent_stages_fn=mock_get_deps,  # Provided but shouldn't be used
+        )
+        
+        # get_deps should NOT be called for deadlock handler
+        mock_get_deps.assert_not_called()
+
+
+class TestBacktrackApprovalEdgeCases:
+    """Additional edge case tests for backtrack approval handling."""
+
+    def test_preserves_existing_backtrack_decision_fields(self, mock_state, mock_result):
+        """Should preserve existing fields in backtrack_decision when approving."""
+        mock_state["backtrack_decision"] = {
+            "target_stage_id": "stage0",
+            "reason": "Some reason from supervisor",
+            "extra_field": "should_be_preserved",
+        }
+        user_input = {"q1": "APPROVE"}
+        mock_get_deps = MagicMock(return_value=["stage1", "stage2"])
+        
+        trigger_handlers.handle_backtrack_approval(
+            mock_state, mock_result, user_input, "stage0", mock_get_deps
+        )
+        
+        assert mock_result["supervisor_verdict"] == "backtrack_to_stage"
+        decision = mock_result["backtrack_decision"]
+        assert decision["target_stage_id"] == "stage0"
+        assert decision["stages_to_invalidate"] == ["stage1", "stage2"]
+        # Original fields should be preserved
+        assert decision.get("reason") == "Some reason from supervisor"
+        assert decision.get("extra_field") == "should_be_preserved"
+
+    def test_approval_with_complex_dependency_chain(self, complex_dependency_state, mock_result):
+        """Should correctly calculate all transitive dependents for diamond structure."""
+        user_input = {"q1": "YES"}
+        
+        def get_deps(plan, target):
+            return _get_dependent_stages(plan, target)
+        
+        trigger_handlers.handle_backtrack_approval(
+            complex_dependency_state, mock_result, user_input, "base", get_deps
+        )
+        
+        assert mock_result["supervisor_verdict"] == "backtrack_to_stage"
+        invalidated = mock_result["backtrack_decision"]["stages_to_invalidate"]
+        # Diamond structure: base -> left, right -> merge -> final
+        assert set(invalidated) == {"left", "right", "merge", "final"}
+
+    def test_approval_whitespace_only_response(self, mock_state, mock_result):
+        """Should treat whitespace-only response as unclear (default to continue)."""
+        user_input = {"q1": "   \n\t  "}
+        
+        trigger_handlers.handle_backtrack_approval(
+            mock_state, mock_result, user_input, "stage0", None
+        )
+        
+        assert mock_result["supervisor_verdict"] == "ok_continue"
+
+    def test_rejection_clears_both_suggestion_and_does_not_set_decision(self, mock_state, mock_result):
+        """Should clear backtrack_suggestion on reject and not set backtrack_decision."""
+        mock_state["backtrack_suggestion"] = {"target": "stage1", "confidence": 0.8}
+        mock_state["backtrack_decision"] = {"target_stage_id": "stage1"}
+        user_input = {"q1": "NO, don't backtrack"}
+        
+        trigger_handlers.handle_backtrack_approval(
+            mock_state, mock_result, user_input, "stage0", None
+        )
+        
+        assert mock_result["supervisor_verdict"] == "ok_continue"
+        assert mock_result["backtrack_suggestion"] is None
+        # backtrack_decision should NOT be in result (unchanged from state)
+        assert "backtrack_decision" not in mock_result
+
+
+class TestDeadlockEdgeCases:
+    """Additional edge case tests for deadlock handling."""
+
+    def test_replan_planner_feedback_format(self, mock_state, mock_result):
+        """Should format planner_feedback correctly with deadlock context."""
+        user_input = {"q1": "REPLAN because stage X is stuck"}
+        
+        trigger_handlers.handle_deadlock_detected(
+            mock_state, mock_result, user_input, "stage1"
+        )
+        
+        assert mock_result["supervisor_verdict"] == "replan_needed"
+        feedback = mock_result["planner_feedback"]
+        # Should include "deadlock" and user's response
+        assert "deadlock" in feedback.lower()
+        assert "REPLAN because stage X is stuck" in feedback
+
+    def test_clarification_question_contains_all_options(self, mock_state, mock_result):
+        """Should present all valid options in clarification question."""
+        user_input = {"q1": "I don't know what to do"}
+        
+        trigger_handlers.handle_deadlock_detected(
+            mock_state, mock_result, user_input, "stage1"
+        )
+        
+        assert mock_result["supervisor_verdict"] == "ask_user"
+        questions = mock_result["pending_user_questions"]
+        assert len(questions) > 0
+        question_text = questions[0].upper()
+        # Should mention all valid options
+        assert "GENERATE_REPORT" in question_text or "REPORT" in question_text
+        assert "REPLAN" in question_text
+        assert "STOP" in question_text
+
+    def test_stop_and_report_both_stop_workflow(self, mock_state, mock_result):
+        """Both STOP and GENERATE_REPORT should set should_stop=True."""
+        for response in ["STOP", "GENERATE_REPORT"]:
+            mock_result.clear()
+            user_input = {"q1": response}
+            
+            trigger_handlers.handle_deadlock_detected(
+                mock_state, mock_result, user_input, "stage1"
+            )
+            
+            assert mock_result["should_stop"] is True, f"should_stop should be True for {response}"
+            assert mock_result["supervisor_verdict"] == "all_complete", f"verdict should be all_complete for {response}"
+
+    def test_replan_does_not_stop_workflow(self, mock_state, mock_result):
+        """REPLAN should NOT set should_stop."""
+        user_input = {"q1": "REPLAN"}
+        
+        trigger_handlers.handle_deadlock_detected(
+            mock_state, mock_result, user_input, "stage1"
+        )
+        
+        assert mock_result["supervisor_verdict"] == "replan_needed"
+        # should_stop should not be set (or explicitly False/None)
+        assert mock_result.get("should_stop") is not True, \
+            "REPLAN should not stop workflow"
+
+
+class TestKeywordMatchingBehavior:
+    """Tests verifying keyword matching uses word boundaries correctly."""
+
+    def test_approval_keywords_word_boundary(self, mock_state, mock_result):
+        """Test that approval keywords use word boundaries."""
+        # These should NOT match approval
+        non_matching_inputs = [
+            "DISAPPROVE",  # Contains APPROVE
+            "UNAPPROVED",  # Contains APPROVE
+            "NOYES",  # Contains YES
+            "REVALIDATE",  # Contains VALID but not as word
+        ]
+        
+        for input_text in non_matching_inputs:
+            mock_result.clear()
+            user_input = {"q1": input_text}
+            
+            trigger_handlers.handle_backtrack_approval(
+                mock_state, mock_result, user_input, "stage0", None
+            )
+            
+            # None of these should result in approval
+            assert mock_result["supervisor_verdict"] != "backtrack_to_stage", \
+                f"'{input_text}' should NOT match as approval"
+
+    def test_rejection_keywords_word_boundary(self, mock_state, mock_result):
+        """Test that rejection keywords use word boundaries."""
+        # These should NOT match rejection
+        non_matching_inputs = [
+            "KNOW",  # Contains NO
+            "ACKNOWLEDGE",  # Contains NO
+            "REJECTIFY",  # Made up but contains REJECT
+        ]
+        
+        mock_state["backtrack_suggestion"] = {"target": "stage1"}
+        
+        for input_text in non_matching_inputs:
+            mock_result.clear()
+            user_input = {"q1": f"{input_text} APPROVE"}  # Include approval keyword
+            
+            trigger_handlers.handle_backtrack_approval(
+                mock_state, mock_result, user_input, "stage0", MagicMock(return_value=[])
+            )
+            
+            # Should match approval, not rejection
+            assert mock_result["supervisor_verdict"] == "backtrack_to_stage", \
+                f"'{input_text}' should NOT match as rejection, APPROVE should win"
+
+    def test_case_insensitive_matching(self, mock_state, mock_result):
+        """Test that keyword matching is case insensitive."""
+        cases = [
+            "approve",
+            "APPROVE", 
+            "Approve",
+            "ApPrOvE",
+        ]
+        
+        mock_state["backtrack_decision"] = {"target_stage_id": "stage0"}
+        
+        for case_variant in cases:
+            mock_result.clear()
+            user_input = {"q1": case_variant}
+            
+            trigger_handlers.handle_backtrack_approval(
+                mock_state, mock_result, user_input, "stage0", MagicMock(return_value=[])
+            )
+            
+            assert mock_result["supervisor_verdict"] == "backtrack_to_stage", \
+                f"'{case_variant}' should match APPROVE (case insensitive)"
+
+
+class TestSupervisorNodeTriggerClearing:
+    """Tests for supervisor_node clearing ask_user_trigger after handling."""
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_clears_ask_user_trigger_on_backtrack_approval(self, mock_context):
+        """Should clear ask_user_trigger after handling backtrack_approval."""
+        mock_context.return_value = None
+        
+        state = {
+            "ask_user_trigger": "backtrack_approval",
+            "user_responses": {"Question": "APPROVE"},
+            "backtrack_decision": {"target_stage_id": "stage1"},
+            "plan": {
+                "stages": [
+                    {"stage_id": "stage0", "dependencies": []},
+                    {"stage_id": "stage1", "dependencies": ["stage0"]},
+                ]
+            },
+        }
+        
+        result = supervisor_node(state)
+        
+        assert result.get("ask_user_trigger") is None, \
+            "ask_user_trigger should be cleared after handling"
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_clears_ask_user_trigger_on_backtrack_rejection(self, mock_context):
+        """Should clear ask_user_trigger after handling rejection."""
+        mock_context.return_value = None
+        
+        state = {
+            "ask_user_trigger": "backtrack_approval",
+            "user_responses": {"Question": "REJECT"},
+            "backtrack_suggestion": {"target": "stage1"},
+        }
+        
+        result = supervisor_node(state)
+        
+        assert result.get("ask_user_trigger") is None, \
+            "ask_user_trigger should be cleared on rejection"
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_clears_ask_user_trigger_on_deadlock_stop(self, mock_context):
+        """Should clear ask_user_trigger after handling deadlock STOP."""
+        mock_context.return_value = None
+        
+        state = {
+            "ask_user_trigger": "deadlock_detected",
+            "user_responses": {"Question": "STOP"},
+        }
+        
+        result = supervisor_node(state)
+        
+        assert result.get("ask_user_trigger") is None, \
+            "ask_user_trigger should be cleared after deadlock handling"
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_clears_ask_user_trigger_on_deadlock_replan(self, mock_context):
+        """Should clear ask_user_trigger after handling deadlock REPLAN."""
+        mock_context.return_value = None
+        
+        state = {
+            "ask_user_trigger": "deadlock_detected",
+            "user_responses": {"Question": "REPLAN"},
+        }
+        
+        result = supervisor_node(state)
+        
+        assert result.get("ask_user_trigger") is None, \
+            "ask_user_trigger should be cleared after replan"
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_preserves_trigger_when_asking_clarification(self, mock_context):
+        """Should NOT clear trigger when asking for clarification (ask_user verdict)."""
+        mock_context.return_value = None
+        
+        state = {
+            "ask_user_trigger": "deadlock_detected",
+            "user_responses": {"Question": "I'm not sure what to do"},
+        }
+        
+        result = supervisor_node(state)
+        
+        # When verdict is ask_user, the trigger is still cleared but new questions are set
+        assert result.get("ask_user_trigger") is None, \
+            "ask_user_trigger should be cleared even when asking clarification"
+        assert result["supervisor_verdict"] == "ask_user"
+        assert len(result.get("pending_user_questions", [])) > 0, \
+            "New questions should be set for clarification"
+
+
+class TestSupervisorNodeStateIntegrity:
+    """Tests for state integrity after supervisor_node processing."""
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_workflow_phase_set_to_supervision(self, mock_context):
+        """Should always set workflow_phase to supervision."""
+        mock_context.return_value = None
+        
+        state = {
+            "ask_user_trigger": "backtrack_approval",
+            "user_responses": {"Question": "APPROVE"},
+            "backtrack_decision": {"target_stage_id": "stage1"},
+            "plan": {"stages": []},
+            "workflow_phase": "execution",  # Different phase
+        }
+        
+        result = supervisor_node(state)
+        
+        assert result["workflow_phase"] == "supervision", \
+            "workflow_phase should be set to supervision"
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_handles_invalid_user_responses_type(self, mock_context):
+        """Should handle non-dict user_responses gracefully."""
+        mock_context.return_value = None
+        
+        state = {
+            "ask_user_trigger": "backtrack_approval",
+            "user_responses": "not a dict",  # Invalid type
+            "backtrack_decision": {"target_stage_id": "stage1"},
+            "plan": {"stages": []},
+        }
+        
+        # Should not raise, should handle gracefully
+        result = supervisor_node(state)
+        
+        # Should default to continue since no valid responses
+        assert result["supervisor_verdict"] == "ok_continue"
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_handles_none_user_responses(self, mock_context):
+        """Should handle None user_responses gracefully."""
+        mock_context.return_value = None
+        
+        state = {
+            "ask_user_trigger": "backtrack_approval",
+            "user_responses": None,
+            "backtrack_decision": {"target_stage_id": "stage1"},
+            "plan": {"stages": []},
+        }
+        
+        result = supervisor_node(state)
+        
+        # Should default to continue
+        assert result["supervisor_verdict"] == "ok_continue"
+
+
+class TestBacktrackDecisionIntegration:
+    """Tests for backtrack_decision handling in the full integration flow."""
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_stages_to_invalidate_calculated_via_supervisor_node(self, mock_context):
+        """Should calculate stages_to_invalidate correctly via supervisor_node."""
+        mock_context.return_value = None
+        
+        state = {
+            "ask_user_trigger": "backtrack_approval",
+            "user_responses": {"Question": "YES, approve the backtrack"},
+            "backtrack_decision": {"target_stage_id": "stage1"},
+            "plan": {
+                "stages": [
+                    {"stage_id": "stage0", "dependencies": []},
+                    {"stage_id": "stage1", "dependencies": ["stage0"]},
+                    {"stage_id": "stage2", "dependencies": ["stage1"]},
+                    {"stage_id": "stage3", "dependencies": ["stage2"]},
+                ]
+            },
+        }
+        
+        result = supervisor_node(state)
+        
+        assert result["supervisor_verdict"] == "backtrack_to_stage"
+        decision = result["backtrack_decision"]
+        assert decision["target_stage_id"] == "stage1"
+        # stage2 and stage3 depend on stage1 (transitively)
+        assert set(decision["stages_to_invalidate"]) == {"stage2", "stage3"}
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_backtrack_decision_preserved_from_state(self, mock_context):
+        """Should preserve existing backtrack_decision fields."""
+        mock_context.return_value = None
+        
+        state = {
+            "ask_user_trigger": "backtrack_approval",
+            "user_responses": {"Question": "APPROVE"},
+            "backtrack_decision": {
+                "target_stage_id": "stage1",
+                "reason": "Physics check failed repeatedly",
+                "suggested_by": "execution_validator",
+            },
+            "plan": {
+                "stages": [
+                    {"stage_id": "stage0", "dependencies": []},
+                    {"stage_id": "stage1", "dependencies": ["stage0"]},
+                ]
+            },
+        }
+        
+        result = supervisor_node(state)
+        
+        decision = result["backtrack_decision"]
+        assert decision["target_stage_id"] == "stage1"
+        assert decision["reason"] == "Physics check failed repeatedly"
+        assert decision["suggested_by"] == "execution_validator"
+        assert "stages_to_invalidate" in decision

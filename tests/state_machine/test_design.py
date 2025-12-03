@@ -298,31 +298,31 @@ class TestDesignReviewerNode:
         
         assert result.get("last_design_review_verdict") == "needs_revision"
 
-    def test_missing_verdict_defaults_to_approve(self, state_with_design):
-        """Test: missing verdict in LLM output defaults to 'approve'."""
+    def test_missing_verdict_defaults_to_needs_revision(self, state_with_design):
+        """Test: missing verdict in LLM output defaults to 'needs_revision' (fail-closed)."""
         mock_review = {"issues": [], "summary": "No verdict given"}  # No verdict key
         
         with patch("src.agents.design.call_agent_with_metrics", return_value=mock_review):
             result = design_reviewer_node(state_with_design)
         
-        assert result.get("last_design_review_verdict") == "approve"
+        assert result.get("last_design_review_verdict") == "needs_revision"
 
-    def test_unknown_verdict_defaults_to_approve(self, state_with_design):
-        """Test: unknown verdict value defaults to 'approve'."""
+    def test_unknown_verdict_defaults_to_needs_revision(self, state_with_design):
+        """Test: unknown verdict value defaults to 'needs_revision' (fail-closed)."""
         mock_review = {"verdict": "unknown_value_xyz", "issues": [], "summary": "??"}
         
         with patch("src.agents.design.call_agent_with_metrics", return_value=mock_review):
             result = design_reviewer_node(state_with_design)
         
-        assert result.get("last_design_review_verdict") == "approve"
+        assert result.get("last_design_review_verdict") == "needs_revision"
 
-    def test_llm_error_auto_approves(self, state_with_design):
-        """Test: LLM error in reviewer auto-approves (doesn't block workflow)."""
+    def test_llm_error_defaults_to_needs_revision(self, state_with_design):
+        """Test: LLM error in reviewer defaults to 'needs_revision' (fail-closed, safer)."""
         with patch("src.agents.design.call_agent_with_metrics", side_effect=Exception("API Error")):
             result = design_reviewer_node(state_with_design)
         
-        # Should auto-approve, not escalate
-        assert result.get("last_design_review_verdict") == "approve"
+        # Should default to needs_revision for safety
+        assert result.get("last_design_review_verdict") == "needs_revision"
         assert not result.get("awaiting_user_input"), "Should not await user on reviewer LLM error"
 
     def test_reviewer_issues_extracted(self, state_with_design):

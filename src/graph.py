@@ -169,7 +169,9 @@ def route_after_supervisor(state: ReproState) -> Literal["select_stage", "plan",
         return "select_stage"
         
     elif verdict == "replan_needed":
-        if state.get("replan_count", 0) < MAX_REPLANS:
+        runtime_config = state.get("runtime_config") or {}
+        max_replans = runtime_config.get("max_replans", MAX_REPLANS)
+        if state.get("replan_count", 0) < max_replans:
             return "plan"
         else:
             save_checkpoint(state, "before_ask_user_replan_limit")
@@ -307,7 +309,8 @@ def create_repro_graph():
         route_after_comparison_check,
         {
             "supervisor": "supervisor",
-            "analyze": "analyze"
+            "analyze": "analyze",
+            "ask_user": "ask_user"  # Router can return ask_user on None/invalid verdict
         }
     )
     

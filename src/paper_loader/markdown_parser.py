@@ -64,12 +64,39 @@ def extract_figures_from_markdown(markdown_text: str) -> List[Dict[str, str]]:
     if in_code_block:
         code_block_ranges.append((code_start, len(lines)))
     
+    # Build character ranges for code block content (more precise than line-based)
+    # This ensures content after closing ``` on the same line is not considered in code block
+    code_block_char_ranges: List[tuple[int, int]] = []
+    
+    # Calculate line start positions
+    line_starts = [0]
+    for line in lines[:-1]:  # All lines except last
+        line_starts.append(line_starts[-1] + len(line) + 1)  # +1 for newline
+    
+    for start_line, end_line in code_block_ranges:
+        # Start of code block is at the beginning of the start line
+        block_start = line_starts[start_line]
+        
+        # End of code block: find the position right after the closing ```
+        if end_line < len(lines):
+            closing_line = lines[end_line]
+            fence_pos = closing_line.find('```')
+            if fence_pos != -1:
+                # Include up to and including the closing ```
+                block_end = line_starts[end_line] + fence_pos + 3
+            else:
+                # No closing fence found (unclosed block), include to end of line
+                block_end = line_starts[end_line] + len(closing_line)
+        else:
+            # end_line is beyond lines (unclosed block at end)
+            block_end = len(markdown_text)
+        
+        code_block_char_ranges.append((block_start, block_end))
+    
     # Helper function to check if a position is in a code block
     def is_in_code_block(char_pos: int) -> bool:
-        # Convert character position to line number
-        line_num = markdown_text[:char_pos].count('\n')
-        for start_line, end_line in code_block_ranges:
-            if start_line <= line_num <= end_line:
+        for start_char, end_char in code_block_char_ranges:
+            if start_char <= char_pos < end_char:
                 return True
         return False
     
@@ -127,7 +154,7 @@ def resolve_figure_url(
     Resolve a figure URL, handling relative paths.
     
     Resolution order:
-    1. If URL is absolute (http/https/file://), use as-is
+    1. If URL is absolute (http/https/file/data URI), use as-is
     2. If base_url is provided and URL is relative, join with base_url
     3. If base_path is provided and URL is relative, resolve against base_path
     4. Otherwise, return URL as-is
@@ -149,8 +176,8 @@ def resolve_figure_url(
     
     parsed = urlparse(url)
     
-    # Already absolute URL
-    if parsed.scheme in ('http', 'https', 'file'):
+    # Already absolute URL (including data URIs which contain inline image data)
+    if parsed.scheme in ('http', 'https', 'file', 'data'):
         return url
     
     # Relative URL with base_url provided
