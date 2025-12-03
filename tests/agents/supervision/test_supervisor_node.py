@@ -1,230 +1,10 @@
-"""Unit tests for src/agents/supervision.py"""
+"""Tests for supervisor_node and related recovery helpers."""
+
+from unittest.mock import MagicMock, patch
 
 import pytest
-from unittest.mock import patch, MagicMock
 
-from src.agents.supervision import supervisor_node, _get_dependent_stages
-from src.agents.supervision.supervisor import _derive_stage_completion_outcome
-
-class TestDeriveStageCompletionOutcome:
-    """Tests for _derive_stage_completion_outcome logic."""
-
-    @patch("src.agents.supervision.supervisor.stage_comparisons_for_stage")
-    @patch("src.agents.supervision.supervisor.breakdown_comparison_classifications")
-    def test_returns_failed_on_missing_outputs(self, mock_breakdown, mock_comparisons):
-        """Should return completed_failed if outputs are missing."""
-        mock_comparisons.return_value = []
-        mock_breakdown.return_value = {"missing": ["absorption.csv"], "pending": [], "match": []}
-        
-        state = {
-            "analysis_overall_classification": "ACCEPTABLE_MATCH",
-            "comparison_verdict": "match",
-            "physics_verdict": "pass",
-            "analysis_summary": "Good match",
-        }
-        
-        status, summary = _derive_stage_completion_outcome(state, "stage1")
-        
-        assert status == "completed_failed"
-        assert "Missing outputs" in summary
-
-    @patch("src.agents.supervision.supervisor.stage_comparisons_for_stage")
-    @patch("src.agents.supervision.supervisor.breakdown_comparison_classifications")
-    def test_returns_partial_on_pending_comparisons(self, mock_breakdown, mock_comparisons):
-        """Should return completed_partial if comparisons are pending."""
-        mock_comparisons.return_value = []
-        mock_breakdown.return_value = {"missing": [], "pending": ["fig1"], "match": []}
-        
-        state = {
-            "analysis_overall_classification": "ACCEPTABLE_MATCH",
-            "comparison_verdict": "match",
-            "physics_verdict": "pass",
-        }
-        
-        status, summary = _derive_stage_completion_outcome(state, "stage1")
-        
-        assert status == "completed_partial"
-        assert "Comparisons pending" in summary
-
-    @patch("src.agents.supervision.supervisor.stage_comparisons_for_stage")
-    @patch("src.agents.supervision.supervisor.breakdown_comparison_classifications")
-    def test_returns_failed_on_bad_classification(self, mock_breakdown, mock_comparisons):
-        """Should return completed_failed on FAILED or POOR_MATCH."""
-        mock_comparisons.return_value = []
-        mock_breakdown.return_value = {"missing": [], "pending": [], "match": []}
-        
-        for classification in ["FAILED", "POOR_MATCH"]:
-            state = {
-                "analysis_overall_classification": classification,
-                "comparison_verdict": "mismatch",
-                "physics_verdict": "pass",
-                "analysis_summary": "Bad results",
-            }
-            
-            status, summary = _derive_stage_completion_outcome(state, "stage1")
-            
-            assert status == "completed_failed"
-
-    @patch("src.agents.supervision.supervisor.stage_comparisons_for_stage")
-    @patch("src.agents.supervision.supervisor.breakdown_comparison_classifications")
-    def test_returns_partial_on_needs_revision(self, mock_breakdown, mock_comparisons):
-        """Should return completed_partial if comparison_verdict is needs_revision."""
-        mock_comparisons.return_value = []
-        mock_breakdown.return_value = {"missing": [], "pending": [], "match": []}
-        
-        state = {
-            "analysis_overall_classification": "ACCEPTABLE_MATCH",
-            "comparison_verdict": "needs_revision",
-            "physics_verdict": "pass",
-        }
-        
-        status, summary = _derive_stage_completion_outcome(state, "stage1")
-        
-        assert status == "completed_partial"
-
-    @patch("src.agents.supervision.supervisor.stage_comparisons_for_stage")
-    @patch("src.agents.supervision.supervisor.breakdown_comparison_classifications")
-    def test_returns_partial_on_physics_warning(self, mock_breakdown, mock_comparisons):
-        """Should return completed_partial if physics_verdict is warning."""
-        mock_comparisons.return_value = []
-        mock_breakdown.return_value = {"missing": [], "pending": [], "match": []}
-        
-        state = {
-            "analysis_overall_classification": "ACCEPTABLE_MATCH",
-            "comparison_verdict": "match",
-            "physics_verdict": "warning",
-        }
-        
-        status, summary = _derive_stage_completion_outcome(state, "stage1")
-        
-        assert status == "completed_partial"
-
-    @patch("src.agents.supervision.supervisor.stage_comparisons_for_stage")
-    @patch("src.agents.supervision.supervisor.breakdown_comparison_classifications")
-    def test_returns_failed_on_physics_fail(self, mock_breakdown, mock_comparisons):
-        """Should return completed_failed if physics_verdict is fail."""
-        mock_comparisons.return_value = []
-        mock_breakdown.return_value = {"missing": [], "pending": [], "match": []}
-        
-        state = {
-            "analysis_overall_classification": "ACCEPTABLE_MATCH",
-            "comparison_verdict": "match",
-            "physics_verdict": "fail",
-        }
-        
-        status, summary = _derive_stage_completion_outcome(state, "stage1")
-        
-        assert status == "completed_failed"
-
-    @patch("src.agents.supervision.supervisor.stage_comparisons_for_stage")
-    @patch("src.agents.supervision.supervisor.breakdown_comparison_classifications")
-    def test_extracts_summary_from_analysis_summary(self, mock_breakdown, mock_comparisons):
-        """Should extract correct summary text from analysis_summary dict."""
-        mock_comparisons.return_value = []
-        mock_breakdown.return_value = {"missing": [], "pending": [], "match": []}
-        
-        state = {
-            "analysis_overall_classification": "ACCEPTABLE_MATCH",
-            "comparison_verdict": "match",
-            "physics_verdict": "pass",
-            "analysis_summary": {"notes": "Specific notes", "totals": {"matches": 1}},
-        }
-        
-        status, summary = _derive_stage_completion_outcome(state, "stage1")
-        
-        assert summary == "Specific notes"
-
-    @patch("src.agents.supervision.supervisor.stage_comparisons_for_stage")
-    @patch("src.agents.supervision.supervisor.breakdown_comparison_classifications")
-    def test_extracts_summary_from_totals(self, mock_breakdown, mock_comparisons):
-        """Should extract summary from totals if no notes."""
-        mock_comparisons.return_value = []
-        mock_breakdown.return_value = {"missing": [], "pending": [], "match": []}
-        
-        state = {
-            "analysis_overall_classification": "ACCEPTABLE_MATCH",
-            "comparison_verdict": "match",
-            "physics_verdict": "pass",
-            "analysis_summary": {"totals": {"matches": 2, "targets": 3}},
-        }
-        
-        status, summary = _derive_stage_completion_outcome(state, "stage1")
-        
-        assert summary == "2/3 targets matched"
-
-
-
-class TestGetDependentStages:
-    """Tests for _get_dependent_stages helper function."""
-
-    def test_finds_direct_dependents(self):
-        """Should find stages that directly depend on target."""
-        plan = {
-            "stages": [
-                {"stage_id": "stage0", "dependencies": []},
-                {"stage_id": "stage1", "dependencies": ["stage0"]},
-                {"stage_id": "stage2", "dependencies": ["stage0"]},
-            ]
-        }
-        
-        result = _get_dependent_stages(plan, "stage0")
-        
-        assert set(result) == {"stage1", "stage2"}
-
-    def test_finds_transitive_dependents(self):
-        """Should find stages that transitively depend on target."""
-        plan = {
-            "stages": [
-                {"stage_id": "stage0", "dependencies": []},
-                {"stage_id": "stage1", "dependencies": ["stage0"]},
-                {"stage_id": "stage2", "dependencies": ["stage1"]},
-                {"stage_id": "stage3", "dependencies": ["stage2"]},
-            ]
-        }
-        
-        result = _get_dependent_stages(plan, "stage0")
-        
-        assert set(result) == {"stage1", "stage2", "stage3"}
-
-    def test_returns_empty_for_leaf_stage(self):
-        """Should return empty list for stage with no dependents."""
-        plan = {
-            "stages": [
-                {"stage_id": "stage0", "dependencies": []},
-                {"stage_id": "stage1", "dependencies": ["stage0"]},
-            ]
-        }
-        
-        result = _get_dependent_stages(plan, "stage1")
-        
-        assert result == []
-
-    def test_handles_empty_plan(self):
-        """Should handle empty plan gracefully."""
-        result = _get_dependent_stages({}, "stage0")
-        assert result == []
-
-    def test_handles_missing_stages(self):
-        """Should handle plan with no stages key."""
-        plan = {"title": "Test Plan"}
-        result = _get_dependent_stages(plan, "stage0")
-        assert result == []
-
-    def test_handles_complex_dependency_graph(self):
-        """Should handle diamond dependency pattern."""
-        plan = {
-            "stages": [
-                {"stage_id": "A", "dependencies": []},
-                {"stage_id": "B", "dependencies": ["A"]},
-                {"stage_id": "C", "dependencies": ["A"]},
-                {"stage_id": "D", "dependencies": ["B", "C"]},
-            ]
-        }
-        
-        result = _get_dependent_stages(plan, "A")
-        
-        assert set(result) == {"B", "C", "D"}
-
+from src.agents.supervision import supervisor_node
 
 class TestSupervisorNode:
     """Tests for supervisor_node function."""
@@ -1025,8 +805,6 @@ class TestUnknownTrigger:
         
         assert result["supervisor_verdict"] == "ok_continue"
         assert "unknown" in result["supervisor_feedback"].lower()
-
-
 class TestArchiveErrorRecovery:
     """Tests for archive error recovery logic."""
 
@@ -1074,8 +852,6 @@ class TestArchiveErrorRecovery:
         assert len(result["archive_errors"]) == 1
         assert result["archive_errors"][0]["stage_id"] == "stage1"
         mock_archive.assert_called_once_with(state, "stage1")
-
-
 class TestUserInteractionLogging:
     """Tests for user interaction logging."""
 
@@ -1105,9 +881,6 @@ class TestUserInteractionLogging:
         assert interaction["context"]["stage_id"] == "stage0"
         assert interaction["context"]["agent"] == "SupervisorAgent"
         assert interaction["user_response"] == "APPROVE"
-
-
-
 class TestInvalidUserResponses:
     """Tests for handling invalid user_responses."""
 
