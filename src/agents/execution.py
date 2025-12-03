@@ -109,14 +109,18 @@ def execution_validator_node(state: ReproState) -> dict:
                 user_content=user_content,
                 state=state,
             )
-            if "verdict" not in agent_output:
-                raise ValueError("Agent output missing 'verdict' key")
-            agent_output["stage_id"] = stage_id
         except Exception as e:
             logger.error(f"Execution validator LLM call failed: {e}")
             agent_output = create_llm_error_auto_approve("execution_validator", e, default_verdict="pass")
-            agent_output["stage_id"] = stage_id
             agent_output["summary"] = f"Auto-approved due to LLM error: {e}"
+        
+        # Handle missing verdict gracefully (separate from LLM unavailability)
+        if "verdict" not in agent_output:
+            logger.warning("Execution validator output missing 'verdict'. Defaulting to 'pass'.")
+            agent_output["verdict"] = "pass"
+            if "summary" not in agent_output:
+                agent_output["summary"] = "Missing verdict in LLM response, defaulting to pass."
+        agent_output["stage_id"] = stage_id
     
     result: Dict[str, Any] = {
         "workflow_phase": "execution_validation",
@@ -193,17 +197,21 @@ def physics_sanity_node(state: ReproState) -> dict:
             user_content=user_content,
             state=state,
         )
-        if "verdict" not in agent_output:
-            raise ValueError("Agent output missing 'verdict' key")
-        agent_output["stage_id"] = stage_id
-        if "backtrack_suggestion" not in agent_output:
-            agent_output["backtrack_suggestion"] = {"suggest_backtrack": False}
     except Exception as e:
         logger.error(f"Physics sanity LLM call failed: {e}")
         agent_output = create_llm_error_auto_approve("physics_sanity", e, default_verdict="pass")
-        agent_output["stage_id"] = stage_id
-        agent_output["backtrack_suggestion"] = {"suggest_backtrack": False}
         agent_output["summary"] = f"Auto-approved due to LLM error: {e}"
+    
+    # Handle missing verdict gracefully (separate from LLM unavailability)
+    if "verdict" not in agent_output:
+        logger.warning("Physics sanity output missing 'verdict'. Defaulting to 'pass'.")
+        agent_output["verdict"] = "pass"
+        if "summary" not in agent_output:
+            agent_output["summary"] = "Missing verdict in LLM response, defaulting to pass."
+    
+    agent_output["stage_id"] = stage_id
+    if "backtrack_suggestion" not in agent_output:
+        agent_output["backtrack_suggestion"] = {"suggest_backtrack": False}
     
     result: Dict[str, Any] = {
         "workflow_phase": "physics_validation",

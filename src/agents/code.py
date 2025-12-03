@@ -247,17 +247,41 @@ def code_generator_node(state: ReproState) -> dict:
     # Extract generated code from agent output
     generated_code = ""
     if isinstance(agent_output, dict):
-        generated_code = agent_output.get("code", "")
-        if not generated_code:
-            generated_code = agent_output.get("simulation_code", "")
-        if not generated_code:
+        # Check if "code" key exists (even if empty string)
+        if "code" in agent_output:
+            generated_code = agent_output["code"]
+        elif "simulation_code" in agent_output:
+            generated_code = agent_output["simulation_code"]
+        else:
+            # Fall back to JSON dump only if neither key exists
             generated_code = json.dumps(agent_output, indent=2)
     else:
         generated_code = str(agent_output)
 
     # Validate generated code
+    # Stub markers indicate incomplete code when they appear at the start
+    # or when code is very short. TODO in comments of otherwise valid code is OK.
     stub_markers = ["STUB", "TODO", "PLACEHOLDER", "# Replace", "would be generated"]
-    is_stub = any(marker in generated_code.upper() for marker in stub_markers)
+    code_stripped = generated_code.strip()
+    code_stripped_upper = code_stripped.upper()
+    
+    # Only flag as stub if:
+    # 1. Code is very short (< 100 chars) and contains stub markers, OR
+    # 2. Stub markers appear at the very start of the code (first line)
+    is_stub = False
+    if len(code_stripped) < 100:
+        # Short code with stub markers is likely a stub
+        is_stub = any(marker in code_stripped_upper for marker in stub_markers)
+    else:
+        # For longer code, only flag if stub markers appear at the start
+        first_line = code_stripped.split('\n')[0].upper()
+        is_stub = any(
+            first_line.startswith(marker) or 
+            first_line.startswith(f"# {marker}") or
+            first_line.startswith(f"// {marker}")
+            for marker in stub_markers
+        )
+    
     is_empty = not generated_code or not generated_code.strip() or len(generated_code.strip()) < 50
     
     if is_stub or is_empty:

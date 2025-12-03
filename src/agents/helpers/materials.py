@@ -61,7 +61,7 @@ def load_material_database() -> dict:
     try:
         with open(index_path, "r") as f:
             return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError) as e:
+    except (FileNotFoundError, json.JSONDecodeError, PermissionError, OSError) as e:
         print(f"Warning: Could not load materials/index.json: {e}")
         return {}
 
@@ -111,14 +111,20 @@ def match_material_from_text(text: str, material_lookup: dict) -> Optional[dict]
 def format_validated_material(mat_entry: dict, from_source: str) -> dict:
     """Format a material database entry for validated_materials list."""
     data_file = mat_entry.get("data_file")
-    path = f"materials/{data_file}" if data_file else None
+    # Handle empty string as None
+    path = f"materials/{data_file}" if data_file and data_file.strip() else None
+    
+    # Handle None explicitly - if csv_available is None, default to False
+    csv_available = mat_entry.get("csv_available")
+    if csv_available is None:
+        csv_available = False
     
     return {
         "material_id": mat_entry.get("material_id"),
         "name": mat_entry.get("name"),
         "source": mat_entry.get("source"),
         "path": path,
-        "csv_available": mat_entry.get("csv_available", False),
+        "csv_available": csv_available,
         "drude_lorentz_fit": mat_entry.get("drude_lorentz_fit"),
         "wavelength_range_nm": mat_entry.get("wavelength_range_nm"),
         "from": from_source,

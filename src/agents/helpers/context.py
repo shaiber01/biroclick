@@ -33,10 +33,10 @@ def check_context_or_escalate(state: ReproState, node_name: str) -> Optional[Dic
         # Safe to proceed, possibly with state updates from auto-recovery
         return check.get("state_updates") if check.get("state_updates") else None
     
-    if check["escalate"]:
+    if check.get("escalate", False):
         # Must ask user - return state updates to trigger ask_user
         return {
-            "pending_user_questions": [check["user_question"]],
+            "pending_user_questions": [check.get("user_question", f"Context overflow in {node_name}. How should we proceed?")],
             "awaiting_user_input": True,
             "ask_user_trigger": "context_overflow",
             "last_node_before_ask_user": node_name,
@@ -49,6 +49,22 @@ def check_context_or_escalate(state: ReproState, node_name: str) -> Optional[Dic
         "ask_user_trigger": "context_overflow",
         "last_node_before_ask_user": node_name,
     }
+
+
+def _contains_keyword(text: str, keyword: str) -> bool:
+    """
+    Check if text contains keyword as a whole word or substring.
+    For short keywords like "NO" and "YES", check for whole word matches to avoid false positives.
+    """
+    # For very short keywords that are substrings of common words, use word boundary matching
+    short_keywords = {"NO", "YES"}
+    if keyword in short_keywords:
+        # Check for whole word match (surrounded by spaces or at start/end)
+        normalized_text = f" {text} "
+        return f" {keyword} " in normalized_text
+    else:
+        # For longer keywords, substring matching is fine
+        return keyword in text
 
 
 def validate_user_responses(trigger: str, responses: Dict[str, str], questions: List[str]) -> List[str]:
@@ -70,55 +86,60 @@ def validate_user_responses(trigger: str, responses: Dict[str, str], questions: 
         return errors
     
     # Get all response text (combined)
+    # Normalize spaces/underscores for keyword matching
     all_responses = " ".join(str(r).upper() for r in responses.values())
+    # Replace underscores with spaces for matching (user might type "change material" instead of "CHANGE_MATERIAL")
+    all_responses_normalized = all_responses.replace("_", " ")
     
     if trigger == "material_checkpoint":
         # Must contain one of: APPROVE, CHANGE_MATERIAL, CHANGE_DATABASE, NEED_HELP
-        valid_keywords = ["APPROVE", "CHANGE_MATERIAL", "CHANGE_DATABASE", "NEED_HELP", "HELP", 
+        # Normalize keywords by replacing underscores with spaces for matching
+        valid_keywords = ["APPROVE", "CHANGE MATERIAL", "CHANGE DATABASE", "NEED HELP", "HELP", 
                          "YES", "NO", "REJECT", "CORRECT", "WRONG"]
-        if not any(kw in all_responses for kw in valid_keywords):
+        # Use helper function to avoid false positives (e.g., "NO" matching "NOT")
+        if not any(_contains_keyword(all_responses_normalized, kw) for kw in valid_keywords):
             errors.append(
                 "Response must contain one of: APPROVE, CHANGE_MATERIAL, CHANGE_DATABASE, or NEED_HELP"
             )
     
     elif trigger == "code_review_limit":
-        valid_keywords = ["PROVIDE_HINT", "HINT", "SKIP", "STOP", "RETRY"]
-        if not any(kw in all_responses for kw in valid_keywords):
+        valid_keywords = ["PROVIDE HINT", "HINT", "SKIP", "STOP", "RETRY"]
+        if not any(kw in all_responses_normalized for kw in valid_keywords):
             errors.append(
                 "Response must contain one of: PROVIDE_HINT, SKIP_STAGE, or STOP"
             )
     
     elif trigger == "design_review_limit":
-        valid_keywords = ["PROVIDE_HINT", "HINT", "SKIP", "STOP", "RETRY"]
-        if not any(kw in all_responses for kw in valid_keywords):
+        valid_keywords = ["PROVIDE HINT", "HINT", "SKIP", "STOP", "RETRY"]
+        if not any(kw in all_responses_normalized for kw in valid_keywords):
             errors.append(
                 "Response must contain one of: PROVIDE_HINT, SKIP_STAGE, or STOP"
             )
     
     elif trigger == "execution_failure_limit":
         valid_keywords = ["RETRY", "GUIDANCE", "SKIP", "STOP"]
-        if not any(kw in all_responses for kw in valid_keywords):
+        if not any(kw in all_responses_normalized for kw in valid_keywords):
             errors.append(
                 "Response must contain one of: RETRY_WITH_GUIDANCE, SKIP_STAGE, or STOP"
             )
     
     elif trigger == "physics_failure_limit":
         valid_keywords = ["RETRY", "ACCEPT", "PARTIAL", "SKIP", "STOP"]
-        if not any(kw in all_responses for kw in valid_keywords):
+        if not any(kw in all_responses_normalized for kw in valid_keywords):
             errors.append(
                 "Response must contain one of: RETRY_WITH_GUIDANCE, ACCEPT_PARTIAL, SKIP_STAGE, or STOP"
             )
     
     elif trigger == "backtrack_approval":
         valid_keywords = ["APPROVE", "REJECT", "YES", "NO"]
-        if not any(kw in all_responses for kw in valid_keywords):
+        if not any(_contains_keyword(all_responses_normalized, kw) for kw in valid_keywords):
             errors.append(
                 "Response must contain one of: APPROVE or REJECT"
             )
     
     elif trigger == "replan_limit":
         valid_keywords = ["FORCE", "ACCEPT", "GUIDANCE", "STOP"]
-        if not any(kw in all_responses for kw in valid_keywords):
+        if not any(kw in all_responses_normalized for kw in valid_keywords):
             errors.append(
                 "Response must contain one of: FORCE_ACCEPT, PROVIDE_GUIDANCE, or STOP"
             )

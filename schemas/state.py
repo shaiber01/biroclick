@@ -2882,7 +2882,7 @@ def get_plan_stage(state: ReproState, stage_id: str) -> Optional[Dict[str, Any]]
         >>> runtime_budget = plan_stage.get("runtime_budget_minutes", 30)
     """
     plan = state.get("plan") or {}
-    stages = plan.get("stages", [])
+    stages = plan.get("stages") or []
     
     for stage in stages:
         if stage.get("stage_id") == stage_id:

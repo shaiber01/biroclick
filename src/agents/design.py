@@ -118,12 +118,21 @@ def simulation_designer_node(state: ReproState) -> dict:
     }
     
     # Add new assumptions if any
-    new_assumptions = agent_output.get("new_assumptions", [])
-    if new_assumptions:
-        existing = state.get("assumptions") or {}
-        global_assumptions = list(existing.get("global_assumptions", []))
-        global_assumptions.extend(new_assumptions)
-        result["assumptions"] = {**existing, "global_assumptions": global_assumptions}
+    # Handle case where agent_output might not be a dict (e.g., string, None)
+    if isinstance(agent_output, dict):
+        new_assumptions = agent_output.get("new_assumptions", [])
+        # Validate that new_assumptions is a list before extending
+        if new_assumptions and isinstance(new_assumptions, list):
+            existing = state.get("assumptions") or {}
+            global_assumptions = list(existing.get("global_assumptions", []))
+            global_assumptions.extend(new_assumptions)
+            result["assumptions"] = {**existing, "global_assumptions": global_assumptions}
+        elif new_assumptions:
+            # Log warning if new_assumptions exists but is not a list
+            logger.warning(
+                f"simulation_designer_node: new_assumptions is not a list (type: {type(new_assumptions)}). "
+                "Ignoring invalid assumptions."
+            )
     
     log_agent_call("SimulationDesignerAgent", "design", start_time)(state, result)
     return result
@@ -190,7 +199,7 @@ def design_reviewer_node(state: ReproState) -> dict:
     result: Dict[str, Any] = {
         "workflow_phase": "design_review",
         "last_design_review_verdict": verdict,
-        "reviewer_issues": agent_output.get("issues", []),
+        "reviewer_issues": agent_output.get("issues") or [],
         "design_revision_count": state.get("design_revision_count", 0),  # Always include current count
     }
     

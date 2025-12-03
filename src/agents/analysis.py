@@ -93,14 +93,19 @@ def results_analyzer_node(state: ReproState) -> dict:
     stage_info = get_plan_stage(state, current_stage_id) if current_stage_id else None
     figures = ensure_stub_figures(state)
     target_ids: List[str] = []
-    if stage_info and stage_info.get("targets"):
-        target_ids = stage_info["targets"]
-    elif stage_info and stage_info.get("target_details"):
-        target_ids = [t.get("figure_id") for t in stage_info["target_details"] if t.get("figure_id")]
+    # Check if stage explicitly defines targets (empty list means no targets)
+    if stage_info:
+        if "targets" in stage_info:
+            target_ids = stage_info["targets"] if stage_info["targets"] else []
+        elif stage_info.get("target_details"):
+            target_ids = [t.get("figure_id") for t in stage_info["target_details"] if t.get("figure_id")]
+        else:
+            # Fall back to figures only if stage doesn't explicitly define targets
+            target_ids = [fig.get("id", "FigStub") for fig in figures]
     else:
         target_ids = [fig.get("id", "FigStub") for fig in figures]
     
-    # Validate targets exist
+    # Validate targets exist - check BEFORE file validation
     if not target_ids or len(target_ids) == 0:
         logger.error(
             f"Stage '{current_stage_id}' has no targets defined. "
@@ -109,8 +114,13 @@ def results_analyzer_node(state: ReproState) -> dict:
         return {
             "workflow_phase": "analysis",
             "analysis_summary": {
+                "stage_id": current_stage_id,
                 "overall_classification": AnalysisClassification.NO_TARGETS,
                 "unresolved_targets": [],
+                "matched_targets": [],
+                "pending_targets": [],
+                "missing_targets": [],
+                "mismatch_targets": [],
                 "summary": "Analysis skipped: Stage has no targets defined.",
                 "totals": {
                     "targets": 0,
@@ -119,6 +129,10 @@ def results_analyzer_node(state: ReproState) -> dict:
                     "missing": 0,
                     "mismatch": 0,
                 },
+                "discrepancies_logged": 0,
+                "validation_criteria": [],
+                "feedback_applied": [],
+                "notes": f"Stage {current_stage_id} has no targets - skipping analysis.",
             },
             "analysis_overall_classification": AnalysisClassification.NO_TARGETS,
             "analysis_result_reports": [],
@@ -246,7 +260,7 @@ def results_analyzer_node(state: ReproState) -> dict:
                     f"Figure image path does not exist or is not a file: {paper_image_path}. "
                     f"Comparison for {target_id} will proceed without reference image."
                 )
-                paper_image_path = None
+                paper_image_path = None  # Set to None when file doesn't exist
         
         requires_digitized = precision_requirement == "excellent"
         quantitative_metrics: Dict[str, Any] = {}
@@ -275,10 +289,33 @@ def results_analyzer_node(state: ReproState) -> dict:
             )
             classification_label = "missing_digitized_data"
             figure_comparisons.append({
-                "target_id": target_id,
+                "figure_id": target_id,
+                "target_id": target_id,  # Keep for backward compatibility
+                "stage_id": current_stage_id,
                 "status": "missing_digitized_data",
                 "classification": "missing_digitized_data",
                 "quantitative_metrics": {},
+                "notes": "Analysis blocked: Digitized data required but not provided",
+                "title": figure_meta.get("description", target_id),
+                "paper_image_path": paper_image_path,
+                "reproduction_image_path": None,
+                "comparison_table": [],
+                "shape_comparison": [],
+                "reason_for_difference": "Digitized reference data required but not provided",
+            })
+            # Add report entry even when digitized data is missing
+            expected_names = expected_outputs_map.get(target_id, [])
+            per_result_reports.append({
+                "result_id": f"{current_stage_id or 'stage'}_{target_id}",
+                "target_figure": target_id,
+                "status": classification_label,
+                "expected_outputs": expected_names,
+                "matched_output": matched_file if has_output else None,
+                "precision_requirement": precision_requirement,
+                "digitized_data_path": None,
+                "validation_criteria": [],
+                "quantitative_metrics": {},
+                "criteria_failures": ["Digitized reference data required but not provided"],
                 "notes": "Analysis blocked: Digitized data required but not provided",
             })
             continue
@@ -422,11 +459,23 @@ def results_analyzer_node(state: ReproState) -> dict:
     pending_count = len(pending_targets)
     mismatch_count = len(mismatch_targets)
     
+    # Check if any reports have missing/incomplete metrics
+    has_incomplete_metrics = False
+    for report in per_result_reports:
+        metrics = report.get("quantitative_metrics", {})
+        # Check if critical metrics are missing (None or empty)
+        if not metrics or metrics.get("peak_position_error_percent") is None:
+            # If precision requirement is excellent or acceptable, missing metrics is a problem
+            precision = report.get("precision_requirement", "qualitative")
+            if precision in ("excellent", "acceptable"):
+                has_incomplete_metrics = True
+                break
+    
     if total_targets == 0:
         overall_classification = AnalysisClassification.NO_TARGETS
     elif missing_count > 0 or mismatch_count > 0:
         overall_classification = AnalysisClassification.POOR_MATCH
-    elif pending_count > 0:
+    elif pending_count > 0 or has_incomplete_metrics:
         overall_classification = AnalysisClassification.PARTIAL_MATCH
     elif len(matched_targets) == total_targets:
         overall_classification = AnalysisClassification.EXCELLENT_MATCH
@@ -585,19 +634,21 @@ def comparison_validator_node(state: ReproState) -> dict:
         target for target in expected_targets
         if target not in {comp.get("figure_id") for comp in comparisons}
     ]
-    if missing_comparisons:
-        verdict = "needs_revision"
-        feedback = f"Results analyzer did not produce comparisons for: {', '.join(missing_comparisons)}"
     
-    if report_issues or missing_report_targets:
+    # Combine all issues: missing comparisons, report issues, and missing reports
+    all_issues = []
+    if missing_comparisons:
+        all_issues.append(f"Results analyzer did not produce comparisons for: {', '.join(missing_comparisons)}")
+    if report_issues:
+        all_issues.extend(report_issues)
+    if missing_report_targets:
+        all_issues.append(f"Missing quantitative reports for: {', '.join(missing_report_targets)}")
+    
+    if all_issues:
         verdict = "needs_revision"
-        combined = report_issues + (
-            [f"Missing quantitative reports for: {', '.join(missing_report_targets)}"]
-            if missing_report_targets else []
-        )
-        feedback = "; ".join(combined[:3])
-        if len(combined) > 3:
-            feedback += f" (+{len(combined)-3} more)"
+        feedback = "; ".join(all_issues[:3])
+        if len(all_issues) > 3:
+            feedback += f" (+{len(all_issues)-3} more)"
     
     result: Dict[str, Any] = {
         "workflow_phase": "comparison_validation",

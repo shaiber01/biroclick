@@ -72,6 +72,10 @@ def parse_user_response(user_responses: Dict[str, str]) -> str:
     Returns:
         Uppercased last response string, or empty string if no responses
     """
+    if user_responses is None:
+        return ""
+    if not isinstance(user_responses, dict):
+        raise TypeError(f"user_responses must be a dict, got {type(user_responses).__name__}")
     if not user_responses:
         return ""
     last_response = list(user_responses.values())[-1]
@@ -89,6 +93,12 @@ def check_keywords(response: str, keywords: list) -> bool:
     Returns:
         True if any keyword is found as a distinct word
     """
+    if response is None:
+        return False
+    if keywords is None:
+        raise TypeError("keywords must be a list, got None")
+    if not isinstance(keywords, list):
+        raise TypeError(f"keywords must be a list, got {type(keywords).__name__}")
     if not response or not keywords:
         return False
         
@@ -97,8 +107,21 @@ def check_keywords(response: str, keywords: list) -> bool:
     for kw in keywords:
         if not kw:
             continue
+        # Convert keyword to string and uppercase for case-insensitive matching
+        kw_str = str(kw).upper()
+        # Escape regex special characters
+        kw_escaped = re.escape(kw_str)
         # Match whole word only to avoid false positives (e.g. "DISAPPROVE" matching "APPROVE")
-        pattern = rf"\b{re.escape(kw)}\b"
+        # Use word boundaries, but handle keywords with non-word characters
+        # For keywords with only word characters, use \b boundaries
+        # For keywords with non-word characters, use lookahead/lookbehind for boundaries
+        if re.search(r'^[a-zA-Z0-9_]+$', kw_str):
+            # Simple word-only keyword: use word boundaries
+            pattern = rf"\b{kw_escaped}\b"
+        else:
+            # Keyword contains non-word characters: match as literal with boundaries
+            # Match start of string or non-word char before, and end of string or non-word char after
+            pattern = rf"(?<!\w){kw_escaped}(?!\w)"
         if re.search(pattern, response_upper):
             return True
             
@@ -136,9 +159,29 @@ def increment_counter_with_max(
         if not incremented:
             # Handle max reached
     """
+    if state is None:
+        raise TypeError("state must be a dict, got None")
+    if not isinstance(state, dict):
+        raise TypeError(f"state must be a dict, got {type(state).__name__}")
+    
     current_count = state.get(counter_name, 0)
-    runtime_config = state.get("runtime_config", {})
+    # Handle case where counter exists but is None
+    if current_count is None:
+        current_count = 0
+    # Validate counter value is an integer
+    if not isinstance(current_count, int):
+        raise TypeError(f"counter '{counter_name}' must be an int, got {type(current_count).__name__}: {current_count}")
+    
+    runtime_config = state.get("runtime_config") or {}
+    if not isinstance(runtime_config, dict):
+        raise TypeError(f"runtime_config must be a dict, got {type(runtime_config).__name__}")
+    
     max_value = runtime_config.get(config_key, default_max)
+    # Validate max_value is an integer
+    if max_value is not None and not isinstance(max_value, int):
+        raise TypeError(f"max value '{config_key}' must be an int, got {type(max_value).__name__}: {max_value}")
+    if max_value is None:
+        max_value = default_max
     
     if current_count < max_value:
         return current_count + 1, True
@@ -177,9 +220,17 @@ def create_llm_error_auto_approve(
     verb_suffix = "d" if default_verdict.endswith("e") else "ed"
     # If default_verdict is "pass", -> "passed". If "approve" -> "approved".
     
-    _logger.warning(f"{agent_name} LLM call failed: {error}. Auto-{default_verdict}ing.")
+    # Handle case where __str__ might return None
+    try:
+        error_str = str(error)
+        if error_str is None:
+            error_str = ""
+    except (TypeError, ValueError):
+        error_str = ""
     
-    error_msg = str(error)[:error_truncate_len]
+    _logger.warning(f"{agent_name} LLM call failed: {error_str or repr(error)}. Auto-{default_verdict}ing.")
+    
+    error_msg = error_str[:error_truncate_len] if error_str else ""
     agent_label = agent_name.replace("_", " ").title()
     
     return {
@@ -219,9 +270,17 @@ def create_llm_error_escalation(
             logger.error(f"Code generator LLM call failed: {e}")
             return create_llm_error_escalation("code_generator", "code_generation", e)
     """
-    _logger.error(f"{agent_name} LLM call failed: {error}. Escalating to user.")
+    # Handle case where __str__ might return None
+    try:
+        error_str = str(error)
+        if error_str is None:
+            error_str = ""
+    except (TypeError, ValueError):
+        error_str = ""
     
-    error_msg = str(error)[:error_truncate_len]
+    _logger.error(f"{agent_name} LLM call failed: {error_str or repr(error)}. Escalating to user.")
+    
+    error_msg = error_str[:error_truncate_len] if error_str else ""
     agent_label = agent_name.replace("_", " ").title()
     
     return {
@@ -264,9 +323,17 @@ def create_llm_error_fallback(
             result.update(fallback)
     """
     def handler(error: Exception) -> Dict[str, Any]:
-        _logger.warning(f"{agent_name} LLM call failed: {error}. Using default: {default_verdict}")
+        # Handle case where __str__ might return None
+        try:
+            error_str = str(error)
+            if error_str is None:
+                error_str = ""
+        except (TypeError, ValueError):
+            error_str = ""
         
-        error_msg = str(error)[:error_truncate_len]
+        _logger.warning(f"{agent_name} LLM call failed: {error_str or repr(error)}. Using default: {default_verdict}")
+        
+        error_msg = error_str[:error_truncate_len] if error_str else ""
         feedback = feedback_msg.format(error=error_msg) if feedback_msg else f"LLM unavailable: {error_msg}"
         
         return {
