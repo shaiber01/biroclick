@@ -70,11 +70,12 @@ def execution_validator_node(state: ReproState) -> dict:
     fallback = get_stage_design_spec(state, state.get("current_stage_id"), "fallback_strategy", "ask_user")
     
     # Check for timeout (via flag or string match)
-    stage_outputs = state.get("stage_outputs", {})
+    stage_outputs = state.get("stage_outputs") or {}
     is_timeout = stage_outputs.get("timeout_exceeded", False)
     if not is_timeout and run_error:
         # Legacy/fallback check for string pattern
-        is_timeout = "exceeded timeout" in str(run_error) or "TIMEOUT_ERROR" in str(run_error)
+        err_str = str(run_error).lower()
+        is_timeout = "exceeded timeout" in err_str or "timeout_error" in err_str
     
     if is_timeout:
         if fallback == "skip_with_warning":
@@ -108,6 +109,8 @@ def execution_validator_node(state: ReproState) -> dict:
                 user_content=user_content,
                 state=state,
             )
+            if "verdict" not in agent_output:
+                raise ValueError("Agent output missing 'verdict' key")
             agent_output["stage_id"] = stage_id
         except Exception as e:
             logger.error(f"Execution validator LLM call failed: {e}")
@@ -168,7 +171,7 @@ def physics_sanity_node(state: ReproState) -> dict:
     system_prompt = build_agent_prompt("physics_sanity", state)
     
     # Build user content for physics sanity check
-    stage_outputs = state.get("stage_outputs", {})
+    stage_outputs = state.get("stage_outputs") or {}
     stage_id = state.get("current_stage_id", "unknown")
     design = state.get("design_description", {})
     
@@ -190,6 +193,8 @@ def physics_sanity_node(state: ReproState) -> dict:
             user_content=user_content,
             state=state,
         )
+        if "verdict" not in agent_output:
+            raise ValueError("Agent output missing 'verdict' key")
         agent_output["stage_id"] = stage_id
         if "backtrack_suggestion" not in agent_output:
             agent_output["backtrack_suggestion"] = {"suggest_backtrack": False}
@@ -220,8 +225,9 @@ def physics_sanity_node(state: ReproState) -> dict:
         result["design_feedback"] = agent_output.get("summary", "Design flaw detected.")
     
     # If agent suggests backtrack, populate backtrack_suggestion for supervisor
-    if agent_output.get("backtrack_suggestion", {}).get("suggest_backtrack"):
-        result["backtrack_suggestion"] = agent_output["backtrack_suggestion"]
+    backtrack = agent_output.get("backtrack_suggestion", {})
+    if isinstance(backtrack, dict) and backtrack.get("suggest_backtrack"):
+        result["backtrack_suggestion"] = backtrack
     
     return result
 

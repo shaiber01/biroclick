@@ -120,8 +120,8 @@ def simulation_designer_node(state: ReproState) -> dict:
     # Add new assumptions if any
     new_assumptions = agent_output.get("new_assumptions", [])
     if new_assumptions:
-        existing = state.get("assumptions", {})
-        global_assumptions = existing.get("global_assumptions", [])
+        existing = state.get("assumptions") or {}
+        global_assumptions = list(existing.get("global_assumptions", []))
         global_assumptions.extend(new_assumptions)
         result["assumptions"] = {**existing, "global_assumptions": global_assumptions}
     

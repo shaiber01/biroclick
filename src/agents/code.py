@@ -96,18 +96,18 @@ def code_reviewer_node(state: ReproState) -> dict:
     
     result: Dict[str, Any] = {
         "workflow_phase": "code_review",
-        "last_code_review_verdict": agent_output["verdict"],
+        "last_code_review_verdict": agent_output.get("verdict", "needs_revision"),
         "reviewer_issues": agent_output.get("issues", []),
         "code_revision_count": state.get("code_revision_count", 0),  # Always include current count
     }
     
     # Increment code revision counter if needs_revision
-    if agent_output["verdict"] == "needs_revision":
+    if result["last_code_review_verdict"] == "needs_revision":
         new_count, _ = increment_counter_with_max(
             state, "code_revision_count", "max_code_revisions", MAX_CODE_REVISIONS
         )
         result["code_revision_count"] = new_count
-        result["reviewer_feedback"] = agent_output.get("feedback", agent_output.get("summary", ""))
+        result["reviewer_feedback"] = agent_output.get("feedback", agent_output.get("summary", "Missing verdict or feedback in review"))
     
     return result
 
@@ -224,12 +224,16 @@ def code_generator_node(state: ReproState) -> dict:
         return create_llm_error_escalation("code_generator", "code_generation", e)
     
     # Extract generated code from agent output
-    generated_code = agent_output.get("code", "")
-    if not generated_code and agent_output.get("simulation_code"):
-        generated_code = agent_output.get("simulation_code")
-    if not generated_code:
-        generated_code = json.dumps(agent_output, indent=2) if isinstance(agent_output, dict) else str(agent_output)
-    
+    generated_code = ""
+    if isinstance(agent_output, dict):
+        generated_code = agent_output.get("code", "")
+        if not generated_code:
+            generated_code = agent_output.get("simulation_code", "")
+        if not generated_code:
+            generated_code = json.dumps(agent_output, indent=2)
+    else:
+        generated_code = str(agent_output)
+
     # Validate generated code
     stub_markers = ["STUB", "TODO", "PLACEHOLDER", "# Replace", "would be generated"]
     is_stub = any(marker in generated_code.upper() for marker in stub_markers)
@@ -260,7 +264,7 @@ def code_generator_node(state: ReproState) -> dict:
     result = {
         "workflow_phase": "code_generation",
         "code": generated_code,
-        "expected_outputs": agent_output.get("expected_outputs", []),
+        "expected_outputs": agent_output.get("expected_outputs", []) if isinstance(agent_output, dict) else [],
     }
     
     log_agent_call("CodeGeneratorAgent", "generate_code", start_time)(state, result)
