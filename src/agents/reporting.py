@@ -255,11 +255,17 @@ def handle_backtrack_node(state: ReproState) -> dict:
         elif stage_id in stages_to_invalidate:
             stage["status"] = "invalidated"
     
+    # Handle backtrack_count: treat None as 0
+    current_backtrack_count = state.get("backtrack_count")
+    if current_backtrack_count is None:
+        current_backtrack_count = 0
+    new_backtrack_count = current_backtrack_count + 1
+    
     result: Dict[str, Any] = {
         "workflow_phase": "backtracking",
         "progress": progress,
         "current_stage_id": target_id,
-        "backtrack_count": state.get("backtrack_count", 0) + 1,
+        "backtrack_count": new_backtrack_count,
         "backtrack_decision": None,
         "code": None,
         "design_description": None,
@@ -281,11 +287,12 @@ def handle_backtrack_node(state: ReproState) -> dict:
         result["validated_materials"] = []
         result["pending_validated_materials"] = []
     
-    # Guard clause: max backtracks exceeded
+    # Guard clause: max backtracks exceeded (use >= to trigger at exact boundary)
     max_backtracks = state.get("runtime_config", {}).get("max_backtracks", 2)
-    if result["backtrack_count"] > max_backtracks:
+    if new_backtrack_count >= max_backtracks:
         return {
             "workflow_phase": "backtracking_limit",
+            "backtrack_count": new_backtrack_count,
             "ask_user_trigger": "backtrack_limit",
             "pending_user_questions": [
                 f"Backtrack limit ({max_backtracks}) exceeded. System is looping. How to proceed?"

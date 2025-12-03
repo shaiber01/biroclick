@@ -326,7 +326,7 @@ def handle_context_overflow(
     
     elif "TRUNCATE" in response_text:
         current_text = state.get("paper_text", "")
-        if len(current_text) > 20000:
+        if len(current_text) >= 20000:
             truncated_text = (
                 current_text[:15000] +
                 "\n\n... [TRUNCATED BY USER REQUEST] ...\n\n" +
@@ -335,6 +335,8 @@ def handle_context_overflow(
             result["paper_text"] = truncated_text
             result["supervisor_feedback"] = "Truncating paper to first 15k and last 5k chars."
         else:
+            # Preserve paper_text even when not truncating
+            result["paper_text"] = current_text
             result["supervisor_feedback"] = "Paper already short enough, proceeding."
         result["supervisor_verdict"] = "ok_continue"
     
@@ -410,7 +412,10 @@ def handle_backtrack_approval(
     """
     response_text = parse_user_response(user_responses)
     
-    if "APPROVE" in response_text:
+    is_approval = check_keywords(response_text, APPROVAL_KEYWORDS)
+    is_rejection = check_keywords(response_text, REJECTION_KEYWORDS)
+    
+    if is_approval and not is_rejection:
         result["supervisor_verdict"] = "backtrack_to_stage"
         decision = state.get("backtrack_decision", {})
         if decision and get_dependent_stages_fn:
@@ -420,7 +425,7 @@ def handle_backtrack_approval(
                 decision["stages_to_invalidate"] = dependent
                 result["backtrack_decision"] = decision
     
-    elif "REJECT" in response_text:
+    elif is_rejection:
         result["backtrack_suggestion"] = None
         result["supervisor_verdict"] = "ok_continue"
     
@@ -450,7 +455,8 @@ def handle_deadlock_detected(
     
     elif "REPLAN" in response_text:
         result["supervisor_verdict"] = "replan_needed"
-        result["planner_feedback"] = f"User requested replan due to deadlock: {response_text}."
+        raw_response = list(user_responses.values())[-1] if user_responses else ""
+        result["planner_feedback"] = f"User requested replan due to deadlock: {raw_response}."
     
     elif "STOP" in response_text:
         result["supervisor_verdict"] = "all_complete"

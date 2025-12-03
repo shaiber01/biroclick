@@ -117,20 +117,61 @@ def select_stage_node(state: ReproState) -> dict:
     for stage in stages:
         if stage.get("status") == "needs_rerun":
             # Guard against race condition
-            dependencies = stage.get("dependencies", [])
+            dependencies = stage.get("dependencies")
+            # Handle None dependencies - treat as empty list
+            if dependencies is None:
+                dependencies = []
+            elif not isinstance(dependencies, list):
+                # If dependencies is not a list, treat as empty
+                dependencies = []
+            
             has_blocking_deps = False
             
             for dep_id in dependencies:
                 dep_stage = next((s for s in stages if s.get("stage_id") == dep_id), None)
                 if dep_stage:
                     dep_status = dep_stage.get("status")
-                    # If dependency is invalidated or also needs rerun, dependent cannot run yet
-                    if dep_status in ["invalidated", "needs_rerun", "not_started", "in_progress", "blocked"]:
+                    # Only allow dependencies that are completed_success or completed_partial
+                    # All other statuses (invalidated, needs_rerun, not_started, in_progress, blocked, completed_failed) are blocking
+                    if dep_status not in ["completed_success", "completed_partial"]:
                         has_blocking_deps = True
                         break
+                else:
+                    # Missing dependency - this is blocking
+                    has_blocking_deps = True
+                    break
             
+            # For needs_rerun stages, if explicit dependencies aren't satisfied,
+            # check if validation hierarchy allows the stage type to run
             if has_blocking_deps:
-                continue
+                stage_type = stage.get("stage_type")
+                if stage_type:
+                    MAT_VAL_KEY = STAGE_TYPE_TO_HIERARCHY_KEY["MATERIAL_VALIDATION"]
+                    SINGLE_STRUCT_KEY = STAGE_TYPE_TO_HIERARCHY_KEY["SINGLE_STRUCTURE"]
+                    ARRAY_SYS_KEY = STAGE_TYPE_TO_HIERARCHY_KEY["ARRAY_SYSTEM"]
+                    PARAM_SWEEP_KEY = STAGE_TYPE_TO_HIERARCHY_KEY["PARAMETER_SWEEP"]
+                    
+                    required_level_key = STAGE_TYPE_TO_HIERARCHY_KEY.get(stage_type)
+                    
+                    # Check if validation hierarchy allows this stage type
+                    hierarchy_allows = False
+                    if stage_type == "SINGLE_STRUCTURE":
+                        hierarchy_allows = hierarchy.get(MAT_VAL_KEY) in ["passed", "partial"]
+                    elif stage_type == "ARRAY_SYSTEM":
+                        hierarchy_allows = hierarchy.get(SINGLE_STRUCT_KEY) in ["passed", "partial"]
+                    elif stage_type == "PARAMETER_SWEEP":
+                        hierarchy_allows = hierarchy.get(SINGLE_STRUCT_KEY) in ["passed", "partial"]
+                    elif stage_type == "COMPLEX_PHYSICS":
+                        hierarchy_allows = (hierarchy.get(PARAM_SWEEP_KEY) in ["passed", "partial"] or
+                                          hierarchy.get(ARRAY_SYS_KEY) in ["passed", "partial"])
+                    elif stage_type == "MATERIAL_VALIDATION":
+                        hierarchy_allows = True  # Material validation has no prerequisites
+                    
+                    if not hierarchy_allows:
+                        continue
+                else:
+                    # No stage_type and dependencies not satisfied - skip
+                    continue
             
             selected_stage_id = stage.get("stage_id")
             current_stage_id = state.get("current_stage_id")
@@ -162,12 +203,32 @@ def select_stage_node(state: ReproState) -> dict:
         stage_id = stage.get("stage_id")
         status = stage.get("status", "not_started")
         
-        if status in ["completed_success", "completed_partial", "completed_failed", "in_progress"]:
+        if status in ["completed_success", "completed_partial", "completed_failed", "in_progress", "invalidated"]:
             continue
         
         # Re-check blocked stages
         if status == "blocked":
+            # Before trying to unblock, check if stage has valid stage_type
+            # Stages blocked due to missing/unknown stage_type should not be unblocked
+            stage_type = stage.get("stage_type")
+            if not stage_type:
+                # Stage is blocked due to missing stage_type - don't try to unblock
+                continue
+            
+            # Check if stage_type is valid (not unknown)
+            required_level_key = STAGE_TYPE_TO_HIERARCHY_KEY.get(stage_type)
+            if stage_type and stage_type not in ["COMPLEX_PHYSICS"] and not required_level_key:
+                # Stage is blocked due to unknown stage_type - don't try to unblock
+                continue
+            
+            # Stage has valid stage_type, check if dependencies are now satisfied
             dependencies = stage.get("dependencies", [])
+            # Only unblock if stage has dependencies that are now satisfied
+            # Stages blocked for other reasons (budget, etc.) should remain blocked
+            if not dependencies:
+                # No dependencies - blocked for non-dependency reason, skip
+                continue
+            
             deps_satisfied = True
             missing_deps = []
             
@@ -289,19 +350,89 @@ def select_stage_node(state: ReproState) -> dict:
                 )
             continue
         
+        # Helper to check if a stage type exists in the plan and can potentially complete
+        def stage_type_can_complete(target_type: str) -> bool:
+            """Check if at least one stage of the target type exists and is not permanently blocked."""
+            for s in stages:
+                if s.get("stage_type") == target_type:
+                    s_status = s.get("status", "not_started")
+                    # A stage can potentially complete if it's not already blocked or failed
+                    if s_status not in ["blocked", "completed_failed"]:
+                        return True
+            return False
+        
+        # Validation hierarchy checks with permanent blocking if prerequisite type can't complete
         if required_level_key:
             if stage_type == "SINGLE_STRUCTURE":
                 if hierarchy.get(MAT_VAL_KEY) not in ["passed", "partial"]:
+                    # Check if MATERIAL_VALIDATION stages can complete
+                    if not stage_type_can_complete("MATERIAL_VALIDATION"):
+                        logger.error(
+                            f"Stage '{stage.get('stage_id')}' (SINGLE_STRUCTURE) requires MATERIAL_VALIDATION "
+                            "but no completable MATERIAL_VALIDATION stage exists. Marking as blocked."
+                        )
+                        progress_stage = get_progress_stage(state, stage.get("stage_id"))
+                        if progress_stage and progress_stage.get("status") != "blocked":
+                            update_progress_stage_status(
+                                state,
+                                stage.get("stage_id"),
+                                "blocked",
+                                summary="Blocked: No completable MATERIAL_VALIDATION stage exists in plan"
+                            )
                     continue
             elif stage_type == "ARRAY_SYSTEM":
                 if hierarchy.get(SINGLE_STRUCT_KEY) not in ["passed", "partial"]:
+                    # Check if SINGLE_STRUCTURE stages can complete
+                    if not stage_type_can_complete("SINGLE_STRUCTURE"):
+                        logger.error(
+                            f"Stage '{stage.get('stage_id')}' (ARRAY_SYSTEM) requires SINGLE_STRUCTURE "
+                            "but no completable SINGLE_STRUCTURE stage exists. Marking as blocked."
+                        )
+                        progress_stage = get_progress_stage(state, stage.get("stage_id"))
+                        if progress_stage and progress_stage.get("status") != "blocked":
+                            update_progress_stage_status(
+                                state,
+                                stage.get("stage_id"),
+                                "blocked",
+                                summary="Blocked: No completable SINGLE_STRUCTURE stage exists in plan"
+                            )
                     continue
             elif stage_type == "PARAMETER_SWEEP":
                 if hierarchy.get(SINGLE_STRUCT_KEY) not in ["passed", "partial"]:
+                    # Check if SINGLE_STRUCTURE stages can complete
+                    if not stage_type_can_complete("SINGLE_STRUCTURE"):
+                        logger.error(
+                            f"Stage '{stage.get('stage_id')}' (PARAMETER_SWEEP) requires SINGLE_STRUCTURE "
+                            "but no completable SINGLE_STRUCTURE stage exists. Marking as blocked."
+                        )
+                        progress_stage = get_progress_stage(state, stage.get("stage_id"))
+                        if progress_stage and progress_stage.get("status") != "blocked":
+                            update_progress_stage_status(
+                                state,
+                                stage.get("stage_id"),
+                                "blocked",
+                                summary="Blocked: No completable SINGLE_STRUCTURE stage exists in plan"
+                            )
                     continue
         elif stage_type == "COMPLEX_PHYSICS":
             if hierarchy.get(PARAM_SWEEP_KEY) not in ["passed", "partial"] and \
                hierarchy.get(ARRAY_SYS_KEY) not in ["passed", "partial"]:
+                # Check if either PARAMETER_SWEEP or ARRAY_SYSTEM can complete
+                can_param_sweep = stage_type_can_complete("PARAMETER_SWEEP")
+                can_array_sys = stage_type_can_complete("ARRAY_SYSTEM")
+                if not can_param_sweep and not can_array_sys:
+                    logger.error(
+                        f"Stage '{stage.get('stage_id')}' (COMPLEX_PHYSICS) requires PARAMETER_SWEEP or "
+                        "ARRAY_SYSTEM but neither can complete. Marking as blocked."
+                    )
+                    progress_stage = get_progress_stage(state, stage.get("stage_id"))
+                    if progress_stage and progress_stage.get("status") != "blocked":
+                        update_progress_stage_status(
+                            state,
+                            stage.get("stage_id"),
+                            "blocked",
+                            summary="Blocked: No completable PARAMETER_SWEEP or ARRAY_SYSTEM stage exists in plan"
+                        )
                 continue
         
         # Type order enforcement

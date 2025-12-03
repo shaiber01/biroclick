@@ -53,12 +53,34 @@ def _get_dependent_stages(plan: dict, target_stage_id: str) -> list:
         List of stage_ids that depend on target_stage_id
     """
     stages = plan.get("stages", [])
-    dependents_map = {s["stage_id"]: [] for s in stages}
+    # Handle None case: if stages is None, treat as empty list
+    if stages is None:
+        stages = []
     
+    # Build dependents map, skipping stages without stage_id
+    dependents_map = {}
+    for s in stages:
+        if isinstance(s, dict) and "stage_id" in s:
+            dependents_map[s["stage_id"]] = []
+    
+    # Build dependency relationships
     for stage in stages:
-        for dep in stage.get("dependencies", []):
+        if not isinstance(stage, dict) or "stage_id" not in stage:
+            continue
+        
+        stage_id = stage["stage_id"]
+        dependencies = stage.get("dependencies", [])
+        # Handle None case: if dependencies is None, treat as empty list
+        if dependencies is None:
+            dependencies = []
+        
+        # Ensure dependencies is iterable
+        if not isinstance(dependencies, (list, tuple)):
+            continue
+        
+        for dep in dependencies:
             if dep in dependents_map:
-                dependents_map[dep].append(stage["stage_id"])
+                dependents_map[dep].append(stage_id)
                 
     invalidated = set()
     queue = [target_stage_id]
@@ -105,7 +127,7 @@ def _derive_stage_completion_outcome(
     elif comparison_breakdown["pending"] and status == "completed_success":
         status = "completed_partial"
     
-    if comparison_verdict == "needs_revision":
+    if comparison_verdict == "needs_revision" and status == "completed_success":
         status = "completed_partial"
     if physics_verdict == "warning" and status == "completed_success":
         status = "completed_partial"

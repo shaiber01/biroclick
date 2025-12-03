@@ -195,7 +195,9 @@ def get_validation_hierarchy(state: dict) -> "ValidationHierarchyStatus":
     # ═══════════════════════════════════════════════════════════════════════
     # CONSISTENCY CHECK: Validate plan ↔ progress alignment
     # ═══════════════════════════════════════════════════════════════════════
-    plan = state.get("plan", {})
+    plan = state.get("plan")
+    if plan is None or not isinstance(plan, dict):
+        plan = {}
     plan_stages = plan.get("stages", [])
     
     if plan_stages and not stages:
