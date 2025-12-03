@@ -502,10 +502,13 @@ def _record_call_metrics(
 ):
     """Record LLM call metrics to state."""
     if "metrics" not in state:
-        state["metrics"] = {"agent_calls": [], "stage_metrics": []}
+        state["metrics"] = {}
     
     if "agent_calls" not in state["metrics"]:
         state["metrics"]["agent_calls"] = []
+    
+    if "stage_metrics" not in state["metrics"]:
+        state["metrics"]["stage_metrics"] = []
     
     state["metrics"]["agent_calls"].append({
         "agent": agent_name,

@@ -119,5 +119,6 @@
   "potential_issues": [
     "Resolution may need to be increased for accurate near-field calculations",
     "Longer runtime may be needed for sharp resonance peaks"
-  ]
+  ],
+  "summary": "3D FDTD simulation of gold nanorod in water using Meep. The design uses tabulated gold optical properties from Johnson & Christy and models the nanorod as a cylinder with 100nm length and 40nm diameter. A broadband Gaussian source excites the longitudinal plasmon mode, and extinction is calculated via transmitted flux measurement."
 }

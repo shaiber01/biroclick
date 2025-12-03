@@ -276,12 +276,22 @@ def create_paper_input(
             ]
         )
     """
+    # Build paper_input dict - validation will check types
+    # Copy input lists and their contents to avoid side effects
+    # Note: We pass figures as-is to let validation catch type errors
+    # If it's a valid list, we'll copy it; otherwise validation will fail
+    if isinstance(figures, list):
+        figures_for_dict = [fig.copy() if isinstance(fig, dict) else fig for fig in figures]
+    else:
+        # Not a list - pass as-is, validation will catch this
+        figures_for_dict = figures
+    
     paper_input: Dict[str, Any] = {
         "paper_id": paper_id,
         "paper_title": paper_title,
         "paper_text": paper_text,
         "paper_domain": paper_domain,
-        "figures": figures,
+        "figures": figures_for_dict,
     }
     
     # Build supplementary section if any supplementary content provided
@@ -291,9 +301,15 @@ def create_paper_input(
         if supplementary_text:
             supplementary["supplementary_text"] = supplementary_text
         if supplementary_figures:
-            supplementary["supplementary_figures"] = supplementary_figures
+            # Copy supplementary figures list and contents to avoid side effects
+            supplementary["supplementary_figures"] = [
+                fig.copy() if isinstance(fig, dict) else fig for fig in supplementary_figures
+            ]
         if supplementary_data_files:
-            supplementary["supplementary_data_files"] = supplementary_data_files
+            # Copy supplementary data files list and contents to avoid side effects
+            supplementary["supplementary_data_files"] = [
+                file.copy() if isinstance(file, dict) else file for file in supplementary_data_files
+            ]
         
         paper_input["supplementary"] = supplementary
     
@@ -376,9 +392,17 @@ def load_paper_from_markdown(
             base_url="https://arxiv.org/html/paper123/"
         )
     """
+    # Check for empty path first
+    if not markdown_path or not markdown_path.strip():
+        raise FileNotFoundError(f"Markdown file not found: {markdown_path}")
+    
     md_path = Path(markdown_path)
     if not md_path.exists():
         raise FileNotFoundError(f"Markdown file not found: {markdown_path}")
+    
+    # Check if path is a directory, not a file
+    if md_path.is_dir():
+        raise FileNotFoundError(f"Markdown file not found: {markdown_path} (path is a directory)")
     
     # Read markdown content
     with open(md_path, 'r', encoding='utf-8') as f:
@@ -465,9 +489,9 @@ def load_paper_from_markdown(
     }
     
     # Add supplementary section if we have any supplementary content
-    if supplementary_text or supplementary_figures:
+    if supplementary_text is not None or supplementary_figures:
         paper_input['supplementary'] = {}
-        if supplementary_text:
+        if supplementary_text is not None:
             paper_input['supplementary']['supplementary_text'] = supplementary_text
         if supplementary_figures:
             paper_input['supplementary']['supplementary_figures'] = supplementary_figures
@@ -529,8 +553,13 @@ def get_figure_by_id(paper_input: PaperInput, figure_id: str) -> Optional[Figure
     Returns:
         FigureInput dict if found, None otherwise
     """
+    # Return None immediately if figure_id is None or empty string
+    if not figure_id:
+        return None
+    
     for fig in paper_input.get("figures", []):
-        if fig.get("id") == figure_id:
+        # Only match if figure has an id field and it matches
+        if "id" in fig and fig["id"] == figure_id:
             return fig
     return None
 

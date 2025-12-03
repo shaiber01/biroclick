@@ -4,7 +4,7 @@
   "title": "SimulationDesignerAgentOutput",
   "description": "Output schema for SimulationDesignerAgent - detailed simulation design specification",
   "type": "object",
-  "required": ["stage_id", "design_description", "unit_system", "geometry", "materials", "sources", "boundary_conditions", "monitors", "performance_estimate"],
+  "required": ["stage_id", "design_description", "unit_system", "geometry", "materials", "sources", "boundary_conditions", "monitors", "performance_estimate", "summary"],
   "properties": {
     "stage_id": {
       "type": "string",
@@ -134,8 +134,29 @@
             "properties": {
               "epsilon": { "type": "number" },
               "epsilon_inf": { "type": "number" },
-              "drude_terms": { "type": "array" },
-              "lorentz_terms": { "type": "array" }
+              "drude_terms": {
+                "type": "array",
+                "description": "Drude model oscillator terms",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "omega_p": { "type": "number", "description": "Plasma frequency" },
+                    "gamma": { "type": "number", "description": "Damping rate" }
+                  }
+                }
+              },
+              "lorentz_terms": {
+                "type": "array",
+                "description": "Lorentz model oscillator terms",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "sigma": { "type": "number", "description": "Oscillator strength" },
+                    "omega_0": { "type": "number", "description": "Resonance frequency" },
+                    "gamma": { "type": "number", "description": "Damping rate" }
+                  }
+                }
+              }
             }
           },
           "wavelength_range": {
@@ -305,6 +326,11 @@
       "type": "array",
       "description": "Potential issues or limitations with this design",
       "items": { "type": "string" }
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1,
+      "description": "One paragraph summary of the simulation design"
     }
   }
 }

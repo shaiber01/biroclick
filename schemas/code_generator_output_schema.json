@@ -4,7 +4,7 @@
   "title": "CodeGeneratorAgentOutput",
   "description": "Output schema for CodeGeneratorAgent - Python+Meep simulation code generation",
   "type": "object",
-  "required": ["stage_id", "code", "expected_outputs", "estimated_runtime_minutes"],
+  "required": ["stage_id", "code", "expected_outputs", "estimated_runtime_minutes", "summary"],
   "properties": {
     "stage_id": {
       "type": "string",
@@ -133,6 +133,11 @@
     "revision_notes": {
       "type": ["string", "null"],
       "description": "If this is a revision, notes on what changed from previous version"
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1,
+      "description": "One paragraph summary of the generated code"
     }
   }
 }

@@ -63,6 +63,12 @@ def validate_paper_input(paper_input: Dict[str, Any]) -> List[str]:
         elif " " in paper_id:
             warnings.append(f"paper_id contains spaces: '{paper_id}' - consider using underscores")
     
+    # Validate paper_title format
+    if "paper_title" in paper_input:
+        paper_title = paper_input["paper_title"]
+        if paper_title is None or not isinstance(paper_title, str):
+            errors.append("paper_title must be a string")
+    
     # Validate paper_text is not empty
     if "paper_text" in paper_input:
         paper_text = paper_input["paper_text"]
@@ -102,6 +108,10 @@ def validate_paper_input(paper_input: Dict[str, Any]) -> List[str]:
 
                 if "id" not in fig:
                     errors.append(f"Figure {i}: missing 'id' field")
+                elif not isinstance(fig["id"], str):
+                    errors.append(f"Figure {i}: 'id' must be a string, got {type(fig['id']).__name__}")
+                elif len(fig["id"]) == 0:
+                    errors.append(f"Figure {i}: 'id' must be non-empty")
                 
                 # image_path is optional if source_url is present, but usually required for processing
                 # Let's check strict requirement:
@@ -120,6 +130,52 @@ def validate_paper_input(paper_input: Dict[str, Any]) -> List[str]:
                     data_path = Path(fig["digitized_data_path"])
                     if not data_path.exists():
                         warnings.append(f"Figure {fig.get('id', i)}: digitized data file not found: {fig['digitized_data_path']}")
+    
+    # Validate supplementary figures (same validation as main figures)
+    supplementary = paper_input.get("supplementary", {})
+    if "supplementary_figures" in supplementary:
+        supp_figures = supplementary["supplementary_figures"]
+        if not isinstance(supp_figures, list):
+            errors.append("supplementary_figures must be a list")
+        else:
+            for i, fig in enumerate(supp_figures):
+                # Check required figure fields
+                if not isinstance(fig, dict):
+                    errors.append(f"Supplementary figure {i}: must be a dictionary")
+                    continue
+
+                if "id" not in fig:
+                    errors.append(f"Supplementary figure {i}: missing 'id' field")
+                elif not isinstance(fig["id"], str):
+                    errors.append(f"Supplementary figure {i}: 'id' must be a string, got {type(fig['id']).__name__}")
+                elif len(fig["id"]) == 0:
+                    errors.append(f"Supplementary figure {i}: 'id' must be non-empty")
+                
+                if "image_path" not in fig:
+                    errors.append(f"Supplementary figure {i} ({fig.get('id', 'unknown')}): missing 'image_path' field")
+                else:
+                    # Check if image file exists
+                    img_path = Path(fig["image_path"])
+                    if not img_path.exists():
+                        warnings.append(f"Supplementary figure {fig.get('id', i)}: image file not found: {fig['image_path']}")
+                    elif img_path.suffix.lower() not in ['.png', '.jpg', '.jpeg', '.gif', '.webp']:
+                        warnings.append(f"Supplementary figure {fig.get('id', i)}: unusual image format: {img_path.suffix}")
+    
+    # Validate supplementary data files
+    if "supplementary_data_files" in supplementary:
+        supp_data_files = supplementary["supplementary_data_files"]
+        if not isinstance(supp_data_files, list):
+            errors.append("supplementary_data_files must be a list")
+        else:
+            for i, data_file in enumerate(supp_data_files):
+                if not isinstance(data_file, dict):
+                    errors.append(f"Supplementary data file {i}: must be a dictionary")
+                    continue
+                
+                required_fields = ["id", "description", "file_path", "data_type"]
+                for field in required_fields:
+                    if field not in data_file:
+                        errors.append(f"Supplementary data file {i} ({data_file.get('id', 'unknown')}): missing '{field}' field")
     
     if errors:
         raise ValidationError(f"Paper input validation failed:\n" + "\n".join(errors))

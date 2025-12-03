@@ -60,16 +60,25 @@ def download_figure(
         
         if parsed.scheme in ('http', 'https'):
             # Remote URL - download it
-            request = urllib.request.Request(
-                url,
-                headers={'User-Agent': DEFAULT_DOWNLOAD_CONFIG.user_agent}
-            )
-            with urllib.request.urlopen(request, timeout=timeout) as response:
-                content = response.read()
+            try:
+                request = urllib.request.Request(
+                    url,
+                    headers={'User-Agent': DEFAULT_DOWNLOAD_CONFIG.user_agent}
+                )
+                with urllib.request.urlopen(request, timeout=timeout) as response:
+                    content = response.read()
+            except OSError as e:
+                # Network/socket errors during download should be treated as download failures
+                # This catches socket errors (which are OSError in Python 3) that might not be wrapped as URLError
+                raise FigureDownloadError(f"Failed to download {url}: {e}")
             
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(output_path, 'wb') as f:
-                f.write(content)
+            try:
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(output_path, 'wb') as f:
+                    f.write(content)
+            except OSError as e:
+                # File I/O errors during save
+                raise FigureDownloadError(f"Failed to save figure to {output_path}: {e}")
                 
         elif parsed.scheme == 'file':
             # file:// URL - extract path and copy

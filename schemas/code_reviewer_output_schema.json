@@ -160,12 +160,18 @@
       "description": "Suggestion to backtrack if code reveals design issues",
       "properties": {
         "suggest_backtrack": { "type": "boolean" },
-        "target_stage_id": { "type": "string" },
-        "reason": { "type": "string" },
+        "target_stage_id": { "type": "string", "description": "Stage ID to backtrack to" },
+        "reason": { "type": "string", "description": "Why backtracking is suggested" },
         "severity": { "type": "string", "enum": ["critical", "significant", "minor"] },
         "evidence": { "type": "string" }
       },
-      "required": ["suggest_backtrack"]
+      "required": ["suggest_backtrack"],
+      "if": {
+        "properties": { "suggest_backtrack": { "const": true } }
+      },
+      "then": {
+        "required": ["target_stage_id", "reason"]
+      }
     },
     "summary": {
       "type": "string",

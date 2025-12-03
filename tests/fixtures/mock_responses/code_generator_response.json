@@ -53,5 +53,6 @@
     "geometry_matches_design": true,
     "materials_match_design": true,
     "output_filenames_match_spec": true
-  }
+  },
+  "summary": "FDTD simulation code for gold nanorod extinction spectrum using Meep. Implements broadband source excitation and flux-based extinction measurement."
 }

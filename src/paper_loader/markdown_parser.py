@@ -33,7 +33,13 @@ def extract_figures_from_markdown(markdown_text: str) -> List[Dict[str, str]]:
         
     Returns:
         List of dicts with 'alt', 'url', and 'original_match' keys
+        
+    Raises:
+        TypeError: If markdown_text is not a string
     """
+    if not isinstance(markdown_text, str):
+        raise TypeError(f"markdown_text must be a string, got {type(markdown_text).__name__}")
+    
     figures: List[Dict[str, str]] = []
     
     # First, identify code blocks to exclude them
@@ -68,8 +74,11 @@ def extract_figures_from_markdown(markdown_text: str) -> List[Dict[str, str]]:
         return False
     
     # Pattern for markdown images: ![alt](url) or ![alt](url "title")
-    # Supports one level of nested brackets in alt text and parentheses in URL
-    markdown_pattern = r'!\[((?:[^\[\]]|\[[^\]]*\])*)\]\(((?:[^()\s]|\([^)]*\))+)(?:\s+"[^"]*")?\)'
+    # Supports one level of nested brackets in alt text and parentheses/spaces in URL
+    # URL can contain spaces and nested parentheses, but we stop at closing paren or quoted title
+    # Match URL: allow nested parentheses and spaces, stop before optional title
+    # Note: Alt text and URL should not span multiple lines (standard markdown behavior)
+    markdown_pattern = r'!\[((?:[^\[\]\n]|\[[^\]\n]*\])*)\]\(((?:[^()\n]|\([^)\n]*\))+?)(?:\s+"[^"\n]*")?\)'
     for match in re.finditer(markdown_pattern, markdown_text):
         # Skip if match is inside a code block
         if is_in_code_block(match.start()):
@@ -130,7 +139,14 @@ def resolve_figure_url(
         
     Returns:
         Resolved URL or path string
+        
+    Raises:
+        TypeError: If url is not a string
     """
+    # Validate input type
+    if not isinstance(url, str):
+        raise TypeError(f"url must be a string, got {type(url).__name__}")
+    
     parsed = urlparse(url)
     
     # Already absolute URL
@@ -139,11 +155,33 @@ def resolve_figure_url(
     
     # Relative URL with base_url provided
     if base_url and not parsed.scheme:
-        return urljoin(base_url, url)
+        # Normalize base_url to end with / to ensure proper directory joining
+        # urljoin treats the last component as a file if base_url doesn't end with /
+        # For relative URLs (not starting with /), we want directory-like behavior
+        # unless base_url clearly ends with a file (has a file extension)
+        normalized_base_url = base_url
+        if not url.startswith('/') and not normalized_base_url.endswith('/'):
+            # Check if base_url ends with a file extension
+            parsed_base = urlparse(base_url)
+            base_path = parsed_base.path
+            if base_path:
+                last_component = base_path.rstrip('/').split('/')[-1]
+                # Common file extensions - if present, don't add trailing slash
+                # (let urljoin replace the file)
+                has_extension = '.' in last_component and last_component.split('.')[-1].lower() in (
+                    'html', 'htm', 'php', 'asp', 'aspx', 'jsp', 'png', 'jpg', 'jpeg', 
+                    'gif', 'svg', 'pdf', 'txt', 'xml', 'json', 'css', 'js'
+                )
+                if not has_extension:
+                    # No file extension detected, treat as directory
+                    normalized_base_url = base_url + '/'
+        return urljoin(normalized_base_url, url)
     
     # Relative path with base_path provided
     if base_path and not parsed.scheme:
-        resolved = base_path / url
+        # Decode URL-encoded characters for file paths
+        decoded_url = unquote(url)
+        resolved = (base_path / decoded_url).resolve()
         return str(resolved)
     
     # Return as-is
@@ -170,7 +208,7 @@ def generate_figure_id(index: int, alt_text: str, url: str) -> str:
     # Try to extract figure number from alt text
     # Improved regex to handle space/period separators better
     # Matches: Fig 1, Fig. 1, Figure 1, Fig S1, Figure 3(a), Fig. 2-3
-    fig_match = re.search(r'(?:fig(?:ure)?|fig\.?)\s*([a-z]?\d+(?:[.\-]\d+)?[a-z]?)', alt_text, re.IGNORECASE)
+    fig_match = re.search(r'(?:fig(?:ure)?|fig\.?)\s*([a-z]?\d+(?:[.\-]\d+)?[a-z]?(?:\([a-z]\))?)', alt_text, re.IGNORECASE)
     if fig_match:
         return f"Fig{fig_match.group(1)}"
     
@@ -183,7 +221,8 @@ def generate_figure_id(index: int, alt_text: str, url: str) -> str:
     # Try to extract from URL filename
     parsed = urlparse(url)
     filename = Path(unquote(parsed.path)).stem
-    fig_match = re.search(r'fig(?:ure)?[_\-]?(\d+(?:[.\-]\d+)?[a-z]?)', filename, re.IGNORECASE)
+    # Allow spaces and other separators in filename (e.g., "figure 13" from "figure%2013")
+    fig_match = re.search(r'fig(?:ure)?[_\- ]*(\d+(?:[.\-]\d+)?[a-z]?)', filename, re.IGNORECASE)
     if fig_match:
         return f"Fig{fig_match.group(1)}"
     
@@ -230,18 +269,58 @@ def extract_paper_title(markdown_text: str) -> str:
     in_code_block = False
     
     # Pass 1: Look for H1 heading outside code blocks
-    for line in lines:
+    for i, line in enumerate(lines):
         stripped = line.strip()
         if stripped.startswith('```'):
             in_code_block = not in_code_block
             continue
             
         if in_code_block:
+            # Skip everything inside code blocks
+            # We'll handle unclosed code blocks by checking after the loop
             continue
             
-        # Check for H1 # Title
-        if stripped.startswith('# '):
-            return stripped[2:].strip()
+        # Check for H1 # Title (hash followed by whitespace)
+        # Handle both cases: # Title (with content) and # or #  (empty/no content)
+        if stripped == '#':
+            # H1 with no content
+            return ''
+        h1_match = re.match(r'^#\s+(.*)$', stripped)
+        if h1_match:
+            title = h1_match.group(1).strip()
+            # Return title (empty string if H1 had only whitespace)
+            return title
+    
+    # If we're still in a code block, it's unclosed
+    # Re-process looking for H1 headings, but skip lines that are clearly code content
+    if in_code_block:
+        # Find where the code block started
+        code_block_start_idx = -1
+        for i, line in enumerate(lines):
+            if line.strip().startswith('```'):
+                code_block_start_idx = i
+                break
+        
+        # Look for H1 headings after the code block start
+        # Skip H1s that are immediately after code block start (likely code comments)
+        # Process H1 headings that come after blank lines or other content (likely actual titles)
+        if code_block_start_idx >= 0:
+            seen_blank_after_code = False
+            for i in range(code_block_start_idx + 1, len(lines)):
+                stripped = lines[i].strip()
+                # Skip code block markers
+                if stripped.startswith('```'):
+                    continue
+                # Track if we've seen blank lines (indicates we've left code content area)
+                if not stripped:
+                    seen_blank_after_code = True
+                    continue
+                # Look for H1 headings
+                # Only process H1s that come after blank lines (not code comments)
+                if seen_blank_after_code:
+                    h1_match = re.match(r'^#\s+(.+)$', stripped)
+                    if h1_match:
+                        return h1_match.group(1).strip()
             
     # Pass 2: Look for HTML h1 (regex might still be fooled by code blocks but unlikely to match exactly)
     html_h1_match = re.search(r'<h1[^>]*>(.+?)</h1>', markdown_text, re.IGNORECASE | re.DOTALL)
@@ -251,17 +330,18 @@ def extract_paper_title(markdown_text: str) -> str:
         return title.strip()
     
     # Pass 3: Look for first non-empty line as fallback
+    # Re-detect code blocks for this pass to handle unclosed blocks correctly
     in_code_block = False
     for line in lines:
-        line = line.strip()
-        
-        if line.startswith('```'):
+        stripped = line.strip()
+        if stripped.startswith('```'):
             in_code_block = not in_code_block
             continue
             
         if in_code_block:
             continue
             
+        line = line.strip()
         if line and not line.startswith('!') and not line.startswith('<'):
             return line[:200]  # Truncate very long lines
     

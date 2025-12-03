@@ -899,11 +899,10 @@ class TestRecordCallMetrics:
 
         assert state["metrics"]["agent_calls"][0]["error"] is None
 
-    def test_does_not_create_stage_metrics_when_metrics_exists(self):
-        """Test that stage_metrics is NOT created when metrics already exists.
+    def test_creates_stage_metrics_when_metrics_exists_but_empty(self):
+        """Test that stage_metrics is created even when metrics already exists.
         
-        This documents current behavior: if state already has metrics but no
-        stage_metrics, the function only creates agent_calls, not stage_metrics.
+        Ensures consistent initialization regardless of how state was created.
         """
         state = {"metrics": {}}  # metrics exists but empty
         _record_call_metrics(
@@ -914,8 +913,8 @@ class TestRecordCallMetrics:
         )
 
         assert "agent_calls" in state["metrics"]
-        # Note: stage_metrics is NOT created in this case - documenting current behavior
-        assert "stage_metrics" not in state["metrics"]
+        assert "stage_metrics" in state["metrics"]
+        assert state["metrics"]["stage_metrics"] == []
 
     def test_handles_metrics_with_none_stage_metrics(self):
         """Test handling when stage_metrics is explicitly None."""

@@ -96,13 +96,29 @@ def estimate_token_cost(paper_input: Dict[str, Any]) -> Dict[str, Any]:
         Dictionary with token and cost estimates
     """
     # Text tokens (rough estimate: ~4 chars per token)
-    paper_text = paper_input.get("paper_text") or ""
+    paper_text_raw = paper_input.get("paper_text")
+    if paper_text_raw is None:
+        paper_text = ""
+    elif not isinstance(paper_text_raw, str):
+        raise TypeError(f"Expected string for paper_text, got {type(paper_text_raw).__name__}")
+    else:
+        paper_text = paper_text_raw
     text_tokens = len(paper_text) / CHARS_PER_TOKEN
     
     # Supplementary text if present
-    supplementary = paper_input.get("supplementary") or {}
-    if supplementary.get("supplementary_text"):
-        text_tokens += len(supplementary["supplementary_text"]) / CHARS_PER_TOKEN
+    supplementary_raw = paper_input.get("supplementary")
+    if supplementary_raw is None:
+        supplementary = {}
+    elif not isinstance(supplementary_raw, dict):
+        raise TypeError(f"Expected dict for supplementary, got {type(supplementary_raw).__name__}")
+    else:
+        supplementary = supplementary_raw
+    
+    supp_text_raw = supplementary.get("supplementary_text")
+    if supp_text_raw is not None:
+        if not isinstance(supp_text_raw, str):
+            raise TypeError(f"Expected string for supplementary_text, got {type(supp_text_raw).__name__}")
+        text_tokens += len(supp_text_raw) / CHARS_PER_TOKEN
     
     # Image tokens (approximate, varies by model)
     figures = paper_input.get("figures")
@@ -170,16 +186,21 @@ def estimate_token_cost(paper_input: Dict[str, Any]) -> Dict[str, Any]:
     # Cost calculation
     input_cost = total_input_estimate * INPUT_COST_PER_MILLION / 1_000_000
     output_cost = total_output_estimate * OUTPUT_COST_PER_MILLION / 1_000_000
-    total_cost = input_cost + output_cost
+    
+    # Round individual costs first
+    input_cost_rounded = round(input_cost, 2)
+    output_cost_rounded = round(output_cost, 2)
+    # Total cost should be sum of rounded components to ensure consistency
+    total_cost = input_cost_rounded + output_cost_rounded
     
     return {
         "estimated_input_tokens": est_input_tokens,
         "estimated_output_tokens": est_output_tokens,
         "estimated_total_tokens": est_total_tokens,
-        "estimated_cost_usd": round(total_cost, 2),
+        "estimated_cost_usd": total_cost,
         "cost_breakdown": {
-            "input_cost_usd": round(input_cost, 2),
-            "output_cost_usd": round(output_cost, 2),
+            "input_cost_usd": input_cost_rounded,
+            "output_cost_usd": output_cost_rounded,
         },
         "assumptions": {
             "num_figures": total_figures,
