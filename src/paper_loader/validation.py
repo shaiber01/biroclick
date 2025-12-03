@@ -102,11 +102,13 @@ def validate_paper_input(paper_input: Dict[str, Any]) -> List[str]:
 
                 if "id" not in fig:
                     errors.append(f"Figure {i}: missing 'id' field")
+                
+                # image_path is optional if source_url is present, but usually required for processing
+                # Let's check strict requirement:
                 if "image_path" not in fig:
                     errors.append(f"Figure {i} ({fig.get('id', 'unknown')}): missing 'image_path' field")
-                
-                # Check if image file exists
-                if "image_path" in fig:
+                else:
+                    # Check if image file exists
                     img_path = Path(fig["image_path"])
                     if not img_path.exists():
                         warnings.append(f"Figure {fig.get('id', i)}: image file not found: {fig['image_path']}")

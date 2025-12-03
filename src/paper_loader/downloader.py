@@ -50,6 +50,9 @@ def download_figure(
         timeout = DEFAULT_DOWNLOAD_CONFIG.timeout_seconds
     
     try:
+        if not url:
+            raise FigureDownloadError("URL cannot be empty")
+            
         parsed = urlparse(url)
         
         if parsed.scheme and parsed.scheme not in ('http', 'https', 'file'):
@@ -70,7 +73,13 @@ def download_figure(
                 
         elif parsed.scheme == 'file':
             # file:// URL - extract path and copy
+            # unquote handles %20 and other encoded chars
             local_path = Path(unquote(parsed.path)).expanduser()
+            
+            # On Windows, file:///C:/path becomes /C:/path which Path handles, 
+            # but standard file:// URL handling can be tricky cross-platform.
+            # Path(parsed.path) is usually robust enough.
+            
             if not local_path.exists():
                 raise FigureDownloadError(f"Local file not found: {local_path}")
             
@@ -79,18 +88,33 @@ def download_figure(
             
         else:
             # Assume local file path (relative or absolute)
+            # Use unquote here too just in case caller passed encoded local path?
+            # Usually local paths passed directly aren't URL encoded, but 
+            # if we follow "robustness principle", we might decode.
+            # However, typical usage: download_figure("images/fig1.png")
+            # If file name has %, it's literal.
+            # But test_file_url_decoding checks file:// scheme, not bare path.
+            
             local_path = Path(url).expanduser()
             
             # If relative and base_path provided, resolve against it
             if not local_path.is_absolute() and base_path:
                 # Security check: prevent path traversal outside base_path
-                resolved_path = (base_path / local_path).resolve()
-                resolved_base = base_path.resolve()
-                
-                if not str(resolved_path).startswith(str(resolved_base)):
-                    raise FigureDownloadError(f"Access denied: Path {local_path} resolves outside base path {base_path}")
-                
-                local_path = resolved_path
+                try:
+                    # Resolve both to get absolute paths with symlinks/.. removed
+                    resolved_path = (base_path / local_path).resolve()
+                    resolved_base = base_path.resolve()
+                    
+                    # Check if resolved path starts with resolved base path
+                    # Use commonpath to be safer? or simple string prefix
+                    # Path.is_relative_to was added in Python 3.9
+                    if not resolved_path.is_relative_to(resolved_base):
+                        raise FigureDownloadError(f"Access denied: Path {local_path} resolves to {resolved_path} which is outside base path {base_path}")
+                        
+                    local_path = resolved_path
+                except (ValueError, RuntimeError) as e:
+                     # is_relative_to raises ValueError if not relative
+                     raise FigureDownloadError(f"Access denied: Path resolution failed: {e}")
             
             if not local_path.exists():
                 raise FigureDownloadError(f"Local file not found: {local_path}")

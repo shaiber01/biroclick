@@ -47,20 +47,16 @@ class TestDownloadFigure:
         Should not treat ftp:// as a local file path.
         """
         output = tmp_path / "out.png"
-        # The current implementation falls through to local file handling for unknown schemes.
-        # This test asserts that we explicitly reject unknown schemes or handle them properly.
-        # If the code treats 'ftp://...' as a local file, it will raise "Local file not found",
-        # which is confusing. We want a clearer error or explicit validation.
         
-        url = "ftp://example.com/image.png"
-        with pytest.raises(FigureDownloadError) as excinfo:
-            download_figure(url, output)
-        
-        # We want to ensure it didn't try to look for a local file named "ftp://..."
-        # So the error message should NOT say "Local file not found" or should explicitly say "Unsupported scheme"
-        msg = str(excinfo.value)
-        assert "Local file not found" not in msg, f"Bug: Treated {url} as local file. Error: {msg}"
-        assert "scheme" in msg.lower() or "supported" in msg.lower()
+        # Testing multiple unsupported schemes
+        for scheme in ["ftp", "sftp", "gopher", "ldap"]:
+            url = f"{scheme}://example.com/image.png"
+            with pytest.raises(FigureDownloadError) as excinfo:
+                download_figure(url, output)
+            
+            msg = str(excinfo.value)
+            assert "Unsupported scheme" in msg
+            assert scheme in msg
 
     # --- Local File Handling ---
 
@@ -280,4 +276,21 @@ class TestDownloadFigure:
         
         with pytest.raises(FigureDownloadError, match="Access denied|outside base path"):
              download_figure(rel_path, output, base_path=base_path)
+
+    def test_path_traversal_allowed_without_base_path(self, tmp_path):
+        """If base_path NOT provided, traversal is allowed (standard filesystem access)."""
+        # Create a secret file
+        secret_dir = tmp_path / "secret"
+        secret_dir.mkdir()
+        secret_file = secret_dir / "passwd"
+        secret_file.write_text("secret_data")
+        
+        output = tmp_path / "out.png"
+        
+        # Absolute path to secret file
+        # Should succeed as we assume caller trusts absolute paths if no sandbox (base_path) enforced
+        download_figure(str(secret_file), output)
+        
+        assert output.exists()
+        assert output.read_text() == "secret_data"
 

@@ -127,10 +127,18 @@ def generate_figure_id(index: int, alt_text: str, url: str) -> str:
         A figure ID string like "Fig1" or "Fig3a"
     """
     # Try to extract figure number from alt text
-    fig_match = re.search(r'(?:fig(?:ure)?|fig\.?)\s*(\d+(?:[.\-]\d+)?[a-z]?)', alt_text, re.IGNORECASE)
+    # Improved regex to handle space/period separators better
+    # Matches: Fig 1, Fig. 1, Figure 1, Fig S1, Figure 3(a), Fig. 2-3
+    fig_match = re.search(r'(?:fig(?:ure)?|fig\.?)\s*([a-z]?\d+(?:[.\-]\d+)?[a-z]?)', alt_text, re.IGNORECASE)
     if fig_match:
         return f"Fig{fig_match.group(1)}"
     
+    # Also try "Fig. S1" pattern where S is separate
+    # Matches: Fig. S1, Figure S3
+    fig_s_match = re.search(r'(?:fig(?:ure)?|fig\.?)\s+(s\d+[a-z]?)', alt_text, re.IGNORECASE)
+    if fig_s_match:
+        return f"Fig{fig_s_match.group(1)}"
+
     # Try to extract from URL filename
     parsed = urlparse(url)
     filename = Path(unquote(parsed.path)).stem
@@ -167,9 +175,9 @@ def extract_paper_title(markdown_text: str) -> str:
     Extract paper title from markdown.
     
     Looks for (in order):
-    1. First H1 heading: # Title
+    1. First H1 heading: # Title (ignoring code blocks)
     2. HTML h1 tag: <h1>Title</h1>
-    3. First non-empty, non-image line
+    3. First non-empty, non-image, non-codeblock line
     
     Args:
         markdown_text: The markdown content
@@ -177,21 +185,42 @@ def extract_paper_title(markdown_text: str) -> str:
     Returns:
         Paper title string, or "Untitled Paper" if not found
     """
-    # Look for first H1 heading: # Title
-    h1_match = re.search(r'^#\s+(.+?)(?:\n|$)', markdown_text, re.MULTILINE)
-    if h1_match:
-        return h1_match.group(1).strip()
+    lines = markdown_text.split('\n')
+    in_code_block = False
     
-    # Look for HTML h1
+    # Pass 1: Look for H1 heading outside code blocks
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith('```'):
+            in_code_block = not in_code_block
+            continue
+            
+        if in_code_block:
+            continue
+            
+        # Check for H1 # Title
+        if stripped.startswith('# '):
+            return stripped[2:].strip()
+            
+    # Pass 2: Look for HTML h1 (regex might still be fooled by code blocks but unlikely to match exactly)
     html_h1_match = re.search(r'<h1[^>]*>(.+?)</h1>', markdown_text, re.IGNORECASE | re.DOTALL)
     if html_h1_match:
         # Strip any HTML tags inside
         title = re.sub(r'<[^>]+>', '', html_h1_match.group(1))
         return title.strip()
     
-    # Look for first non-empty line as fallback
-    for line in markdown_text.split('\n'):
+    # Pass 3: Look for first non-empty line as fallback
+    in_code_block = False
+    for line in lines:
         line = line.strip()
+        
+        if line.startswith('```'):
+            in_code_block = not in_code_block
+            continue
+            
+        if in_code_block:
+            continue
+            
         if line and not line.startswith('!') and not line.startswith('<'):
             return line[:200]  # Truncate very long lines
     

@@ -70,12 +70,12 @@ class TestEstimateTokens:
 
     def test_none_input_raises_error(self):
         """None input raises TypeError."""
-        with pytest.raises(TypeError):
+        with pytest.raises(TypeError, match="Expected string"):
             estimate_tokens(None)  # type: ignore
 
     def test_int_input_raises_error(self):
         """Integer input raises TypeError."""
-        with pytest.raises(TypeError):
+        with pytest.raises(TypeError, match="Expected string"):
             estimate_tokens(123)  # type: ignore
 
 
@@ -142,7 +142,7 @@ class TestCheckPaperLength:
 
     def test_none_input_raises_error(self):
         """None input raises TypeError."""
-        with pytest.raises(TypeError):
+        with pytest.raises(TypeError, match="Expected string"):
             check_paper_length(None) # type: ignore
 
 

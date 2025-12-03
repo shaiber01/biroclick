@@ -29,7 +29,13 @@ def estimate_tokens(text: str) -> int:
         
     Returns:
         Estimated token count
+        
+    Raises:
+        TypeError: If text is not a string
     """
+    if not isinstance(text, str):
+        # Explicit check to match robust testing
+        raise TypeError(f"Expected string for text, got {type(text).__name__}")
     return len(text) // CHARS_PER_TOKEN
 
 
@@ -43,7 +49,13 @@ def check_paper_length(text: str, label: str = "Paper") -> List[str]:
         
     Returns:
         List of warning strings (empty if length is normal)
+        
+    Raises:
+        TypeError: If text is not a string
     """
+    if not isinstance(text, str):
+        raise TypeError(f"Expected string for text, got {type(text).__name__}")
+
     warnings: List[str] = []
     char_count = len(text)
     token_estimate = estimate_tokens(text)

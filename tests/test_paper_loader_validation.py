@@ -173,28 +173,20 @@ class TestValidatePaperInput:
     def test_figure_unusual_format_warns(self):
         """Figure with unusual image format generates warning."""
         paper_input = create_valid_paper_input()
-        # Use an existing file but claim it's a .bmp or similar (mock logic implicitly or use known file)
-        # In this case, we use a dummy path but need it to exist for the format check to run?
-        # Actually validation.py checks existence FIRST.
-        # So we mock Path.exists to be True and Path.suffix to be .bmp
         
         with patch("pathlib.Path.exists", return_value=True), \
-             patch("pathlib.Path.suffix", ".bmp"):  # Property mock needs care, but validation checks suffix directly
+             patch("pathlib.Path.suffix", new_callable=lambda: ".bmp"):  # Property mock is tricky here
              
-             # validation.py: img_path.suffix.lower()
-             # To mock suffix properly on a Path object created inside the function is hard without mocking Path constructor.
-             # Easier to rely on the existing test approach or use a real file.
-             pass
-
-        # Revert to existing strategy: use a real file with wrong extension if possible, or just rely on string path.
-        # The current implementation checks `Path(fig["image_path"]).suffix`.
-        paper_input["figures"] = [{
-            "id": "Fig1",
-            "description": "test",
-            "image_path": str(FIXTURES_DIR / "sample_markdown.md")  # Exists, but .md
-        }]
-        
-        warnings = validate_paper_input(paper_input)
+             # Simpler approach: use an image path that explicitly has .bmp suffix string
+             # The code uses Path(path).suffix
+             paper_input["figures"] = [{
+                "id": "Fig1",
+                "description": "test",
+                "image_path": "image.bmp"
+            }]
+             
+             warnings = validate_paper_input(paper_input)
+             
         assert any("unusual image format" in w for w in warnings)
     
     def test_digitized_data_nonexistent_warns(self):
@@ -352,30 +344,20 @@ class TestValidateFigureImage:
 
     def test_pil_import_error_handled(self):
         """If PIL is missing, should return warning but not crash."""
-        # Ensure PIL is NOT in sys.modules to trigger ImportError
-        with patch("pathlib.Path.exists", return_value=True), \
-             patch("pathlib.Path.stat") as mock_stat, \
-             patch.dict("sys.modules"):
+        
+        # We mock sys.modules to NOT have PIL
+        # AND we verify import fails.
+        
+        with patch.dict("sys.modules", {"PIL": None}):
+             # When PIL is mapped to None in sys.modules, import raises ModuleNotFoundError
              
-            # If PIL is already loaded, we must remove it to trigger import error.
-            # However, deleting from patched dict works for imports that check sys.modules.
-            # But if the code does `from PIL import Image`, and PIL is NOT in sys.modules, it tries to find it.
-            # Since it's not installed, it raises ImportError.
-            # BUT, if we are running in an env where it MIGHT be installed (or mocked previously), we need to be careful.
-            # Assuming it's not installed in this environment based on previous error.
+            with patch("pathlib.Path.exists", return_value=True), \
+                 patch("pathlib.Path.stat") as mock_stat:
             
-            # To be safe, we explicitly make sure it raises ImportError if it tries to import.
-            # Since it failed with ModuleNotFoundError before, that means it's not installed.
-            # So we just rely on that.
-            pass
-            
-            # But wait, if I mocked it in previous tests, does it persist?
-            # No, patch.dict is a context manager.
-            
-            mock_stat.return_value.st_size = 1000
-            
-            warnings = validate_figure_image("no_pil.png")
-            assert any("PIL/Pillow not installed" in w for w in warnings)
+                mock_stat.return_value.st_size = 1000
+                
+                warnings = validate_figure_image("no_pil.png")
+                assert any("PIL/Pillow not installed" in w for w in warnings)
 
     def test_image_analysis_exception_handled(self):
         """Generic exception during image analysis is handled."""
