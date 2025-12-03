@@ -26,17 +26,22 @@ def log_agent_call(agent_name: str, node_name: str, start_time: datetime):
             
         duration = (datetime.now(timezone.utc) - start_time).total_seconds()
         
+        # Extract verdict with priority order, handling None result_dict
+        verdict = None
+        if result_dict:
+            verdict = (result_dict.get("execution_verdict") or 
+                      result_dict.get("physics_verdict") or 
+                      result_dict.get("supervisor_verdict") or
+                      result_dict.get("last_plan_review_verdict") or
+                      None)
+        
         metric = {
             "agent": agent_name,
             "node": node_name,
             "stage_id": state.get("current_stage_id"),
             "timestamp": start_time.isoformat(),
             "duration_seconds": duration,
-            "verdict": result_dict.get("execution_verdict") or 
-                       result_dict.get("physics_verdict") or 
-                       result_dict.get("supervisor_verdict") or
-                       result_dict.get("last_plan_review_verdict") or
-                       None,
+            "verdict": verdict,
             "error": result_dict.get("run_error") if result_dict else None
         }
         

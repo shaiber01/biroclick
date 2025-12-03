@@ -23,10 +23,10 @@ def resolve_data_path(path_str: Optional[str]) -> Optional[Path]:
         return None
     candidate = Path(path_str).expanduser()
     if candidate.exists():
-        return candidate
+        return candidate.resolve()  # Ensure absolute path
     alt = PROJECT_ROOT / path_str
     if alt.exists():
-        return alt
+        return alt.resolve()  # Ensure absolute path
     return None
 
 
@@ -144,12 +144,18 @@ def load_numeric_series(path_str: Optional[str], columns: Optional[List[str]] = 
                         x_val, y_val = point[0], point[1]
                     else:
                         continue
+                    # Skip if either value is None
+                    if x_val is None or y_val is None:
+                        continue
                     try:
                         xs.append(float(x_val))
                         ys.append(float(y_val))
                     except (TypeError, ValueError):
                         continue
-                return normalize_series(xs, ys)
+                # Only return None if we have fewer than 3 valid points
+                if len(xs) >= 3:
+                    return normalize_series(xs, ys)
+                return None
             return None
         if suffix == ".npy":
             arr = np.load(resolved)
@@ -245,18 +251,21 @@ def quantitative_curve_metrics(
     # Interpolate reference onto simulation axis
     y_ref_interp = np.interp(x_sim, x_ref, y_ref, left=np.nan, right=np.nan)
     mask = np.isfinite(y_ref_interp)
-    if not mask.any():
+    n_points = int(np.sum(mask))
+    metrics["n_points_compared"] = n_points
+    if not mask.any() or n_points == 0:
         return metrics
     sim_vals = y_sim[mask]
     ref_vals = y_ref_interp[mask]
-    n_points = sim_vals.size
-    metrics["n_points_compared"] = int(n_points)
-    if n_points == 0:
-        return metrics
     
     peak_paper = metrics.get("peak_position_paper")
     peak_sim = metrics.get("peak_position_sim")
-    if peak_paper is not None and peak_sim is not None and peak_paper != 0:
+    peak_value_paper = metrics.get("peak_value_paper")
+    # Only compute error if both peaks exist, paper peak position is non-zero and finite,
+    # and paper peak value is non-zero (to avoid division by zero)
+    if (peak_paper is not None and peak_sim is not None and 
+        peak_paper != 0 and isfinite(peak_paper) and
+        peak_value_paper is not None and peak_value_paper != 0):
         metrics["peak_position_error_percent"] = abs(peak_sim - peak_paper) / abs(peak_paper) * 100.0
     
     if metrics.get("peak_value_paper"):

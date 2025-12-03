@@ -1587,7 +1587,8 @@ def estimate_context_for_node(
     # Node-specific context
     if node_name in ["plan", "adapt_prompts"]:
         # These receive full paper text
-        paper_text = state.get("paper_text", "")
+        # Handle None explicitly - get() returns None if key exists with None value
+        paper_text = state.get("paper_text") or ""
         breakdown["paper_text"] = len(paper_text) // chars_per_token
         
     elif node_name in ["design", "generate_code", "review_design", "review_code"]:

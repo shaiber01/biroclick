@@ -83,6 +83,12 @@ def generate_report_node(state: ReproState) -> Dict[str, Any]:
         }
     else:
         result["executive_summary"] = state["executive_summary"]
+    
+    # Preserve assumptions and figure_comparisons from state (will be overwritten if agent provides them)
+    if "assumptions" in state:
+        result["assumptions"] = state["assumptions"]
+    if "figure_comparisons" in state:
+        result["figure_comparisons"] = state["figure_comparisons"]
 
     # Build quantitative summary table
     quantitative_reports = state.get("analysis_result_reports", [])

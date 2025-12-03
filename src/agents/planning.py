@@ -60,8 +60,10 @@ def adapt_prompts_node(state: ReproState) -> Dict[str, Any]:
     system_prompt = build_agent_prompt("prompt_adaptor", state)
     
     # Build user content with paper summary
-    paper_text = state.get("paper_text", "")[:5000]  # First 5k chars for context
-    paper_domain = state.get("paper_domain", "")
+    # Handle None paper_text gracefully
+    paper_text_raw = state.get("paper_text") or ""
+    paper_text = paper_text_raw[:5000] if paper_text_raw else ""  # First 5k chars for context
+    paper_domain = state.get("paper_domain") or ""
     
     user_content = f"# PAPER SUMMARY FOR PROMPT ADAPTATION\n\n"
     user_content += f"Domain: {paper_domain}\n\n"
@@ -84,7 +86,15 @@ def adapt_prompts_node(state: ReproState) -> Dict[str, Any]:
         )
         
         # Extract adaptations from agent output
-        adaptations = agent_output.get("adaptations", [])
+        # Handle None explicitly - get() returns None if key exists with None value
+        adaptations = agent_output.get("adaptations")
+        if adaptations is None:
+            adaptations = []
+        elif not isinstance(adaptations, list):
+            # If adaptations is not a list, treat as empty list
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Prompt adaptor returned non-list adaptations: {type(adaptations)}. Using empty list.")
+            adaptations = []
         result["prompt_adaptations"] = adaptations
         
         # Store detected paper domain if provided
@@ -252,7 +262,11 @@ def plan_reviewer_node(state: ReproState) -> dict:
     
     # Validate plan has stages
     plan = state.get("plan", {})
+    if plan is None:
+        plan = {}
     plan_stages = plan.get("stages", [])
+    if plan_stages is None:
+        plan_stages = []
     
     if not plan_stages or len(plan_stages) == 0:
         blocking_issues.append(
@@ -374,6 +388,7 @@ def plan_reviewer_node(state: ReproState) -> dict:
                 )
     
     # Handle blocking issues or call LLM
+    is_blocking_issue = bool(blocking_issues)
     if blocking_issues:
         agent_output = {
             "verdict": "needs_revision",
@@ -384,8 +399,8 @@ def plan_reviewer_node(state: ReproState) -> dict:
     else:
         user_content = f"# REPRODUCTION PLAN TO REVIEW\n\n```json\n{json.dumps(plan, indent=2)}\n```"
         
-        assumptions = state.get("assumptions", {})
-        if assumptions:
+        assumptions = state.get("assumptions")
+        if assumptions is not None:
             user_content += f"\n\n# ASSUMPTIONS\n\n```json\n{json.dumps(assumptions, indent=2)}\n```"
         
         try:
@@ -406,13 +421,18 @@ def plan_reviewer_node(state: ReproState) -> dict:
     
     # Increment replan counter if needs_revision
     if agent_output["verdict"] == "needs_revision":
-        current_replan_count = state.get("replan_count", 0)
-        runtime_config = state.get("runtime_config", {})
-        max_replans = runtime_config.get("max_replans", MAX_REPLANS)
-        if current_replan_count < max_replans:
-            result["replan_count"] = current_replan_count + 1
-        else:
-            result["replan_count"] = current_replan_count
+        # For blocking structural issues, only increment if replan_count was already in state
+        # For LLM rejections, always increment (even if starting from 0 or not present)
+        if not is_blocking_issue or "replan_count" in state:
+            current_replan_count = state.get("replan_count", 0)
+            runtime_config = state.get("runtime_config", {})
+            max_replans = runtime_config.get("max_replans", MAX_REPLANS)
+            if current_replan_count < max_replans:
+                result["replan_count"] = current_replan_count + 1
+            else:
+                # Only set replan_count if it was already in state or if it's an LLM rejection
+                if "replan_count" in state or not is_blocking_issue:
+                    result["replan_count"] = current_replan_count
         result["planner_feedback"] = agent_output.get("feedback", agent_output.get("summary", ""))
     
     return result

@@ -129,7 +129,7 @@ def build_stub_stages(paper_id: str, targets: List[Dict[str, Any]]) -> List[Dict
 
 def build_stub_planned_materials(state: ReproState) -> List[Dict[str, Any]]:
     """Build placeholder material entries."""
-    domain = state.get("paper_domain", "generic")
+    domain = state.get("paper_domain") or "generic"
     return [{
         "material_id": f"{domain}_placeholder",
         "name": f"{domain.title()} Material",
@@ -154,14 +154,19 @@ def build_stub_plan(state: ReproState) -> Dict[str, Any]:
     """Build a complete stub plan from state."""
     paper_id = state.get("paper_id", "paper_stub")
     paper_title = state.get("paper_title", paper_id.replace("_", " ").title())
+    original_figures = state.get("paper_figures") or []
+    total_figures = len(original_figures)
+    reproducible_figures = total_figures  # In stub plans, assume all figures are reproducible
     figures = ensure_stub_figures(state)
     targets = build_stub_targets(figures)
     stages = build_stub_stages(paper_id, targets)
-    total_figures = len(figures)
-    attempted = [t["figure_id"] for t in targets]
+    # Filter out stub targets from attempted_figures - only include actual paper figures
+    attempted = [t["figure_id"] for t in targets if t["figure_id"] != "FigStub"]
+    # Filter out stub targets from reproducible_figure_ids
+    reproducible_figure_ids = [f["id"] for f in original_figures] if original_figures else []
     coverage = 0.0
     if total_figures:
-        coverage = round(len(attempted) / total_figures * 100, 2)
+        coverage = round(len(reproducible_figure_ids) / total_figures * 100, 2)
     
     plan = {
         "paper_id": paper_id,
@@ -174,8 +179,8 @@ def build_stub_plan(state: ReproState) -> Dict[str, Any]:
         "stages": stages,
         "reproduction_scope": {
             "total_figures": total_figures,
-            "reproducible_figures": len(attempted),
-            "reproducible_figure_ids": attempted,
+            "reproducible_figures": reproducible_figures,
+            "reproducible_figure_ids": reproducible_figure_ids,
             "attempted_figures": attempted,
             "skipped_figures": [],
             "coverage_percent": coverage,

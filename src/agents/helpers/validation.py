@@ -12,11 +12,12 @@ from src.agents.constants import AnalysisClassification
 
 
 # Regex patterns for parsing validation criteria
+# Updated to support decimal thresholds (e.g., 0.1%, 5.5%)
 CRITERIA_PATTERNS = [
-    ("resonance_within_percent", re.compile(r"resonance.*within\s+(\d+)%"), "peak_position_error_percent", "max"),
-    ("peak_within_percent", re.compile(r"peak.*within\s+(\d+)%"), "peak_position_error_percent", "max"),
-    ("normalized_rmse_max", re.compile(r"normalized\s*rmse.*(?:<=|less than)\s*(\d+)%"), "normalized_rmse_percent", "max"),
-    ("correlation_min", re.compile(r"correlation.*(?:>=|greater than)\s*(0\.\d+|\d+(\.\d+)?)"), "correlation", "min"),
+    ("resonance_within_percent", re.compile(r"resonance.*within\s+(\d+(?:\.\d+)?)%"), "peak_position_error_percent", "max"),
+    ("peak_within_percent", re.compile(r"peak.*within\s+(\d+(?:\.\d+)?)%"), "peak_position_error_percent", "max"),
+    ("normalized_rmse_max", re.compile(r"normalized\s*rmse.*(?:<=|less than)\s*(\d+(?:\.\d+)?)%"), "normalized_rmse_percent", "max"),
+    ("correlation_min", re.compile(r"correlation.*(?:>=|greater than)\s*(0\.\d+|\d+(?:\.\d+)?)"), "correlation", "min"),
 ]
 
 
@@ -96,10 +97,25 @@ def evaluate_validation_criteria(metrics: Dict[str, Any], criteria: List[str]) -
             if metric_value is None:
                 failures.append(f"{criterion.strip()} (missing metric '{metric_key}')")
             else:
-                if mode == "max" and metric_value > threshold:
-                    failures.append(f"{criterion.strip()} (measured {metric_value:.2f} > {threshold})")
-                if mode == "min" and metric_value < threshold:
-                    failures.append(f"{criterion.strip()} (measured {metric_value:.2f} < {threshold})")
+                # Handle non-numeric metric values gracefully
+                try:
+                    # Try to convert to float if it's a string
+                    if isinstance(metric_value, str):
+                        try:
+                            metric_value = float(metric_value)
+                        except ValueError:
+                            # Non-convertible string - treat as missing
+                            failures.append(f"{criterion.strip()} (invalid metric value '{metric_key}' is not numeric)")
+                            break
+                    
+                    # Now compare numeric values
+                    if mode == "max" and metric_value > threshold:
+                        failures.append(f"{criterion.strip()} (measured {metric_value:.2f} > {threshold})")
+                    if mode == "min" and metric_value < threshold:
+                        failures.append(f"{criterion.strip()} (measured {metric_value:.2f} < {threshold})")
+                except (TypeError, ValueError) as e:
+                    # Handle any other type errors gracefully
+                    failures.append(f"{criterion.strip()} (invalid metric value '{metric_key}' cannot be compared: {type(metric_value).__name__})")
             break
         if not matched_pattern:
             # Unknown format; treat as informational
@@ -110,6 +126,8 @@ def evaluate_validation_criteria(metrics: Dict[str, Any], criteria: List[str]) -
 def extract_targets_from_feedback(feedback: Optional[str], known_targets: List[str]) -> List[str]:
     """Extract figure IDs mentioned in feedback text."""
     if not feedback:
+        return []
+    if not known_targets:
         return []
     pattern = re.compile(r"(Fig\s?[0-9]+[a-zA-Z]?)", re.IGNORECASE)
     matches = [m.strip().replace(" ", "") for m in pattern.findall(feedback)]
@@ -128,13 +146,23 @@ def match_output_file(file_entries: List[Any], target_id: str) -> Optional[str]:
     """Best-effort match simulation output files to a target figure."""
     normalized_id = (target_id or "").lower()
     for entry in file_entries:
-        path_str = entry if isinstance(entry, str) else entry.get("path") or entry.get("file") or str(entry)
+        if isinstance(entry, str):
+            path_str = entry
+        else:
+            path_str = entry.get("path") or entry.get("file")
+            if path_str is None:
+                path_str = str(entry)
+            else:
+                path_str = str(path_str)  # Convert to string in case it's not
         name = Path(path_str).name.lower()
         if normalized_id and normalized_id in name:
             return path_str
     if file_entries:
         entry = file_entries[0]
-        return entry if isinstance(entry, str) else entry.get("path") or entry.get("file")
+        if isinstance(entry, str):
+            return entry
+        result = entry.get("path") or entry.get("file")
+        return str(result) if result is not None else None
     return None
 
 
@@ -159,8 +187,7 @@ def collect_expected_outputs(plan_stage: Optional[Dict[str, Any]], paper_id: str
         if not target or not pattern:
             continue
         resolved = pattern.replace("{paper_id}", paper_id or "")
-        if stage_id:
-            resolved = resolved.replace("{stage_id}", stage_id)
+        resolved = resolved.replace("{stage_id}", stage_id or "")
         resolved = resolved.replace("{target_id}", target.lower())
         mapping[target].append(resolved)
     return mapping
@@ -175,7 +202,7 @@ def collect_expected_columns(plan_stage: Optional[Dict[str, Any]]) -> Dict[str, 
     for spec in expected:
         target = spec.get("target_figure")
         columns = spec.get("columns")
-        if target and columns:
+        if target and columns is not None:
             mapping[target] = columns
     return mapping
 
@@ -237,7 +264,8 @@ def validate_analysis_reports(reports: List[Dict[str, Any]]) -> List[str]:
         if precision == "excellent" and not metrics:
             issues.append(f"{target}: excellent precision requires quantitative metrics.")
             continue
-        if error is not None:
+        # Only process error if it's a valid numeric type
+        if error is not None and isinstance(error, (int, float)):
             thresholds = DISCREPANCY_THRESHOLDS["resonance_wavelength"]
             is_match = status == "match" or status == AnalysisClassification.MATCH
             if is_match and error > thresholds["acceptable"]:
