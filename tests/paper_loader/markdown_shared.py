@@ -20,3 +20,4 @@ def assert_single_figure(md: str, *, url: str, alt: str = "") -> Mapping[str, st
         assert figure["alt"] == alt
     return figure
 
+
