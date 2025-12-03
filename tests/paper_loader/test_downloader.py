@@ -19,7 +19,7 @@ from src.paper_loader.config import DEFAULT_DOWNLOAD_CONFIG
 # Test Fixtures
 # ═══════════════════════════════════════════════════════════════════════
 
-FIXTURES_DIR = Path(__file__).parent / "fixtures" / "paper_loader"
+FIXTURES_DIR = Path(__file__).parent.parent / "fixtures" / "paper_loader"
 
 @pytest.fixture
 def mock_urlopen():
