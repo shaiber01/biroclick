@@ -460,10 +460,26 @@ def run_simulation(
     except subprocess.TimeoutExpired as e:
         runtime_seconds = time.time() - start_time
         
+        # Handle stdout/stderr - they may be bytes or strings depending on text mode
+        # With text=True, they are strings; with text=False, they are bytes
+        stdout_str = ""
+        if e.stdout:
+            if isinstance(e.stdout, bytes):
+                stdout_str = e.stdout.decode(errors='replace')
+            else:
+                stdout_str = e.stdout
+        
+        stderr_str = ""
+        if e.stderr:
+            if isinstance(e.stderr, bytes):
+                stderr_str = e.stderr.decode(errors='replace')
+            else:
+                stderr_str = e.stderr
+        
         return _make_error_result(
             error=f"Simulation exceeded timeout ({cfg['timeout_seconds']}s)",
-            stdout=e.stdout.decode() if e.stdout else "",
-            stderr=e.stderr.decode() if e.stderr else "",
+            stdout=stdout_str,
+            stderr=stderr_str,
             output_dir=output_dir,
             exclude_files=[script_name],
             runtime_seconds=runtime_seconds,
@@ -515,6 +531,10 @@ def _list_output_files(
 ) -> List[str]:
     """List all files in directory, excluding specified names."""
     exclude = exclude or []
+    
+    # Convert string to Path if needed (for robustness)
+    if isinstance(directory, str):
+        directory = Path(directory)
     
     try:
         files = []
@@ -582,7 +602,17 @@ def validate_code(code: str) -> List[str]:
     Basic validation of simulation code before execution.
     
     Returns list of warnings/issues found.
+    
+    Args:
+        code: String containing Python code to validate
+        
+    Raises:
+        TypeError: If code is not a string
     """
+    # Validate input type
+    if not isinstance(code, str):
+        raise TypeError(f"code must be a string, got {type(code).__name__}")
+    
     warnings = []
     
     # Check for dangerous patterns
@@ -614,8 +644,22 @@ def validate_code(code: str) -> List[str]:
         if pattern in code:
             warnings.append(f"BLOCKING: {message}")
     
-    # Check for required imports
-    if "import meep" not in code and "from meep" not in code:
+    # Check for required imports - only check actual import statements, not comments or strings
+    has_meep_import = False
+    for line in code.split('\n'):
+        # Strip whitespace and check if line is a comment
+        stripped = line.strip()
+        if stripped.startswith('#'):
+            continue  # Skip comment lines
+        
+        # Check if line contains an actual import statement (not in a string)
+        # Simple heuristic: check if "import meep" or "from meep" appears at start of line (after stripping)
+        # This is not perfect but better than checking the whole code string
+        if stripped.startswith('import meep') or stripped.startswith('from meep'):
+            has_meep_import = True
+            break
+    
+    if not has_meep_import:
         warnings.append("NOTE: No meep import found")
     
     return warnings
@@ -633,11 +677,13 @@ def estimate_runtime(
     # Basic heuristics
     has_3d = "mp.Vector3" in code and code.count("mp.Vector3") > 2
     has_sweep = "for" in code and ("range(" in code or "np.linspace" in code)
-    has_flux = "FluxRegion" in code or "add_flux" in code
-    has_near2far = "Near2FarRegion" in code or "add_near2far" in code
+    # Check for FluxRegion usage (mp.FluxRegion or FluxRegion() to avoid false positives in variable names)
+    has_flux = ("mp.FluxRegion" in code or "FluxRegion(" in code or "add_flux" in code)
+    # Check for Near2FarRegion usage (mp.Near2FarRegion or Near2FarRegion() to avoid false positives)
+    has_near2far = ("mp.Near2FarRegion" in code or "Near2FarRegion(" in code or "add_near2far" in code)
     
     # Base estimate
-    if design_estimate_minutes:
+    if design_estimate_minutes is not None:
         estimate = design_estimate_minutes
     else:
         estimate = 5.0  # Default 5 minutes
@@ -714,7 +760,12 @@ def run_code_node(state: Dict[str, Any]) -> Dict[str, Any]:
         {}
     )
     
-    runtime_budget = current_stage.get("runtime_budget_minutes", 60)
+    runtime_budget_raw = current_stage.get("runtime_budget_minutes")
+    # Use default if None or not a valid number type
+    if runtime_budget_raw is None or not isinstance(runtime_budget_raw, (int, float)):
+        runtime_budget = 60
+    else:
+        runtime_budget = runtime_budget_raw
     runtime_config = state.get("runtime_config", {})
     
     # Build output directory

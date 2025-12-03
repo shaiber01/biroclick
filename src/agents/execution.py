@@ -118,8 +118,12 @@ def execution_validator_node(state: ReproState) -> dict:
         if "verdict" not in agent_output:
             logger.warning("Execution validator output missing 'verdict'. Defaulting to 'pass'.")
             agent_output["verdict"] = "pass"
-            if "summary" not in agent_output:
-                agent_output["summary"] = "Missing verdict in LLM response, defaulting to pass."
+            # Always indicate missing verdict in summary, even if summary was provided
+            missing_verdict_msg = "Missing verdict in LLM response, defaulting to pass."
+            if "summary" in agent_output:
+                agent_output["summary"] = f"{missing_verdict_msg} Original summary: {agent_output['summary']}"
+            else:
+                agent_output["summary"] = missing_verdict_msg
         agent_output["stage_id"] = stage_id
     
     result: Dict[str, Any] = {
@@ -134,7 +138,11 @@ def execution_validator_node(state: ReproState) -> dict:
             state, "execution_failure_count", "max_execution_failures", MAX_EXECUTION_FAILURES
         )
         result["execution_failure_count"] = new_count
-        result["total_execution_failures"] = state.get("total_execution_failures", 0) + 1
+        # Handle None value for total_execution_failures
+        current_total = state.get("total_execution_failures", 0)
+        if current_total is None:
+            current_total = 0
+        result["total_execution_failures"] = current_total + 1
         
         runtime_config = state.get("runtime_config", {})
         max_failures = runtime_config.get("max_execution_failures", MAX_EXECUTION_FAILURES)
@@ -183,7 +191,8 @@ def physics_sanity_node(state: ReproState) -> dict:
     user_content += f"## Stage Outputs\n```json\n{json.dumps(stage_outputs, indent=2, default=str)}\n```"
     
     # Add design spec for physics reference
-    if design:
+    # Include design_description even if empty dict (falsy but should be shown)
+    if design is not None:
         if isinstance(design, dict):
             user_content += f"\n\n## Design Spec\n```json\n{json.dumps(design, indent=2)}\n```"
         else:
@@ -206,8 +215,12 @@ def physics_sanity_node(state: ReproState) -> dict:
     if "verdict" not in agent_output:
         logger.warning("Physics sanity output missing 'verdict'. Defaulting to 'pass'.")
         agent_output["verdict"] = "pass"
-        if "summary" not in agent_output:
-            agent_output["summary"] = "Missing verdict in LLM response, defaulting to pass."
+        # Always indicate missing verdict in summary, even if summary was provided
+        missing_verdict_msg = "Missing verdict in LLM response, defaulting to pass."
+        if "summary" in agent_output:
+            agent_output["summary"] = f"{missing_verdict_msg} Original summary: {agent_output['summary']}"
+        else:
+            agent_output["summary"] = missing_verdict_msg
     
     agent_output["stage_id"] = stage_id
     if "backtrack_suggestion" not in agent_output:

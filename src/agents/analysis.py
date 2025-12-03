@@ -166,6 +166,9 @@ def results_analyzer_node(state: ReproState) -> dict:
                 "Please check execution logs and rerun simulation."
             ),
             "analysis_summary": "Analysis skipped: No outputs available",
+            "figure_comparisons": [],
+            "analysis_result_reports": [],
+            "analysis_overall_classification": AnalysisClassification.FAILED,
         }
     
     # Initialize file lists before the loop (FIX for UnboundLocalError)
@@ -175,17 +178,25 @@ def results_analyzer_node(state: ReproState) -> dict:
     
     for file_path in output_files:
         file_path_str = str(file_path) if not isinstance(file_path, str) else file_path
-        file_obj = Path(file_path_str)
-        
-        if not file_obj.is_absolute():
-            file_obj = base_output_dir / file_obj
-        
-        if not file_obj.exists() and not Path(file_path_str).is_absolute():
-            file_obj = PROJECT_ROOT / file_path_str
-        
-        if file_obj.exists() and file_obj.is_file():
-            existing_files.append(str(file_obj.resolve()))
-        else:
+        try:
+            file_obj = Path(file_path_str)
+            
+            if not file_obj.is_absolute():
+                file_obj = base_output_dir / file_obj
+            
+            if not file_obj.exists() and not Path(file_path_str).is_absolute():
+                file_obj = PROJECT_ROOT / file_path_str
+            
+            if file_obj.exists() and file_obj.is_file():
+                existing_files.append(str(file_obj.resolve()))
+            else:
+                missing_files.append(file_path_str)
+        except (OSError, ValueError) as e:
+            # Handle very long paths or invalid path characters
+            logger.warning(
+                f"Could not process file path '{file_path_str}': {e}. "
+                "Skipping this file."
+            )
             missing_files.append(file_path_str)
     
     if not existing_files and output_files:
@@ -201,6 +212,9 @@ def results_analyzer_node(state: ReproState) -> dict:
                 "Simulation may have failed to write outputs or files were deleted."
             ),
             "analysis_summary": "Analysis skipped: Output files missing",
+            "figure_comparisons": [],
+            "analysis_result_reports": [],
+            "analysis_overall_classification": AnalysisClassification.FAILED,
         }
     
     if missing_files:
@@ -594,7 +608,7 @@ def comparison_validator_node(state: ReproState) -> dict:
     # skip processing and return immediately. The @with_context_check decorator handles
     # escalations from this node, but this guards against pre-existing escalation state.
     if state.get("awaiting_user_input"):
-        return state
+        return {}
     
     stage_id = state.get("current_stage_id")
     comparisons = stage_comparisons_for_stage(state, stage_id)

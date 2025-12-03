@@ -51,6 +51,12 @@ def ask_user_node(state: ReproState) -> Dict[str, Any]:
     trigger = state.get("ask_user_trigger", "unknown")
     paper_id = state.get("paper_id", "unknown")
     
+    # Get original questions (for mapping responses after retry) or use current questions
+    original_questions = state.get("original_user_questions", questions)
+    # If this is a fresh call (not a retry), store original questions
+    if "original_user_questions" not in state:
+        original_questions = questions.copy()
+    
     if not questions:
         return {
             "awaiting_user_input": False,
@@ -126,6 +132,10 @@ def ask_user_node(state: ReproState) -> Dict[str, Any]:
         print("=" * 60)
             
     except KeyboardInterrupt:
+        if hasattr(signal, 'SIGALRM'):
+            signal.alarm(0)
+            if 'old_handler' in locals():
+                signal.signal(signal.SIGALRM, old_handler)
         print(f"\n\n⚠ Interrupted by user (Ctrl+C)")
         checkpoint_path = save_checkpoint(state, f"interrupted_{trigger}")
         print(f"✓ Checkpoint saved: {checkpoint_path}")
@@ -134,6 +144,10 @@ def ask_user_node(state: ReproState) -> Dict[str, Any]:
         raise SystemExit(0)
         
     except TimeoutError:
+        if hasattr(signal, 'SIGALRM'):
+            signal.alarm(0)
+            if 'old_handler' in locals():
+                signal.signal(signal.SIGALRM, old_handler)
         print(f"\n\n⚠ User response timeout ({timeout_seconds}s)")
         checkpoint_path = save_checkpoint(state, f"timeout_{trigger}")
         print(f"✓ Checkpoint saved: {checkpoint_path}")
@@ -142,6 +156,10 @@ def ask_user_node(state: ReproState) -> Dict[str, Any]:
         raise SystemExit(0)
         
     except EOFError:
+        if hasattr(signal, 'SIGALRM'):
+            signal.alarm(0)
+            if 'old_handler' in locals():
+                signal.signal(signal.SIGALRM, old_handler)
         print(f"\n\n⚠ End of input (EOF)")
         checkpoint_path = save_checkpoint(state, f"eof_{trigger}")
         print(f"✓ Checkpoint saved: {checkpoint_path}")
@@ -149,8 +167,37 @@ def ask_user_node(state: ReproState) -> Dict[str, Any]:
         print(f"  python -m src.graph --resume {checkpoint_path}")
         raise SystemExit(0)
     
-    # Validate user responses
-    validation_errors = validate_user_responses(trigger, responses, questions)
+    # Map responses back to original questions if this is a retry
+    # (responses might be keyed by reask question text)
+    mapped_responses = {}
+    for i, orig_q in enumerate(original_questions):
+        # Try to find response by original question first
+        if orig_q in responses:
+            mapped_responses[orig_q] = responses[orig_q]
+        # If not found, try by index (for reask scenarios where question text was modified)
+        elif i < len(questions) and questions[i] in responses:
+            mapped_responses[orig_q] = responses[questions[i]]
+        # If still not found, check if any response key ends with the original question
+        # (for reask format: "error message\n\nPlease try again:\n{original_question}")
+        else:
+            for resp_key, resp_value in responses.items():
+                if resp_key.endswith(orig_q) or f"\n{orig_q}" in resp_key:
+                    mapped_responses[orig_q] = resp_value
+                    break
+    
+    # Fallback: if mapping failed but we have responses, use them as-is
+    # (this handles edge cases where mapping logic doesn't catch everything)
+    if not mapped_responses and responses:
+        # If we have the same number of responses as original questions, map by index
+        if len(responses) == len(original_questions):
+            response_values = list(responses.values())
+            mapped_responses = {orig_q: response_values[i] for i, orig_q in enumerate(original_questions)}
+        else:
+            # Last resort: use responses as-is (might cause validation issues, but better than empty)
+            mapped_responses = responses
+    
+    # Validate user responses using original questions
+    validation_errors = validate_user_responses(trigger, mapped_responses, original_questions)
     if validation_errors:
         validation_attempt_key = f"user_validation_attempts_{trigger}"
         validation_attempts = state.get(validation_attempt_key, 0) + 1
@@ -163,11 +210,12 @@ def ask_user_node(state: ReproState) -> Dict[str, Any]:
                 "Accepting response despite validation errors and escalating to supervisor."
             )
             return {
-                "user_responses": {**state.get("user_responses", {}), **responses},
+                "user_responses": {**state.get("user_responses", {}), **mapped_responses},
                 "pending_user_questions": [],
                 "awaiting_user_input": False,
                 "workflow_phase": "awaiting_user",
                 validation_attempt_key: 0,
+                "original_user_questions": None,  # Clear after success
                 "supervisor_feedback": (
                     f"User response had validation errors but was accepted after {validation_attempts} attempts."
                 ),
@@ -176,30 +224,32 @@ def ask_user_node(state: ReproState) -> Dict[str, Any]:
         error_msg = "\n".join(f"  - {err}" for err in validation_errors)
         
         # Prepend error message to the first question, and keep all other questions
-        first_question = questions[0] if questions else 'Please provide a valid response.'
+        first_question = original_questions[0] if original_questions else 'Please provide a valid response.'
         reask_questions = [
             f"Your response had validation errors (attempt {validation_attempts}/{max_validation_attempts}):\n{error_msg}\n\n"
             f"Please try again:\n{first_question}"
         ]
         
-        if len(questions) > 1:
-            reask_questions.extend(questions[1:])
-            
+        if len(original_questions) > 1:
+            reask_questions.extend(original_questions[1:])
+        
         return {
             "pending_user_questions": reask_questions,
             "awaiting_user_input": True,
             "ask_user_trigger": trigger,
             "last_node_before_ask_user": state.get("last_node_before_ask_user"),
             validation_attempt_key: validation_attempts,
+            "original_user_questions": original_questions,  # Preserve for mapping responses
         }
     
     validation_attempt_key = f"user_validation_attempts_{trigger}"
     result = {
-        "user_responses": {**state.get("user_responses", {}), **responses},
+        "user_responses": {**state.get("user_responses", {}), **mapped_responses},
         "pending_user_questions": [],
         "awaiting_user_input": False,
         "workflow_phase": "awaiting_user",
         validation_attempt_key: 0,
+        "original_user_questions": None,  # Clear after successful validation
     }
     return result
 
@@ -228,15 +278,24 @@ def material_checkpoint_node(state: ReproState) -> dict:
     
     # Find Stage 0 (material validation) results
     stage0_info = None
-    for stage in stages:
-        if stage.get("stage_type") == "MATERIAL_VALIDATION":
-            stage0_info = stage
-            break
+    # Handle None or non-iterable stages gracefully
+    if stages is not None and isinstance(stages, (list, tuple)):
+        for stage in stages:
+            # Only process dict-like objects
+            if isinstance(stage, dict) and stage.get("stage_type") == "MATERIAL_VALIDATION":
+                stage0_info = stage
+                break
     
     # Get output files from stage_outputs
     stage_outputs = state.get("stage_outputs", {})
     output_files = stage_outputs.get("files", [])
-    plot_files = [f for f in output_files if f.endswith(('.png', '.pdf', '.jpg'))]
+    # Handle None or non-iterable files gracefully, use case-insensitive matching
+    plot_files = []
+    if output_files is not None and isinstance(output_files, (list, tuple)):
+        plot_files = [
+            f for f in output_files 
+            if isinstance(f, str) and f.lower().endswith(('.png', '.pdf', '.jpg'))
+        ]
     
     # Extract materials - stored as PENDING until user approves
     pending_materials = extract_validated_materials(state)

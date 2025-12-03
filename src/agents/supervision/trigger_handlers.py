@@ -96,8 +96,8 @@ def handle_material_checkpoint(
         result["supervisor_verdict"] = "replan_needed"
         result["planner_feedback"] = f"User rejected material validation and requested database change: {response_text}."
         if current_stage_id:
-            update_progress_stage_status(
-                state, current_stage_id, "needs_rerun",
+            _update_progress_with_error_handling(
+                state, result, current_stage_id, "needs_rerun",
                 invalidation_reason="User requested material change"
             )
         result["pending_validated_materials"] = []
@@ -413,7 +413,20 @@ def handle_replan_limit(
     elif "GUIDANCE" in response_text:
         result["replan_count"] = 0
         raw_response = list(user_responses.values())[-1] if user_responses else ""
-        result["planner_feedback"] = f"User guidance: {raw_response}"
+        # Strip "GUIDANCE:" prefix (case-insensitive) from the raw response
+        guidance_text = raw_response
+        if guidance_text:
+            # Remove "GUIDANCE:" prefix if present (case-insensitive)
+            guidance_upper = guidance_text.upper().strip()
+            if guidance_upper.startswith("GUIDANCE"):
+                # Find the colon after GUIDANCE and strip everything before it (including colon and whitespace)
+                colon_idx = guidance_text.find(":")
+                if colon_idx != -1:
+                    guidance_text = guidance_text[colon_idx + 1:].strip()
+                else:
+                    # No colon, just remove "GUIDANCE" keyword
+                    guidance_text = guidance_text[len("GUIDANCE"):].strip()
+        result["planner_feedback"] = f"User guidance: {guidance_text}"
         result["supervisor_verdict"] = "replan_needed"
     
     elif "STOP" in response_text:
@@ -449,13 +462,17 @@ def handle_backtrack_approval(
     if is_approval and not is_rejection:
         result["supervisor_verdict"] = "backtrack_to_stage"
         decision = state.get("backtrack_decision", {})
-        if decision and get_dependent_stages_fn:
-            target = decision.get("target_stage_id")
-            if target:
-                dependent = get_dependent_stages_fn(state.get("plan", {}), target)
-                # Ensure stages_to_invalidate is always a list, never None
-                decision["stages_to_invalidate"] = dependent if dependent is not None else []
-                result["backtrack_decision"] = decision
+        if decision:
+            if get_dependent_stages_fn:
+                target = decision.get("target_stage_id")
+                if target:
+                    dependent = get_dependent_stages_fn(state.get("plan", {}), target)
+                    # Ensure stages_to_invalidate is always a list, never None
+                    decision["stages_to_invalidate"] = dependent if dependent is not None else []
+            else:
+                # When no function provided, set empty list for stages_to_invalidate
+                decision["stages_to_invalidate"] = []
+            result["backtrack_decision"] = decision
     
     elif is_rejection:
         result["backtrack_suggestion"] = None

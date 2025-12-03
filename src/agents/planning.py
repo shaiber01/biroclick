@@ -180,12 +180,12 @@ def plan_node(state: ReproState) -> dict:
 
     plan_data = {
         "paper_id": final_paper_id,
-        "paper_domain": agent_output.get("paper_domain", "other"),
-        "title": agent_output.get("title", ""),
-        "summary": agent_output.get("summary", ""),
-        "stages": agent_output.get("stages", []),
-        "targets": agent_output.get("targets", []),
-        "extracted_parameters": agent_output.get("extracted_parameters", []),
+        "paper_domain": agent_output.get("paper_domain") or "other",
+        "title": agent_output.get("title") or "",
+        "summary": agent_output.get("summary") or "",
+        "stages": agent_output.get("stages") or [],
+        "targets": agent_output.get("targets") or [],
+        "extracted_parameters": agent_output.get("extracted_parameters") or [],
     }
     
     # Extract planned materials and assumptions
@@ -197,7 +197,7 @@ def plan_node(state: ReproState) -> dict:
         "plan": plan_data,
         "planned_materials": planned_materials,
         "assumptions": assumptions,
-        "paper_domain": agent_output.get("paper_domain", "other"),
+        "paper_domain": agent_output.get("paper_domain") or "other",
     }
     
     # Initialize progress stages from plan
@@ -277,6 +277,14 @@ def plan_reviewer_node(state: ReproState) -> dict:
     # Validate stages have targets and IDs
     stage_ids = set()
     for stage in plan_stages:
+        # Validate stage is a dict
+        if not isinstance(stage, dict):
+            blocking_issues.append(
+                f"PLAN_ISSUE: Found invalid stage structure (expected dict, got {type(stage).__name__}). "
+                "All stages must be dictionaries with required fields."
+            )
+            continue
+        
         stage_id = stage.get("stage_id")
         if not stage_id:
             blocking_issues.append(
@@ -294,6 +302,12 @@ def plan_reviewer_node(state: ReproState) -> dict:
         targets = stage.get("targets", [])
         target_details = stage.get("target_details", [])
         
+        # Handle None values explicitly
+        if targets is None:
+            targets = []
+        if target_details is None:
+            target_details = []
+        
         has_targets = bool(targets) or bool(target_details)
         
         if not has_targets:
@@ -307,14 +321,22 @@ def plan_reviewer_node(state: ReproState) -> dict:
     # Check for dependencies on non-existent stages
     if plan_stages:
         # Re-collect valid stage IDs for dependency checking
-        valid_stage_ids = {s.get("stage_id") for s in plan_stages if s.get("stage_id")}
+        valid_stage_ids = {s.get("stage_id") for s in plan_stages if isinstance(s, dict) and s.get("stage_id")}
         
         for stage in plan_stages:
+            # Skip non-dict stages (already reported above)
+            if not isinstance(stage, dict):
+                continue
+                
             stage_id = stage.get("stage_id")
             if not stage_id:
                 continue
                 
             dependencies = stage.get("dependencies", [])
+            # Handle None dependencies explicitly
+            if dependencies is None:
+                dependencies = []
+            
             for dep in dependencies:
                 if dep not in valid_stage_ids:
                     blocking_issues.append(
@@ -349,9 +371,12 @@ def plan_reviewer_node(state: ReproState) -> dict:
                 rec_stack.add(stage_id)
                 path.append(stage_id)
                 
-                stage = next((s for s in plan_stages if s.get("stage_id") == stage_id), None)
+                stage = next((s for s in plan_stages if isinstance(s, dict) and s.get("stage_id") == stage_id), None)
                 if stage:
                     dependencies = stage.get("dependencies", [])
+                    # Handle None dependencies explicitly
+                    if dependencies is None:
+                        dependencies = []
                     for dep_id in dependencies:
                         if dep_id in stage_ids:
                             dfs(dep_id)
@@ -379,8 +404,16 @@ def plan_reviewer_node(state: ReproState) -> dict:
         
         # Check self-dependencies
         for stage in plan_stages:
+            # Skip non-dict stages (already reported above)
+            if not isinstance(stage, dict):
+                continue
+                
             stage_id = stage.get("stage_id")
             dependencies = stage.get("dependencies", [])
+            # Handle None dependencies explicitly
+            if dependencies is None:
+                dependencies = []
+                
             if stage_id in dependencies:
                 blocking_issues.append(
                     f"PLAN_ISSUE: Stage '{stage_id}' depends on itself. "

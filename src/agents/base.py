@@ -38,6 +38,9 @@ def with_context_check(node_name: str):
     def decorator(func: Callable[..., Dict[str, Any]]):
         @wraps(func)
         def wrapper(state: ReproState, *args, **kwargs) -> Dict[str, Any]:
+            # Early return if already awaiting user input - don't modify state
+            if state.get("awaiting_user_input"):
+                return {}
             escalation = check_context_or_escalate(state, node_name)
             if escalation is not None:
                 if escalation.get("awaiting_user_input"):

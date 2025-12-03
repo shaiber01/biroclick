@@ -2127,13 +2127,23 @@ def save_checkpoint(
     from pathlib import Path
     
     paper_id = state.get("paper_id", "unknown")
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    # Use microseconds to ensure uniqueness even when checkpoints are created rapidly
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     
     checkpoint_dir = Path(output_dir) / paper_id / "checkpoints"
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
     
     filename = f"checkpoint_{paper_id}_{checkpoint_name}_{timestamp}.json"
     filepath = checkpoint_dir / filename
+    
+    # Ensure file doesn't already exist (handle extremely rare microsecond collision)
+    # If it does exist, add a counter suffix
+    counter = 0
+    original_filepath = filepath
+    while filepath.exists():
+        counter += 1
+        base_name = original_filepath.stem
+        filepath = checkpoint_dir / f"{base_name}_{counter}.json"
     
     # Convert state to JSON-serializable dict
     state_dict = dict(state)
@@ -2149,10 +2159,13 @@ def save_checkpoint(
     if latest_path.exists() or latest_path.is_symlink():
         latest_path.unlink()
     
+    # Use actual filename (may have counter suffix if collision occurred)
+    actual_filename = filepath.name
+    
     symlink_created = False
     try:
         # Try to create a relative symlink (works better across systems)
-        latest_path.symlink_to(filename)
+        latest_path.symlink_to(actual_filename)
         symlink_created = True
     except (OSError, NotImplementedError):
         # Symlink creation failed (common on Windows without admin/Developer Mode)
