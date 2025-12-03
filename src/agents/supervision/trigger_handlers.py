@@ -185,7 +185,7 @@ def handle_code_review_limit(
         result["supervisor_verdict"] = "ok_continue"
         result["supervisor_feedback"] = "Retrying code generation with user hint."
     
-    elif check_keywords(response_text, ["SKIP"]):
+    elif check_keywords(response_text, ["SKIP", "SKIP_STAGE"]):
         result["supervisor_verdict"] = "ok_continue"
         if current_stage_id:
             _update_progress_with_error_handling(
@@ -227,7 +227,7 @@ def handle_design_review_limit(
         result["reviewer_feedback"] = f"User hint: {raw_response}"
         result["supervisor_verdict"] = "ok_continue"
     
-    elif check_keywords(response_text, ["SKIP"]):
+    elif check_keywords(response_text, ["SKIP", "SKIP_STAGE"]):
         result["supervisor_verdict"] = "ok_continue"
         if current_stage_id:
             _update_progress_with_error_handling(
@@ -263,13 +263,14 @@ def handle_execution_failure_limit(
     response_text = parse_user_response(user_responses)
     
     # Use word boundary matching to avoid false positives (e.g., "RETRYING" matching "RETRY")
-    if check_keywords(response_text, ["RETRY", "GUIDANCE"]):
+    # Include compound keywords like RETRY_WITH_GUIDANCE that users are prompted to use
+    if check_keywords(response_text, ["RETRY", "GUIDANCE", "RETRY_WITH_GUIDANCE"]):
         result["execution_failure_count"] = 0
         raw_response = list(user_responses.values())[-1] if user_responses else ""
         result["supervisor_feedback"] = f"User guidance: {raw_response}"
         result["supervisor_verdict"] = "ok_continue"
     
-    elif check_keywords(response_text, ["SKIP"]):
+    elif check_keywords(response_text, ["SKIP", "SKIP_STAGE"]):
         result["supervisor_verdict"] = "ok_continue"
         if current_stage_id:
             _update_progress_with_error_handling(
@@ -306,13 +307,14 @@ def handle_physics_failure_limit(
     response_text = parse_user_response(user_responses)
     
     # Use word boundary matching to avoid false positives (e.g., "ACCEPTABLE" matching "ACCEPT")
-    if check_keywords(response_text, ["RETRY"]):
+    # Include compound keywords like RETRY_WITH_GUIDANCE that users are prompted to use
+    if check_keywords(response_text, ["RETRY", "RETRY_WITH_GUIDANCE"]):
         result["physics_failure_count"] = 0
         raw_response = list(user_responses.values())[-1] if user_responses else ""
         result["supervisor_feedback"] = f"User guidance: {raw_response}"
         result["supervisor_verdict"] = "ok_continue"
     
-    elif check_keywords(response_text, ["ACCEPT", "PARTIAL"]):
+    elif check_keywords(response_text, ["ACCEPT", "PARTIAL", "ACCEPT_PARTIAL"]):
         result["supervisor_verdict"] = "ok_continue"
         if current_stage_id:
             _update_progress_with_error_handling(
@@ -320,7 +322,7 @@ def handle_physics_failure_limit(
                 summary="Accepted as partial by user despite physics issues"
             )
     
-    elif check_keywords(response_text, ["SKIP"]):
+    elif check_keywords(response_text, ["SKIP", "SKIP_STAGE"]):
         result["supervisor_verdict"] = "ok_continue"
         if current_stage_id:
             _update_progress_with_error_handling(
@@ -381,7 +383,7 @@ def handle_context_overflow(
             result["supervisor_feedback"] = "Paper already short enough, proceeding."
         result["supervisor_verdict"] = "ok_continue"
     
-    elif check_keywords(response_text, ["SKIP"]):
+    elif check_keywords(response_text, ["SKIP", "SKIP_STAGE"]):
         result["supervisor_verdict"] = "ok_continue"
         if current_stage_id:
             _update_progress_with_error_handling(
@@ -417,7 +419,8 @@ def handle_replan_limit(
     response_text = parse_user_response(user_responses)
     
     # Use word boundary matching to avoid false positives
-    if check_keywords(response_text, ["FORCE", "ACCEPT"]):
+    # Include compound keyword FORCE_ACCEPT that users are prompted to use
+    if check_keywords(response_text, ["FORCE", "ACCEPT", "FORCE_ACCEPT"]):
         result["supervisor_verdict"] = "ok_continue"
         result["supervisor_feedback"] = "Plan force-accepted by user."
     
@@ -551,7 +554,7 @@ def handle_llm_error(
         result["supervisor_verdict"] = "ok_continue"
         result["supervisor_feedback"] = "Retrying after user acknowledged LLM error."
     
-    elif check_keywords(response_text, ["SKIP"]):
+    elif check_keywords(response_text, ["SKIP", "SKIP_STAGE"]):
         result["supervisor_verdict"] = "ok_continue"
         if current_stage_id:
             _update_progress_with_error_handling(
@@ -676,7 +679,8 @@ def handle_backtrack_limit(
     response_text = parse_user_response(user_responses)
     
     # Use word boundary matching to avoid false positives
-    if check_keywords(response_text, ["FORCE", "CONTINUE"]):
+    # Include compound keyword FORCE_CONTINUE that users are prompted to use
+    if check_keywords(response_text, ["FORCE", "CONTINUE", "FORCE_CONTINUE"]):
         result["supervisor_verdict"] = "ok_continue"
         result["supervisor_feedback"] = "Continuing despite backtrack limit as per user request."
         # Reset or increment limit? Logic usually handles count, we just unblock verdict.

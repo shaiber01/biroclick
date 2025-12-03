@@ -104,9 +104,8 @@ class TestCodeReviewLimitTrigger:
         assert result["supervisor_verdict"] == "ok_continue"
         assert result.get("ask_user_trigger") is None
         # Verify update_progress_stage_status was called with correct args
-        # Note: invalidation_reason defaults to None in the function signature
         mock_update.assert_called_once_with(
-            state, "stage1", "blocked", summary="Skipped by user due to code review issues", invalidation_reason=None
+            state, "stage1", "blocked", summary="Skipped by user due to code review issues"
         )
         # Verify should_stop is NOT set
         assert result.get("should_stop") is not True
@@ -129,7 +128,7 @@ class TestCodeReviewLimitTrigger:
         
         assert result["supervisor_verdict"] == "ok_continue"
         mock_update.assert_called_once_with(
-            state, "stage2", "blocked", summary="Skipped by user due to code review issues", invalidation_reason=None
+            state, "stage2", "blocked", summary="Skipped by user due to code review issues"
         )
 
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
@@ -335,7 +334,7 @@ class TestHandleCodeReviewLimit:
         assert mock_result["code_revision_count"] == 0
         assert mock_result["supervisor_verdict"] == "ok_continue"
 
-    @patch("src.agents.supervision.trigger_handlers.update_progress_stage_status")
+    @patch("src.agents.supervision.trigger_handlers._update_progress_with_error_handling")
     def test_handle_code_review_limit_skip(self, mock_update, mock_state, mock_result):
         """Should handle SKIP response correctly."""
         user_input = {"q1": "SKIP"}
@@ -343,36 +342,35 @@ class TestHandleCodeReviewLimit:
         trigger_handlers.handle_code_review_limit(mock_state, mock_result, user_input, "stage1")
         
         assert mock_result["supervisor_verdict"] == "ok_continue"
-        # Verify update_progress_stage_status was called with exact arguments
-        # Note: invalidation_reason defaults to None in the function signature
+        # Verify _update_progress_with_error_handling was called with correct arguments
         mock_update.assert_called_once_with(
-            mock_state, "stage1", "blocked", summary="Skipped by user due to code review issues", invalidation_reason=None
+            mock_state, mock_result, "stage1", "blocked", summary="Skipped by user due to code review issues"
         )
         # Verify should_stop is NOT set
         assert mock_result.get("should_stop") is not True
         # Verify code_revision_count is NOT reset
         assert "code_revision_count" not in mock_result
 
-    @patch("src.agents.supervision.trigger_handlers.update_progress_stage_status")
+    @patch("src.agents.supervision.trigger_handlers._update_progress_with_error_handling")
     def test_handle_code_review_limit_skip_none_stage_id(self, mock_update, mock_state, mock_result):
-        """Should not call update_progress_stage_status when stage_id is None."""
+        """Should not call _update_progress_with_error_handling when stage_id is None."""
         user_input = {"q1": "SKIP"}
         
         trigger_handlers.handle_code_review_limit(mock_state, mock_result, user_input, None)
         
         assert mock_result["supervisor_verdict"] == "ok_continue"
-        # Critical: should NOT call update_progress_stage_status
+        # Critical: should NOT call _update_progress_with_error_handling
         mock_update.assert_not_called()
 
-    @patch("src.agents.supervision.trigger_handlers.update_progress_stage_status")
+    @patch("src.agents.supervision.trigger_handlers._update_progress_with_error_handling")
     def test_handle_code_review_limit_skip_empty_string_stage_id(self, mock_update, mock_state, mock_result):
-        """Should not call update_progress_stage_status when stage_id is empty string."""
+        """Should not call _update_progress_with_error_handling when stage_id is empty string."""
         user_input = {"q1": "SKIP"}
         
         trigger_handlers.handle_code_review_limit(mock_state, mock_result, user_input, "")
         
         assert mock_result["supervisor_verdict"] == "ok_continue"
-        # Empty string is falsy, so should NOT call update_progress_stage_status
+        # Empty string is falsy, so should NOT call _update_progress_with_error_handling
         mock_update.assert_not_called()
 
     def test_handle_code_review_limit_stop(self, mock_state, mock_result):
@@ -605,45 +603,41 @@ class TestHandleCodeReviewLimit:
         assert "reviewer_feedback" in mock_result
         assert mock_result["reviewer_feedback"].startswith("User hint:")
 
-    @patch("src.agents.supervision.trigger_handlers.update_progress_stage_status")
+    @patch("src.agents.supervision.trigger_handlers._update_progress_with_error_handling")
     def test_handle_code_review_limit_skip_with_empty_string_stage_id_does_not_call_update(self, mock_update, mock_state, mock_result):
-        """Should not call update_progress_stage_status when stage_id is empty string (falsy)."""
+        """Should not call _update_progress_with_error_handling when stage_id is empty string (falsy)."""
         user_input = {"q1": "SKIP"}
         
         trigger_handlers.handle_code_review_limit(mock_state, mock_result, user_input, "")
         
         assert mock_result["supervisor_verdict"] == "ok_continue"
-        # Empty string is falsy, so should NOT call update_progress_stage_status
+        # Empty string is falsy, so should NOT call _update_progress_with_error_handling
         mock_update.assert_not_called()
 
-    def test_handle_code_review_limit_hint_word_boundary_issue(self, mock_state, mock_result):
-        """Should handle cases where keywords appear as substrings (e.g., 'HINT' in 'HINTING')."""
-        # This tests if the substring matching could cause false positives
+    def test_handle_code_review_limit_hint_word_boundary(self, mock_state, mock_result):
+        """Keywords as substrings should NOT match (word boundary matching)."""
+        # Word boundary matching prevents false positives
         user_input = {"q1": "I was HINTING at something"}
         
         trigger_handlers.handle_code_review_limit(mock_state, mock_result, user_input, "stage1")
         
-        # "HINTING" contains "HINT", so should match PROVIDE_HINT/HINT branch
-        # This might be a bug - should it match? Let's test and see
-        assert mock_result["code_revision_count"] == 0
-        assert mock_result["supervisor_verdict"] == "ok_continue"
+        # "HINTING" does NOT match "HINT" with word boundary matching
+        assert mock_result["supervisor_verdict"] == "ask_user"
 
-    def test_handle_code_review_limit_skip_word_boundary_issue(self, mock_state, mock_result):
-        """Should handle cases where SKIP appears as substring."""
+    def test_handle_code_review_limit_skip_word_boundary(self, mock_state, mock_result):
+        """SKIP as substring should NOT match (word boundary matching)."""
         user_input = {"q1": "SKIPPING this stage"}
         
         trigger_handlers.handle_code_review_limit(mock_state, mock_result, user_input, "stage1")
         
-        # "SKIPPING" contains "SKIP", so should match SKIP branch
-        # This might be intentional or a bug - let's test and see
-        assert mock_result["supervisor_verdict"] == "ok_continue"
+        # "SKIPPING" does NOT match "SKIP" with word boundary matching
+        assert mock_result["supervisor_verdict"] == "ask_user"
 
-    def test_handle_code_review_limit_stop_word_boundary_issue(self, mock_state, mock_result):
-        """Should handle cases where STOP appears as substring."""
+    def test_handle_code_review_limit_stop_word_boundary(self, mock_state, mock_result):
+        """STOP as substring should NOT match (word boundary matching)."""
         user_input = {"q1": "STOPPING the workflow"}
         
         trigger_handlers.handle_code_review_limit(mock_state, mock_result, user_input, "stage1")
         
-        # "STOPPING" contains "STOP", so should match STOP branch
-        assert mock_result["supervisor_verdict"] == "all_complete"
-        assert mock_result["should_stop"] is True
+        # "STOPPING" does NOT match "STOP" with word boundary matching
+        assert mock_result["supervisor_verdict"] == "ask_user"

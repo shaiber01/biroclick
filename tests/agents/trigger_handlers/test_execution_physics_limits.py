@@ -269,12 +269,12 @@ class TestHandleExecutionFailureLimit:
         """Test SKIP updates stage status when stage_id provided."""
         user_input = {"q1": "SKIP"}
         
-        with patch("src.agents.supervision.trigger_handlers.update_progress_stage_status") as mock_update:
+        with patch("src.agents.supervision.trigger_handlers._update_progress_with_error_handling") as mock_update:
             trigger_handlers.handle_execution_failure_limit(mock_state, mock_result, user_input, "stage1")
             
             assert mock_result["supervisor_verdict"] == "ok_continue"
             mock_update.assert_called_once_with(
-                mock_state, "stage1", "blocked",
+                mock_state, mock_result, "stage1", "blocked",
                 summary="Skipped by user due to execution failures"
             )
 
@@ -282,7 +282,7 @@ class TestHandleExecutionFailureLimit:
         """Test SKIP works without stage_id (no update call)."""
         user_input = {"q1": "SKIP"}
         
-        with patch("src.agents.supervision.trigger_handlers.update_progress_stage_status") as mock_update:
+        with patch("src.agents.supervision.trigger_handlers._update_progress_with_error_handling") as mock_update:
             trigger_handlers.handle_execution_failure_limit(mock_state, mock_result, user_input, None)
             
             assert mock_result["supervisor_verdict"] == "ok_continue"
@@ -395,7 +395,7 @@ class TestHandlePhysicsFailureLimit:
         """Test ACCEPT works without stage_id (no update call)."""
         user_input = {"q1": "ACCEPT"}
         
-        with patch("src.agents.supervision.trigger_handlers.update_progress_stage_status") as mock_update:
+        with patch("src.agents.supervision.trigger_handlers._update_progress_with_error_handling") as mock_update:
             trigger_handlers.handle_physics_failure_limit(mock_state, mock_result, user_input, None)
             
             assert mock_result["supervisor_verdict"] == "ok_continue"
@@ -431,12 +431,12 @@ class TestHandlePhysicsFailureLimit:
         """Test SKIP updates stage status when stage_id provided."""
         user_input = {"q1": "SKIP"}
         
-        with patch("src.agents.supervision.trigger_handlers.update_progress_stage_status") as mock_update:
+        with patch("src.agents.supervision.trigger_handlers._update_progress_with_error_handling") as mock_update:
             trigger_handlers.handle_physics_failure_limit(mock_state, mock_result, user_input, "stage1")
             
             assert mock_result["supervisor_verdict"] == "ok_continue"
             mock_update.assert_called_once_with(
-                mock_state, "stage1", "blocked",
+                mock_state, mock_result, "stage1", "blocked",
                 summary="Skipped by user due to physics check failures"
             )
 
@@ -444,7 +444,7 @@ class TestHandlePhysicsFailureLimit:
         """Test SKIP works without stage_id (no update call)."""
         user_input = {"q1": "SKIP"}
         
-        with patch("src.agents.supervision.trigger_handlers.update_progress_stage_status") as mock_update:
+        with patch("src.agents.supervision.trigger_handlers._update_progress_with_error_handling") as mock_update:
             trigger_handlers.handle_physics_failure_limit(mock_state, mock_result, user_input, None)
             
             assert mock_result["supervisor_verdict"] == "ok_continue"
@@ -495,7 +495,7 @@ class TestHandlePhysicsFailureLimit:
         """Test keywords are case-insensitive."""
         user_input = {"q1": "accept partial"}
         
-        with patch("src.agents.supervision.trigger_handlers.update_progress_stage_status") as mock_update:
+        with patch("src.agents.supervision.trigger_handlers._update_progress_with_error_handling") as mock_update:
             trigger_handlers.handle_physics_failure_limit(mock_state, mock_result, user_input, "stage1")
             
             assert mock_result["supervisor_verdict"] == "ok_continue"
@@ -589,7 +589,7 @@ class TestHandlePhysicsFailureLimit:
         """Test ACCEPT keyword with surrounding whitespace."""
         user_input = {"q1": "  ACCEPT  "}
         
-        with patch("src.agents.supervision.trigger_handlers.update_progress_stage_status") as mock_update:
+        with patch("src.agents.supervision.trigger_handlers._update_progress_with_error_handling") as mock_update:
             trigger_handlers.handle_physics_failure_limit(mock_state, mock_result, user_input, "stage1")
             
             assert mock_result["supervisor_verdict"] == "ok_continue"
@@ -845,7 +845,7 @@ class TestKeywordPrecedence:
         """SKIP should be checked before STOP when RETRY not present."""
         user_input = {"q1": "SKIP or STOP"}
         
-        with patch("src.agents.supervision.trigger_handlers.update_progress_stage_status") as mock_update:
+        with patch("src.agents.supervision.trigger_handlers._update_progress_with_error_handling") as mock_update:
             trigger_handlers.handle_execution_failure_limit(mock_state, mock_result, user_input, "stage1")
         
         # SKIP should win (checked before STOP)
@@ -882,7 +882,7 @@ class TestKeywordPrecedence:
         """SKIP should be checked before STOP when ACCEPT/RETRY not present."""
         user_input = {"q1": "SKIP or STOP"}
         
-        with patch("src.agents.supervision.trigger_handlers.update_progress_stage_status") as mock_update:
+        with patch("src.agents.supervision.trigger_handlers._update_progress_with_error_handling") as mock_update:
             trigger_handlers.handle_physics_failure_limit(mock_state, mock_result, user_input, "stage1")
         
         # SKIP should win
@@ -994,7 +994,7 @@ class TestSkipDoesNotResetCounters:
         user_input = {"q1": "SKIP"}
         mock_result["execution_failure_count"] = 5
         
-        with patch("src.agents.supervision.trigger_handlers.update_progress_stage_status"):
+        with patch("src.agents.supervision.trigger_handlers._update_progress_with_error_handling"):
             trigger_handlers.handle_execution_failure_limit(mock_state, mock_result, user_input, "stage1")
         
         # Count should NOT be reset
@@ -1006,7 +1006,7 @@ class TestSkipDoesNotResetCounters:
         user_input = {"q1": "SKIP"}
         mock_result["physics_failure_count"] = 4
         
-        with patch("src.agents.supervision.trigger_handlers.update_progress_stage_status"):
+        with patch("src.agents.supervision.trigger_handlers._update_progress_with_error_handling"):
             trigger_handlers.handle_physics_failure_limit(mock_state, mock_result, user_input, "stage1")
         
         # Count should NOT be reset
@@ -1054,24 +1054,26 @@ class TestStopActionBehavior:
         assert mock_result["should_stop"] is True
 
     def test_execution_stop_does_not_update_progress(self, mock_state, mock_result):
-        """STOP should not call update_progress_stage_status."""
+        """STOP should not call any progress update functions."""
         user_input = {"q1": "STOP"}
         
         with patch("src.agents.supervision.trigger_handlers.update_progress_stage_status") as mock_update:
-            trigger_handlers.handle_execution_failure_limit(mock_state, mock_result, user_input, "stage1")
+            with patch("src.agents.supervision.trigger_handlers._update_progress_with_error_handling") as mock_wrapper:
+                trigger_handlers.handle_execution_failure_limit(mock_state, mock_result, user_input, "stage1")
         
         mock_update.assert_not_called()
+        mock_wrapper.assert_not_called()
 
     def test_physics_stop_does_not_update_progress(self, mock_state, mock_result):
-        """STOP should not call update_progress_stage_status."""
+        """STOP should not call any progress update functions."""
         user_input = {"q1": "STOP"}
         
         with patch("src.agents.supervision.trigger_handlers.update_progress_stage_status") as mock_update:
-            with patch("src.agents.supervision.trigger_handlers._update_progress_with_error_handling") as mock_update2:
+            with patch("src.agents.supervision.trigger_handlers._update_progress_with_error_handling") as mock_wrapper:
                 trigger_handlers.handle_physics_failure_limit(mock_state, mock_result, user_input, "stage1")
         
         mock_update.assert_not_called()
-        mock_update2.assert_not_called()
+        mock_wrapper.assert_not_called()
 
 
 class TestClarificationQuestionContent:
@@ -1191,28 +1193,30 @@ class TestProgressUpdateParameters:
     """Tests verifying the exact parameters passed to progress update functions."""
 
     def test_execution_skip_calls_update_with_correct_params(self, mock_state, mock_result):
-        """SKIP should call update_progress_stage_status with exact parameters."""
+        """SKIP should call _update_progress_with_error_handling with exact parameters."""
         user_input = {"q1": "SKIP"}
         
-        with patch("src.agents.supervision.trigger_handlers.update_progress_stage_status") as mock_update:
+        with patch("src.agents.supervision.trigger_handlers._update_progress_with_error_handling") as mock_update:
             trigger_handlers.handle_execution_failure_limit(mock_state, mock_result, user_input, "test_stage_123")
         
         mock_update.assert_called_once_with(
             mock_state,
+            mock_result,
             "test_stage_123",
             "blocked",
             summary="Skipped by user due to execution failures"
         )
 
     def test_physics_skip_calls_update_with_correct_params(self, mock_state, mock_result):
-        """SKIP should call update_progress_stage_status with exact parameters."""
+        """SKIP should call _update_progress_with_error_handling with exact parameters."""
         user_input = {"q1": "SKIP"}
         
-        with patch("src.agents.supervision.trigger_handlers.update_progress_stage_status") as mock_update:
+        with patch("src.agents.supervision.trigger_handlers._update_progress_with_error_handling") as mock_update:
             trigger_handlers.handle_physics_failure_limit(mock_state, mock_result, user_input, "physics_stage_456")
         
         mock_update.assert_called_once_with(
             mock_state,
+            mock_result,
             "physics_stage_456",
             "blocked",
             summary="Skipped by user due to physics check failures"
@@ -1406,40 +1410,36 @@ class TestErrorHandlingConsistency:
     """
     Tests for error handling consistency between handlers.
     
-    NOTE: There's an inconsistency in the implementation:
-    - handle_execution_failure_limit uses update_progress_stage_status directly for SKIP
-    - handle_physics_failure_limit uses _update_progress_with_error_handling for ACCEPT/PARTIAL
-      but update_progress_stage_status directly for SKIP
-    
-    This means SKIP operations have no error handling wrapper in either handler.
+    All handlers now consistently use _update_progress_with_error_handling
+    for progress updates, ensuring exceptions don't crash the workflow.
     """
 
-    def test_execution_skip_uses_direct_update_not_wrapper(self, mock_state, mock_result):
-        """Document that execution SKIP uses direct update (no error handling wrapper)."""
+    def test_execution_skip_uses_error_handling_wrapper(self, mock_state, mock_result):
+        """Verify execution SKIP uses error handling wrapper."""
         user_input = {"q1": "SKIP"}
         
         with patch("src.agents.supervision.trigger_handlers.update_progress_stage_status") as mock_direct:
             with patch("src.agents.supervision.trigger_handlers._update_progress_with_error_handling") as mock_wrapper:
                 trigger_handlers.handle_execution_failure_limit(mock_state, mock_result, user_input, "stage1")
         
-        # Direct call is used, not the error handling wrapper
-        mock_direct.assert_called_once()
-        mock_wrapper.assert_not_called()
+        # Error handling wrapper is used, not direct call
+        mock_wrapper.assert_called_once()
+        mock_direct.assert_not_called()
 
-    def test_physics_skip_uses_direct_update_not_wrapper(self, mock_state, mock_result):
-        """Document that physics SKIP uses direct update (no error handling wrapper)."""
+    def test_physics_skip_uses_error_handling_wrapper(self, mock_state, mock_result):
+        """Verify physics SKIP uses error handling wrapper."""
         user_input = {"q1": "SKIP"}
         
         with patch("src.agents.supervision.trigger_handlers.update_progress_stage_status") as mock_direct:
             with patch("src.agents.supervision.trigger_handlers._update_progress_with_error_handling") as mock_wrapper:
                 trigger_handlers.handle_physics_failure_limit(mock_state, mock_result, user_input, "stage1")
         
-        # Direct call is used, not the error handling wrapper
-        mock_direct.assert_called_once()
-        mock_wrapper.assert_not_called()
+        # Error handling wrapper is used, not direct call
+        mock_wrapper.assert_called_once()
+        mock_direct.assert_not_called()
 
     def test_physics_accept_uses_error_handling_wrapper(self, mock_state, mock_result):
-        """Document that physics ACCEPT uses error handling wrapper."""
+        """Verify physics ACCEPT uses error handling wrapper."""
         user_input = {"q1": "ACCEPT"}
         
         with patch("src.agents.supervision.trigger_handlers.update_progress_stage_status") as mock_direct:
@@ -1501,7 +1501,7 @@ class TestBoundaryConditions:
         """Handler should treat empty string stage_id as falsy (no progress update)."""
         user_input = {"q1": "SKIP"}
         
-        with patch("src.agents.supervision.trigger_handlers.update_progress_stage_status") as mock_update:
+        with patch("src.agents.supervision.trigger_handlers._update_progress_with_error_handling") as mock_update:
             trigger_handlers.handle_execution_failure_limit(mock_state, mock_result, user_input, "")
         
         # Empty string is falsy in Python, so `if current_stage_id:` returns False
@@ -1514,11 +1514,12 @@ class TestBoundaryConditions:
         user_input = {"q1": "SKIP"}
         special_stage_id = "stage_123_with-dashes.and.dots/and/slashes"
         
-        with patch("src.agents.supervision.trigger_handlers.update_progress_stage_status") as mock_update:
+        with patch("src.agents.supervision.trigger_handlers._update_progress_with_error_handling") as mock_update:
             trigger_handlers.handle_physics_failure_limit(mock_state, mock_result, user_input, special_stage_id)
         
         mock_update.assert_called_once_with(
             mock_state,
+            mock_result,
             special_stage_id,
             "blocked",
             summary="Skipped by user due to physics check failures"
@@ -1574,7 +1575,7 @@ class TestKeywordOnlyResponses:
         """Exact 'SKIP' keyword should work."""
         user_input = {"q1": "SKIP"}
         
-        with patch("src.agents.supervision.trigger_handlers.update_progress_stage_status"):
+        with patch("src.agents.supervision.trigger_handlers._update_progress_with_error_handling"):
             trigger_handlers.handle_execution_failure_limit(mock_state, mock_result, user_input, "stage1")
         
         assert mock_result["supervisor_verdict"] == "ok_continue"

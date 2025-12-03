@@ -145,14 +145,13 @@ class TestHandleReplanLimit:
         assert "replan_count" not in mock_result
 
     def test_handle_replan_limit_case_insensitive_force(self, mock_state, mock_result):
-        """Test case-insensitive FORCE matching."""
+        """Test case-insensitive FORCE matching (whole word only)."""
         test_cases = [
             "force",
             "Force",
             "FORCE",
             "FoRcE",
-            "FORCEFUL",
-            "enforce",
+            "FORCE_ACCEPT",  # Compound keyword
         ]
         
         for response in test_cases:
@@ -165,13 +164,12 @@ class TestHandleReplanLimit:
             assert mock_result.get("supervisor_feedback") == "Plan force-accepted by user."
 
     def test_handle_replan_limit_case_insensitive_accept(self, mock_state, mock_result):
-        """Test case-insensitive ACCEPT matching."""
+        """Test case-insensitive ACCEPT matching (whole word only)."""
         test_cases = [
             "accept",
             "Accept",
             "ACCEPT",
             "AcCePt",
-            "accepted",
         ]
         
         for response in test_cases:
@@ -184,7 +182,7 @@ class TestHandleReplanLimit:
             assert mock_result.get("supervisor_feedback") == "Plan force-accepted by user."
 
     def test_handle_replan_limit_case_insensitive_guidance(self, mock_state, mock_result):
-        """Test case-insensitive GUIDANCE matching."""
+        """Test case-insensitive GUIDANCE matching (whole word only)."""
         test_cases = [
             "guidance",
             "Guidance",
@@ -204,13 +202,12 @@ class TestHandleReplanLimit:
             assert "planner_feedback" in mock_result
 
     def test_handle_replan_limit_case_insensitive_stop(self, mock_state, mock_result):
-        """Test case-insensitive STOP matching."""
+        """Test case-insensitive STOP matching (whole word only)."""
         test_cases = [
             "stop",
             "Stop",
             "STOP",
             "StOp",
-            "stopped",
         ]
         
         for response in test_cases:
@@ -438,37 +435,38 @@ class TestHandleReplanLimit:
         assert mock_result["supervisor_verdict"] == "replan_needed"
         assert mock_result["planner_feedback"] == "User guidance: Last guidance"
 
-    def test_handle_replan_limit_partial_match_force(self, mock_state, mock_result):
-        """Test partial match: words containing FORCE."""
+    def test_handle_replan_limit_partial_match_force_no_match(self, mock_state, mock_result):
+        """Test partial match: words containing FORCE should NOT match (word boundary)."""
         user_input = {"q1": "FORCEFUL action"}
         trigger_handlers.handle_replan_limit(mock_state, mock_result, user_input, "stage1")
         
-        assert mock_result["supervisor_verdict"] == "ok_continue"
-        assert mock_result.get("supervisor_feedback") == "Plan force-accepted by user."
+        # Word boundary matching: FORCEFUL does not match FORCE
+        assert mock_result["supervisor_verdict"] == "ask_user"
 
-    def test_handle_replan_limit_partial_match_accept(self, mock_state, mock_result):
-        """Test partial match: words containing ACCEPT."""
+    def test_handle_replan_limit_partial_match_accept_no_match(self, mock_state, mock_result):
+        """Test partial match: words containing ACCEPT should NOT match (word boundary)."""
         user_input = {"q1": "ACCEPTED proposal"}
         trigger_handlers.handle_replan_limit(mock_state, mock_result, user_input, "stage1")
         
-        assert mock_result["supervisor_verdict"] == "ok_continue"
-        assert mock_result.get("supervisor_feedback") == "Plan force-accepted by user."
+        # Word boundary matching: ACCEPTED does not match ACCEPT
+        assert mock_result["supervisor_verdict"] == "ask_user"
 
     def test_handle_replan_limit_partial_match_guidance(self, mock_state, mock_result):
-        """Test partial match: words containing GUIDANCE."""
+        """Test partial match: GUIDANCE as a keyword still works."""
         user_input = {"q1": "GUIDANCE: test"}
         trigger_handlers.handle_replan_limit(mock_state, mock_result, user_input, "stage1")
         
+        # GUIDANCE is the keyword itself, not a partial match
         assert mock_result["supervisor_verdict"] == "replan_needed"
         assert mock_result["replan_count"] == 0
 
-    def test_handle_replan_limit_partial_match_stop(self, mock_state, mock_result):
-        """Test partial match: words containing STOP."""
+    def test_handle_replan_limit_partial_match_stop_no_match(self, mock_state, mock_result):
+        """Test partial match: words containing STOP should NOT match (word boundary)."""
         user_input = {"q1": "STOPPED process"}
         trigger_handlers.handle_replan_limit(mock_state, mock_result, user_input, "stage1")
         
-        assert mock_result["supervisor_verdict"] == "all_complete"
-        assert mock_result["should_stop"] is True
+        # Word boundary matching: STOPPED does not match STOP
+        assert mock_result["supervisor_verdict"] == "ask_user"
 
     def test_handle_replan_limit_unknown_empty_string(self, mock_state, mock_result):
         """Test unknown response with empty string."""
