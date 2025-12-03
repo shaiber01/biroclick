@@ -47,6 +47,7 @@ from .base import (
     with_context_check,
     create_llm_error_auto_approve,
     create_llm_error_escalation,
+    increment_counter_with_max,
 )
 
 
@@ -447,25 +448,39 @@ def plan_reviewer_node(state: ReproState) -> dict:
             logger.error(f"Plan reviewer LLM call failed: {e}")
             agent_output = create_llm_error_auto_approve("plan_reviewer", e)
     
+    # Normalize verdict to allowed values
+    raw_verdict = agent_output.get("verdict", "approve")
+    # Normalize common variations: "pass" -> "approve", "reject" -> "needs_revision"
+    if raw_verdict in ["pass", "approved", "accept"]:
+        verdict = "approve"
+    elif raw_verdict in ["reject", "revision_needed", "needs_work"]:
+        verdict = "needs_revision"
+    elif raw_verdict in ["approve", "needs_revision"]:
+        verdict = raw_verdict
+    else:
+        # Unknown verdict - log warning and default to approve
+        logger.warning(
+            f"Plan reviewer returned unexpected verdict '{raw_verdict}'. "
+            "Normalizing to 'approve'. Allowed values: 'approve', 'needs_revision'."
+        )
+        verdict = "approve"
+    
     result: Dict[str, Any] = {
         "workflow_phase": "plan_review",
-        "last_plan_review_verdict": agent_output["verdict"],
+        "last_plan_review_verdict": verdict,
     }
     
     # Increment replan counter if needs_revision
-    if agent_output["verdict"] == "needs_revision":
+    if verdict == "needs_revision":
         # For blocking structural issues, only increment if replan_count was already in state
         # For LLM rejections, always increment (even if starting from 0 or not present)
         if not is_blocking_issue or "replan_count" in state:
-            current_replan_count = state.get("replan_count", 0)
-            runtime_config = state.get("runtime_config", {})
-            max_replans = runtime_config.get("max_replans", MAX_REPLANS)
-            if current_replan_count < max_replans:
-                result["replan_count"] = current_replan_count + 1
-            else:
-                # Only set replan_count if it was already in state or if it's an LLM rejection
-                if "replan_count" in state or not is_blocking_issue:
-                    result["replan_count"] = current_replan_count
+            # BUG FIX: Use increment_counter_with_max for consistency with other counters
+            # This ensures proper handling of max_replans limit
+            new_count, was_incremented = increment_counter_with_max(
+                state, "replan_count", "max_replans", MAX_REPLANS
+            )
+            result["replan_count"] = new_count
         result["planner_feedback"] = agent_output.get("feedback", agent_output.get("summary", ""))
     
     return result

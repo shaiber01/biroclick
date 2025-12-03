@@ -94,9 +94,26 @@ def code_reviewer_node(state: ReproState) -> dict:
         logger.error(f"Code reviewer LLM call failed: {e}")
         agent_output = create_llm_error_auto_approve("code_reviewer", e)
     
+    # Normalize verdict to allowed values
+    raw_verdict = agent_output.get("verdict", "needs_revision")
+    # Normalize common variations: "pass" -> "approve", "reject" -> "needs_revision"
+    if raw_verdict in ["pass", "approved", "accept"]:
+        verdict = "approve"
+    elif raw_verdict in ["reject", "revision_needed", "needs_work"]:
+        verdict = "needs_revision"
+    elif raw_verdict in ["approve", "needs_revision"]:
+        verdict = raw_verdict
+    else:
+        # Unknown verdict - log warning and default to needs_revision (safer for code)
+        logger.warning(
+            f"Code reviewer returned unexpected verdict '{raw_verdict}'. "
+            "Normalizing to 'needs_revision'. Allowed values: 'approve', 'needs_revision'."
+        )
+        verdict = "needs_revision"
+    
     result: Dict[str, Any] = {
         "workflow_phase": "code_review",
-        "last_code_review_verdict": agent_output.get("verdict", "needs_revision"),
+        "last_code_review_verdict": verdict,
         "reviewer_issues": agent_output.get("issues", []),
         "code_revision_count": state.get("code_revision_count", 0),  # Always include current count
     }

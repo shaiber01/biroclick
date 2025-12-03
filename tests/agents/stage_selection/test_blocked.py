@@ -125,7 +125,11 @@ class TestBlockedStageHandling:
 
     @patch("src.agents.stage_selection.update_progress_stage_status")
     def test_blocks_stage_with_missing_deps(self, mock_update):
-        """Should block stage with missing dependencies."""
+        """Should block stage with missing dependencies and detect deadlock.
+        
+        When a stage has missing dependencies (dependencies that don't exist in the
+        stages list), it can never run. If this is the only stage, it IS a deadlock.
+        """
         state = {
             "plan": {"stages": []},
             "progress": {
@@ -150,7 +154,10 @@ class TestBlockedStageHandling:
         # Verify return value - should return None since no stage can be selected
         assert result["current_stage_id"] is None
         assert result["workflow_phase"] == "stage_selection"
-        assert result.get("ask_user_trigger") is None  # Not a deadlock yet
+        # With only one stage that has missing dependencies, it's a deadlock
+        # The stage can never run because its dependencies don't exist
+        assert result.get("ask_user_trigger") == "deadlock_detected"
+        assert result.get("awaiting_user_input") is True
 
     @patch("src.agents.stage_selection.update_progress_stage_status")
     def test_blocks_stage_with_multiple_missing_deps(self, mock_update):

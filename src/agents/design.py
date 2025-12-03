@@ -188,13 +188,25 @@ def design_reviewer_node(state: ReproState) -> dict:
         logger.error(f"Design reviewer LLM call failed: {e}")
         agent_output = create_llm_error_auto_approve("design_reviewer", e)
     
-    # Handle missing verdict
-    verdict = agent_output.get("verdict")
-    if not verdict:
+    # Normalize verdict to allowed values
+    raw_verdict = agent_output.get("verdict")
+    if not raw_verdict:
         logger.warning("Design reviewer output missing 'verdict'. Defaulting to 'approve'.")
         verdict = "approve"
-        # Ensure agent_output has verdict for consistency if we reuse it
-        agent_output["verdict"] = verdict
+    # Normalize common variations: "pass" -> "approve", "reject" -> "needs_revision"
+    elif raw_verdict in ["pass", "approved", "accept"]:
+        verdict = "approve"
+    elif raw_verdict in ["reject", "revision_needed", "needs_work"]:
+        verdict = "needs_revision"
+    elif raw_verdict in ["approve", "needs_revision"]:
+        verdict = raw_verdict
+    else:
+        # Unknown verdict - log warning and default to approve
+        logger.warning(
+            f"Design reviewer returned unexpected verdict '{raw_verdict}'. "
+            "Normalizing to 'approve'. Allowed values: 'approve', 'needs_revision'."
+        )
+        verdict = "approve"
         
     result: Dict[str, Any] = {
         "workflow_phase": "design_review",
@@ -205,11 +217,32 @@ def design_reviewer_node(state: ReproState) -> dict:
     
     # Increment design revision counter if needs_revision
     if verdict == "needs_revision":
-        new_count, _ = increment_counter_with_max(
+        new_count, was_incremented = increment_counter_with_max(
             state, "design_revision_count", "max_design_revisions", MAX_DESIGN_REVISIONS
         )
         result["design_revision_count"] = new_count
         result["reviewer_feedback"] = agent_output.get("feedback", agent_output.get("summary", ""))
+        
+        # If we hit the max revision budget, escalate to ask_user immediately.
+        if not was_incremented:
+            runtime_config = state.get("runtime_config", {})
+            max_revs = runtime_config.get("max_design_revisions", MAX_DESIGN_REVISIONS)
+            stage_id = state.get("current_stage_id", "unknown")
+            question = (
+                "Design review limit reached.\n\n"
+                f"- Stage: {stage_id}\n"
+                f"- Attempts: {new_count}/{max_revs}\n"
+                "- Latest reviewer feedback:\n"
+                f"  {result.get('reviewer_feedback', 'No feedback available')}\n\n"
+                "Please respond with PROVIDE_HINT (include guidance for next attempt), "
+                "SKIP to bypass this stage, or STOP to end the workflow."
+            )
+            result.update({
+                "ask_user_trigger": "design_review_limit",
+                "pending_user_questions": [question],
+                "awaiting_user_input": True,
+                "last_node_before_ask_user": "design_review",
+            })
     
     return result
 

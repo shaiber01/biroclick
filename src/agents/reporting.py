@@ -41,6 +41,10 @@ def generate_report_node(state: ReproState) -> Dict[str, Any]:
     metrics = state.get("metrics", {})
     if metrics:
         agent_calls = metrics.get("agent_calls", [])
+        # Validate agent_calls is a list to prevent AttributeError on non-list types
+        if not isinstance(agent_calls, list):
+            logger.warning(f"agent_calls is not a list (got {type(agent_calls)}), using empty list")
+            agent_calls = []
         total_input = sum(call.get("input_tokens", 0) or 0 for call in agent_calls)
         total_output = sum(call.get("output_tokens", 0) or 0 for call in agent_calls)
         
@@ -95,7 +99,11 @@ def generate_report_node(state: ReproState) -> Dict[str, Any]:
     if quantitative_reports:
         summary_rows: List[Dict[str, Any]] = []
         for report in quantitative_reports:
-            metrics_data = report.get("quantitative_metrics") or {}
+            metrics_data = report.get("quantitative_metrics")
+            # Validate quantitative_metrics is a dict to prevent AttributeError on non-dict types
+            if not isinstance(metrics_data, dict):
+                logger.warning(f"quantitative_metrics is not a dict (got {type(metrics_data)}), using empty dict")
+                metrics_data = {}
             summary_rows.append({
                 "stage_id": report.get("stage_id"),
                 "figure_id": report.get("target_figure"),

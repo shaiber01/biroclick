@@ -26,6 +26,8 @@ def extract_figures_from_markdown(markdown_text: str) -> List[Dict[str, str]]:
     - Markdown images with title: ![alt text](url "title")
     - HTML img tags: <img src="url" alt="..." />
     
+    Ignores images inside code blocks (```...```).
+    
     Args:
         markdown_text: The markdown content
         
@@ -34,10 +36,45 @@ def extract_figures_from_markdown(markdown_text: str) -> List[Dict[str, str]]:
     """
     figures: List[Dict[str, str]] = []
     
+    # First, identify code blocks to exclude them
+    lines = markdown_text.split('\n')
+    in_code_block = False
+    code_block_ranges: List[tuple[int, int]] = []
+    code_start = 0
+    
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith('```'):
+            if in_code_block:
+                # End of code block
+                code_block_ranges.append((code_start, i))
+                in_code_block = False
+            else:
+                # Start of code block
+                code_start = i
+                in_code_block = True
+    
+    # If code block wasn't closed, include until end
+    if in_code_block:
+        code_block_ranges.append((code_start, len(lines)))
+    
+    # Helper function to check if a position is in a code block
+    def is_in_code_block(char_pos: int) -> bool:
+        # Convert character position to line number
+        line_num = markdown_text[:char_pos].count('\n')
+        for start_line, end_line in code_block_ranges:
+            if start_line <= line_num <= end_line:
+                return True
+        return False
+    
     # Pattern for markdown images: ![alt](url) or ![alt](url "title")
     # Supports one level of nested brackets in alt text and parentheses in URL
     markdown_pattern = r'!\[((?:[^\[\]]|\[[^\]]*\])*)\]\(((?:[^()\s]|\([^)]*\))+)(?:\s+"[^"]*")?\)'
     for match in re.finditer(markdown_pattern, markdown_text):
+        # Skip if match is inside a code block
+        if is_in_code_block(match.start()):
+            continue
+            
         alt_text = match.group(1).strip()
         url = match.group(2).strip()
         figures.append({
@@ -52,6 +89,10 @@ def extract_figures_from_markdown(markdown_text: str) -> List[Dict[str, str]]:
     alt_pattern = r'alt=["\']([^"\']*)["\']'
     
     for match in re.finditer(html_pattern, markdown_text, re.IGNORECASE):
+        # Skip if match is inside a code block
+        if is_in_code_block(match.start()):
+            continue
+            
         url = match.group(1).strip()
         # Try to find alt text in the same tag
         alt_match = re.search(alt_pattern, match.group(0), re.IGNORECASE)

@@ -498,12 +498,40 @@ def select_stage_node(state: ReproState) -> dict:
         potentially_runnable = []
         permanently_blocked = []
         
+        # Build set of completed stage IDs for dependency checking
+        completed_stage_ids = {
+            s.get("stage_id") for s in stages
+            if s.get("status") in ["completed_success", "completed_partial"]
+        }
+        
         for stage in remaining_stages:
             status = stage.get("status", "not_started")
-            if status in ["not_started", "invalidated", "needs_rerun"]:
-                potentially_runnable.append(stage.get("stage_id"))
-            elif status in ["blocked", "completed_failed"]:
-                permanently_blocked.append(stage.get("stage_id"))
+            stage_id = stage.get("stage_id")
+            
+            if status in ["blocked", "completed_failed"]:
+                permanently_blocked.append(stage_id)
+            elif status in ["not_started", "invalidated", "needs_rerun"]:
+                # Check if this stage's dependencies can ever be satisfied
+                dependencies = stage.get("dependencies") or []
+                has_blocking_deps = False
+                
+                for dep_id in dependencies:
+                    dep_stage = next((s for s in stages if s.get("stage_id") == dep_id), None)
+                    if dep_stage:
+                        dep_status = dep_stage.get("status", "not_started")
+                        # If dependency is permanently blocked/failed, this stage can't run
+                        if dep_status in ["blocked", "completed_failed"]:
+                            has_blocking_deps = True
+                            break
+                    else:
+                        # Missing dependency - can't run
+                        has_blocking_deps = True
+                        break
+                
+                if has_blocking_deps:
+                    permanently_blocked.append(stage_id)
+                else:
+                    potentially_runnable.append(stage_id)
         
         if not potentially_runnable and permanently_blocked:
             logger.warning(

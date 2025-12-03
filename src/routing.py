@@ -156,6 +156,17 @@ def create_verdict_router(
             return "ask_user"
         
         # ═══════════════════════════════════════════════════════════════════════
+        # HANDLE INVALID VERDICT TYPES: Only strings are valid verdicts
+        # ═══════════════════════════════════════════════════════════════════════
+        if not isinstance(verdict, str):
+            logger.error(
+                f"{verdict_field} has invalid type {type(verdict).__name__}, expected str. "
+                f"Value: {verdict}. Escalating to user for guidance."
+            )
+            save_checkpoint(state, f"before_ask_user_{checkpoint_prefix}_error")
+            return "ask_user"
+        
+        # ═══════════════════════════════════════════════════════════════════════
         # ROUTE BASED ON VERDICT
         # ═══════════════════════════════════════════════════════════════════════
         if verdict in routes:

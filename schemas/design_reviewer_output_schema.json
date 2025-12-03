@@ -141,6 +141,7 @@
     },
     "summary": {
       "type": "string",
+      "minLength": 1,
       "description": "One paragraph summary of design review"
     }
   }

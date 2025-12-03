@@ -148,12 +148,19 @@ def match_output_file(file_entries: List[Any], target_id: str) -> Optional[str]:
     for entry in file_entries:
         if isinstance(entry, str):
             path_str = entry
-        else:
+        elif isinstance(entry, Path):
+            # Handle Path objects directly
+            path_str = str(entry)
+        elif isinstance(entry, dict):
+            # Handle dict entries with 'path' or 'file' keys
             path_str = entry.get("path") or entry.get("file")
             if path_str is None:
                 path_str = str(entry)
             else:
                 path_str = str(path_str)  # Convert to string in case it's not
+        else:
+            # Fallback: convert to string
+            path_str = str(entry)
         name = Path(path_str).name.lower()
         if normalized_id and normalized_id in name:
             return path_str
@@ -161,8 +168,13 @@ def match_output_file(file_entries: List[Any], target_id: str) -> Optional[str]:
         entry = file_entries[0]
         if isinstance(entry, str):
             return entry
-        result = entry.get("path") or entry.get("file")
-        return str(result) if result is not None else None
+        elif isinstance(entry, Path):
+            return str(entry)
+        elif isinstance(entry, dict):
+            result = entry.get("path") or entry.get("file")
+            return str(result) if result is not None else None
+        else:
+            return str(entry)
     return None
 
 

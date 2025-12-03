@@ -67,22 +67,35 @@ def load_schema(schema_name: str) -> dict:
         
     Raises:
         FileNotFoundError: If schema file doesn't exist
+        TypeError: If schema_name is not a string
     """
-    if schema_name in _schema_cache:
-        return _schema_cache[schema_name]
+    if not isinstance(schema_name, str):
+        raise TypeError(f"schema_name must be a string, got {type(schema_name).__name__}")
     
+    # Normalize cache key: always use .json extension for consistency
+    cache_key = schema_name if schema_name.endswith(".json") else f"{schema_name}.json"
+    
+    if cache_key in _schema_cache:
+        return _schema_cache[cache_key]
+    
+    # Normalize filename for file access
     if not schema_name.endswith(".json"):
         schema_name = f"{schema_name}.json"
     
     schema_path = SCHEMAS_DIR / schema_name
     
-    if not schema_path.exists():
-        raise FileNotFoundError(f"Schema not found: {schema_path}")
+    # Check if file exists, handling OSError for very long filenames
+    try:
+        if not schema_path.exists():
+            raise FileNotFoundError(f"Schema not found: {schema_path}")
+    except OSError as e:
+        # Handle very long filenames or other filesystem errors
+        raise FileNotFoundError(f"Schema not found: {schema_path}") from e
     
     with open(schema_path, "r", encoding="utf-8") as f:
         schema = json.load(f)
     
-    _schema_cache[schema_name] = schema
+    _schema_cache[cache_key] = schema
     return schema
 
 
@@ -101,7 +114,15 @@ def get_agent_schema(agent_name: str) -> dict:
         
     Raises:
         ValueError: If no schema found for the agent
+        TypeError: If agent_name is not a string
     """
+    if not isinstance(agent_name, str):
+        raise TypeError(f"agent_name must be a string, got {type(agent_name).__name__}")
+    
+    # Check for empty string
+    if not agent_name.strip():
+        raise ValueError(f"Unknown agent: '{agent_name}'. Agent name cannot be empty or whitespace.")
+    
     # Special cases that don't follow the standard naming convention
     special_mapping = {
         "report": "report_schema",
@@ -113,10 +134,27 @@ def get_agent_schema(agent_name: str) -> dict:
     
     # Auto-discover: try {agent_name}_output_schema.json
     auto_schema_name = f"{agent_name}_output_schema"
-    auto_schema_path = SCHEMAS_DIR / f"{auto_schema_name}.json"
+    expected_filename = f"{auto_schema_name}.json"
+    auto_schema_path = SCHEMAS_DIR / expected_filename
     
-    if auto_schema_path.exists():
-        return load_schema(auto_schema_name)
+    # Check if file exists with exact case match (case-sensitive check)
+    # On case-insensitive filesystems, Path.exists() might return True even with wrong case
+    # So we verify by checking the actual directory listing
+    try:
+        if auto_schema_path.exists():
+            # Verify exact case match by checking directory listing
+            # This ensures case sensitivity even on case-insensitive filesystems
+            try:
+                actual_files = [f.name for f in SCHEMAS_DIR.iterdir() if f.is_file()]
+                if expected_filename in actual_files:
+                    return load_schema(auto_schema_name)
+            except OSError:
+                # If directory listing fails, fall back to exists() check
+                # This handles the case where exists() works correctly
+                return load_schema(auto_schema_name)
+    except OSError:
+        # Handle filesystem errors (e.g., very long paths)
+        pass
     
     raise ValueError(
         f"Unknown agent: {agent_name}. "
@@ -129,6 +167,7 @@ def get_agent_schema(agent_name: str) -> dict:
 # ═══════════════════════════════════════════════════════════════════════
 
 _llm_client: Optional[ChatAnthropic] = None
+_llm_client_model: Optional[str] = None
 
 
 def get_llm_client(model: Optional[str] = None) -> ChatAnthropic:
@@ -152,9 +191,14 @@ def get_llm_client(model: Optional[str] = None) -> ChatAnthropic:
         Extended thinking is enabled for better reasoning on complex scientific
         tasks. This requires tool_choice="auto" instead of forcing specific tools.
     """
-    global _llm_client
+    global _llm_client, _llm_client_model
     
     model = model or os.environ.get("REPROLAB_MODEL", DEFAULT_MODEL)
+    
+    # If singleton exists but model differs, reset and recreate
+    if _llm_client is not None and _llm_client_model != model:
+        _llm_client = None
+        _llm_client_model = None
     
     if _llm_client is None:
         _llm_client = ChatAnthropic(
@@ -167,14 +211,16 @@ def get_llm_client(model: Optional[str] = None) -> ChatAnthropic:
                 "budget_tokens": 10000,  # Token budget for internal reasoning
             },
         )
+        _llm_client_model = model
     
     return _llm_client
 
 
 def reset_llm_client():
     """Reset the LLM client (useful for testing)."""
-    global _llm_client
+    global _llm_client, _llm_client_model
     _llm_client = None
+    _llm_client_model = None
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -358,10 +404,18 @@ def call_agent(
                             except json.JSONDecodeError:
                                 continue
                     
-                    # Fallback to greedy search if no valid code blocks found
-                    json_match = re.search(r'(\{[\s\S]*\})', content)
-                    if json_match:
-                        return json.loads(json_match.group())
+                    # Fallback: try parsing from each '{' position, starting from the end
+                    # This handles cases where set notation like {1, 2, 3} appears before real JSON
+                    brace_positions = [i for i, c in enumerate(content) if c == '{']
+                    for pos in reversed(brace_positions):
+                        try:
+                            # Try to parse JSON starting from this position
+                            candidate = content[pos:]
+                            parsed = json.loads(candidate)
+                            if isinstance(parsed, dict):
+                                return parsed
+                        except json.JSONDecodeError:
+                            continue
                     raise ValueError("No JSON found")
                 except (json.JSONDecodeError, ValueError):
                     raise ValueError(
@@ -503,34 +557,34 @@ def build_user_content_for_designer(state: Dict[str, Any]) -> str:
     parts = []
     
     # Current stage info
-    stage_id = state.get("current_stage_id", "unknown")
+    stage_id = state.get("current_stage_id") or "unknown"
     parts.append(f"# CURRENT STAGE: {stage_id}")
     
     # Plan stage details
-    plan = state.get("plan", {})
-    stages = plan.get("stages", [])
+    plan = state.get("plan") or {}
+    stages = plan.get("stages", []) if isinstance(plan, dict) else []
     current_stage = next((s for s in stages if s.get("stage_id") == stage_id), None)
     
     if current_stage:
         parts.append(f"## Stage Details\n```json\n{json.dumps(current_stage, indent=2)}\n```")
     
     # Extracted parameters
-    params = state.get("extracted_parameters", [])
+    params = state.get("extracted_parameters") or []
     if params:
         parts.append(f"## Extracted Parameters\n```json\n{json.dumps(params[:20], indent=2)}\n```")
     
     # Assumptions
-    assumptions = state.get("assumptions", {})
-    if assumptions:
+    assumptions = state.get("assumptions") or {}
+    if assumptions and isinstance(assumptions, dict):
         parts.append(f"## Assumptions\n```json\n{json.dumps(assumptions, indent=2)}\n```")
     
     # Validated materials (for Stage 1+)
-    materials = state.get("validated_materials", [])
+    materials = state.get("validated_materials") or []
     if materials:
         parts.append(f"## Validated Materials\n```json\n{json.dumps(materials, indent=2)}\n```")
     
     # Revision feedback if any
-    feedback = state.get("reviewer_feedback", "")
+    feedback = state.get("reviewer_feedback") or ""
     if feedback:
         parts.append(f"## REVISION FEEDBACK\n\n{feedback}")
     
@@ -544,11 +598,11 @@ def build_user_content_for_code_generator(state: Dict[str, Any]) -> str:
     parts = []
     
     # Current stage
-    stage_id = state.get("current_stage_id", "unknown")
+    stage_id = state.get("current_stage_id") or "unknown"
     parts.append(f"# CURRENT STAGE: {stage_id}")
     
     # Design specification
-    design = state.get("design_description", "")
+    design = state.get("design_description") or ""
     if design:
         if isinstance(design, dict):
             parts.append(f"## Design Specification\n```json\n{json.dumps(design, indent=2)}\n```")
@@ -556,12 +610,12 @@ def build_user_content_for_code_generator(state: Dict[str, Any]) -> str:
             parts.append(f"## Design Specification\n\n{design}")
     
     # Validated materials
-    materials = state.get("validated_materials", [])
+    materials = state.get("validated_materials") or []
     if materials:
         parts.append(f"## Validated Materials (use these paths!)\n```json\n{json.dumps(materials, indent=2)}\n```")
     
     # Revision feedback if any
-    feedback = state.get("reviewer_feedback", "")
+    feedback = state.get("reviewer_feedback") or ""
     if feedback:
         parts.append(f"## REVISION FEEDBACK\n\n{feedback}")
     
@@ -575,25 +629,26 @@ def build_user_content_for_analyzer(state: Dict[str, Any]) -> str:
     parts = []
     
     # Current stage
-    stage_id = state.get("current_stage_id", "unknown")
+    stage_id = state.get("current_stage_id") or "unknown"
     parts.append(f"# CURRENT STAGE: {stage_id}")
     
     # Stage outputs
-    outputs = state.get("stage_outputs", {})
-    if outputs:
+    outputs = state.get("stage_outputs")
+    if outputs is not None:  # Include even if empty dict
         parts.append(f"## Simulation Outputs\n```json\n{json.dumps(outputs, indent=2, default=str)}\n```")
     
     # Target figures for this stage
     plan = state.get("plan") or {}
-    stages = plan.get("stages", [])
+    stages = plan.get("stages", []) if isinstance(plan, dict) else []
     current_stage = next((s for s in stages if s.get("stage_id") == stage_id), None)
     
     if current_stage:
         targets = current_stage.get("targets", [])
-        parts.append(f"## Target Figures: {', '.join(targets)}")
+        if targets:  # Only include if targets list is not empty
+            parts.append(f"## Target Figures: {', '.join(targets)}")
     
     # Revision feedback if any
-    feedback = state.get("analysis_feedback", "")
+    feedback = state.get("analysis_feedback") or ""
     if feedback:
         parts.append(f"## REVISION FEEDBACK\n\n{feedback}")
     
@@ -609,18 +664,34 @@ def get_images_for_analyzer(state: Dict[str, Any]) -> List[Path]:
     images = []
     
     # Paper figures
-    paper_figures = state.get("paper_figures", [])
-    for fig in paper_figures:
-        path = fig.get("image_path")
-        if path and Path(path).exists():
-            images.append(Path(path))
+    paper_figures = state.get("paper_figures") or []
+    if paper_figures:
+        for fig in paper_figures:
+            if not isinstance(fig, dict):
+                continue
+            path = fig.get("image_path")
+            if path and Path(path).exists():
+                images.append(Path(path))
     
     # Simulation output plots
     stage_outputs = state.get("stage_outputs") or {}
-    output_files = stage_outputs.get("files", [])
+    output_files = stage_outputs.get("files") if isinstance(stage_outputs, dict) else None
+    if output_files is None:
+        output_files = []
     
     for file_path in output_files:
-        path = Path(file_path) if isinstance(file_path, str) else Path(file_path.get("path", ""))
+        # Handle different path formats
+        if hasattr(file_path, '__class__') and file_path.__class__.__name__ == 'Path':
+            # Check if it's a Path object (works with both real Path and mocked Path)
+            path = file_path
+        elif isinstance(file_path, str):
+            path = Path(file_path)
+        elif isinstance(file_path, dict):
+            path = Path(file_path.get("path", ""))
+        else:
+            # Fallback: try to convert to Path
+            path = Path(str(file_path))
+        
         if path.exists() and path.suffix.lower() in [".png", ".jpg", ".jpeg", ".gif", ".webp"]:
             images.append(path)
     
