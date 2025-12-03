@@ -92,14 +92,14 @@ def validate_user_responses(trigger: str, responses: Dict[str, str], questions: 
     all_responses_normalized = all_responses.replace("_", " ")
     
     if trigger == "material_checkpoint":
-        # Must contain one of: APPROVE, CHANGE_MATERIAL, CHANGE_DATABASE, NEED_HELP
+        # Must contain one of: APPROVE, CHANGE_MATERIAL, CHANGE_DATABASE, NEED_HELP, STOP
         # Normalize keywords by replacing underscores with spaces for matching
         valid_keywords = ["APPROVE", "CHANGE MATERIAL", "CHANGE DATABASE", "NEED HELP", "HELP", 
-                         "YES", "NO", "REJECT", "CORRECT", "WRONG"]
+                         "YES", "NO", "REJECT", "CORRECT", "WRONG", "STOP"]
         # Use helper function to avoid false positives (e.g., "NO" matching "NOT")
         if not any(_contains_keyword(all_responses_normalized, kw) for kw in valid_keywords):
             errors.append(
-                "Response must contain one of: APPROVE, CHANGE_MATERIAL, CHANGE_DATABASE, or NEED_HELP"
+                "Response must contain one of: APPROVE, CHANGE_MATERIAL, CHANGE_DATABASE, NEED_HELP, or STOP"
             )
     
     elif trigger == "code_review_limit":

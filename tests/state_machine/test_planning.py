@@ -8,6 +8,13 @@ Tests cover:
 
 These tests verify the complete planning phase flow, including edge cases,
 error handling, and counter management.
+
+IMPORTANT NOTE ON STATE CAPTURE:
+When using graph.stream(), the state from graph.get_state() represents the state
+BEFORE the current event's updates are applied. To get state AFTER a node runs:
+1. Wait for the NEXT event and then call get_state(), OR
+2. Merge the updates dict from the event into the current state, OR
+3. Consume all events and check final state
 """
 
 import pytest
@@ -25,6 +32,45 @@ from tests.state_machine.common import (
 )
 
 
+def stream_until_node(graph, initial_state, config, target_node: str, break_on_target: bool = False):
+    """Stream graph until reaching target node.
+    
+    Args:
+        graph: LangGraph graph instance
+        initial_state: Initial state dict
+        config: Config dict with thread_id
+        target_node: Node name to stop at
+        break_on_target: If True, break when reaching target. If False, break on next node.
+    
+    Returns:
+        Tuple of (final_state_dict, nodes_visited_list, updates_from_target_node)
+    
+    Note: State from get_state() is the state BEFORE the current event's updates.
+    To get state after target_node, set break_on_target=False which waits for next node.
+    """
+    nodes_visited = []
+    target_updates = None
+    
+    for event in graph.stream(initial_state, config):
+        for node_name, updates in event.items():
+            nodes_visited.append(node_name)
+            
+            # If we already saw target, current state includes target's updates
+            if len(nodes_visited) > 1 and nodes_visited[-2] == target_node:
+                state = graph.get_state(config)
+                return state.values, nodes_visited, target_updates
+            
+            if node_name == target_node:
+                target_updates = updates
+                if break_on_target:
+                    state = graph.get_state(config)
+                    return state.values, nodes_visited, target_updates
+    
+    # End of stream - get final state
+    state = graph.get_state(config)
+    return state.values, nodes_visited, target_updates
+
+
 class TestPlanningPhase:
     """Test planning agent flow."""
 
@@ -39,6 +85,7 @@ class TestPlanningPhase:
         - last_plan_review_verdict is 'approve'
         - paper_domain is preserved from prompt_adaptor
         - prompt_adaptations are stored (even if empty)
+        - current_stage_id and current_stage_type are set
         """
         visited = []
 
@@ -66,24 +113,17 @@ class TestPlanningPhase:
             config = {"configurable": {"thread_id": unique_thread_id("planning")}}
 
             print("\n--- Running graph ---")
-            final_state = None
-            nodes_visited = []
-
-            for event in graph.stream(initial_state, config):
-                for node_name, updates in event.items():
-                    nodes_visited.append(node_name)
-                    print(f"  → {node_name}")
-
-                    if node_name == "select_stage":
-                        state = graph.get_state(config)
-                        final_state = state.values
-                        break
-                else:
-                    continue
-                break
+            
+            # Stream until after select_stage (wait for design node to get state after select_stage)
+            final_state, nodes_visited, select_updates = stream_until_node(
+                graph, initial_state, config, "select_stage", break_on_target=False
+            )
+            
+            for node in nodes_visited:
+                print(f"  → {node}")
 
             # Verify graph execution
-            assert final_state is not None, "Graph should reach select_stage node"
+            assert final_state is not None, "Graph should complete"
             
             # Verify node visitation order
             assert "adapt_prompts" in nodes_visited, "adapt_prompts node should be visited"
@@ -133,7 +173,7 @@ class TestPlanningPhase:
             assert progress_stage["status"] == "not_started", \
                 "Progress stage status should be 'not_started'"
             
-            # Verify current stage selection
+            # Verify current stage selection (state after select_stage runs)
             assert final_state.get("current_stage_id") == "stage_0_materials", \
                 "current_stage_id should be set to first stage"
             assert final_state.get("current_stage_type") == "MATERIAL_VALIDATION", \
@@ -195,52 +235,54 @@ class TestPlanningPhase:
 
             print("\n--- Running graph ---")
             nodes_visited = []
-            final_state = None
-
+            rejection_state_captured = None
+            
             for event in graph.stream(initial_state, config):
                 for node_name, updates in event.items():
                     nodes_visited.append(node_name)
                     print(f"  → {node_name}")
                     
-                    # Capture state after first rejection
-                    if node_name == "plan_review" and nodes_visited.count("plan_review") == 1:
-                        state = graph.get_state(config)
-                        rejection_state = state.values
-                        
-                        # Verify rejection state has feedback
-                        assert rejection_state.get("last_plan_review_verdict") == "needs_revision", \
-                            "First review should reject with 'needs_revision'"
-                        assert rejection_state.get("planner_feedback") is not None, \
-                            "Rejected plan should have planner_feedback"
-                        assert len(rejection_state.get("planner_feedback", "")) > 0, \
-                            "planner_feedback should not be empty"
+                    # Capture state AFTER first plan_review (when we see the next node)
+                    if len(nodes_visited) > 1 and nodes_visited.count("plan_review") == 1:
+                        prev_node = nodes_visited[-2]
+                        if prev_node == "plan_review" and rejection_state_captured is None:
+                            rejection_state_captured = graph.get_state(config).values.copy()
+                            
+                            # Verify rejection state has feedback
+                            assert rejection_state_captured.get("last_plan_review_verdict") == "needs_revision", \
+                                f"First review should reject with 'needs_revision', got {rejection_state_captured.get('last_plan_review_verdict')}"
+                            assert rejection_state_captured.get("planner_feedback") is not None, \
+                                "Rejected plan should have planner_feedback"
+                            assert len(rejection_state_captured.get("planner_feedback", "")) > 0, \
+                                "planner_feedback should not be empty"
+                            print(f"    [Captured rejection state - feedback: {rejection_state_captured.get('planner_feedback')[:50]}...]")
 
                     if node_name == "select_stage":
-                        state = graph.get_state(config)
-                        final_state = state.values
                         break
                 else:
                     continue
                 break
+            
+            # Get final state after select_stage
+            final_state = graph.get_state(config).values
 
             # Verify revision flow occurred
             assert nodes_visited.count("plan") == 2, \
-                "Plan node should be visited twice (initial + revision)"
+                f"Plan node should be visited twice (initial + revision), got {nodes_visited.count('plan')}"
             assert nodes_visited.count("plan_review") == 2, \
-                "Plan review node should be visited twice"
+                f"Plan review node should be visited twice, got {nodes_visited.count('plan_review')}"
             
             # Verify planner was called twice
             planner_calls = sum(1 for v in visited if v == "planner")
             assert planner_calls == 2, f"Planner should be called twice, was called {planner_calls} times"
             
             # Verify final state is properly approved
-            assert final_state is not None, "Should reach select_stage after approval"
             assert final_state.get("last_plan_review_verdict") == "approve", \
                 "Final verdict should be 'approve'"
             
             # Verify replan_count was incremented
             assert final_state.get("replan_count", 0) >= 1, \
-                "replan_count should be >= 1 after revision"
+                f"replan_count should be >= 1 after revision, got {final_state.get('replan_count', 0)}"
 
             print("\n✅ Revision flow test passed!")
 
@@ -387,6 +429,9 @@ class TestPlanReviewerStructuralValidation:
     - Missing dependencies
     - Circular dependencies
     - Self-dependencies
+    
+    NOTE: These structural validations happen BEFORE the LLM is called.
+    The plan_reviewer returns needs_revision with blocking issues if structure is invalid.
     """
 
     def test_plan_with_no_stages_rejected(self, initial_state):
@@ -428,28 +473,33 @@ class TestPlanReviewerStructuralValidation:
 
             print("\n--- Running graph ---")
             nodes_visited = []
+            review_state = None
 
             for event in graph.stream(initial_state, config):
                 for node_name, updates in event.items():
                     nodes_visited.append(node_name)
                     print(f"  → {node_name}")
                     
-                    if node_name == "plan_review":
-                        state = graph.get_state(config)
-                        review_state = state.values
-                        
-                        # Verify structural rejection
-                        assert review_state.get("last_plan_review_verdict") == "needs_revision", \
-                            "Empty stages plan should be rejected"
-                        
-                        feedback = review_state.get("planner_feedback", "")
-                        assert "stage" in feedback.lower(), \
-                            f"Feedback should mention stages issue: {feedback}"
-                        break
+                    # Capture state AFTER plan_review by waiting for next node
+                    if len(nodes_visited) > 1:
+                        prev_node = nodes_visited[-2]
+                        if prev_node == "plan_review" and review_state is None:
+                            review_state = graph.get_state(config).values.copy()
+                            
+                            # Verify structural rejection
+                            assert review_state.get("last_plan_review_verdict") == "needs_revision", \
+                                f"Empty stages plan should be rejected, got {review_state.get('last_plan_review_verdict')}"
+                            
+                            feedback = review_state.get("planner_feedback", "")
+                            assert "stage" in feedback.lower(), \
+                                f"Feedback should mention stages issue: {feedback}"
+                            print(f"    [Feedback: {feedback[:100]}...]")
+                            break
                 else:
                     continue
                 break
 
+            assert review_state is not None, "Should have captured review state"
             print("\n✅ No stages rejection test passed!")
 
     def test_plan_with_missing_stage_id_rejected(self, initial_state):
@@ -487,22 +537,27 @@ class TestPlanReviewerStructuralValidation:
             config = {"configurable": {"thread_id": unique_thread_id("no_stage_id")}}
 
             nodes_visited = []
+            review_state = None
+            
             for event in graph.stream(initial_state, config):
                 for node_name, _ in event.items():
                     nodes_visited.append(node_name)
                     print(f"  → {node_name}")
                     
-                    if node_name == "plan_review":
-                        state = graph.get_state(config)
-                        review_state = state.values
-                        
-                        assert review_state.get("last_plan_review_verdict") == "needs_revision", \
-                            "Missing stage_id should cause rejection"
-                        break
+                    if len(nodes_visited) > 1:
+                        prev_node = nodes_visited[-2]
+                        if prev_node == "plan_review" and review_state is None:
+                            review_state = graph.get_state(config).values.copy()
+                            
+                            assert review_state.get("last_plan_review_verdict") == "needs_revision", \
+                                f"Missing stage_id should cause rejection, got {review_state.get('last_plan_review_verdict')}"
+                            print(f"    [Feedback: {review_state.get('planner_feedback', '')[:100]}...]")
+                            break
                 else:
                     continue
                 break
 
+            assert review_state is not None, "Should have captured review state"
             print("\n✅ Missing stage_id rejection test passed!")
 
     def test_plan_with_duplicate_stage_ids_rejected(self, initial_state):
@@ -547,25 +602,32 @@ class TestPlanReviewerStructuralValidation:
             graph = create_repro_graph()
             config = {"configurable": {"thread_id": unique_thread_id("dup_stage_id")}}
 
+            nodes_visited = []
+            review_state = None
+            
             for event in graph.stream(initial_state, config):
                 for node_name, _ in event.items():
+                    nodes_visited.append(node_name)
                     print(f"  → {node_name}")
                     
-                    if node_name == "plan_review":
-                        state = graph.get_state(config)
-                        review_state = state.values
-                        
-                        assert review_state.get("last_plan_review_verdict") == "needs_revision", \
-                            "Duplicate stage_id should cause rejection"
-                        
-                        feedback = review_state.get("planner_feedback", "")
-                        assert "duplicate" in feedback.lower() or "stage_0_materials" in feedback, \
-                            f"Feedback should mention duplicate: {feedback}"
-                        break
+                    if len(nodes_visited) > 1:
+                        prev_node = nodes_visited[-2]
+                        if prev_node == "plan_review" and review_state is None:
+                            review_state = graph.get_state(config).values.copy()
+                            
+                            assert review_state.get("last_plan_review_verdict") == "needs_revision", \
+                                f"Duplicate stage_id should cause rejection, got {review_state.get('last_plan_review_verdict')}"
+                            
+                            feedback = review_state.get("planner_feedback", "")
+                            assert "duplicate" in feedback.lower() or "stage_0_materials" in feedback, \
+                                f"Feedback should mention duplicate: {feedback}"
+                            print(f"    [Feedback: {feedback[:100]}...]")
+                            break
                 else:
                     continue
                 break
 
+            assert review_state is not None, "Should have captured review state"
             print("\n✅ Duplicate stage_id rejection test passed!")
 
     def test_plan_with_missing_targets_rejected(self, initial_state):
@@ -587,7 +649,9 @@ class TestPlanReviewerStructuralValidation:
                 plan = MockLLMResponses.planner()
                 # Remove targets from stage
                 plan["stages"][0]["targets"] = []
-                plan["stages"][0]["target_details"] = []  # Also remove target_details
+                # Also clear target_details if present
+                if "target_details" in plan["stages"][0]:
+                    plan["stages"][0]["target_details"] = []
                 return plan
             if agent == "plan_reviewer":
                 return MockLLMResponses.plan_reviewer_approve()
@@ -603,21 +667,28 @@ class TestPlanReviewerStructuralValidation:
             graph = create_repro_graph()
             config = {"configurable": {"thread_id": unique_thread_id("no_targets")}}
 
+            nodes_visited = []
+            review_state = None
+            
             for event in graph.stream(initial_state, config):
                 for node_name, _ in event.items():
+                    nodes_visited.append(node_name)
                     print(f"  → {node_name}")
                     
-                    if node_name == "plan_review":
-                        state = graph.get_state(config)
-                        review_state = state.values
-                        
-                        assert review_state.get("last_plan_review_verdict") == "needs_revision", \
-                            "Missing targets should cause rejection"
-                        break
+                    if len(nodes_visited) > 1:
+                        prev_node = nodes_visited[-2]
+                        if prev_node == "plan_review" and review_state is None:
+                            review_state = graph.get_state(config).values.copy()
+                            
+                            assert review_state.get("last_plan_review_verdict") == "needs_revision", \
+                                f"Missing targets should cause rejection, got {review_state.get('last_plan_review_verdict')}"
+                            print(f"    [Feedback: {review_state.get('planner_feedback', '')[:100]}...]")
+                            break
                 else:
                     continue
                 break
 
+            assert review_state is not None, "Should have captured review state"
             print("\n✅ Missing targets rejection test passed!")
 
     def test_plan_with_circular_dependency_rejected(self, initial_state):
@@ -678,25 +749,32 @@ class TestPlanReviewerStructuralValidation:
             graph = create_repro_graph()
             config = {"configurable": {"thread_id": unique_thread_id("circular_dep")}}
 
+            nodes_visited = []
+            review_state = None
+            
             for event in graph.stream(initial_state, config):
                 for node_name, _ in event.items():
+                    nodes_visited.append(node_name)
                     print(f"  → {node_name}")
                     
-                    if node_name == "plan_review":
-                        state = graph.get_state(config)
-                        review_state = state.values
-                        
-                        assert review_state.get("last_plan_review_verdict") == "needs_revision", \
-                            "Circular dependency should cause rejection"
-                        
-                        feedback = review_state.get("planner_feedback", "")
-                        assert "circular" in feedback.lower(), \
-                            f"Feedback should mention circular dependency: {feedback}"
-                        break
+                    if len(nodes_visited) > 1:
+                        prev_node = nodes_visited[-2]
+                        if prev_node == "plan_review" and review_state is None:
+                            review_state = graph.get_state(config).values.copy()
+                            
+                            assert review_state.get("last_plan_review_verdict") == "needs_revision", \
+                                f"Circular dependency should cause rejection, got {review_state.get('last_plan_review_verdict')}"
+                            
+                            feedback = review_state.get("planner_feedback", "")
+                            assert "circular" in feedback.lower(), \
+                                f"Feedback should mention circular dependency: {feedback}"
+                            print(f"    [Feedback: {feedback[:100]}...]")
+                            break
                 else:
                     continue
                 break
 
+            assert review_state is not None, "Should have captured review state"
             print("\n✅ Circular dependency rejection test passed!")
 
     def test_plan_with_self_dependency_rejected(self, initial_state):
@@ -733,21 +811,28 @@ class TestPlanReviewerStructuralValidation:
             graph = create_repro_graph()
             config = {"configurable": {"thread_id": unique_thread_id("self_dep")}}
 
+            nodes_visited = []
+            review_state = None
+            
             for event in graph.stream(initial_state, config):
                 for node_name, _ in event.items():
+                    nodes_visited.append(node_name)
                     print(f"  → {node_name}")
                     
-                    if node_name == "plan_review":
-                        state = graph.get_state(config)
-                        review_state = state.values
-                        
-                        assert review_state.get("last_plan_review_verdict") == "needs_revision", \
-                            "Self-dependency should cause rejection"
-                        break
+                    if len(nodes_visited) > 1:
+                        prev_node = nodes_visited[-2]
+                        if prev_node == "plan_review" and review_state is None:
+                            review_state = graph.get_state(config).values.copy()
+                            
+                            assert review_state.get("last_plan_review_verdict") == "needs_revision", \
+                                f"Self-dependency should cause rejection, got {review_state.get('last_plan_review_verdict')}"
+                            print(f"    [Feedback: {review_state.get('planner_feedback', '')[:100]}...]")
+                            break
                 else:
                     continue
                 break
 
+            assert review_state is not None, "Should have captured review state"
             print("\n✅ Self-dependency rejection test passed!")
 
     def test_plan_with_missing_dependency_rejected(self, initial_state):
@@ -784,21 +869,28 @@ class TestPlanReviewerStructuralValidation:
             graph = create_repro_graph()
             config = {"configurable": {"thread_id": unique_thread_id("missing_dep")}}
 
+            nodes_visited = []
+            review_state = None
+            
             for event in graph.stream(initial_state, config):
                 for node_name, _ in event.items():
+                    nodes_visited.append(node_name)
                     print(f"  → {node_name}")
                     
-                    if node_name == "plan_review":
-                        state = graph.get_state(config)
-                        review_state = state.values
-                        
-                        assert review_state.get("last_plan_review_verdict") == "needs_revision", \
-                            "Missing dependency should cause rejection"
-                        break
+                    if len(nodes_visited) > 1:
+                        prev_node = nodes_visited[-2]
+                        if prev_node == "plan_review" and review_state is None:
+                            review_state = graph.get_state(config).values.copy()
+                            
+                            assert review_state.get("last_plan_review_verdict") == "needs_revision", \
+                                f"Missing dependency should cause rejection, got {review_state.get('last_plan_review_verdict')}"
+                            print(f"    [Feedback: {review_state.get('planner_feedback', '')[:100]}...]")
+                            break
                 else:
                     continue
                 break
 
+            assert review_state is not None, "Should have captured review state"
             print("\n✅ Missing dependency rejection test passed!")
 
 
@@ -838,33 +930,29 @@ class TestStageSelection:
             config = {"configurable": {"thread_id": unique_thread_id("stage_select")}}
 
             print("\n--- Running graph ---")
-            final_state = None
-
-            for event in graph.stream(initial_state, config):
-                for node_name, updates in event.items():
-                    print(f"  → {node_name}")
-
-                    if node_name == "select_stage":
-                        state = graph.get_state(config)
-                        final_state = state.values
-                        print(f"\n  Selected stage: {final_state.get('current_stage_id')}")
-                        print(f"  Stage type: {final_state.get('current_stage_type')}")
-                        break
-                else:
-                    continue
-                break
+            
+            # Stream until we have state after select_stage
+            final_state, nodes_visited, _ = stream_until_node(
+                graph, initial_state, config, "select_stage", break_on_target=False
+            )
+            
+            for node in nodes_visited:
+                print(f"  → {node}")
+            
+            print(f"\n  Selected stage: {final_state.get('current_stage_id')}")
+            print(f"  Stage type: {final_state.get('current_stage_type')}")
 
             # Verify stage selection
-            assert final_state is not None, "Should reach select_stage"
+            assert final_state is not None, "Should complete stream"
             assert final_state.get("current_stage_id") == "stage_0_materials", \
-                "current_stage_id should be first stage"
+                f"current_stage_id should be first stage, got {final_state.get('current_stage_id')}"
             assert final_state.get("current_stage_type") == "MATERIAL_VALIDATION", \
-                "current_stage_type should match"
+                f"current_stage_type should match, got {final_state.get('current_stage_type')}"
 
             # Verify progress structure
             progress = final_state.get("progress", {})
             stages = progress.get("stages", [])
-            assert len(stages) == 1, "Progress should have 1 stage"
+            assert len(stages) == 1, f"Progress should have 1 stage, got {len(stages)}"
             assert stages[0]["stage_id"] == "stage_0_materials"
             assert stages[0]["status"] == "not_started"
 
@@ -933,23 +1021,18 @@ class TestStageSelection:
             graph = create_repro_graph()
             config = {"configurable": {"thread_id": unique_thread_id("stage_deps")}}
 
-            final_state = None
-            for event in graph.stream(initial_state, config):
-                for node_name, _ in event.items():
-                    print(f"  → {node_name}")
-                    
-                    if node_name == "select_stage":
-                        state = graph.get_state(config)
-                        final_state = state.values
-                        break
-                else:
-                    continue
-                break
+            # Stream until we have state after select_stage
+            final_state, nodes_visited, _ = stream_until_node(
+                graph, initial_state, config, "select_stage", break_on_target=False
+            )
+            
+            for node in nodes_visited:
+                print(f"  → {node}")
 
             # First selection should pick stage_0 (no dependencies)
             assert final_state is not None
             assert final_state.get("current_stage_id") == "stage_0_materials", \
-                "Should select stage with no dependencies first"
+                f"Should select stage with no dependencies first, got {final_state.get('current_stage_id')}"
             
             # Stage 1 should still be not_started (dependency not satisfied)
             progress = final_state.get("progress", {})
@@ -957,7 +1040,7 @@ class TestStageSelection:
             stage_1 = next((s for s in stages if s["stage_id"] == "stage_1_structure"), None)
             assert stage_1 is not None, "Stage 1 should exist in progress"
             assert stage_1["status"] == "not_started", \
-                "Stage 1 should be not_started (dependency not complete)"
+                f"Stage 1 should be not_started (dependency not complete), got {stage_1['status']}"
 
             print("\n✅ Stage selection with dependencies test passed!")
 
@@ -991,7 +1074,7 @@ class TestStageSelection:
         assert result.get("current_stage_id") is None, \
             "current_stage_id should be None when no stages"
         assert result.get("ask_user_trigger") == "no_stages_available", \
-            "ask_user_trigger should be 'no_stages_available'"
+            f"ask_user_trigger should be 'no_stages_available', got {result.get('ask_user_trigger')}"
         assert result.get("awaiting_user_input") is True, \
             "awaiting_user_input should be True"
         assert len(result.get("pending_user_questions", [])) > 0, \
@@ -1089,21 +1172,13 @@ class TestAdaptPromptsNode:
             graph = create_repro_graph()
             config = {"configurable": {"thread_id": unique_thread_id("adapt_prompts")}}
 
-            adapt_prompts_state = None
-            for event in graph.stream(initial_state, config):
-                for node_name, _ in event.items():
-                    print(f"  → {node_name}")
-                    
-                    if node_name == "adapt_prompts":
-                        state = graph.get_state(config)
-                        adapt_prompts_state = state.values
-                    
-                    if node_name == "plan":
-                        # Stop after plan to check adapt_prompts result
-                        break
-                else:
-                    continue
-                break
+            # Stream until after adapt_prompts (wait for plan node)
+            adapt_prompts_state, nodes_visited, _ = stream_until_node(
+                graph, initial_state, config, "adapt_prompts", break_on_target=False
+            )
+            
+            for node in nodes_visited:
+                print(f"  → {node}")
 
             # Verify adaptations were stored
             assert adapt_prompts_state is not None
@@ -1112,11 +1187,11 @@ class TestAdaptPromptsNode:
             
             adaptations = adapt_prompts_state["prompt_adaptations"]
             assert isinstance(adaptations, list), "adaptations should be a list"
-            assert len(adaptations) == 2, "Should have 2 adaptations"
+            assert len(adaptations) == 2, f"Should have 2 adaptations, got {len(adaptations)}"
             
             # Verify paper_domain was updated
             assert adapt_prompts_state.get("paper_domain") == "plasmonics", \
-                "paper_domain should be updated"
+                f"paper_domain should be updated to 'plasmonics', got {adapt_prompts_state.get('paper_domain')}"
 
             print("\n✅ Adapt prompts test passed!")
 
@@ -1150,23 +1225,17 @@ class TestAdaptPromptsNode:
             graph = create_repro_graph()
             config = {"configurable": {"thread_id": unique_thread_id("adapt_fail")}}
 
-            nodes_visited = []
-            for event in graph.stream(initial_state, config):
-                for node_name, _ in event.items():
-                    nodes_visited.append(node_name)
-                    print(f"  → {node_name}")
-                    
-                    if node_name == "plan":
-                        state = graph.get_state(config)
-                        plan_state = state.values
-                        
-                        # Should have empty adaptations (fallback)
-                        assert plan_state.get("prompt_adaptations") == [], \
-                            "Should have empty adaptations on LLM failure"
-                        break
-                else:
-                    continue
-                break
+            # Stream until after adapt_prompts
+            state_after_adapt, nodes_visited, _ = stream_until_node(
+                graph, initial_state, config, "adapt_prompts", break_on_target=False
+            )
+            
+            for node in nodes_visited:
+                print(f"  → {node}")
+            
+            # Should have empty adaptations (fallback)
+            assert state_after_adapt.get("prompt_adaptations") == [], \
+                f"Should have empty adaptations on LLM failure, got {state_after_adapt.get('prompt_adaptations')}"
 
             # Should continue to plan despite failure
             assert "adapt_prompts" in nodes_visited
@@ -1210,23 +1279,18 @@ class TestVerdictNormalization:
             graph = create_repro_graph()
             config = {"configurable": {"thread_id": unique_thread_id("normalize_pass")}}
 
-            final_state = None
-            for event in graph.stream(initial_state, config):
-                for node_name, _ in event.items():
-                    print(f"  → {node_name}")
-                    
-                    if node_name == "select_stage":
-                        state = graph.get_state(config)
-                        final_state = state.values
-                        break
-                else:
-                    continue
-                break
+            # Stream until after select_stage
+            final_state, nodes_visited, _ = stream_until_node(
+                graph, initial_state, config, "select_stage", break_on_target=False
+            )
+            
+            for node in nodes_visited:
+                print(f"  → {node}")
 
             # Should normalize 'pass' to 'approve'
-            assert final_state is not None, "Should reach select_stage"
+            assert "select_stage" in nodes_visited, "Should reach select_stage"
             assert final_state.get("last_plan_review_verdict") == "approve", \
-                "'pass' should be normalized to 'approve'"
+                f"'pass' should be normalized to 'approve', got {final_state.get('last_plan_review_verdict')}"
 
             print("\n✅ Verdict normalization test passed!")
 
@@ -1281,6 +1345,6 @@ class TestVerdictNormalization:
 
             # Should normalize 'reject' to 'needs_revision' and trigger replan
             assert nodes_visited.count("plan") == 2, \
-                "'reject' should trigger replan (normalized to 'needs_revision')"
+                f"'reject' should trigger replan (normalized to 'needs_revision'), got {nodes_visited.count('plan')} plan visits"
 
             print("\n✅ Reject normalization test passed!")

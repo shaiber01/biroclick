@@ -120,16 +120,18 @@ def code_reviewer_node(state: ReproState) -> dict:
     
     # Increment code revision counter if needs_revision
     if result["last_code_review_verdict"] == "needs_revision":
-        new_count, incremented = increment_counter_with_max(
+        new_count, _ = increment_counter_with_max(
             state, "code_revision_count", "max_code_revisions", MAX_CODE_REVISIONS
         )
         result["code_revision_count"] = new_count
         result["reviewer_feedback"] = agent_output.get("feedback", agent_output.get("summary", "Missing verdict or feedback in review"))
         
         # If we hit the max revision budget, escalate to ask_user immediately.
-        if not incremented:
-            runtime_config = state.get("runtime_config", {})
-            max_revs = runtime_config.get("max_code_revisions", MAX_CODE_REVISIONS)
+        # BUG FIX: Check if new_count >= max (not just if increment failed).
+        # The routing also checks this, but we need to set the trigger/questions.
+        runtime_config = state.get("runtime_config", {})
+        max_revs = runtime_config.get("max_code_revisions", MAX_CODE_REVISIONS)
+        if new_count >= max_revs:
             stage_id = state.get("current_stage_id", "unknown")
             question = (
                 "Code review limit reached.\n\n"

@@ -475,12 +475,30 @@ def plan_reviewer_node(state: ReproState) -> dict:
         # For blocking structural issues, only increment if replan_count was already in state
         # For LLM rejections, always increment (even if starting from 0 or not present)
         if not is_blocking_issue or "replan_count" in state:
-            # BUG FIX: Use increment_counter_with_max for consistency with other counters
-            # This ensures proper handling of max_replans limit
-            new_count, was_incremented = increment_counter_with_max(
+            new_count, _ = increment_counter_with_max(
                 state, "replan_count", "max_replans", MAX_REPLANS
             )
             result["replan_count"] = new_count
+            
+            # If we hit the max replan limit, escalate to ask_user immediately.
+            # BUG FIX: Check if new_count >= max (not just if increment failed).
+            runtime_config = state.get("runtime_config", {})
+            max_replans = runtime_config.get("max_replans", MAX_REPLANS)
+            
+            if new_count >= max_replans:
+                feedback_text = agent_output.get("feedback", agent_output.get("summary", "No feedback available"))
+                result["ask_user_trigger"] = "plan_review_limit"
+                result["pending_user_questions"] = [
+                    f"Plan review rejected {new_count}/{max_replans} times.\n\n"
+                    f"- Latest feedback: {feedback_text}\n\n"
+                    "Options:\n"
+                    "- APPROVE_PLAN: Force-accept the current plan despite issues\n"
+                    "- GUIDANCE: Provide specific guidance for replanning (include your guidance after the keyword)\n"
+                    "- STOP: End the workflow"
+                ]
+                result["awaiting_user_input"] = True
+                result["last_node_before_ask_user"] = "plan_review"
+        
         result["planner_feedback"] = agent_output.get("feedback", agent_output.get("summary", ""))
     
     return result

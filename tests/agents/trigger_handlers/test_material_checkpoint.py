@@ -146,6 +146,21 @@ class TestMaterialCheckpointTrigger:
         assert result["pending_validated_materials"] == []
 
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_handles_stop(self, mock_context):
+        """Should stop workflow on STOP response."""
+        mock_context.return_value = None
+        
+        state = {
+            "ask_user_trigger": "material_checkpoint",
+            "user_responses": {"Material question": "STOP"},
+        }
+        
+        result = supervisor_node(state)
+        
+        assert result["supervisor_verdict"] == "all_complete"
+        assert result.get("should_stop") is True
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_handles_need_help(self, mock_context):
         """Should ask for more details on NEED_HELP response."""
         mock_context.return_value = None
@@ -542,6 +557,20 @@ class TestHandleMaterialCheckpoint:
         assert mock_result["supervisor_verdict"] == "ask_user"
         assert len(mock_result["pending_user_questions"]) > 0
         assert "details" in mock_result["pending_user_questions"][0].lower()
+
+    def test_handle_material_checkpoint_stop(self, mock_state, mock_result):
+        """Should stop workflow on STOP response."""
+        user_input = {"q1": "STOP"}
+        trigger_handlers.handle_material_checkpoint(mock_state, mock_result, user_input, "stage1")
+        assert mock_result["supervisor_verdict"] == "all_complete"
+        assert mock_result.get("should_stop") is True
+
+    def test_handle_material_checkpoint_stop_case_insensitive(self, mock_state, mock_result):
+        """Should handle case-insensitive STOP."""
+        user_input = {"q1": "stop the workflow"}
+        trigger_handlers.handle_material_checkpoint(mock_state, mock_result, user_input, "stage1")
+        assert mock_result["supervisor_verdict"] == "all_complete"
+        assert mock_result.get("should_stop") is True
 
     def test_handle_material_checkpoint_help_keyword(self, mock_state, mock_result):
         """Should ask for clarification on HELP keyword."""

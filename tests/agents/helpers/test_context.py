@@ -220,6 +220,7 @@ class TestValidateUserResponses:
             "CHANGE_MATERIAL",
             "CHANGE_DATABASE",
             "NEED_HELP",
+            "STOP",
             "HELP",
             "YES",
             "NO",
@@ -230,6 +231,7 @@ class TestValidateUserResponses:
             "yes please",
             "I need help",
             "change material please",
+            "stop",  # case insensitive stop
         ]
         for response in valid_responses:
             errors = validate_user_responses(
@@ -266,7 +268,9 @@ class TestValidateUserResponses:
         )
         assert len(errors) == 1
         error_msg = errors[0]
-        assert "APPROVE" in error_msg or "CHANGE_MATERIAL" in error_msg or "CHANGE_DATABASE" in error_msg or "NEED_HELP" in error_msg
+        # Should mention at least one valid option
+        valid_options = ["APPROVE", "CHANGE_MATERIAL", "CHANGE_DATABASE", "NEED_HELP", "STOP"]
+        assert any(opt in error_msg for opt in valid_options), f"Error message should contain valid options: {error_msg}"
 
     def test_code_review_limit_all_valid_keywords(self):
         """Should accept all valid keywords for code_review_limit."""

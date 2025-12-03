@@ -16,7 +16,7 @@ JSON Schema Files:
 - plan_schema.json        → Plan structure, ExtractedParameter, Stage, Target
 - assumptions_schema.json → Assumption, GeometryInterpretation
 - progress_schema.json    → StageProgress, Output, Discrepancy, UserInteraction
-- metrics_schema.json     → AgentCallMetric, StageMetric, MetricsLog
+- metrics_schema.json     → AgentCall, StageMetric, ReproductionMetrics
 - report_schema.json      → FigureComparison, OverallAssessment, Conclusions
 - prompt_adaptations_schema.json → Adaptation records
 
@@ -694,7 +694,7 @@ def check_materials_validated(state: dict) -> tuple:
 # ═══════════════════════════════════════════════════════════════════════
 #
 # NOTE: Types like ExtractedParameter, Discrepancy, StageProgress,
-# FigureComparison, AgentCallMetric, StageMetric, MetricsLog, etc.
+# FigureComparison, AgentCall, StageMetric, ReproductionMetrics, etc.
 # are defined in the JSON schemas and should be generated from there.
 #
 # See the header of this file for generation instructions.
@@ -2847,8 +2847,19 @@ def initialize_progress_from_plan(state: ReproState) -> ReproState:
     progress_stages = []
     current_time = datetime.now(timezone.utc).isoformat()
     
-    for plan_stage in plan_stages:
-        stage_id = plan_stage.get("stage_id", "unknown")
+    for idx, plan_stage in enumerate(plan_stages):
+        # Validate stage structure - must be a dict with required fields
+        if not isinstance(plan_stage, dict):
+            raise ValueError(
+                f"Stage at index {idx} must be a dict, got {type(plan_stage).__name__}"
+            )
+        
+        stage_id = plan_stage.get("stage_id")
+        if not stage_id:
+            raise ValueError(
+                f"Stage at index {idx} is missing required 'stage_id' field"
+            )
+        
         stage_type = plan_stage.get("stage_type", "SINGLE_STRUCTURE")
         
         # Create progress stage entry with ONLY execution-state fields

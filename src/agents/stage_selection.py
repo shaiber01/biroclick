@@ -25,6 +25,7 @@ from schemas.state import (
     STAGE_TYPE_ORDER,
     initialize_progress_from_plan,
     get_progress_stage,
+    get_plan_stage,
     update_progress_stage_status,
 )
 
@@ -117,7 +118,10 @@ def select_stage_node(state: ReproState) -> dict:
     for stage in stages:
         if stage.get("status") == "needs_rerun":
             # Guard against race condition
-            dependencies = stage.get("dependencies")
+            # Get dependencies from plan stage (design spec), not progress stage
+            stage_id = stage.get("stage_id")
+            plan_stage = get_plan_stage(state, stage_id) if stage_id else None
+            dependencies = plan_stage.get("dependencies") if plan_stage else None
             # Handle None dependencies - treat as empty list
             if dependencies is None:
                 dependencies = []
@@ -222,7 +226,9 @@ def select_stage_node(state: ReproState) -> dict:
                 continue
             
             # Stage has valid stage_type, check if dependencies are now satisfied
-            dependencies = stage.get("dependencies", [])
+            # Get dependencies from plan stage (design spec), not progress stage
+            plan_stage_for_deps = get_plan_stage(state, stage.get("stage_id"))
+            dependencies = plan_stage_for_deps.get("dependencies", []) if plan_stage_for_deps else []
             # Only unblock if stage has dependencies that are now satisfied
             # Stages blocked for other reasons (budget, etc.) should remain blocked
             if not dependencies:
@@ -263,8 +269,9 @@ def select_stage_node(state: ReproState) -> dict:
             else:
                 continue
         
-        # Check dependencies
-        dependencies = stage.get("dependencies", [])
+        # Check dependencies - get from plan stage (design spec), not progress stage
+        plan_stage_for_deps = get_plan_stage(state, stage.get("stage_id"))
+        dependencies = plan_stage_for_deps.get("dependencies", []) if plan_stage_for_deps else []
         
         if not dependencies:
             deps_satisfied = True

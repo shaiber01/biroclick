@@ -119,31 +119,29 @@ def validate_paper_input(paper_input: Dict[str, Any]) -> List[str]:
                     errors.append(f"Figure {i} ({fig.get('id', 'unknown')}): missing 'image_path' field")
                 else:
                     image_path = fig["image_path"]
-                    # Validate image_path is not None and not empty
+                    # Validate image_path is not None
                     if image_path is None:
                         errors.append(f"Figure {i} ({fig.get('id', 'unknown')}): 'image_path' cannot be None")
-                    elif not isinstance(image_path, str) or not image_path.strip():
-                        errors.append(f"Figure {i} ({fig.get('id', 'unknown')}): 'image_path' must be a non-empty string")
+                    elif not isinstance(image_path, str):
+                        errors.append(f"Figure {i} ({fig.get('id', 'unknown')}): 'image_path' must be a string")
                     else:
-                        # Check if image file exists
+                        # Check if image file exists (empty string will be treated as non-existent)
                         img_path = Path(image_path)
-                        if not img_path.exists():
+                        if not image_path.strip() or not img_path.exists():
                             warnings.append(f"Figure {fig.get('id', i)}: image file not found: {image_path}")
                         elif img_path.suffix.lower() not in ['.png', '.jpg', '.jpeg', '.gif', '.webp']:
                             warnings.append(f"Figure {fig.get('id', i)}: unusual image format: {img_path.suffix}")
                 
                 # Check digitized data if provided
                 digitized_data_path = fig.get("digitized_data_path")
-                if digitized_data_path:
-                    # Validate digitized_data_path is not None and not empty
-                    if digitized_data_path is None:
-                        # This shouldn't happen due to .get() returning None, but be safe
-                        pass
-                    elif not isinstance(digitized_data_path, str) or not digitized_data_path.strip():
-                        warnings.append(f"Figure {fig.get('id', i)}: 'digitized_data_path' must be a non-empty string")
+                if digitized_data_path is not None:
+                    # Validate digitized_data_path is a string
+                    if not isinstance(digitized_data_path, str):
+                        warnings.append(f"Figure {fig.get('id', i)}: 'digitized_data_path' must be a string")
                     else:
+                        # Check if file exists (empty string will be treated as non-existent)
                         data_path = Path(digitized_data_path)
-                        if not data_path.exists():
+                        if not digitized_data_path.strip() or not data_path.exists():
                             warnings.append(f"Figure {fig.get('id', i)}: digitized data file not found: {digitized_data_path}")
     
     # Validate supplementary figures (same validation as main figures)
@@ -169,12 +167,19 @@ def validate_paper_input(paper_input: Dict[str, Any]) -> List[str]:
                 if "image_path" not in fig:
                     errors.append(f"Supplementary figure {i} ({fig.get('id', 'unknown')}): missing 'image_path' field")
                 else:
-                    # Check if image file exists
-                    img_path = Path(fig["image_path"])
-                    if not img_path.exists():
-                        warnings.append(f"Supplementary figure {fig.get('id', i)}: image file not found: {fig['image_path']}")
-                    elif img_path.suffix.lower() not in ['.png', '.jpg', '.jpeg', '.gif', '.webp']:
-                        warnings.append(f"Supplementary figure {fig.get('id', i)}: unusual image format: {img_path.suffix}")
+                    image_path = fig["image_path"]
+                    # Validate image_path is not None
+                    if image_path is None:
+                        errors.append(f"Supplementary figure {i} ({fig.get('id', 'unknown')}): 'image_path' cannot be None")
+                    elif not isinstance(image_path, str):
+                        errors.append(f"Supplementary figure {i} ({fig.get('id', 'unknown')}): 'image_path' must be a string")
+                    else:
+                        # Check if image file exists (empty string will be treated as non-existent)
+                        img_path = Path(image_path)
+                        if not image_path.strip() or not img_path.exists():
+                            warnings.append(f"Supplementary figure {fig.get('id', i)}: image file not found: {image_path}")
+                        elif img_path.suffix.lower() not in ['.png', '.jpg', '.jpeg', '.gif', '.webp']:
+                            warnings.append(f"Supplementary figure {fig.get('id', i)}: unusual image format: {img_path.suffix}")
     
     # Validate supplementary data files
     if "supplementary_data_files" in supplementary:

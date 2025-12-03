@@ -217,16 +217,18 @@ def design_reviewer_node(state: ReproState) -> dict:
     
     # Increment design revision counter if needs_revision
     if verdict == "needs_revision":
-        new_count, was_incremented = increment_counter_with_max(
+        new_count, _ = increment_counter_with_max(
             state, "design_revision_count", "max_design_revisions", MAX_DESIGN_REVISIONS
         )
         result["design_revision_count"] = new_count
         result["reviewer_feedback"] = agent_output.get("feedback", agent_output.get("summary", ""))
         
         # If we hit the max revision budget, escalate to ask_user immediately.
-        if not was_incremented:
-            runtime_config = state.get("runtime_config", {})
-            max_revs = runtime_config.get("max_design_revisions", MAX_DESIGN_REVISIONS)
+        # BUG FIX: Check if new_count >= max (not just if increment failed).
+        # The routing also checks this, but we need to set the trigger/questions.
+        runtime_config = state.get("runtime_config", {})
+        max_revs = runtime_config.get("max_design_revisions", MAX_DESIGN_REVISIONS)
+        if new_count >= max_revs:
             stage_id = state.get("current_stage_id", "unknown")
             question = (
                 "Design review limit reached.\n\n"

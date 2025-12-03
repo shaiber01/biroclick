@@ -143,6 +143,10 @@ def handle_material_checkpoint(
             "Please provide more details about the material issue."
         ]
     
+    elif "STOP" in response_text:
+        result["supervisor_verdict"] = "all_complete"
+        result["should_stop"] = True
+    
     elif is_rejection:
         result["supervisor_verdict"] = "ask_user"
         result["pending_user_questions"] = [

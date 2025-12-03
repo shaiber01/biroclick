@@ -978,13 +978,8 @@ class TestValidatePaperInput:
         with pytest.raises(ValidationError) as excinfo:
             validate_paper_input(paper_input)
 
-        # Path(None) would fail, but let's see what happens
-        # Actually, Path(None) might raise TypeError, but let's test
-        try:
-            validate_paper_input(paper_input)
-        except (ValidationError, TypeError) as e:
-            # Either is acceptable - None is invalid
-            assert True
+        error_msg = str(excinfo.value)
+        assert "'image_path' cannot be None" in error_msg
 
     def test_figure_image_path_empty_string_raises(self, paper_input_factory):
         """Figure with empty string image_path should be handled."""

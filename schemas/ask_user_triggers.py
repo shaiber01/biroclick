@@ -33,12 +33,13 @@ ASK_USER_TRIGGERS: Dict[str, Dict[str, Any]] = {
         "description": "Mandatory Stage 0 material validation requires user confirmation",
         "source_node": "material_checkpoint",
         "expected_response_keys": ["verdict", "notes"],
-        "valid_verdicts": ["APPROVE", "CHANGE_DATABASE", "CHANGE_MATERIAL", "NEED_HELP"],
+        "valid_verdicts": ["APPROVE", "CHANGE_DATABASE", "CHANGE_MATERIAL", "NEED_HELP", "STOP"],
         "supervisor_action": {
             "APPROVE": "Set supervisor_verdict='ok_continue', proceed to select_stage",
             "CHANGE_DATABASE": "Invalidate Stage 0, update assumptions, rerun Stage 0",
             "CHANGE_MATERIAL": "Route to plan with supervisor_feedback about material change",
             "NEED_HELP": "Route back to ask_user with additional context",
+            "STOP": "Route to generate_report, abort workflow",
         }
     },
     "code_review_limit": {

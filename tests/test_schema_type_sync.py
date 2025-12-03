@@ -313,11 +313,53 @@ class TestSchemaTypeSync:
             assert schema_path.exists(), f"Missing schema: {schema_name}"
             schema = load_schema(schema_name)
             assert "properties" in schema, f"Schema {schema_name} missing 'properties'"
-            # All agent output schemas should have a verdict field
-            assert "verdict" in schema["properties"], (
-                f"Schema {schema_name} missing 'verdict' field - "
-                "all agent outputs must have a verdict"
-            )
+            # Reviewer/validator agents should have a verdict field
+            # Non-reviewer agents (Planner, Designer, CodeGenerator, ResultsAnalyzer) don't have verdicts
+            reviewer_validator_schemas = {
+                "supervisor_output_schema.json",
+                "plan_reviewer_output_schema.json",
+                "design_reviewer_output_schema.json",
+                "code_reviewer_output_schema.json",
+                "execution_validator_output_schema.json",
+                "physics_sanity_output_schema.json",
+                "comparison_validator_output_schema.json",
+            }
+            non_reviewer_schemas = {
+                "planner_output_schema.json",  # Produces plan structure
+                "simulation_designer_output_schema.json",  # Produces design structure
+                "code_generator_output_schema.json",  # Produces code
+                "results_analyzer_output_schema.json",  # Uses overall_classification instead
+            }
+            
+            if schema_name in reviewer_validator_schemas:
+                assert "verdict" in schema["properties"], (
+                    f"Schema {schema_name} missing 'verdict' field - "
+                    "all reviewer/validator agent outputs must have a verdict"
+                )
+            elif schema_name == "results_analyzer_output_schema.json":
+                assert "overall_classification" in schema["properties"], (
+                    f"Schema {schema_name} missing 'overall_classification' field"
+                )
+            elif schema_name in non_reviewer_schemas:
+                # These agents produce artifacts, not verdicts - verify they have key output fields
+                if schema_name == "planner_output_schema.json":
+                    assert "stages" in schema["properties"], (
+                        f"Schema {schema_name} missing 'stages' field (required for plan)"
+                    )
+                elif schema_name == "simulation_designer_output_schema.json":
+                    assert "design_description" in schema["properties"], (
+                        f"Schema {schema_name} missing 'design_description' field"
+                    )
+                elif schema_name == "code_generator_output_schema.json":
+                    assert "code" in schema["properties"], (
+                        f"Schema {schema_name} missing 'code' field"
+                    )
+            else:
+                # Unknown schema - should be added to one of the categories above
+                raise AssertionError(
+                    f"Schema {schema_name} not categorized - "
+                    "add to reviewer_validator_schemas or non_reviewer_schemas"
+                )
     
     def test_supervisor_output_has_verdict(self):
         """Supervisor output schema should have verdict field with correct enum values."""
@@ -1152,8 +1194,8 @@ class TestGeneratedTypesSync:
 
     def test_metrics_schema_generated_types_exist(self):
         """Verify that metrics_schema.json has corresponding generated types."""
-        assert hasattr(generated_types, "MetricsLog"), (
-            "Missing generated type 'MetricsLog' for metrics_schema.json"
+        assert hasattr(generated_types, "ReproductionMetrics"), (
+            "Missing generated type 'ReproductionMetrics' for metrics_schema.json"
         )
 
 

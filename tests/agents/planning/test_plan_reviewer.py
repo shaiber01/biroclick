@@ -776,7 +776,11 @@ class TestPlanReviewerNode:
     @patch("src.agents.planning.validate_state_or_warn")
     @patch("src.agents.planning.call_agent_with_metrics")
     def test_reviewer_llm_unexpected_verdict(self, mock_llm, mock_validate):
-        """Test handling of unexpected verdict value from LLM."""
+        """Test handling of unexpected verdict value from LLM.
+        
+        Unknown verdicts are normalized to 'approve' for safety, to avoid
+        blocking workflow on malformed LLM responses.
+        """
         mock_validate.return_value = []
         mock_llm.return_value = {"verdict": "unknown_verdict"}
         state = {
@@ -785,24 +789,31 @@ class TestPlanReviewerNode:
         
         result = plan_reviewer_node(state)
         
-        # Should still set the verdict (even if unexpected)
-        assert result["last_plan_review_verdict"] == "unknown_verdict"
-        # Should not increment replan_count for non-needs_revision verdicts
+        # Unknown verdicts are normalized to 'approve' (logs warning)
+        assert result["last_plan_review_verdict"] == "approve"
+        # Should not increment replan_count for approve verdicts
         assert "replan_count" not in result
 
     @patch("src.agents.planning.validate_state_or_warn")
     @patch("src.agents.planning.call_agent_with_metrics")
     def test_reviewer_llm_missing_verdict_key(self, mock_llm, mock_validate):
-        """Test handling when LLM response is missing verdict key."""
+        """Test handling when LLM response is missing verdict key.
+        
+        When verdict key is missing, the component defaults to 'approve'
+        to avoid blocking workflow on malformed LLM responses.
+        """
         mock_validate.return_value = []
         mock_llm.return_value = {"feedback": "Some feedback"}
         state = {
             "plan": {"stages": [{"stage_id": "s1", "targets": ["t"]}]}
         }
         
-        # This should raise KeyError when accessing agent_output["verdict"]
-        with pytest.raises(KeyError):
-            plan_reviewer_node(state)
+        result = plan_reviewer_node(state)
+        
+        # Missing verdict defaults to 'approve' (uses .get("verdict", "approve"))
+        assert result["last_plan_review_verdict"] == "approve"
+        # Should not increment replan_count for approve verdicts
+        assert "replan_count" not in result
 
     @patch("src.agents.planning.validate_state_or_warn")
     def test_reviewer_blocking_issues_verdict_structure(self, mock_validate):

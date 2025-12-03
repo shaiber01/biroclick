@@ -134,7 +134,7 @@ def execution_validator_node(state: ReproState) -> dict:
     
     # Increment failure counters if verdict is "fail"
     if agent_output["verdict"] == "fail":
-        new_count, was_incremented = increment_counter_with_max(
+        new_count, _ = increment_counter_with_max(
             state, "execution_failure_count", "max_execution_failures", MAX_EXECUTION_FAILURES
         )
         result["execution_failure_count"] = new_count
@@ -144,15 +144,19 @@ def execution_validator_node(state: ReproState) -> dict:
             current_total = 0
         result["total_execution_failures"] = current_total + 1
         
+        # If we hit the max failure limit, escalate to ask_user immediately.
+        # BUG FIX: Check if new_count >= max (not just if increment failed).
         runtime_config = state.get("runtime_config", {})
         max_failures = runtime_config.get("max_execution_failures", MAX_EXECUTION_FAILURES)
         
-        if not was_incremented:
-            result["ask_user_trigger"] = "execution_failure_limit"
+        if new_count >= max_failures:
+            result["ask_user_trigger"] = "execution_limit"
             result["pending_user_questions"] = [
-                f"Execution failed {max_failures} times. Last error: {run_error or 'Unknown'}. "
+                f"Execution failed {new_count}/{max_failures} times. Last error: {run_error or 'Unknown'}. "
                 "Options: RETRY_WITH_GUIDANCE (provide hint), SKIP_STAGE, or STOP?"
             ]
+            result["awaiting_user_input"] = True
+            result["last_node_before_ask_user"] = "execution_check"
     
     return result
 
@@ -238,6 +242,24 @@ def physics_sanity_node(state: ReproState) -> dict:
             state, "physics_failure_count", "max_physics_failures", MAX_PHYSICS_FAILURES
         )
         result["physics_failure_count"] = new_count
+        
+        # If we hit the max physics failure limit, escalate to ask_user immediately.
+        # BUG FIX: Check if new_count >= max (not just if increment failed).
+        runtime_config = state.get("runtime_config", {})
+        max_failures = runtime_config.get("max_physics_failures", MAX_PHYSICS_FAILURES)
+        stage_id = state.get("current_stage_id", "unknown")
+        
+        if new_count >= max_failures:
+            result["ask_user_trigger"] = "physics_limit"
+            result["pending_user_questions"] = [
+                f"Physics sanity check failed {new_count}/{max_failures} times.\n\n"
+                f"- Stage: {stage_id}\n"
+                f"- Latest feedback: {result.get('physics_feedback', 'No feedback available')}\n\n"
+                "Options: RETRY (provide guidance), ACCEPT (proceed with issues), "
+                "SKIP_STAGE, or STOP?"
+            ]
+            result["awaiting_user_input"] = True
+            result["last_node_before_ask_user"] = "physics_check"
     elif agent_output["verdict"] == "design_flaw":
         new_count, _ = increment_counter_with_max(
             state, "design_revision_count", "max_design_revisions", MAX_DESIGN_REVISIONS
