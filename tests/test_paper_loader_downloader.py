@@ -60,8 +60,8 @@ class TestDownloadFigure:
 
     # --- Local File Handling ---
 
-    def test_local_file_absolute_path_ignores_base_path(self, tmp_path):
-        """Absolute path should ignore base_path if provided."""
+    def test_local_file_absolute_path_enforces_base_path(self, tmp_path):
+        """Absolute path OUTSIDE base_path should fail if base_path is provided."""
         # Create a dummy file in tmp_path
         source = tmp_path / "source.png"
         source.write_text("content")
@@ -72,11 +72,24 @@ class TestDownloadFigure:
         base_path = tmp_path / "other_dir"
         base_path.mkdir()
         
-        # Should use absolute path 'source' and ignore 'base_path'
+        # Should fail because source is not inside base_path
+        with pytest.raises(FigureDownloadError, match="Access denied|outside base path"):
+            download_figure(str(source.absolute()), output, base_path=base_path)
+
+    def test_local_file_absolute_path_allowed_inside_base_path(self, tmp_path):
+        """Absolute path INSIDE base_path should succeed."""
+        base_path = tmp_path / "root"
+        base_path.mkdir()
+        
+        source = base_path / "image.png"
+        source.write_text("data")
+        
+        output = tmp_path / "output.png"
+        
         download_figure(str(source.absolute()), output, base_path=base_path)
         
         assert output.exists()
-        assert output.read_text() == "content"
+        assert output.read_text() == "data"
 
     def test_local_file_tilde_expansion(self, tmp_path):
         """

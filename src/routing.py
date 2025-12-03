@@ -172,9 +172,9 @@ def create_verdict_router(
                 route_on_limit = count_limit.get("route_on_limit", "ask_user")
                 
                 # Check current count against limit
-                runtime_config = state.get("runtime_config", {})
+                runtime_config = state.get("runtime_config") or {}
                 max_count = runtime_config.get(max_count_key, default_max)
-                current_count = state.get(count_field, 0)
+                current_count = state.get(count_field) or 0
                 
                 if current_count >= max_count:
                     logger.warning(

@@ -88,26 +88,23 @@ def download_figure(
             
         else:
             # Assume local file path (relative or absolute)
-            # Use unquote here too just in case caller passed encoded local path?
-            # Usually local paths passed directly aren't URL encoded, but 
-            # if we follow "robustness principle", we might decode.
-            # However, typical usage: download_figure("images/fig1.png")
-            # If file name has %, it's literal.
-            # But test_file_url_decoding checks file:// scheme, not bare path.
-            
             local_path = Path(url).expanduser()
             
-            # If relative and base_path provided, resolve against it
-            if not local_path.is_absolute() and base_path:
-                # Security check: prevent path traversal outside base_path
+            # If base_path provided, we enforce that the file must be within it
+            # This prevents path traversal (../secret) and absolute path leaks (/etc/passwd)
+            # when we expect a self-contained directory.
+            if base_path:
+                # Resolve both to get absolute paths with symlinks/.. removed
+                # If local_path is absolute, /base / local_path is just local_path
                 try:
-                    # Resolve both to get absolute paths with symlinks/.. removed
-                    resolved_path = (base_path / local_path).resolve()
+                    if local_path.is_absolute():
+                        resolved_path = local_path.resolve()
+                    else:
+                        resolved_path = (base_path / local_path).resolve()
+                        
                     resolved_base = base_path.resolve()
                     
                     # Check if resolved path starts with resolved base path
-                    # Use commonpath to be safer? or simple string prefix
-                    # Path.is_relative_to was added in Python 3.9
                     if not resolved_path.is_relative_to(resolved_base):
                         raise FigureDownloadError(f"Access denied: Path {local_path} resolves to {resolved_path} which is outside base path {base_path}")
                         
