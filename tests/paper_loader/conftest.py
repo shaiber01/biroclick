@@ -1,8 +1,21 @@
-"""Shared fixtures for paper loader tests."""
+"""Shared fixtures and helpers for paper loader test modules."""
 
-from typing import Any, Dict, List
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any, Callable, Dict, List
 
 import pytest
+
+FIXTURES_DIR = Path(__file__).resolve().parent.parent / "fixtures" / "paper_loader"
+
+
+@pytest.fixture
+def paper_loader_base_path(tmp_path: Path) -> Path:
+    """Provide a deterministic base path for markdown resolver tests."""
+    base = tmp_path / "papers" / "paper-under-test"
+    base.mkdir(parents=True, exist_ok=True)
+    return base
 
 
 @pytest.fixture
@@ -26,43 +39,32 @@ def _build_figures(ids: List[str]) -> List[Dict[str, Any]]:
         }
         for index, figure_id in enumerate(ids, start=1)
     ]
-from __future__ import annotations
-
-from pathlib import Path
-from typing import Any, Dict
-
-import pytest
-
-
-FIXTURES_DIR = Path(__file__).resolve().parent.parent / "fixtures" / "paper_loader"
 
 
 def create_valid_paper_input() -> Dict[str, Any]:
-    """Create a minimal valid paper input for testing."""
+    """Create a minimal valid paper input for validation-heavy tests."""
     return {
         "paper_id": "test_paper",
         "paper_title": "Test Paper Title",
-        "paper_text": "A" * 150,  # Just over minimum length
+        "paper_text": "A" * 150,
         "figures": [
             {
                 "id": "Fig1",
                 "description": "Test figure",
-                "image_path": str(
-                    FIXTURES_DIR / "sample_images" / "test_figure.png"
-                ),
+                "image_path": str(FIXTURES_DIR / "sample_images" / "test_figure.png"),
             }
         ],
     }
 
 
-@pytest.fixture()
+@pytest.fixture
 def valid_paper_input() -> Dict[str, Any]:
     """Return a fresh valid paper input per test."""
     return create_valid_paper_input()
 
 
-@pytest.fixture()
-def paper_input_factory():
+@pytest.fixture
+def paper_input_factory() -> Callable[..., Dict[str, Any]]:
     """Return a factory for customized paper inputs."""
 
     def _factory(**overrides: Any) -> Dict[str, Any]:
@@ -73,19 +75,10 @@ def paper_input_factory():
     return _factory
 
 
-@pytest.fixture()
+@pytest.fixture
 def sample_image_path() -> Path:
     """Return path to a real sample figure image."""
     return FIXTURES_DIR / "sample_images" / "test_figure.png"
-"""Shared fixtures and helpers for paper loader tests."""
-
-from pathlib import Path
-from typing import Dict, List, Any
-
-import pytest
-
-# Root path for paper loader fixture assets.
-FIXTURES_DIR = Path(__file__).resolve().parent.parent / "fixtures" / "paper_loader"
 
 
 def make_sample_paper_input() -> Dict[str, Any]:
@@ -129,7 +122,5 @@ def sample_paper_input() -> Dict[str, Any]:
 
 @pytest.fixture(scope="session")
 def paper_loader_fixtures_dir() -> Path:
-    """Fixture that exposes the fixtures directory path."""
+    """Expose the fixtures directory path for tests that need raw assets."""
     return FIXTURES_DIR
-
-
