@@ -1,0 +1,2 @@
+"""Stage selection integration tests."""
+

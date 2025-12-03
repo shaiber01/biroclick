@@ -1,0 +1,2 @@
+"""Reporting integration tests."""
+

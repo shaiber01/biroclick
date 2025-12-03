@@ -98,6 +98,7 @@ Detailed fabrication steps...
 # Integration Tests
 # ═══════════════════════════════════════════════════════════════════════
 
+@pytest.mark.slow
 class TestPaperLoaderIntegration:
     """Integration tests for the paper loading workflow."""
     

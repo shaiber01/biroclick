@@ -161,6 +161,33 @@ class TestSimulationDesignerCompleteness:
         assert "monitors" in design
         assert len(design.get("geometry", [])) > 0
 
+    def test_simulation_designer_node_creates_design(self, base_state, valid_plan):
+        from src.agents.design import simulation_designer_node
+
+        mock_response = {
+            "stage_id": "stage_0",
+            "design_description": "FDTD simulation with gold nanorod...",
+            "geometry": [{"type": "cylinder", "radius": 20, "material": "gold"}],
+            "sources": [{"type": "gaussian", "wavelength_range": [400, 800]}],
+            "monitors": [{"type": "flux", "name": "transmission"}],
+            "materials": [{"material_id": "gold", "source": "Johnson-Christy"}],
+            "new_assumptions": {"sim_a1": "assuming periodic boundary"},
+        }
+
+        base_state["plan"] = valid_plan
+        base_state["current_stage_id"] = "stage_0"
+        base_state["current_stage_type"] = "MATERIAL_VALIDATION"
+
+        with patch(
+            "src.agents.design.call_agent_with_metrics", return_value=mock_response
+        ):
+            result = simulation_designer_node(base_state)
+
+        design = result["design_description"]
+        assert design.get("stage_id") == "stage_0"
+        assert design["geometry"][0].get("type") == "cylinder"
+        assert design["materials"] == mock_response["materials"]
+
 
 class TestDesignerFieldMapping:
     """Verify simulation designer mapping of geometry fields."""
