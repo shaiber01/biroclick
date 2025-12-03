@@ -151,6 +151,39 @@ class TestLLMCalledCorrectly:
             assert call_kwargs.get("agent_name") == "plan_reviewer", \
                 f"Expected agent_name='plan_reviewer', got '{call_kwargs.get('agent_name')}'"
 
+    def test_plan_node_passes_figures_and_text_to_llm(self, base_state):
+        """plan_node must include paper text and figures in user_content passed to LLM."""
+        from src.agents.planning import plan_node
+
+        mock_response = {
+            "paper_id": "test",
+            "title": "Test",
+            "stages": [{"stage_id": "s1", "stage_type": "MATERIAL_VALIDATION", "targets": ["Fig1"], "dependencies": []}],
+            "targets": [{"figure_id": "Fig1"}],
+            "extracted_parameters": [{"name": "length", "value": 10}],
+        }
+
+        with patch("src.agents.planning.call_agent_with_metrics", return_value=mock_response) as mock:
+            plan_node(base_state)
+
+        call_kwargs = mock.call_args.kwargs
+        user_content = call_kwargs.get("user_content")
+        # The planner sometimes uses multimodal payloads; coerce to string for assertions.
+        if isinstance(user_content, str):
+            content_str = user_content
+        else:
+            content_str = json.dumps(user_content, default=str)
+
+        assert "Extinction spectrum" in content_str, \
+            "user_content should reference figure descriptions so LLM can plan against them"
+        assert "gold nanorods" in content_str.lower(), \
+            "user_content should include actual paper text, not just metadata"
+        assert base_state["paper_text"][:40].strip().split()[0].lower() in content_str.lower(), \
+            "user_content should include actual paper text, not just metadata"
+        state_payload = call_kwargs.get("state", {})
+        assert state_payload.get("paper_id") == base_state["paper_id"], \
+            "State forwarded to LLM should still reference the same paper identifier"
+
 
 # ═══════════════════════════════════════════════════════════════════════
 # Test: Output Structure is Correct
@@ -187,6 +220,12 @@ class TestOutputStructure:
         # Plan must have stages
         assert "stages" in result["plan"], "Plan missing stages"
         assert len(result["plan"]["stages"]) > 0, "Plan has no stages"
+        first_stage = result["plan"]["stages"][0]
+        assert first_stage["stage_id"] == "s1"
+        assert first_stage["stage_type"] == "MATERIAL_VALIDATION", \
+            f"Stage should preserve stage_type, got {first_stage}"
+        assert isinstance(first_stage.get("dependencies"), list), \
+            "Stage dependencies should be a list"
 
         # Check extracting other fields
         assert "planned_materials" in result, "Missing planned_materials"
@@ -206,6 +245,13 @@ class TestOutputStructure:
         assert result["progress"] is not None
         assert len(result["progress"]["stages"]) == 1
         assert result["progress"]["stages"][0]["stage_id"] == "s1"
+        assert result["progress"]["stages"][0]["status"] == "not_started", \
+            f"Progress entries should start as not_started: {result['progress']['stages'][0]}"
+        assert "stage_type" in result["progress"]["stages"][0], \
+            "Progress entries should preserve stage_type from plan"
+        deps = result["progress"]["stages"][0].get("dependencies")
+        assert deps in (None, []) or isinstance(deps, list), \
+            f"Progress dependencies should round-trip list semantics, got {deps}"
     
     def test_reviewer_output_has_verdict(self, base_state, valid_plan):
         """All reviewer nodes must return a verdict."""
@@ -222,8 +268,8 @@ class TestOutputStructure:
             result = plan_reviewer_node(base_state)
         
         assert "last_plan_review_verdict" in result, "plan_reviewer: Missing verdict field"
-        assert result["last_plan_review_verdict"] in ["approve", "needs_revision"], \
-            f"plan_reviewer: Invalid verdict: {result['last_plan_review_verdict']}"
+        assert result["last_plan_review_verdict"] == mock_response["verdict"], \
+            f"plan_reviewer: Verdict should mirror LLM output, got {result['last_plan_review_verdict']}"
         assert "workflow_phase" in result, "plan_reviewer: Missing workflow_phase"
         
         # Test design_reviewer - BUG FINDER: must also return verdict
@@ -234,8 +280,8 @@ class TestOutputStructure:
             result = design_reviewer_node(base_state)
         
         assert "last_design_review_verdict" in result, "design_reviewer: Missing verdict field"
-        assert result["last_design_review_verdict"] in ["approve", "needs_revision"], \
-            f"design_reviewer: Invalid verdict: {result['last_design_review_verdict']}"
+        assert result["last_design_review_verdict"] == mock_response["verdict"], \
+            f"design_reviewer: Verdict should match LLM output, got {result['last_design_review_verdict']}"
         assert "workflow_phase" in result, "design_reviewer: Missing workflow_phase"
         
         # Test code_reviewer - BUG FINDER: must also return verdict
@@ -245,8 +291,8 @@ class TestOutputStructure:
             result = code_reviewer_node(base_state)
         
         assert "last_code_review_verdict" in result, "code_reviewer: Missing verdict field"
-        assert result["last_code_review_verdict"] in ["approve", "needs_revision"], \
-            f"code_reviewer: Invalid verdict: {result['last_code_review_verdict']}"
+        assert result["last_code_review_verdict"] == mock_response["verdict"], \
+            f"code_reviewer: Verdict should match LLM output, got {result['last_code_review_verdict']}"
         assert "workflow_phase" in result, "code_reviewer: Missing workflow_phase"
     
     def test_execution_validator_output_has_verdict(self, base_state):
@@ -388,6 +434,10 @@ class TestErrorHandling:
         # Should auto-approve to not block workflow
         assert result.get("last_plan_review_verdict") == "approve", \
             f"Expected auto-approve on LLM error, got '{result.get('last_plan_review_verdict')}'"
+        assert result.get("workflow_phase") == "plan_review", \
+            f"Workflow phase should still be plan_review, got {result.get('workflow_phase')}"
+        assert result.get("planner_feedback") is None or "LLM" in str(result.get("planner_feedback")).upper(), \
+            "Feedback should mention the LLM failure or remain unset"
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -701,6 +751,9 @@ class TestBusinessLogic:
         
         assert result["last_plan_review_verdict"] == "needs_revision", \
             "Should reject empty plan"
+        feedback = result.get("planner_feedback", "")
+        assert "PLAN_ISSUE" in feedback, \
+            f"Planner feedback should enumerate blocking issues, got '{feedback}'"
     
     def test_plan_reviewer_rejects_stages_without_targets(self, base_state):
         """plan_reviewer_node should reject stages without targets."""
@@ -722,6 +775,9 @@ class TestBusinessLogic:
         
         assert result["last_plan_review_verdict"] == "needs_revision", \
             "Should reject stage without targets"
+        feedback = result.get("planner_feedback", "")
+        assert "Stage 's1' has no targets" in feedback, \
+            f"Feedback should call out the offending stage, got '{feedback}'"
     
     def test_execution_validator_returns_verdict_from_llm(self, base_state):
         """execution_validator_node should return the LLM's verdict."""
