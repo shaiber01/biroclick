@@ -36,3 +36,18 @@ Thumbs.db
 *.bak
 
 .history/
+
+
+
+process_test_reviews.py
+temp_prompt.md
+.test_review_progress.json
+
+
+
+
+
+
+
+
+
