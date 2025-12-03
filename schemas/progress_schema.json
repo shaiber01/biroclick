@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "progress_schema.json",
   "title": "Paper Reproduction Progress",
-  "description": "Schema for _artifact_progress.json files (artifact naming: underscore prefix indicates output-only)",
+  "description": "Schema for _artifact_progress.json files (artifact naming: underscore prefix indicates output-only). NOTE: Figure comparisons are stored at the top-level in ReproState (not per-stage) for simpler management. Each FigureComparison has a stage_id field to link it to its source stage. See schemas/state.py for the canonical FigureComparison type.",
   
   "type": "object",
   "required": ["paper_id", "stages"],
@@ -138,8 +138,6 @@
         }
       }
     },
-    
-    "NOTE": "Figure comparisons are stored at the top-level in ReproState (not per-stage) for simpler management. Each FigureComparison has a stage_id field to link it to its source stage. See schemas/state.py for the canonical FigureComparison type.",
     
     "output": {
       "type": "object",

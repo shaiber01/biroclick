@@ -331,15 +331,31 @@ class TestFullWorkflowSuccess:
     """Test complete successful workflow from paper to report."""
     
     def test_planning_phase(self, base_state):
-        """Test planning phase produces valid plan."""
+        """Test planning phase produces valid plan with all required fields."""
         with patch("src.agents.planning.call_agent_with_metrics") as mock_llm:
             mock_llm.return_value = MockResponseFactory.planner_response()
             
             result = plan_node(base_state)
             
             assert "plan" in result
-            assert result["plan"]["stages"]
-            assert len(result["plan"]["stages"]) >= 1
+            plan = result["plan"]
+            
+            # Verify plan structure
+            assert plan["paper_id"] == "test_gold_nanorod"
+            assert len(plan["stages"]) == 2
+            assert plan["stages"][0]["stage_id"] == "stage_0_materials"
+            assert plan["stages"][0]["stage_type"] == "MATERIAL_VALIDATION"
+            
+            # Verify progress initialization
+            assert "progress" in result
+            assert len(result["progress"]["stages"]) == 2
+            assert result["progress"]["stages"][0]["status"] == "not_started"
+            
+            # Verify extracted parameters
+            assert "extracted_parameters" in result
+            assert len(result["extracted_parameters"]) == 2
+            assert result["extracted_parameters"][0]["name"] == "length"
+            
             assert result["workflow_phase"] == "planning"
     
     def test_plan_review_approve(self, base_state):
@@ -353,6 +369,9 @@ class TestFullWorkflowSuccess:
             result = plan_reviewer_node(base_state)
             
             assert result["last_plan_review_verdict"] == "approve"
+            assert result["workflow_phase"] == "plan_review"
+            # Verify no unexpected issues
+            assert "planner_feedback" not in result or not result["planner_feedback"]
     
     def test_stage_selection(self, base_state):
         """Test stage selection picks first available stage."""
@@ -364,9 +383,8 @@ class TestFullWorkflowSuccess:
         
         # Should select first stage with no dependencies
         selected = result.get("current_stage_id")
-        assert selected is not None, "Should select a stage"
-        # First stage should be materials (no deps) or first available
-        assert selected in ["stage_0_materials", "stage_1_extinction"]
+        assert selected == "stage_0_materials", "Should select materials stage first (no deps)"
+        assert result.get("current_stage_type") == "MATERIAL_VALIDATION"
     
     def test_full_single_stage_workflow(self, base_state):
         """Test complete single-stage workflow."""
@@ -375,6 +393,7 @@ class TestFullWorkflowSuccess:
         base_state["plan"] = plan
         base_state["progress"] = deepcopy(plan["progress"])
         base_state["current_stage_id"] = "stage_1_extinction"
+        base_state["current_stage_type"] = "SINGLE_STRUCTURE"
         base_state["validated_materials"] = [{"material_id": "gold", "path": "/materials/Au.csv"}]
         
         # Mock execution result (simulates code_runner)
@@ -396,6 +415,9 @@ class TestFullWorkflowSuccess:
             result = simulation_designer_node(base_state)
             base_state.update(result)
             workflow_states.append(("design", result))
+            
+            assert "design_description" in result
+            assert result["design_description"]["geometry_definitions"][0]["material"] == "gold"
         
         # Design review
         with patch("src.agents.design.call_agent_with_metrics") as mock_llm:
@@ -414,6 +436,8 @@ class TestFullWorkflowSuccess:
             workflow_states.append(("code_gen", result))
         
         assert "code" in base_state
+        assert "import meep" in base_state["code"]
+        assert "STUB" not in base_state["code"]
         
         # Code review
         with patch("src.agents.code.call_agent_with_metrics") as mock_llm:
@@ -423,6 +447,29 @@ class TestFullWorkflowSuccess:
             workflow_states.append(("code_review", result))
         
         assert base_state["last_code_review_verdict"] == "approve"
+
+
+class TestPlannerFailureModes:
+    """Test planner failure modes and edge cases."""
+
+    def test_missing_paper_text(self, base_state):
+        """Test planner handles missing paper text."""
+        base_state["paper_text"] = ""
+        
+        result = plan_node(base_state)
+        
+        assert result["ask_user_trigger"] == "missing_paper_text"
+        assert result["awaiting_user_input"] is True
+        assert len(result["pending_user_questions"]) > 0
+    
+    def test_short_paper_text(self, base_state):
+        """Test planner handles insufficient paper text."""
+        base_state["paper_text"] = "Too short"
+        
+        result = plan_node(base_state)
+        
+        assert result["ask_user_trigger"] == "missing_paper_text"
+        assert "too short" in result["pending_user_questions"][0].lower()
 
 
 class TestWorkflowWithRevisions:
@@ -441,23 +488,30 @@ class TestWorkflowWithRevisions:
             mock_llm.return_value = MockResponseFactory.designer_response()
             result = simulation_designer_node(base_state)
             base_state.update(result)
+            
+            # Verify no feedback initially
+            assert "reviewer_feedback" not in base_state or not base_state["reviewer_feedback"]
         
         # Review rejects
+        feedback_msg = "Add PML thickness"
         with patch("src.agents.design.call_agent_with_metrics") as mock_llm:
-            mock_llm.return_value = MockResponseFactory.reviewer_needs_revision("Add PML thickness")
+            mock_llm.return_value = MockResponseFactory.reviewer_needs_revision(feedback_msg)
             result = design_reviewer_node(base_state)
             base_state.update(result)
         
         assert base_state["last_design_review_verdict"] == "needs_revision"
         assert base_state["design_revision_count"] == 1
+        assert base_state["reviewer_feedback"] == feedback_msg
         
         # Second design attempt with feedback
-        assert "reviewer_feedback" in base_state
-        
         with patch("src.agents.design.call_agent_with_metrics") as mock_llm:
             mock_llm.return_value = MockResponseFactory.designer_response()
             result = simulation_designer_node(base_state)
             base_state.update(result)
+            
+            # In a real scenario, we'd check that the feedback influenced the design
+            # Here we just verify the flow continued
+            assert result["workflow_phase"] == "design"
         
         # Review approves
         with patch("src.agents.design.call_agent_with_metrics") as mock_llm:
@@ -610,3 +664,143 @@ class TestSupervisorDecisions:
         # Note: actual verdict depends on implementation
         assert "supervisor_verdict" in result
 
+
+class TestPlanReviewerValidation:
+    """Test plan reviewer validation logic."""
+
+    def test_circular_dependency_detection(self, base_state):
+        """Test detection of circular dependencies in plan."""
+        plan = MockResponseFactory.planner_response()
+        # Create circular dependency: stage0 -> stage1 -> stage0
+        plan["stages"][0]["dependencies"] = ["stage_1_extinction"]
+        plan["stages"][1]["dependencies"] = ["stage_0_materials"]
+        
+        base_state["plan"] = plan
+        
+        result = plan_reviewer_node(base_state)
+        
+        assert result["last_plan_review_verdict"] == "needs_revision"
+        assert "circular" in result.get("planner_feedback", "").lower()
+    
+    def test_empty_stage_targets(self, base_state):
+        """Test detection of stages without targets."""
+        plan = MockResponseFactory.planner_response()
+        plan["stages"][0]["targets"] = []
+        
+        base_state["plan"] = plan
+        
+        result = plan_reviewer_node(base_state)
+        
+        assert result["last_plan_review_verdict"] == "needs_revision"
+        assert "no targets" in result.get("planner_feedback", "").lower()
+
+
+class TestCodeGeneratorValidation:
+    """Test code generator validation logic."""
+
+    def test_missing_validated_materials(self, base_state):
+        """Test code generation fails if materials not validated (for non-material stages)."""
+        base_state["current_stage_id"] = "stage_1_extinction"
+        base_state["current_stage_type"] = "SINGLE_STRUCTURE"
+        # Make design description long enough (>50 chars)
+        base_state["design_description"] = "Valid design " * 5
+        base_state["validated_materials"] = [] # Empty
+        
+        result = code_generator_node(base_state)
+        
+        assert "run_error" in result
+        assert "validated_materials is empty" in result["run_error"]
+    
+    def test_stub_detection_triggers_revision(self, base_state):
+        """Test that stub markers in generated code trigger revision."""
+        base_state["current_stage_id"] = "stage_1_extinction"
+        base_state["current_stage_type"] = "SINGLE_STRUCTURE"
+        base_state["validated_materials"] = [{"material_id": "gold"}]
+        # Make design description long enough (>50 chars)
+        base_state["design_description"] = "Valid design " * 5
+        
+        # Mock response with stub
+        stub_response = MockResponseFactory.code_generator_response()
+        stub_response["code"] = "# TODO: Implement simulation"
+        
+        with patch("src.agents.code.call_agent_with_metrics") as mock_llm:
+            mock_llm.return_value = stub_response
+            
+            result = code_generator_node(base_state)
+            
+            assert "reviewer_feedback" in result
+            assert "stub" in result["reviewer_feedback"].lower()
+            assert result["code_revision_count"] == 1
+
+
+class TestExecutionValidatorLogic:
+    """Test execution validator logic."""
+
+    def test_successful_execution_metrics(self, base_state):
+        """Test validation of successful execution with metrics."""
+        base_state["current_stage_id"] = "stage_1_extinction"
+        base_state["execution_result"] = {
+            "success": True,
+            "output_files": ["data.csv"],
+            "runtime_seconds": 45.5,
+        }
+        
+        # Mock pass response
+        with patch("src.agents.execution.call_agent_with_metrics") as mock_llm:
+            mock_llm.return_value = MockResponseFactory.execution_validator_pass()
+            
+            result = execution_validator_node(base_state)
+            
+            assert result["execution_verdict"] == "pass"
+            # execution_duration is not returned by validator, but is in base_state
+            # assert result["execution_duration"] == 45.5 
+
+    def test_execution_failure_handling(self, base_state):
+        """Test validation of failed execution."""
+        base_state["current_stage_id"] = "stage_1_extinction"
+        base_state["execution_result"] = {
+            "success": False,
+            "error": "Timeout",
+            "output_files": [],
+        }
+        
+        # Mock fail response
+        with patch("src.agents.execution.call_agent_with_metrics") as mock_llm:
+            mock_llm.return_value = MockResponseFactory.execution_validator_fail("Timeout occurred")
+            
+            result = execution_validator_node(base_state)
+            
+            assert result["execution_verdict"] == "fail"
+            assert result["execution_failure_count"] == 1
+            # The error might not be in the result dict if not explicitly added by validator
+            # assert "Timeout" in str(result) 
+
+
+class TestResultsAnalyzerLogic:
+    """Test results analyzer logic."""
+
+    def test_analysis_classification_update(self, base_state, tmp_path):
+        """Test that analysis results update the state correctly."""
+        base_state["current_stage_id"] = "stage_1_extinction"
+        
+        # Create dummy output file
+        d = tmp_path / "data.csv"
+        d.write_text("header\n1,2")
+        
+        base_state["stage_outputs"] = {"files": [str(d)]}
+        # Add target to plan for reference
+        plan = MockResponseFactory.planner_response()
+        base_state["plan"] = plan
+        
+        # Patch get_images so the LLM is called
+        with patch("src.agents.analysis.call_agent_with_metrics") as mock_llm, \
+             patch("src.agents.analysis.get_images_for_analyzer", return_value=["img.png"]):
+            
+            mock_llm.return_value = MockResponseFactory.analyzer_response("EXCELLENT_MATCH")
+            
+            result = results_analyzer_node(base_state)
+            
+            assert result["analysis_overall_classification"] == "EXCELLENT_MATCH"
+            assert "figure_comparisons" in result
+            assert len(result["figure_comparisons"]) > 0
+            assert result["workflow_phase"] == "analysis"

@@ -36,18 +36,19 @@ class TestWithContextCheck:
         assert result["pending_user_questions"] == ["Context overflow"]
 
     @patch("src.agents.base.check_context_or_escalate")
-    def test_merges_state_updates_and_continues(self, mock_check):
-        """Should merge context updates into state and continue."""
+    def test_updates_state_before_calling_func(self, mock_check):
+        """Should update state with context changes BEFORE calling function."""
         mock_check.return_value = {"metrics": {"tokens": 100}}
         
         @with_context_check("test_node")
         def test_node(state):
-            # Verify state has been updated
-            assert state.get("metrics") == {"tokens": 100}
+            # Verify state has been updated inside function
+            if state.get("metrics") != {"tokens": 100}:
+                raise ValueError("State was not updated before function call")
             return {"result": "success"}
         
+        # This should NOT raise ValueError
         result = test_node({"original": "data"})
-        
         assert result["result"] == "success"
 
     @patch("src.agents.base.check_context_or_escalate")
@@ -245,6 +246,8 @@ class TestCreateLlmErrorAutoApprove:
         assert len(result["issues"]) == 1
         assert result["issues"][0]["severity"] == "minor"
         assert "API timeout" in result["issues"][0]["description"]
+        # Verify summary format
+        assert result["summary"] == "Code Reviewer auto-approved due to LLM unavailability"
 
     def test_creates_pass_verdict_for_validators(self):
         """Should create response with pass verdict for validators."""
@@ -253,6 +256,7 @@ class TestCreateLlmErrorAutoApprove:
         result = create_llm_error_auto_approve("execution_validator", error, default_verdict="pass")
         
         assert result["verdict"] == "pass"
+        assert result["summary"] == "Execution Validator auto-passed due to LLM unavailability"
 
     def test_truncates_long_error_message(self):
         """Should truncate long error messages."""
@@ -260,7 +264,16 @@ class TestCreateLlmErrorAutoApprove:
         
         result = create_llm_error_auto_approve("test_agent", long_error, error_truncate_len=50)
         
-        assert len(result["issues"][0]["description"]) < 100
+        # The description contains "LLM review unavailable: " + error_msg
+        description = result["issues"][0]["description"]
+        assert len(description) < 100 # "LLM review unavailable: " is ~24 chars + 50 = 74
+        assert "..." not in description # Python slice doesn't add ellipses automatically, unless implemented manually
+        # Wait, the implementation is just str(error)[:len].
+        # So if str(error) is "A"*500, slicing to 50 gives "A"*50.
+        # The test should verify it matches exactly the sliced version.
+        
+        expected_msg = ("A" * 500)[:50]
+        assert expected_msg in description
 
     def test_includes_summary(self):
         """Should include summary message."""

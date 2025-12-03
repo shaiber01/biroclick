@@ -8,13 +8,13 @@ If a test fails here, it's a BUG IN THE CODE, not the test.
 """
 
 import pytest
+import json
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 # Import the REAL modules
-from src.prompts import build_agent_prompt, load_prompt_file, PROMPTS_DIR
+from src.prompts import build_agent_prompt, PROMPTS_DIR
 from schemas.state import create_initial_state
-
 
 # ═══════════════════════════════════════════════════════════════════════
 # Test: All Required Prompt Files Exist
@@ -36,7 +36,7 @@ class TestPromptFilesExist:
         "physics_sanity",
         "results_analyzer",
         "supervisor",
-        "report_generator",  # This one is missing!
+        "report_generator",
     ]
     
     @pytest.mark.parametrize("agent_name", AGENTS_REQUIRING_PROMPTS)
@@ -111,7 +111,6 @@ class TestSchemaFilesExist:
     @pytest.mark.parametrize("schema_name", REQUIRED_SCHEMAS)
     def test_schema_is_valid_json(self, schema_name):
         """Each schema must be valid JSON."""
-        import json
         schema_file = self.SCHEMAS_DIR / schema_name
         if schema_file.exists():
             try:
@@ -124,7 +123,7 @@ class TestSchemaFilesExist:
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# Test: Node Functions Can Be Called
+# Test: Node Functions Can Be Called and Return Valid State Updates
 # ═══════════════════════════════════════════════════════════════════════
 
 class TestNodeFunctionsCallable:
@@ -132,14 +131,24 @@ class TestNodeFunctionsCallable:
     Test that node functions can be called with minimal state.
     
     Only mock the LLM call itself - everything else runs for real.
+    These tests verify:
+    1. The node doesn't crash.
+    2. The node returns a dict with expected state keys.
     """
     
     @pytest.fixture
     def minimal_state(self):
         """Create minimal valid state for testing."""
+        # Paper text must be > 100 chars for planner
+        paper_text = """
+        We study the optical properties of gold nanorods with length 100nm and diameter 40nm. 
+        Using FDTD simulations, we calculate extinction spectra and near-field enhancement patterns. 
+        The localized surface plasmon resonance is observed at 650nm wavelength.
+        This text is long enough to pass the planner's validation check which requires 100 characters.
+        """
         state = create_initial_state(
             paper_id="test_paper",
-            paper_text="We study gold nanorods with length 100nm and diameter 40nm.",
+            paper_text=paper_text,
             paper_domain="plasmonics"
         )
         # Add plan so nodes don't fail on missing plan
@@ -172,8 +181,10 @@ class TestNodeFunctionsCallable:
         def _mock(*args, **kwargs):
             agent = kwargs.get("agent_name", "unknown")
             # Return minimal valid response for each agent type
-            if "reviewer" in agent or "validator" in agent:
+            if "reviewer" in agent:
                 return {"verdict": "approve", "issues": [], "summary": "OK"}
+            elif "validator" in agent:
+                return {"verdict": "pass", "issues": [], "summary": "OK"}
             elif agent == "planner":
                 return {
                     "paper_id": "test",
@@ -183,60 +194,150 @@ class TestNodeFunctionsCallable:
                     "extracted_parameters": [],
                 }
             elif agent == "supervisor":
-                return {"verdict": "ok_continue", "feedback": "OK"}
+                return {"verdict": "ok_continue", "reasoning": "OK"}
+            elif agent == "report":
+                return {
+                    "executive_summary": {"overall_assessment": []},
+                    "conclusions": ["Done"]
+                }
+            elif agent == "physics_sanity":
+                return {"verdict": "pass", "reasoning": "Physics looks good"}
+            elif agent == "prompt_adaptor":
+                return {"adaptations": []}
             else:
                 return {}
         return _mock
     
-    def test_plan_node_builds_prompt_successfully(self, minimal_state, mock_llm_response):
-        """plan_node must be able to build its prompt without crashing."""
+    def test_plan_node_returns_valid_plan(self, minimal_state, mock_llm_response):
+        """plan_node must return a result containing a plan structure."""
         from src.agents.planning import plan_node
         
-        # Only mock the LLM call, not the prompt building
         with patch("src.agents.planning.call_agent_with_metrics", mock_llm_response):
-            # This will fail if prompt file is missing or has errors
             result = plan_node(minimal_state)
+            
             assert result is not None
+            assert "plan" in result, "plan_node must return 'plan' key"
+            assert "workflow_phase" in result
+            assert result["workflow_phase"] == "planning"
+            
+            plan = result["plan"]
+            assert "stages" in plan, "Plan must have stages"
+            assert "targets" in plan, "Plan must have targets"
     
-    def test_supervisor_node_builds_prompt_successfully(self, minimal_state, mock_llm_response):
-        """supervisor_node must be able to build its prompt without crashing."""
+    def test_supervisor_node_returns_verdict(self, minimal_state, mock_llm_response):
+        """supervisor_node must return a supervisor_verdict."""
         from src.agents.supervision.supervisor import supervisor_node
         
         with patch("src.agents.supervision.supervisor.call_agent_with_metrics", mock_llm_response):
             result = supervisor_node(minimal_state)
+            
             assert result is not None
+            assert "supervisor_verdict" in result, "supervisor_node must return supervisor_verdict"
+            assert "supervisor_feedback" in result
+            assert result["workflow_phase"] == "supervision"
     
-    def test_report_node_builds_prompt_successfully(self, minimal_state, mock_llm_response):
-        """generate_report_node must be able to build its prompt without crashing."""
+    def test_report_node_completes_workflow(self, minimal_state, mock_llm_response):
+        """generate_report_node must mark workflow as complete."""
         from src.agents.reporting import generate_report_node
         
-        # This test WILL FAIL because report_generator_agent.md is missing!
         with patch("src.agents.reporting.call_agent_with_metrics", mock_llm_response):
             result = generate_report_node(minimal_state)
+            
             assert result is not None
+            assert "workflow_complete" in result, "generate_report_node must set workflow_complete"
+            assert result["workflow_complete"] is True
+            assert "executive_summary" in result
+            assert "workflow_phase" in result
+            assert result["workflow_phase"] == "reporting"
     
-    def test_design_node_builds_prompt_successfully(self, minimal_state, mock_llm_response):
-        """simulation_designer_node must be able to build its prompt."""
+    def test_design_node_returns_design(self, minimal_state, mock_llm_response):
+        """simulation_designer_node must return design_description."""
         from src.agents.design import simulation_designer_node
         
         minimal_state["current_stage_id"] = "stage_0"
         minimal_state["current_stage_type"] = "MATERIAL_VALIDATION"
         
-        with patch("src.agents.design.call_agent_with_metrics", mock_llm_response):
+        # Mock design response
+        design_response = {
+            "design": {
+                "stage_id": "stage_0",
+                "geometry": [],
+                "simulation_parameters": {}
+            },
+            "explanation": "Designed"
+        }
+        
+        with patch("src.agents.design.call_agent_with_metrics", return_value=design_response):
             result = simulation_designer_node(minimal_state)
+            
             assert result is not None
+            assert "design_description" in result, "simulation_designer_node must return design_description"
+            assert result["design_description"]["design"]["stage_id"] == "stage_0"
+            assert "workflow_phase" in result
     
-    def test_code_generator_builds_prompt_successfully(self, minimal_state, mock_llm_response):
-        """code_generator_node must be able to build its prompt."""
+    def test_code_generator_returns_code(self, minimal_state, mock_llm_response):
+        """code_generator_node must return generated code."""
         from src.agents.code import code_generator_node
         
         minimal_state["current_stage_id"] = "stage_0"
         minimal_state["current_stage_type"] = "MATERIAL_VALIDATION"
-        minimal_state["current_design"] = {"stage_id": "stage_0", "geometry": []}
+        # Must provide design_description for code generator
+        minimal_state["design_description"] = {
+            "design": {"geometry": [], "simulation_parameters": {}},
+            "explanation": "Valid design"
+        }
         
-        with patch("src.agents.code.call_agent_with_metrics", mock_llm_response):
+        code_response = {
+            "code": "import meep as mp\nprint('hello')",
+            "explanation": "Generated"
+        }
+        
+        with patch("src.agents.code.call_agent_with_metrics", return_value=code_response):
             result = code_generator_node(minimal_state)
+            
             assert result is not None
+            assert "code" in result, "code_generator_node must return code"
+            assert "import meep" in result["code"]
+            assert "workflow_phase" in result
+
+    def test_execution_validator_node_returns_verdict(self, minimal_state, mock_llm_response):
+        """execution_validator_node must return execution_verdict."""
+        from src.agents.execution import execution_validator_node
+        
+        minimal_state["current_stage_id"] = "stage_0"
+        minimal_state["stage_outputs"] = {"stdout": "run complete", "stderr": ""}
+        
+        with patch("src.agents.execution.call_agent_with_metrics", mock_llm_response):
+            result = execution_validator_node(minimal_state)
+            
+            assert result is not None
+            assert "execution_verdict" in result
+            assert result["execution_verdict"] in ["pass", "fail"]
+    
+    def test_physics_sanity_node_returns_verdict(self, minimal_state, mock_llm_response):
+        """physics_sanity_node must return physics_verdict."""
+        from src.agents.execution import physics_sanity_node
+        
+        minimal_state["current_stage_id"] = "stage_0"
+        minimal_state["stage_outputs"] = {"files": ["spectrum.csv"]}
+        
+        with patch("src.agents.execution.call_agent_with_metrics", mock_llm_response):
+            result = physics_sanity_node(minimal_state)
+            
+            assert result is not None
+            assert "physics_verdict" in result
+            assert result["physics_verdict"] in ["pass", "fail", "warning", "design_flaw"]
+            
+    def test_prompt_adaptor_node_returns_adaptations(self, minimal_state, mock_llm_response):
+        """prompt_adaptor_node must return prompt_adaptations."""
+        from src.agents.planning import adapt_prompts_node
+        
+        with patch("src.agents.planning.call_agent_with_metrics", mock_llm_response):
+            result = adapt_prompts_node(minimal_state)
+            
+            assert result is not None
+            assert "prompt_adaptations" in result
+            assert isinstance(result["prompt_adaptations"], list)
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -248,7 +349,6 @@ class TestRoutingReturnsValidValues:
     
     def test_supervisor_verdicts_match_routing(self):
         """Supervisor schema verdicts must match what routing expects."""
-        import json
         
         # Load schema to see what verdicts supervisor can return
         schema_file = Path(__file__).parent.parent / "schemas" / "supervisor_output_schema.json"
@@ -283,17 +383,14 @@ class TestRoutingReturnsValidValues:
         for reviewer in ["plan_reviewer", "design_reviewer", "code_reviewer"]:
             schema_file = Path(__file__).parent.parent / "schemas" / f"{reviewer}_output_schema.json"
             if schema_file.exists():
-                import json
                 with open(schema_file) as f:
                     schema = json.load(f)
                 
                 if "verdict" in schema.get("properties", {}):
                     schema_verdicts = set(schema["properties"]["verdict"].get("enum", []))
                     missing = expected_verdicts - schema_verdicts
-                    extra = schema_verdicts - expected_verdicts
                     
                     assert not missing, f"{reviewer} schema missing verdicts: {missing}"
-                    # Extra verdicts are OK as long as routing has a default
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -445,7 +542,7 @@ class TestFileValidation:
         return state
     
     def test_results_analyzer_handles_missing_files(self, analysis_state):
-        """results_analyzer should handle missing output files gracefully."""
+        """results_analyzer should detect missing files and FAIL execution."""
         from src.agents.analysis import results_analyzer_node
         
         # Set up stage_outputs with non-existent files
@@ -455,20 +552,21 @@ class TestFileValidation:
             "stderr": "",
         }
         
-        # Mock only the LLM call, let file validation run
-        mock_response = {
-            "overall_classification": "PARTIAL_MATCH",
-            "figure_comparisons": [],
-            "summary": "Analysis complete",
-        }
-        
-        with patch("src.agents.analysis.call_agent_with_metrics", return_value=mock_response):
+        # We don't expect an LLM call because validation should fail first
+        # But we mock it just in case it proceeds (which would be a bug)
+        with patch("src.agents.analysis.call_agent_with_metrics") as mock_llm:
             result = results_analyzer_node(analysis_state)
-        
-        # Should detect the file validation issue
-        # Either returns error or proceeds with empty files
-        assert result is not None
-        assert "workflow_phase" in result
+            
+            # IMPORTANT: Should FAIL if files are missing
+            assert result.get("execution_verdict") == "fail", \
+                "Analysis should mark execution as failed when output files are missing"
+            
+            assert result.get("run_error") is not None, \
+                "Should provide a run_error explanation"
+            
+            error_msg = result["run_error"].lower()
+            assert "exist on disk" in error_msg or "missing" in error_msg, \
+                f"Error message should mention missing files, got: {error_msg}"
     
     def test_results_analyzer_with_real_csv_file(self, analysis_state, tmp_path):
         """results_analyzer should successfully process real CSV files."""
@@ -511,9 +609,12 @@ class TestFileValidation:
         # Should successfully process the file
         assert result is not None
         assert result.get("workflow_phase") == "analysis"
+        # Should have populated analysis_summary
+        assert "analysis_summary" in result
+        assert result["analysis_summary"]["totals"]["targets"] > 0
     
     def test_results_analyzer_empty_stage_outputs(self, analysis_state):
-        """results_analyzer should handle empty stage_outputs."""
+        """results_analyzer should handle empty stage_outputs by failing."""
         from src.agents.analysis import results_analyzer_node
         
         # Empty stage_outputs - common error case
@@ -521,10 +622,10 @@ class TestFileValidation:
         
         result = results_analyzer_node(analysis_state)
         
-        # Should return error state, not crash
-        assert result is not None
-        # Should indicate failure
-        assert result.get("execution_verdict") == "fail" or "error" in str(result).lower()
+        # Should return error state
+        assert result.get("execution_verdict") == "fail", \
+            "Should fail if stage_outputs is empty"
+        assert result.get("run_error") is not None
 
 
 class TestMaterialValidation:
@@ -532,7 +633,6 @@ class TestMaterialValidation:
     
     def test_material_file_resolution(self):
         """Material files should resolve correctly from the materials directory."""
-        from pathlib import Path
         
         materials_dir = Path(__file__).parent.parent / "materials"
         
@@ -540,7 +640,6 @@ class TestMaterialValidation:
         expected_materials = [
             "palik_gold.csv",
             "palik_silver.csv",
-            "johnson_christy_gold.csv",
         ]
         
         existing = []
@@ -560,7 +659,5 @@ class TestMaterialValidation:
             f"Expected at least one of: {expected_materials}"
         )
 
-
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
-

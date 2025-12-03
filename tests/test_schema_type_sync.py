@@ -3,20 +3,26 @@ Test that JSON schemas and Python types in state.py remain synchronized.
 
 This test catches drift between:
 - JSON schemas (source of truth for data structures)
-- Python TypedDicts in state.py (used at runtime)
+- Python TypedDicts in schemas/state.py (used at runtime)
+- Generated types in schemas/generated_types.py
 
-If this test fails, it means state.py needs to be updated to match the schemas,
-or vice versa if the schema change was intentional.
+If this test fails, it means state.py or generated_types.py needs to be updated 
+to match the schemas, or vice versa if the schema change was intentional.
 """
 
 import json
 import os
 import sys
+import inspect
 from pathlib import Path
+from typing import Set, Dict, Any
 
 # Add project root to path
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
+
+from schemas import generated_types
+from schemas import state as state_module
 
 SCHEMAS_DIR = PROJECT_ROOT / "schemas"
 
@@ -27,7 +33,7 @@ def load_schema(name: str) -> dict:
         return json.load(f)
 
 
-def get_typed_dict_keys(typed_dict_class) -> set:
+def get_typed_dict_keys(typed_dict_class) -> Set[str]:
     """Get keys from a TypedDict class, handling forward references."""
     # TypedDict stores annotations in __annotations__
     if hasattr(typed_dict_class, '__annotations__'):
@@ -35,7 +41,7 @@ def get_typed_dict_keys(typed_dict_class) -> set:
     return set()
 
 
-def get_repro_state_keys() -> set:
+def get_repro_state_keys() -> Set[str]:
     """Get ReproState keys by reading the source file directly.
     
     This avoids import issues with forward references like HardwareConfig.
@@ -67,17 +73,12 @@ def get_repro_state_keys() -> set:
     return keys
 
 
-def get_schema_properties(schema: dict) -> set:
+def get_schema_properties(schema: dict) -> Set[str]:
     """Extract property names from a JSON schema."""
     props = set()
     if "properties" in schema:
         props.update(schema["properties"].keys())
     return props
-
-
-def get_schema_required(schema: dict) -> set:
-    """Extract required field names from a JSON schema."""
-    return set(schema.get("required", []))
 
 
 class TestSchemaTypeSync:
@@ -178,14 +179,19 @@ class TestSchemaTypeSync:
             "needed for digitized data enforcement"
         )
     
-    def test_plan_reviewer_has_digitized_data_check(self):
-        """Plan reviewer output should have digitized_data_check field."""
+    def test_plan_reviewer_has_digitized_data_checklist(self):
+        """Plan reviewer output should have digitized_data checklist item."""
         schema = load_schema("plan_reviewer_output_schema.json")
         props = get_schema_properties(schema)
-        assert "digitized_data_check" in props, (
-            "Plan reviewer output missing 'digitized_data_check' field"
+        
+        # It should be nested in checklist_results
+        assert "checklist_results" in props, "Plan reviewer output missing 'checklist_results'"
+        
+        checklist_props = schema["properties"]["checklist_results"]["properties"]
+        assert "digitized_data" in checklist_props, (
+            "Plan reviewer checklist missing 'digitized_data' section"
         )
-    
+
     def test_state_has_validated_materials(self):
         """ReproState should have validated_materials field for material handoff."""
         keys = get_repro_state_keys()
@@ -224,6 +230,49 @@ class TestSchemaTypeSync:
         )
 
 
+class TestGeneratedTypesSync:
+    """Tests that schemas/generated_types.py is in sync with schemas/*.json."""
+
+    def test_generated_types_has_all_agent_outputs(self):
+        """Verify that all agent output schemas have corresponding generated types."""
+        # map schema filename to expected class name
+        # This naming convention is standard for datamodel-code-generator based on 'title' in schema
+        expected_types = {
+            "plan_reviewer_output_schema.json": "PlanReviewerAgentOutput",
+            "design_reviewer_output_schema.json": "DesignReviewerAgentOutput",
+            "code_reviewer_output_schema.json": "CodeReviewerAgentOutput",
+            "supervisor_output_schema.json": "SupervisorAgentOutput",
+            "execution_validator_output_schema.json": "ExecutionValidatorAgentOutput",
+            "results_analyzer_output_schema.json": "ResultsAnalyzerAgentOutput",
+            "comparison_validator_output_schema.json": "ComparisonValidatorAgentOutput",
+            "physics_sanity_output_schema.json": "PhysicsSanityAgentOutput",
+        }
+
+        for schema_file, class_name in expected_types.items():
+            # Check if the class exists in generated_types module
+            assert hasattr(generated_types, class_name), (
+                f"Missing generated type '{class_name}' for schema '{schema_file}'. "
+                "Run 'python scripts/generate_types.py' to regenerate."
+            )
+
+    def test_generated_type_fields_match_schema(self):
+        """Verify that fields in generated types match the schema required fields."""
+        # Example check for PlanReviewerAgentOutput
+        if not hasattr(generated_types, "PlanReviewerAgentOutput"):
+            # Skip if type is missing (test_generated_types_has_all_agent_outputs will catch it)
+            return
+
+        plan_reviewer_type = getattr(generated_types, "PlanReviewerAgentOutput")
+        keys = get_typed_dict_keys(plan_reviewer_type)
+        
+        schema = load_schema("plan_reviewer_output_schema.json")
+        required = set(schema.get("required", []))
+        
+        # All required fields in schema should be in TypedDict
+        missing = required - keys
+        assert not missing, f"PlanReviewerAgentOutput missing required fields: {missing}"
+
+
 class TestSchemaConsistency:
     """Tests for internal consistency of schemas."""
     
@@ -252,8 +301,6 @@ class TestSchemaConsistency:
                     f"{schema_file.name} has empty 'required' array"
                 )
 
-
 if __name__ == "__main__":
     import pytest
     pytest.main([__file__, "-v"])
-

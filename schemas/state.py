@@ -1149,6 +1149,12 @@ class RuntimeConfig(TypedDict):
     max_execution_failures: int  # Default: 2 - limit simulation runtime crashes before escalating
     max_physics_failures: int  # Default: 2 - limit physics sanity failures before escalating
 
+    # Revision limits (configurable)
+    max_replans: int
+    max_design_revisions: int
+    max_code_revisions: int
+    max_analysis_revisions: int
+
 
 # Default runtime configuration
 DEFAULT_RUNTIME_CONFIG = RuntimeConfig(
@@ -1166,7 +1172,11 @@ DEFAULT_RUNTIME_CONFIG = RuntimeConfig(
     debug_max_stages=2,
     max_backtracks=2,
     max_execution_failures=2,
-    max_physics_failures=2
+    max_physics_failures=2,
+    max_replans=2,
+    max_design_revisions=3,
+    max_code_revisions=3,
+    max_analysis_revisions=2
 )
 
 # Debug mode runtime configuration preset
@@ -1185,7 +1195,11 @@ DEBUG_RUNTIME_CONFIG = RuntimeConfig(
     debug_max_stages=2,
     max_backtracks=1,
     max_execution_failures=1,
-    max_physics_failures=1
+    max_physics_failures=1,
+    max_replans=1,
+    max_design_revisions=1,
+    max_code_revisions=1,
+    max_analysis_revisions=1
 )
 
 
