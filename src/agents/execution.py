@@ -113,10 +113,12 @@ def execution_validator_node(state: ReproState) -> dict:
             logger.error(f"Execution validator LLM call failed: {e}")
             agent_output = create_llm_error_auto_approve("execution_validator", e, default_verdict="pass")
             agent_output["stage_id"] = stage_id
+            agent_output["summary"] = f"Auto-approved due to LLM error: {e}"
     
     result: Dict[str, Any] = {
         "workflow_phase": "execution_validation",
         "execution_verdict": agent_output["verdict"],
+        "execution_feedback": agent_output.get("summary", "No feedback provided."),
     }
     
     # Increment failure counters if verdict is "fail"
@@ -196,10 +198,12 @@ def physics_sanity_node(state: ReproState) -> dict:
         agent_output = create_llm_error_auto_approve("physics_sanity", e, default_verdict="pass")
         agent_output["stage_id"] = stage_id
         agent_output["backtrack_suggestion"] = {"suggest_backtrack": False}
+        agent_output["summary"] = f"Auto-approved due to LLM error: {e}"
     
     result: Dict[str, Any] = {
         "workflow_phase": "physics_validation",
         "physics_verdict": agent_output["verdict"],
+        "physics_feedback": agent_output.get("summary", "No feedback provided."),
     }
     
     # Increment failure counters based on verdict type
@@ -213,6 +217,7 @@ def physics_sanity_node(state: ReproState) -> dict:
             state, "design_revision_count", "max_design_revisions", MAX_DESIGN_REVISIONS
         )
         result["design_revision_count"] = new_count
+        result["design_feedback"] = agent_output.get("summary", "Design flaw detected.")
     
     # If agent suggests backtrack, populate backtrack_suggestion for supervisor
     if agent_output.get("backtrack_suggestion", {}).get("suggest_backtrack"):

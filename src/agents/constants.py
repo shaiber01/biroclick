@@ -45,9 +45,9 @@ class AnalysisClassification(str, Enum):
     POOR_MATCH = "POOR_MATCH"
     FAILED = "FAILED"
     NO_TARGETS = "NO_TARGETS"
-    PENDING_VALIDATION = "pending_validation"
-    MATCH = "match"
-    MISMATCH = "mismatch"
+    PENDING_VALIDATION = "PENDING_VALIDATION"
+    MATCH = "MATCH"
+    MISMATCH = "MISMATCH"
 
 
 class WorkflowPhase(str, Enum):

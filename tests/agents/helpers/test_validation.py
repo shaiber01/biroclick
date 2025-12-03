@@ -1,6 +1,7 @@
 """Unit tests for src/agents/helpers/validation.py"""
 
 import pytest
+from src.agents.constants import AnalysisClassification
 
 from src.agents.helpers.validation import (
     classify_percent_error,
@@ -24,18 +25,18 @@ class TestClassifyPercentError:
 
     def test_excellent_match(self):
         """Should classify small errors as match."""
-        assert classify_percent_error(0.5) == "match"
-        assert classify_percent_error(1.0) == "match"
+        assert classify_percent_error(0.5) == AnalysisClassification.MATCH
+        assert classify_percent_error(1.0) == AnalysisClassification.MATCH
 
     def test_acceptable_partial_match(self):
         """Should classify moderate errors as partial_match."""
-        assert classify_percent_error(3.0) == "partial_match"
-        assert classify_percent_error(5.0) == "partial_match"
+        assert classify_percent_error(3.0) == AnalysisClassification.PARTIAL_MATCH
+        assert classify_percent_error(5.0) == AnalysisClassification.PARTIAL_MATCH
 
     def test_large_error_mismatch(self):
         """Should classify large errors as mismatch."""
-        assert classify_percent_error(15.0) == "mismatch"
-        assert classify_percent_error(50.0) == "mismatch"
+        assert classify_percent_error(15.0) == AnalysisClassification.MISMATCH
+        assert classify_percent_error(50.0) == AnalysisClassification.MISMATCH
 
 
 class TestClassificationFromMetrics:
@@ -44,41 +45,41 @@ class TestClassificationFromMetrics:
     def test_no_reference_returns_pending(self):
         """Should return pending_validation without reference data."""
         result = classification_from_metrics({}, "excellent", has_reference=False)
-        assert result == "pending_validation"
+        assert result == AnalysisClassification.PENDING_VALIDATION
 
     def test_qualitative_always_matches(self):
         """Should return match for qualitative precision requirement."""
         result = classification_from_metrics({}, "qualitative", has_reference=True)
-        assert result == "match"
+        assert result == AnalysisClassification.MATCH
 
     def test_uses_peak_position_error(self):
         """Should classify based on peak position error."""
         metrics = {"peak_position_error_percent": 1.0}
         result = classification_from_metrics(metrics, "excellent", has_reference=True)
-        assert result == "match"
+        assert result == AnalysisClassification.MATCH
         
         metrics = {"peak_position_error_percent": 20.0}
         result = classification_from_metrics(metrics, "excellent", has_reference=True)
-        assert result == "mismatch"
+        assert result == AnalysisClassification.MISMATCH
 
     def test_falls_back_to_rmse(self):
         """Should use RMSE when peak error not available."""
         metrics = {"normalized_rmse_percent": 3.0}
         result = classification_from_metrics(metrics, "excellent", has_reference=True)
-        assert result == "match"
+        assert result == AnalysisClassification.MATCH
         
         metrics = {"normalized_rmse_percent": 10.0}
         result = classification_from_metrics(metrics, "excellent", has_reference=True)
-        assert result == "partial_match"
+        assert result == AnalysisClassification.PARTIAL_MATCH
         
         metrics = {"normalized_rmse_percent": 20.0}
         result = classification_from_metrics(metrics, "excellent", has_reference=True)
-        assert result == "mismatch"
+        assert result == AnalysisClassification.MISMATCH
 
     def test_returns_pending_without_metrics(self):
         """Should return pending when no metrics available."""
         result = classification_from_metrics({}, "excellent", has_reference=True)
-        assert result == "pending_validation"
+        assert result == AnalysisClassification.PENDING_VALIDATION
 
 
 class TestEvaluateValidationCriteria:
@@ -371,7 +372,7 @@ class TestValidateAnalysisReports:
         """Should detect when classification doesn't match metrics."""
         reports = [{
             "target_figure": "Fig1",
-            "status": "match",
+            "status": AnalysisClassification.MATCH,
             "quantitative_metrics": {"peak_position_error_percent": 20.0},
             "precision_requirement": "excellent",
         }]
@@ -393,10 +394,10 @@ class TestBreakdownComparisonClassifications:
     def test_categorizes_classifications(self):
         """Should categorize classifications correctly."""
         comparisons = [
-            {"figure_id": "Fig1", "classification": "match"},
-            {"figure_id": "Fig2", "classification": "partial_match"},
-            {"figure_id": "Fig3", "classification": "mismatch"},
-            {"figure_id": "Fig4", "classification": "pending_validation"},
+            {"figure_id": "Fig1", "classification": AnalysisClassification.MATCH},
+            {"figure_id": "Fig2", "classification": AnalysisClassification.PARTIAL_MATCH},
+            {"figure_id": "Fig3", "classification": AnalysisClassification.MISMATCH},
+            {"figure_id": "Fig4", "classification": AnalysisClassification.PENDING_VALIDATION},
         ]
         
         result = breakdown_comparison_classifications(comparisons)

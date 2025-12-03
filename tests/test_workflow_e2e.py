@@ -17,6 +17,7 @@ from unittest.mock import patch, MagicMock
 from copy import deepcopy
 
 from schemas.state import create_initial_state, ReproState
+from src.agents.constants import AnalysisClassification
 from src.agents import (
     plan_node,
     plan_reviewer_node,
@@ -240,14 +241,14 @@ np.savetxt("extinction.csv", [[400, 0.5], [700, 1.0], [900, 0.3]])
         }
     
     @staticmethod
-    def analyzer_response(classification: str = "ACCEPTABLE_MATCH") -> dict:
+    def analyzer_response(classification: str = AnalysisClassification.ACCEPTABLE_MATCH) -> dict:
         """Create a results analyzer response."""
         return {
             "overall_classification": classification,
             "figure_comparisons": [
                 {
                     "figure_id": "Fig1",
-                    "classification": "match" if classification == "EXCELLENT_MATCH" else "partial_match",
+                    "classification": AnalysisClassification.MATCH if classification == AnalysisClassification.EXCELLENT_MATCH else AnalysisClassification.PARTIAL_MATCH,
                     "shape_comparison": ["Peak position within 5%"],
                     "reason_for_difference": "Minor numerical differences",
                 }
@@ -635,7 +636,7 @@ class TestSupervisorDecisions:
         plan = MockResponseFactory.planner_response()
         base_state["plan"] = plan
         base_state["progress"] = deepcopy(plan["progress"])
-        base_state["analysis_overall_classification"] = "ACCEPTABLE_MATCH"
+        base_state["analysis_overall_classification"] = AnalysisClassification.ACCEPTABLE_MATCH
         
         with patch("src.agents.supervision.supervisor.call_agent_with_metrics") as mock_llm:
             mock_llm.return_value = MockResponseFactory.supervisor_continue()
@@ -796,11 +797,11 @@ class TestResultsAnalyzerLogic:
         with patch("src.agents.analysis.call_agent_with_metrics") as mock_llm, \
              patch("src.agents.analysis.get_images_for_analyzer", return_value=["img.png"]):
             
-            mock_llm.return_value = MockResponseFactory.analyzer_response("EXCELLENT_MATCH")
+            mock_llm.return_value = MockResponseFactory.analyzer_response(AnalysisClassification.EXCELLENT_MATCH)
             
             result = results_analyzer_node(base_state)
             
-            assert result["analysis_overall_classification"] == "EXCELLENT_MATCH"
+            assert result["analysis_overall_classification"] == AnalysisClassification.EXCELLENT_MATCH
             assert "figure_comparisons" in result
             assert len(result["figure_comparisons"]) > 0
             assert result["workflow_phase"] == "analysis"

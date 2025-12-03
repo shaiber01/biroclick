@@ -93,6 +93,31 @@ class TestWithContextCheck:
         assert my_documented_function.__name__ == "my_documented_function"
         assert "docstring" in my_documented_function.__doc__
 
+    @patch("src.agents.base.check_context_or_escalate")
+    def test_supports_kwargs_passing(self, mock_check):
+        """Should support passing additional arguments to the decorated function."""
+        # This test currently FAILS because the wrapper signature is fixed to (state)
+        mock_check.return_value = None
+        
+        @with_context_check("test_kwargs")
+        def node_with_args(state, extra_arg=None):
+            return {"extra": extra_arg}
+        
+        result = node_with_args({}, extra_arg="working")
+        assert result["extra"] == "working"
+
+    @patch("src.agents.base.check_context_or_escalate")
+    def test_propagates_exceptions(self, mock_check):
+        """Should propagate exceptions from the decorated function."""
+        mock_check.return_value = None
+        
+        @with_context_check("test_error")
+        def error_node(state):
+            raise ValueError("Boom")
+            
+        with pytest.raises(ValueError, match="Boom"):
+            error_node({})
+
 
 class TestBoundedIncrement:
     """Tests for bounded_increment function."""
@@ -111,6 +136,20 @@ class TestBoundedIncrement:
     def test_handles_zero_max(self):
         """Should handle zero max value."""
         assert bounded_increment(0, 0) == 0
+
+    def test_handles_negative_current(self):
+        """Should handle negative current values correctly."""
+        assert bounded_increment(-1, 5) == 0
+        assert bounded_increment(-5, 5) == -4
+
+    def test_behavior_when_current_exceeds_max(self):
+        """
+        Verify behavior when current is already above max.
+        Current implementation: min(current + 1, max)
+        If current=10, max=5 -> min(11, 5) = 5.
+        This clamps the value down to max immediately.
+        """
+        assert bounded_increment(10, 5) == 5
 
 
 class TestParseUserResponse:
@@ -139,6 +178,18 @@ class TestParseUserResponse:
         responses = {"Question?": "yes"}
         assert parse_user_response(responses) == "YES"
 
+    def test_strips_whitespace(self):
+        """Should strip leading/trailing whitespace."""
+        # This test currently FAILS if implementation doesn't strip
+        responses = {"Q1": "  yes  "}
+        assert parse_user_response(responses) == "YES"
+
+    def test_handles_none_responses(self):
+        """Should handle None values gracefully."""
+        # If dictionary values can be None (e.g. failed to capture), it should handle it
+        responses = {"Q1": None}
+        assert parse_user_response(responses) == "NONE"
+
 
 class TestCheckKeywords:
     """Tests for check_keywords function."""
@@ -160,9 +211,19 @@ class TestCheckKeywords:
         """Should return False for empty response."""
         assert check_keywords("", ["APPROVE"]) is False
 
-    def test_partial_match(self):
-        """Should match partial words."""
-        assert check_keywords("APPROVED BY USER", ["APPROVE"]) is True
+    def test_partial_match_handling(self):
+        """Should NOT match false positives where keyword is part of another word."""
+        # Example: 'DISAPPROVE' should NOT match 'APPROVE' if we want strict keyword matching.
+        # But the current implementation uses `in` operator which is substring search.
+        # This test asserts correct behavior for semantic keywords.
+        # If 'APPROVE' is a command, 'DISAPPROVE' should not trigger it.
+        assert check_keywords("DISAPPROVE", ["APPROVE"]) is False
+        assert check_keywords("SOMEOTHERWORD", ["WORD"]) is False
+
+    def test_case_insensitivity(self):
+        """Should handle mixed case input robustly."""
+        # The docstring says input 'should be uppercased', but robust code should handle it.
+        assert check_keywords("approve", ["APPROVE"]) is True
 
 
 class TestIncrementCounterWithMax:
@@ -232,6 +293,20 @@ class TestIncrementCounterWithMax:
         assert new_count == 1
         assert was_incremented is True
 
+    def test_behavior_when_exceeding_max(self):
+        """Should not increment and should preserve value if already above max."""
+        state = {
+            "code_revision_count": 10,
+            "runtime_config": {"max_code_revisions": 5},
+        }
+        
+        new_count, was_incremented = increment_counter_with_max(
+            state, "code_revision_count", "max_code_revisions", 3
+        )
+        
+        assert new_count == 10
+        assert was_incremented is False
+
 
 class TestCreateLlmErrorAutoApprove:
     """Tests for create_llm_error_auto_approve function."""
@@ -264,14 +339,8 @@ class TestCreateLlmErrorAutoApprove:
         
         result = create_llm_error_auto_approve("test_agent", long_error, error_truncate_len=50)
         
-        # The description contains "LLM review unavailable: " + error_msg
         description = result["issues"][0]["description"]
-        assert len(description) < 100 # "LLM review unavailable: " is ~24 chars + 50 = 74
-        assert "..." not in description # Python slice doesn't add ellipses automatically, unless implemented manually
-        # Wait, the implementation is just str(error)[:len].
-        # So if str(error) is "A"*500, slicing to 50 gives "A"*50.
-        # The test should verify it matches exactly the sliced version.
-        
+        assert len(description) < 100
         expected_msg = ("A" * 500)[:50]
         assert expected_msg in description
 
@@ -283,6 +352,12 @@ class TestCreateLlmErrorAutoApprove:
         
         assert "Code Reviewer" in result["summary"]
         assert "auto-approve" in result["summary"].lower()
+
+    def test_handles_empty_error_message(self):
+        """Should handle empty exception message."""
+        error = Exception("")
+        result = create_llm_error_auto_approve("agent", error)
+        assert "LLM review unavailable: " in result["issues"][0]["description"]
 
 
 class TestCreateLlmErrorEscalation:
@@ -322,7 +397,6 @@ class TestCreateLlmErrorEscalation:
         result = create_llm_error_escalation("code_generator", "code_generation", error)
         
         assert "Code Generator" in result["pending_user_questions"][0]
-        # Check full message structure
         assert "Code Generator failed: Error. Please check API and try again." in result["pending_user_questions"][0]
 
 
@@ -365,4 +439,3 @@ class TestCreateLlmErrorFallback:
         result = handler(error)
         
         assert len(result["test_feedback"]) < 50
-

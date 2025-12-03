@@ -54,6 +54,7 @@ from .helpers.validation import (
     breakdown_comparison_classifications,
 )
 from .helpers.metrics import record_discrepancy
+from src.agents.constants import AnalysisClassification
 
 # Project root for path resolution
 PROJECT_ROOT = Path(__file__).parent.parent.parent
@@ -108,7 +109,7 @@ def results_analyzer_node(state: ReproState) -> dict:
         return {
             "workflow_phase": "analysis",
             "analysis_summary": {
-                "overall_classification": "NO_TARGETS",
+                "overall_classification": AnalysisClassification.NO_TARGETS,
                 "unresolved_targets": [],
                 "summary": "Analysis skipped: Stage has no targets defined.",
                 "totals": {
@@ -119,7 +120,7 @@ def results_analyzer_node(state: ReproState) -> dict:
                     "mismatch": 0,
                 },
             },
-            "analysis_overall_classification": "NO_TARGETS",
+            "analysis_overall_classification": AnalysisClassification.NO_TARGETS,
             "analysis_result_reports": [],
             "figure_comparisons": [],
             "supervisor_verdict": "ok_continue",
@@ -131,7 +132,7 @@ def results_analyzer_node(state: ReproState) -> dict:
     base_output_dir = PROJECT_ROOT / "outputs" / paper_id / current_stage_id
     
     # Use stage_outputs.files from state
-    stage_outputs = state.get("stage_outputs", {})
+    stage_outputs = state.get("stage_outputs") or {}
     output_files = stage_outputs.get("files", [])
     
     existing_files: List[str] = []
@@ -201,7 +202,7 @@ def results_analyzer_node(state: ReproState) -> dict:
     if stage_info and stage_info.get("target_details"):
         target_meta_list = stage_info["target_details"]
     else:
-        target_meta_list = state.get("plan", {}).get("targets", [])
+        target_meta_list = (state.get("plan") or {}).get("targets", [])
     plan_targets_map = {target.get("figure_id"): target for target in target_meta_list}
     
     matched_targets: List[str] = []
@@ -310,17 +311,17 @@ def results_analyzer_node(state: ReproState) -> dict:
                 precision_requirement,
                 has_reference,
             )
-            if classification_label == "match":
+            if classification_label == AnalysisClassification.MATCH:
                 matched_targets.append(target_id)
-            elif classification_label in {"pending_validation", "partial_match"}:
+            elif classification_label in {AnalysisClassification.PENDING_VALIDATION, AnalysisClassification.PARTIAL_MATCH}:
                 pending_targets.append(target_id)
             else:
                 mismatch_targets.append(target_id)
             
             error_percent = quantitative_metrics.get("peak_position_error_percent")
-            if error_percent is not None and classification_label in {"partial_match", "mismatch"}:
-                discrepancy_class = "acceptable" if classification_label == "partial_match" else "investigate"
-                blocking = classification_label == "mismatch"
+            if error_percent is not None and classification_label in {AnalysisClassification.PARTIAL_MATCH, AnalysisClassification.MISMATCH}:
+                discrepancy_class = "acceptable" if classification_label == AnalysisClassification.PARTIAL_MATCH else "investigate"
+                blocking = classification_label == AnalysisClassification.MISMATCH
                 paper_peak = quantitative_metrics.get("peak_position_paper")
                 sim_peak = quantitative_metrics.get("peak_position_sim")
                 stage_discrepancies.append(
@@ -344,8 +345,8 @@ def results_analyzer_node(state: ReproState) -> dict:
             "paper": figure_meta.get("description", target_id),
             "reproduction": matched_file or "Not generated",
             "status": (
-                "✅ Match" if has_output and classification_label == "match"
-                else "⚠️ Pending" if classification_label in {"pending_validation", "partial_match"}
+                "✅ Match" if has_output and classification_label == AnalysisClassification.MATCH
+                else "⚠️ Pending" if classification_label in {AnalysisClassification.PENDING_VALIDATION, AnalysisClassification.PARTIAL_MATCH}
                 else "❌ Missing"
             ),
         }]
@@ -355,7 +356,7 @@ def results_analyzer_node(state: ReproState) -> dict:
                 "paper": digitized_path,
                 "reproduction": matched_file or "Not generated",
                 "status": (
-                    "Pending review" if classification_label not in {"missing_output", "mismatch"}
+                    "Pending review" if classification_label not in {"missing_output", AnalysisClassification.MISMATCH}
                     else "❌ Missing"
                 ),
             })
@@ -384,7 +385,7 @@ def results_analyzer_node(state: ReproState) -> dict:
         if criteria_failures:
             if target_id not in mismatch_targets:
                 mismatch_targets.append(target_id)
-            classification_label = "mismatch"
+            classification_label = AnalysisClassification.MISMATCH
             for failure in criteria_failures:
                 sim_value_display = json.dumps(quantitative_metrics) if quantitative_metrics else "N/A"
                 stage_discrepancies.append(
@@ -422,15 +423,15 @@ def results_analyzer_node(state: ReproState) -> dict:
     mismatch_count = len(mismatch_targets)
     
     if total_targets == 0:
-        overall_classification = "NO_TARGETS"
+        overall_classification = AnalysisClassification.NO_TARGETS
     elif missing_count > 0 or mismatch_count > 0:
-        overall_classification = "POOR_MATCH"
+        overall_classification = AnalysisClassification.POOR_MATCH
     elif pending_count > 0:
-        overall_classification = "PARTIAL_MATCH"
+        overall_classification = AnalysisClassification.PARTIAL_MATCH
     elif len(matched_targets) == total_targets:
-        overall_classification = "EXCELLENT_MATCH"
+        overall_classification = AnalysisClassification.EXCELLENT_MATCH
     else:
-        overall_classification = "ACCEPTABLE_MATCH"
+        overall_classification = AnalysisClassification.ACCEPTABLE_MATCH
     
     summary_notes_parts = []
     if state.get("analysis_feedback"):

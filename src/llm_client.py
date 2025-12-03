@@ -584,7 +584,7 @@ def build_user_content_for_analyzer(state: Dict[str, Any]) -> str:
         parts.append(f"## Simulation Outputs\n```json\n{json.dumps(outputs, indent=2, default=str)}\n```")
     
     # Target figures for this stage
-    plan = state.get("plan", {})
+    plan = state.get("plan") or {}
     stages = plan.get("stages", [])
     current_stage = next((s for s in stages if s.get("stage_id") == stage_id), None)
     
@@ -616,7 +616,7 @@ def get_images_for_analyzer(state: Dict[str, Any]) -> List[Path]:
             images.append(Path(path))
     
     # Simulation output plots
-    stage_outputs = state.get("stage_outputs", {})
+    stage_outputs = state.get("stage_outputs") or {}
     output_files = stage_outputs.get("files", [])
     
     for file_path in output_files:

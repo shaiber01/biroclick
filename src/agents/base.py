@@ -8,6 +8,7 @@ Provides common patterns used across all agent node implementations:
 """
 
 import logging
+import re
 from functools import wraps
 from pathlib import Path
 from typing import Callable, Dict, Any, Optional, Tuple
@@ -34,15 +35,15 @@ def with_context_check(node_name: str):
         def simulation_designer_node(state: ReproState) -> dict:
             # ... actual logic, no boilerplate ...
     """
-    def decorator(func: Callable[[ReproState], Dict[str, Any]]):
+    def decorator(func: Callable[..., Dict[str, Any]]):
         @wraps(func)
-        def wrapper(state: ReproState) -> Dict[str, Any]:
+        def wrapper(state: ReproState, *args, **kwargs) -> Dict[str, Any]:
             escalation = check_context_or_escalate(state, node_name)
             if escalation is not None:
                 if escalation.get("awaiting_user_input"):
                     return escalation
                 state = {**state, **escalation}
-            return func(state)
+            return func(state, *args, **kwargs)
         return wrapper
     return decorator
 
@@ -74,7 +75,7 @@ def parse_user_response(user_responses: Dict[str, str]) -> str:
     if not user_responses:
         return ""
     last_response = list(user_responses.values())[-1]
-    return last_response.upper() if isinstance(last_response, str) else str(last_response)
+    return str(last_response).strip().upper()
 
 
 def check_keywords(response: str, keywords: list) -> bool:
@@ -82,13 +83,26 @@ def check_keywords(response: str, keywords: list) -> bool:
     Check if response contains any of the keywords.
     
     Args:
-        response: Response string to check (should be uppercased)
+        response: Response string to check (case-insensitive)
         keywords: List of keywords to look for
         
     Returns:
-        True if any keyword is found
+        True if any keyword is found as a distinct word
     """
-    return any(kw in response for kw in keywords)
+    if not response or not keywords:
+        return False
+        
+    response_upper = response.upper()
+    
+    for kw in keywords:
+        if not kw:
+            continue
+        # Match whole word only to avoid false positives (e.g. "DISAPPROVE" matching "APPROVE")
+        pattern = rf"\b{re.escape(kw)}\b"
+        if re.search(pattern, response_upper):
+            return True
+            
+    return False
 
 
 def increment_counter_with_max(
@@ -160,6 +174,9 @@ def create_llm_error_auto_approve(
             logger.error(f"Code reviewer LLM call failed: {e}")
             agent_output = create_llm_error_auto_approve("code_reviewer", e)
     """
+    verb_suffix = "d" if default_verdict.endswith("e") else "ed"
+    # If default_verdict is "pass", -> "passed". If "approve" -> "approved".
+    
     _logger.warning(f"{agent_name} LLM call failed: {error}. Auto-{default_verdict}ing.")
     
     error_msg = str(error)[:error_truncate_len]
@@ -168,7 +185,7 @@ def create_llm_error_auto_approve(
     return {
         "verdict": default_verdict,
         "issues": [{"severity": "minor", "description": f"LLM review unavailable: {error_msg}"}],
-        "summary": f"{agent_label} auto-{default_verdict}ed due to LLM unavailability",
+        "summary": f"{agent_label} auto-{default_verdict}{verb_suffix} due to LLM unavailability",
     }
 
 
@@ -258,4 +275,3 @@ def create_llm_error_fallback(
         }
     
     return handler
-

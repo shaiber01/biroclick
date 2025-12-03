@@ -179,15 +179,23 @@ def design_reviewer_node(state: ReproState) -> dict:
         logger.error(f"Design reviewer LLM call failed: {e}")
         agent_output = create_llm_error_auto_approve("design_reviewer", e)
     
+    # Handle missing verdict
+    verdict = agent_output.get("verdict")
+    if not verdict:
+        logger.warning("Design reviewer output missing 'verdict'. Defaulting to 'approve'.")
+        verdict = "approve"
+        # Ensure agent_output has verdict for consistency if we reuse it
+        agent_output["verdict"] = verdict
+        
     result: Dict[str, Any] = {
         "workflow_phase": "design_review",
-        "last_design_review_verdict": agent_output["verdict"],
+        "last_design_review_verdict": verdict,
         "reviewer_issues": agent_output.get("issues", []),
         "design_revision_count": state.get("design_revision_count", 0),  # Always include current count
     }
     
     # Increment design revision counter if needs_revision
-    if agent_output["verdict"] == "needs_revision":
+    if verdict == "needs_revision":
         new_count, _ = increment_counter_with_max(
             state, "design_revision_count", "max_design_revisions", MAX_DESIGN_REVISIONS
         )

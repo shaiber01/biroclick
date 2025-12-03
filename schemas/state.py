@@ -2881,7 +2881,7 @@ def get_plan_stage(state: ReproState, stage_id: str) -> Optional[Dict[str, Any]]
         >>> expected_outputs = plan_stage.get("expected_outputs", [])
         >>> runtime_budget = plan_stage.get("runtime_budget_minutes", 30)
     """
-    plan = state.get("plan", {})
+    plan = state.get("plan") or {}
     stages = plan.get("stages", [])
     
     for stage in stages:

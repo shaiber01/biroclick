@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional, List, Tuple
 
 from schemas.state import ReproState, DISCREPANCY_THRESHOLDS
+from src.agents.constants import AnalysisClassification
 
 
 # Regex patterns for parsing validation criteria
@@ -23,10 +24,10 @@ def classify_percent_error(error_percent: float) -> str:
     """Classify error percentage into match/partial_match/mismatch."""
     thresholds = DISCREPANCY_THRESHOLDS["resonance_wavelength"]
     if error_percent <= thresholds["excellent"]:
-        return "match"
+        return AnalysisClassification.MATCH
     if error_percent <= thresholds["acceptable"]:
-        return "partial_match"
-    return "mismatch"
+        return AnalysisClassification.PARTIAL_MATCH
+    return AnalysisClassification.MISMATCH
 
 
 def classification_from_metrics(
@@ -47,11 +48,11 @@ def classification_from_metrics(
     """
     if not has_reference:
         if precision_requirement == "excellent":
-            return "pending_validation"
+            return AnalysisClassification.PENDING_VALIDATION
         # Without reference data, treat as qualitative-only pending further review
-        return "pending_validation"
+        return AnalysisClassification.PENDING_VALIDATION
     if precision_requirement == "qualitative":
-        return "match"
+        return AnalysisClassification.MATCH
     
     error_percent = metrics.get("peak_position_error_percent")
     if error_percent is not None:
@@ -60,12 +61,12 @@ def classification_from_metrics(
     rmse = metrics.get("normalized_rmse_percent")
     if rmse is not None:
         if rmse <= 5:
-            return "match"
+            return AnalysisClassification.MATCH
         if rmse <= 15:
-            return "partial_match"
-        return "mismatch"
+            return AnalysisClassification.PARTIAL_MATCH
+        return AnalysisClassification.MISMATCH
     
-    return "pending_validation"
+    return AnalysisClassification.PENDING_VALIDATION
 
 
 def evaluate_validation_criteria(metrics: Dict[str, Any], criteria: List[str]) -> Tuple[bool, List[str]]:
@@ -209,7 +210,7 @@ def stage_comparisons_for_stage(state: ReproState, stage_id: Optional[str]) -> L
     if not stage_id:
         return []
     return [
-        comp for comp in state.get("figure_comparisons", [])
+        comp for comp in (state.get("figure_comparisons") or [])
         if comp.get("stage_id") == stage_id
     ]
 
@@ -219,7 +220,7 @@ def analysis_reports_for_stage(state: ReproState, stage_id: Optional[str]) -> Li
     if not stage_id:
         return []
     return [
-        report for report in state.get("analysis_result_reports", [])
+        report for report in (state.get("analysis_result_reports") or [])
         if report.get("stage_id") == stage_id
     ]
 
@@ -238,9 +239,12 @@ def validate_analysis_reports(reports: List[Dict[str, Any]]) -> List[str]:
             continue
         if error is not None:
             thresholds = DISCREPANCY_THRESHOLDS["resonance_wavelength"]
-            if status == "match" and error > thresholds["acceptable"]:
+            is_match = status == "match" or status == AnalysisClassification.MATCH
+            if is_match and error > thresholds["acceptable"]:
                 issues.append(f"{target}: classified as match but peak error {error:.2f}% > acceptable {thresholds['acceptable']}%.")
-            if status in {"pending_validation", "partial_match"} and error > thresholds["investigate"]:
+            
+            is_pending_or_partial = status in {"pending_validation", "partial_match", AnalysisClassification.PENDING_VALIDATION, AnalysisClassification.PARTIAL_MATCH}
+            if is_pending_or_partial and error > thresholds["investigate"]:
                 issues.append(f"{target}: error {error:.2f}% exceeds investigate threshold; classification should be 'mismatch'.")
         failures = report.get("criteria_failures") or []
         for failure in failures:
@@ -252,11 +256,23 @@ def breakdown_comparison_classifications(comparisons: List[Dict[str, Any]]) -> D
     """Summarize comparison classifications into missing/pending/match buckets."""
     breakdown: Dict[str, List[str]] = {"missing": [], "pending": [], "matches": []}
     for comp in comparisons:
-        classification = (comp.get("classification") or "").lower()
+        # Check raw classification and lower() version to handle both legacy and new formats
+        classification_raw = comp.get("classification") or ""
+        classification = classification_raw.lower()
         figure_id = comp.get("figure_id") or "unknown"
-        if classification in {"missing_output", "fail", "not_reproduced", "mismatch", "poor_match"}:
+        
+        missing_set = {
+            "missing_output", "fail", "not_reproduced", "mismatch", "poor_match",
+            AnalysisClassification.FAILED, AnalysisClassification.MISMATCH, AnalysisClassification.POOR_MATCH, AnalysisClassification.NO_TARGETS
+        }
+        pending_set = {
+            "pending_validation", "partial_match", "match_pending", "partial",
+            AnalysisClassification.PENDING_VALIDATION, AnalysisClassification.PARTIAL_MATCH
+        }
+        
+        if classification_raw in missing_set or classification in {s.lower() for s in missing_set if isinstance(s, str)}:
             breakdown["missing"].append(figure_id)
-        elif classification in {"pending_validation", "partial_match", "match_pending", "partial"}:
+        elif classification_raw in pending_set or classification in {s.lower() for s in pending_set if isinstance(s, str)}:
             breakdown["pending"].append(figure_id)
         else:
             breakdown["matches"].append(figure_id)

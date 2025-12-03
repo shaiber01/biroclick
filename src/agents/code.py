@@ -240,10 +240,15 @@ def code_generator_node(state: ReproState) -> dict:
             f"Generated code is stub or empty (stub={is_stub}, empty={is_empty}). "
             "Code generation must produce valid simulation code."
         )
+        # Calculate new revision count respecting max
+        new_count, _ = increment_counter_with_max(
+            state, "code_revision_count", "max_code_revisions", MAX_CODE_REVISIONS
+        )
+        
         result: Dict[str, Any] = {
             "workflow_phase": "code_generation",
             "code": generated_code,
-            "code_revision_count": state.get("code_revision_count", 0) + 1,
+            "code_revision_count": new_count,
             "reviewer_feedback": (
                 "ERROR: Generated code is empty or contains stub markers. "
                 "Code generation must produce valid Meep simulation code. "

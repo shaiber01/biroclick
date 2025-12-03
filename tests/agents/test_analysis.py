@@ -7,6 +7,7 @@ import json
 from unittest.mock import patch, MagicMock
 from pathlib import Path
 from src.agents.analysis import results_analyzer_node, comparison_validator_node, PROJECT_ROOT
+from src.agents.constants import AnalysisClassification
 
 # ═══════════════════════════════════════════════════════════════════════
 # Fixtures
@@ -59,7 +60,7 @@ class TestResultsAnalyzerNode:
         """Test successful analysis path with excellent match."""
         mock_check.return_value = None
         mock_prompt.return_value = "System Prompt"
-        mock_llm.return_value = {"overall_classification": "EXCELLENT_MATCH"}
+        mock_llm.return_value = {"overall_classification": AnalysisClassification.EXCELLENT_MATCH}
         mock_match.return_value = "output.csv"
         
         # Mock successful metric computation
@@ -80,7 +81,18 @@ class TestResultsAnalyzerNode:
             
             # Strict assertions
             assert result["workflow_phase"] == "analysis"
-            assert result["analysis_overall_classification"] == "EXCELLENT_MATCH"
+            assert result["analysis_overall_classification"] == AnalysisClassification.EXCELLENT_MATCH
+            
+            # Verify all top-level keys present
+            expected_keys = {
+                "workflow_phase", 
+                "analysis_summary", 
+                "analysis_overall_classification", 
+                "analysis_result_reports", 
+                "figure_comparisons", 
+                "analysis_feedback"
+            }
+            assert set(result.keys()) == expected_keys
             
             summary = result["analysis_summary"]
             assert summary["totals"]["matches"] == 1
@@ -92,8 +104,99 @@ class TestResultsAnalyzerNode:
             reports = result["analysis_result_reports"]
             assert len(reports) == 1
             assert reports[0]["target_figure"] == "Fig1"
-            assert reports[0]["status"] == "match"
+            assert reports[0]["status"] == AnalysisClassification.MATCH
             assert reports[0]["quantitative_metrics"]["peak_position_error_percent"] == 0.5
+            
+            # Verify comparisons structure
+            comparisons = result["figure_comparisons"]
+            assert len(comparisons) == 1
+            comp = comparisons[0]
+            assert comp["figure_id"] == "Fig1"
+            assert comp["classification"] == AnalysisClassification.MATCH
+            assert "comparison_table" in comp
+            assert len(comp["comparison_table"]) >= 1
+
+    def test_analyzer_stage_outputs_none(self, base_state):
+        """Test error when stage_outputs is explicitly None."""
+        base_state["stage_outputs"] = None
+        
+        result = results_analyzer_node(base_state)
+        
+        assert result["execution_verdict"] == "fail"
+        assert "Stage outputs are missing" in result["run_error"]
+        assert result["workflow_phase"] == "analysis"
+
+    def test_analyzer_plan_none(self, base_state):
+        """Test handling when plan is None (should default gracefully or fail safely)."""
+        base_state["plan"] = None
+        
+        # Should not crash, but might result in NO_TARGETS or proceed if figures exist
+        # If plan is None, get_plan_stage returns None.
+        # figures = ensure_stub_figures(state) -> checks paper_figures
+        # target_ids fallback to figures.
+        
+        with patch("pathlib.Path.exists", return_value=True), \
+             patch("pathlib.Path.is_file", return_value=True):
+            result = results_analyzer_node(base_state)
+        
+        assert result["workflow_phase"] == "analysis"
+        # If paper_figures are present in base_state (they are "Fig1"), it should try to analyze "Fig1"
+        # But it might fail to find output if stage_outputs["files"] is checked against empty expectations?
+        # match_output_file logic handles matching.
+        
+        # In base_state, stage_outputs has files.
+        # So it might actually proceed.
+        assert result["analysis_overall_classification"] in [
+            AnalysisClassification.NO_TARGETS,
+            AnalysisClassification.POOR_MATCH,
+            AnalysisClassification.PARTIAL_MATCH,
+            AnalysisClassification.ACCEPTABLE_MATCH,
+            AnalysisClassification.EXCELLENT_MATCH
+        ]
+
+    @patch("src.agents.analysis.build_agent_prompt")
+    @patch("src.agents.analysis.check_context_or_escalate")
+    @patch("src.agents.analysis.call_agent_with_metrics")
+    @patch("src.agents.analysis.load_numeric_series")
+    @patch("src.agents.analysis.quantitative_curve_metrics")
+    @patch("src.agents.analysis.match_output_file")
+    def test_analyzer_metrics_nan(
+        self, mock_match, mock_metrics, mock_load, mock_llm, mock_check, mock_prompt, base_state
+    ):
+        """Test handling of NaN metrics."""
+        mock_check.return_value = None
+        mock_prompt.return_value = "Prompt"
+        mock_match.return_value = "output.csv"
+        mock_load.return_value = (MagicMock(), MagicMock())
+        
+        # Mock metrics returning NaN
+        mock_metrics.return_value = {
+            "peak_position_error_percent": float("nan"),
+            "normalized_rmse_percent": float("nan")
+        }
+        
+        with patch("pathlib.Path.exists", return_value=True), \
+             patch("pathlib.Path.is_file", return_value=True):
+             
+            result = results_analyzer_node(base_state)
+            
+            # Should not crash. Classification might depend on how NaN is handled.
+            # Usually NaN comparison fails, so it might fall through to mismatch or pending.
+            
+            assert result["workflow_phase"] == "analysis"
+            report = result["analysis_result_reports"][0]
+            # Check if it's captured
+            metrics = report["quantitative_metrics"]
+            import math
+            assert math.isnan(metrics["peak_position_error_percent"])
+            
+            # Verify classification is robust
+            assert report["status"] in [
+                AnalysisClassification.MATCH,
+                AnalysisClassification.MISMATCH,
+                AnalysisClassification.PENDING_VALIDATION,
+                AnalysisClassification.PARTIAL_MATCH
+            ]
 
     def test_analyzer_missing_stage_id(self, base_state):
         """Test error when current_stage_id is missing."""
@@ -136,7 +239,7 @@ class TestResultsAnalyzerNode:
         
         result = results_analyzer_node(base_state)
         
-        assert result["analysis_overall_classification"] == "NO_TARGETS"
+        assert result["analysis_overall_classification"] == AnalysisClassification.NO_TARGETS
         assert result["supervisor_verdict"] == "ok_continue"
         assert result["analysis_summary"]["totals"]["targets"] == 0
 
@@ -257,7 +360,7 @@ class TestResultsAnalyzerNode:
         mock_images.return_value = ["fig1.png"]
         mock_user_content.return_value = "Analysis content"
         mock_call.return_value = {
-            "overall_classification": "ACCEPTABLE_MATCH",
+            "overall_classification": AnalysisClassification.ACCEPTABLE_MATCH,
             "summary": "Visual analysis complete",
             "figure_comparisons": []
         }
@@ -269,7 +372,7 @@ class TestResultsAnalyzerNode:
             
             mock_call.assert_called_once()
             assert result["workflow_phase"] == "analysis"
-            assert result["analysis_overall_classification"] == "ACCEPTABLE_MATCH"
+            assert result["analysis_overall_classification"] == AnalysisClassification.ACCEPTABLE_MATCH
 
     @patch("src.agents.analysis.call_agent_with_metrics")
     @patch("src.agents.analysis.get_images_for_analyzer")
@@ -297,7 +400,11 @@ class TestResultsAnalyzerNode:
             # If metrics are empty, classification might be "missing_output" if match failed?
             # Here match succeeded, metrics empty -> classification might be 'pending_validation' (no ref) or 'match' if qualitative
             # Assuming qualitative because precision is 'acceptable' and no ref data in mock
-            assert result["analysis_overall_classification"] in ["ACCEPTABLE_MATCH", "PARTIAL_MATCH", "EXCELLENT_MATCH"]
+            assert result["analysis_overall_classification"] in [
+                AnalysisClassification.ACCEPTABLE_MATCH,
+                AnalysisClassification.PARTIAL_MATCH,
+                AnalysisClassification.EXCELLENT_MATCH
+            ]
 
     @patch("src.agents.analysis.check_context_or_escalate", return_value=None)
     @patch("src.agents.analysis.build_agent_prompt", return_value="prompt")
@@ -364,10 +471,10 @@ class TestComparisonValidatorNode:
     def test_validator_approve(self, mock_check, base_state):
         """Test approval when all comparisons exist and match."""
         base_state["analysis_result_reports"] = [
-            {"stage_id": "stage_1_sim", "target_figure": "Fig1", "status": "match"}
+            {"stage_id": "stage_1_sim", "target_figure": "Fig1", "status": AnalysisClassification.MATCH}
         ]
         base_state["figure_comparisons"] = [
-            {"stage_id": "stage_1_sim", "figure_id": "Fig1", "classification": "match"}
+            {"stage_id": "stage_1_sim", "figure_id": "Fig1", "classification": AnalysisClassification.MATCH}
         ]
         
         result = comparison_validator_node(base_state)
@@ -375,6 +482,20 @@ class TestComparisonValidatorNode:
         assert result["comparison_verdict"] == "approve"
         assert result["analysis_feedback"] is None
         assert "All required comparisons present" in result["comparison_feedback"]
+
+    @patch("src.agents.analysis.check_context_or_escalate", return_value=None)
+    def test_validator_analysis_reports_none(self, mock_check, base_state):
+        """Test validation when analysis_result_reports is None."""
+        base_state["analysis_result_reports"] = None
+        base_state["figure_comparisons"] = [
+            {"stage_id": "stage_1_sim", "figure_id": "Fig1", "classification": AnalysisClassification.MATCH}
+        ]
+        
+        # Should handle None gracefully or fail safely
+        result = comparison_validator_node(base_state)
+        
+        assert result["comparison_verdict"] == "needs_revision"
+        assert "Missing quantitative reports" in result["comparison_feedback"]
 
     @patch("src.agents.analysis.check_context_or_escalate", return_value=None)
     def test_validator_missing_comparison(self, mock_check, base_state):
@@ -390,7 +511,7 @@ class TestComparisonValidatorNode:
     def test_validator_missing_quantitative_data(self, mock_check, base_state):
         """Test rejection when quantitative reports are missing."""
         base_state["figure_comparisons"] = [
-            {"stage_id": "stage_1_sim", "figure_id": "Fig1", "classification": "match"}
+            {"stage_id": "stage_1_sim", "figure_id": "Fig1", "classification": AnalysisClassification.MATCH}
         ]
         base_state["analysis_result_reports"] = [] # Missing reports
         
@@ -458,10 +579,10 @@ class TestComparisonValidatorNode:
     def test_needs_revision_when_pending_checks(self, mock_check, base_state):
         """Should need revision when comparisons are pending."""
         base_state["figure_comparisons"] = [
-            {"stage_id": "stage_1_sim", "figure_id": "Fig1", "classification": "pending_validation"}
+            {"stage_id": "stage_1_sim", "figure_id": "Fig1", "classification": AnalysisClassification.PENDING_VALIDATION}
         ]
         base_state["analysis_result_reports"] = [
-            {"stage_id": "stage_1_sim", "target_figure": "Fig1", "status": "pending_validation"}
+            {"stage_id": "stage_1_sim", "target_figure": "Fig1", "status": AnalysisClassification.PENDING_VALIDATION}
         ]
         
         result = comparison_validator_node(base_state)
@@ -473,13 +594,13 @@ class TestComparisonValidatorNode:
     def test_needs_revision_on_report_issues(self, mock_check, base_state):
         """Should need revision when analysis reports have validation issues."""
         base_state["figure_comparisons"] = [
-            {"stage_id": "stage_1_sim", "figure_id": "Fig1", "classification": "match"}
+            {"stage_id": "stage_1_sim", "figure_id": "Fig1", "classification": AnalysisClassification.MATCH}
         ]
         base_state["analysis_result_reports"] = [
             {
                 "stage_id": "stage_1_sim", 
                 "target_figure": "Fig1", 
-                "status": "match",
+                "status": AnalysisClassification.MATCH,
                 "quantitative_metrics": {"peak_position_error_percent": 10.0}, # High error for match
                 "precision_requirement": "acceptable"
             }
@@ -495,10 +616,10 @@ class TestComparisonValidatorNode:
     def test_clears_feedback_on_approve(self, mock_check, base_state):
         """Should clear analysis_feedback on approval."""
         base_state["analysis_result_reports"] = [
-            {"stage_id": "stage_1_sim", "target_figure": "Fig1", "status": "match"}
+            {"stage_id": "stage_1_sim", "target_figure": "Fig1", "status": AnalysisClassification.MATCH}
         ]
         base_state["figure_comparisons"] = [
-            {"stage_id": "stage_1_sim", "figure_id": "Fig1", "classification": "match"}
+            {"stage_id": "stage_1_sim", "figure_id": "Fig1", "classification": AnalysisClassification.MATCH}
         ]
         base_state["analysis_feedback"] = "Old feedback"
         
@@ -591,12 +712,12 @@ class TestComparisonValidatorNode:
         """Should approve when all required comparisons are present."""
         base_state["plan"]["stages"][0]["targets"] = ["Fig1", "Fig2"]
         base_state["figure_comparisons"] = [
-             {"stage_id": "stage_1_sim", "figure_id": "Fig1", "classification": "match"},
-             {"stage_id": "stage_1_sim", "figure_id": "Fig2", "classification": "match"}
+            {"stage_id": "stage_1_sim", "figure_id": "Fig1", "classification": AnalysisClassification.MATCH},
+            {"stage_id": "stage_1_sim", "figure_id": "Fig2", "classification": AnalysisClassification.MATCH}
         ]
         base_state["analysis_result_reports"] = [
-             {"stage_id": "stage_1_sim", "target_figure": "Fig1", "status": "match"},
-             {"stage_id": "stage_1_sim", "target_figure": "Fig2", "status": "match"}
+            {"stage_id": "stage_1_sim", "target_figure": "Fig1", "status": AnalysisClassification.MATCH},
+            {"stage_id": "stage_1_sim", "target_figure": "Fig2", "status": AnalysisClassification.MATCH}
         ]
         
         result = comparison_validator_node(base_state)
@@ -608,7 +729,7 @@ class TestComparisonValidatorNode:
         """Should need revision when comparisons are missing for some targets."""
         base_state["plan"]["stages"][0]["targets"] = ["Fig1", "Fig2"]
         base_state["figure_comparisons"] = [
-             {"stage_id": "stage_1_sim", "figure_id": "Fig1", "classification": "match"}
+            {"stage_id": "stage_1_sim", "figure_id": "Fig1", "classification": AnalysisClassification.MATCH}
         ]
         # Fig2 missing
         
@@ -622,11 +743,11 @@ class TestComparisonValidatorNode:
         """Should detect missing quantitative reports for targets."""
         base_state["plan"]["stages"][0]["targets"] = ["Fig1", "Fig2"]
         base_state["figure_comparisons"] = [
-             {"stage_id": "stage_1_sim", "figure_id": "Fig1", "classification": "match"},
-             {"stage_id": "stage_1_sim", "figure_id": "Fig2", "classification": "match"}
+            {"stage_id": "stage_1_sim", "figure_id": "Fig1", "classification": AnalysisClassification.MATCH},
+            {"stage_id": "stage_1_sim", "figure_id": "Fig2", "classification": AnalysisClassification.MATCH}
         ]
         base_state["analysis_result_reports"] = [
-             {"stage_id": "stage_1_sim", "target_figure": "Fig1", "status": "match"}
+            {"stage_id": "stage_1_sim", "target_figure": "Fig1", "status": AnalysisClassification.MATCH}
         ]
         # Fig2 report missing
         
@@ -642,10 +763,10 @@ class TestComparisonValidatorNode:
         base_state["plan"]["stages"][0]["target_details"] = [{"figure_id": "Fig1"}]
         
         base_state["figure_comparisons"] = [
-             {"stage_id": "stage_1_sim", "figure_id": "Fig1", "classification": "match"}
+            {"stage_id": "stage_1_sim", "figure_id": "Fig1", "classification": AnalysisClassification.MATCH}
         ]
         base_state["analysis_result_reports"] = [
-             {"stage_id": "stage_1_sim", "target_figure": "Fig1", "status": "match"}
+            {"stage_id": "stage_1_sim", "target_figure": "Fig1", "status": AnalysisClassification.MATCH}
         ]
         
         result = comparison_validator_node(base_state)
