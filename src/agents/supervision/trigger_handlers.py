@@ -48,6 +48,28 @@ def _archive_with_error_handling(
         result["archive_errors"] = archive_errors
 
 
+def _update_progress_with_error_handling(
+    state: ReproState,
+    result: Dict[str, Any],
+    stage_id: str,
+    status: str,
+    summary: Optional[str] = None,
+    invalidation_reason: Optional[str] = None,
+) -> None:
+    """Update progress stage status with error handling."""
+    try:
+        # Only pass kwargs that are provided (not None)
+        kwargs = {}
+        if summary is not None:
+            kwargs["summary"] = summary
+        if invalidation_reason is not None:
+            kwargs["invalidation_reason"] = invalidation_reason
+        update_progress_stage_status(state, stage_id, status, **kwargs)
+    except Exception as e:
+        logger.error(f"Failed to update progress for stage {stage_id}: {e}")
+        # Continue execution - progress update failure shouldn't block workflow
+
+
 def handle_material_checkpoint(
     state: ReproState,
     result: Dict[str, Any],
@@ -68,27 +90,9 @@ def handle_material_checkpoint(
     is_approval = check_keywords(response_text, APPROVAL_KEYWORDS)
     is_rejection = check_keywords(response_text, REJECTION_KEYWORDS)
     
-    if is_approval and not is_rejection:
-        result["supervisor_verdict"] = "ok_continue"
-        result["supervisor_feedback"] = "Material validation approved by user."
-        pending_materials = state.get("pending_validated_materials", [])
-        
-        if pending_materials:
-            result["validated_materials"] = pending_materials
-            result["pending_validated_materials"] = []
-        else:
-            result["supervisor_verdict"] = "ask_user"
-            result["pending_user_questions"] = [
-                "ERROR: No materials were extracted for validation. "
-                "Please specify materials manually using CHANGE_MATERIAL or CHANGE_DATABASE."
-            ]
-            return
-        
-        if current_stage_id:
-            _archive_with_error_handling(state, result, current_stage_id)
-            update_progress_stage_status(state, current_stage_id, "completed_success")
-    
-    elif "CHANGE_DATABASE" in response_text or (is_rejection and "DATABASE" in response_text):
+    # Check for CHANGE_DATABASE/CHANGE_MATERIAL FIRST (before approval)
+    # These take precedence even if approval keywords are present
+    if "CHANGE_DATABASE" in response_text or (is_rejection and "DATABASE" in response_text):
         result["supervisor_verdict"] = "replan_needed"
         result["planner_feedback"] = f"User rejected material validation and requested database change: {response_text}."
         if current_stage_id:
@@ -103,12 +107,35 @@ def handle_material_checkpoint(
         result["supervisor_verdict"] = "replan_needed"
         result["planner_feedback"] = f"User indicated wrong material: {response_text}. Please update plan."
         if current_stage_id:
-            update_progress_stage_status(
-                state, current_stage_id, "needs_rerun",
+            _update_progress_with_error_handling(
+                state, result, current_stage_id, "needs_rerun",
                 invalidation_reason="User rejected material"
             )
         result["pending_validated_materials"] = []
         result["validated_materials"] = []
+    
+    elif is_approval and not is_rejection:
+        result["supervisor_verdict"] = "ok_continue"
+        result["supervisor_feedback"] = "Material validation approved by user."
+        pending_materials = state.get("pending_validated_materials", [])
+        
+        if pending_materials:
+            result["validated_materials"] = pending_materials
+            result["pending_validated_materials"] = []
+        else:
+            result["supervisor_verdict"] = "ask_user"
+            result["pending_user_questions"] = [
+                "ERROR: No materials were extracted for validation. "
+                "Please specify materials manually using CHANGE_MATERIAL or CHANGE_DATABASE."
+            ]
+            # Set both material lists to empty even when error
+            result["validated_materials"] = []
+            result["pending_validated_materials"] = []
+            return
+        
+        if current_stage_id:
+            _archive_with_error_handling(state, result, current_stage_id)
+            _update_progress_with_error_handling(state, result, current_stage_id, "completed_success")
     
     elif "NEED_HELP" in response_text or "HELP" in response_text:
         result["supervisor_verdict"] = "ask_user"
@@ -155,8 +182,8 @@ def handle_code_review_limit(
     elif "SKIP" in response_text:
         result["supervisor_verdict"] = "ok_continue"
         if current_stage_id:
-            update_progress_stage_status(
-                state, current_stage_id, "blocked",
+            _update_progress_with_error_handling(
+                state, result, current_stage_id, "blocked",
                 summary="Skipped by user due to code review issues"
             )
     
@@ -196,8 +223,8 @@ def handle_design_review_limit(
     elif "SKIP" in response_text:
         result["supervisor_verdict"] = "ok_continue"
         if current_stage_id:
-            update_progress_stage_status(
-                state, current_stage_id, "blocked",
+            _update_progress_with_error_handling(
+                state, result, current_stage_id, "blocked",
                 summary="Skipped by user due to design review issues"
             )
     
@@ -279,8 +306,8 @@ def handle_physics_failure_limit(
     elif "ACCEPT" in response_text or "PARTIAL" in response_text:
         result["supervisor_verdict"] = "ok_continue"
         if current_stage_id:
-            update_progress_stage_status(
-                state, current_stage_id, "completed_partial",
+            _update_progress_with_error_handling(
+                state, result, current_stage_id, "completed_partial",
                 summary="Accepted as partial by user despite physics issues"
             )
     
@@ -326,10 +353,14 @@ def handle_context_overflow(
     
     elif "TRUNCATE" in response_text:
         current_text = state.get("paper_text", "")
-        if len(current_text) >= 20000:
+        # Truncation marker adds 39 chars, so truncated length = 15000 + 39 + 5000 = 20039
+        # Only truncate if original is longer than truncated result would be
+        truncation_marker = "\n\n... [TRUNCATED BY USER REQUEST] ...\n\n"
+        truncated_length = 15000 + len(truncation_marker) + 5000
+        if len(current_text) > truncated_length:
             truncated_text = (
                 current_text[:15000] +
-                "\n\n... [TRUNCATED BY USER REQUEST] ...\n\n" +
+                truncation_marker +
                 current_text[-5000:]
             )
             result["paper_text"] = truncated_text
@@ -422,7 +453,8 @@ def handle_backtrack_approval(
             target = decision.get("target_stage_id")
             if target:
                 dependent = get_dependent_stages_fn(state.get("plan", {}), target)
-                decision["stages_to_invalidate"] = dependent
+                # Ensure stages_to_invalidate is always a list, never None
+                decision["stages_to_invalidate"] = dependent if dependent is not None else []
                 result["backtrack_decision"] = decision
     
     elif is_rejection:
@@ -492,8 +524,8 @@ def handle_llm_error(
     elif "SKIP" in response_text:
         result["supervisor_verdict"] = "ok_continue"
         if current_stage_id:
-            update_progress_stage_status(
-                state, current_stage_id, "blocked",
+            _update_progress_with_error_handling(
+                state, result, current_stage_id, "blocked",
                 summary="Skipped by user after LLM error"
             )
     

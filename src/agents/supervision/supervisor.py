@@ -159,11 +159,27 @@ def _retry_archive_errors(
     """Retry any failed archive operations from previous runs."""
     archive_errors = state.get("archive_errors", [])
     
+    # Handle non-list archive_errors gracefully
+    if not isinstance(archive_errors, list):
+        logger.warning(
+            f"archive_errors has invalid type {type(archive_errors)}, expected list. "
+            "Skipping archive error retry."
+        )
+        result["archive_errors"] = []
+        return
+    
     if archive_errors:
         logger.info(f"Retrying {len(archive_errors)} failed archive operations...")
         
         retried_errors = []
         for error_entry in archive_errors:
+            # Skip entries that aren't dicts
+            if not isinstance(error_entry, dict):
+                logger.warning(f"Skipping invalid archive error entry: {error_entry}")
+                # Keep invalid entries in retried_errors so they're preserved
+                retried_errors.append(error_entry)
+                continue
+            
             stage_id = error_entry.get("stage_id")
             if stage_id:
                 try:
@@ -175,6 +191,9 @@ def _retry_archive_errors(
                         "Will retry again on next supervisor call."
                     )
                     retried_errors.append(error_entry)
+            else:
+                # Keep errors without stage_id (can't retry them)
+                retried_errors.append(error_entry)
         
         result["archive_errors"] = retried_errors if retried_errors else []
     else:
@@ -218,6 +237,10 @@ def _run_normal_supervision(
         
         result["supervisor_verdict"] = agent_output.get("verdict", "ok_continue")
         result["supervisor_feedback"] = agent_output.get("reasoning", "")
+        
+        # Propagate should_stop if present
+        if "should_stop" in agent_output:
+            result["should_stop"] = agent_output["should_stop"]
         
         if agent_output.get("verdict") == "backtrack_to_stage" and agent_output.get("backtrack_target"):
             result["backtrack_decision"] = {
@@ -357,7 +380,8 @@ def supervisor_node(state: ReproState) -> dict:
         _run_normal_supervision(state, result, system_prompt, current_stage_id, logger)
     
     # Log user interaction if one just happened
-    if ask_user_trigger and user_responses:
+    # Log even if user_responses is empty (to track that user was asked)
+    if ask_user_trigger:
         _log_user_interaction(
             state, result, ask_user_trigger, user_responses, current_stage_id
         )
