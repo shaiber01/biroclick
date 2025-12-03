@@ -4,17 +4,19 @@ This document explains how the integration test suite is being decomposed so
 individual modules stay focused on a single workflow domain. Keep it nearby when
 adding new suites or moving tests between files.
 
-## Oversized Files (≥300 LOC)
+## Current Test Structure
 
-| File | LOC | Primary Responsibilities | Shared fixtures/mocks & overlaps |
-| --- | --- | --- | --- |
-| `tests/integration/test_planning_agents.py` | 684 | Adapt prompts node, planner LLM call contracts, plan reviewer decisions, progress initialization, dependency validation, escalation paths. | Depends heavily on `base_state`/`valid_plan`, repeatedly patches `src.agents.planning.call_agent_with_metrics`, `initialize_progress_from_plan`, and `check_context_or_escalate`. Shares `valid_plan` stages and planner responses with `tests/integration/test_invariants.py`, `test_execution_analysis_agents.py`, and `test_code_agents.py`. |
-| `tests/integration/test_supervision_and_routing.py` | 543 | Supervisor node triggers, routing functions for every review/verdict, stage selection edge cases. | Uses `base_state`, `valid_plan`, and stage/progress dicts that also appear in `tests/integration/test_execution_analysis_agents.py`. Patches `select_stage_node` helpers similar to planning progress tests. |
-| `tests/integration/test_execution_analysis_agents.py` | 493 | Mixed coverage for stage selection, simulation designer, execution validators, physics sanity, analysis nodes, report generator, comparison validator. | Reuses the same mock responses as the planning, design, code, execution, analysis, and reporting suites. Overlaps with `tests/integration/test_design_agents.py`, `test_code_agents.py`, `test_reporting_agents.py`; uses `tempfile`/`os` patterns similar to `tests/integration/test_paper_loader_integration.py`. |
-| `tests/integration/test_reporting_agents.py` | 422 | Backtrack node behaviors, report generator completeness, quantitative summaries, metrics aggregation. | Shares `valid_plan`, token-summary calculations, and `call_agent_with_metrics` mocks with `tests/integration/test_execution_analysis_agents.py` and the smaller `test_invariants.py` cross-cutting assertions. |
+The integration tests are organized by domain into subdirectories:
 
-Smaller files that should also benefit from shared helpers created during the
-split: `tests/integration/test_code_agents.py`,
+- **Planning**: `tests/integration/planning/` - Adapt prompts node, planner LLM call contracts, plan reviewer decisions, progress initialization, dependency validation, escalation paths
+- **Supervision**: `tests/integration/supervision/` - Supervisor node triggers and handlers
+- **Routing**: `tests/integration/routing/` - Routing functions for every review/verdict
+- **Stage Selection**: `tests/integration/stage_selection/` - Stage selection edge cases
+- **Execution**: `tests/integration/execution/` - Execution validators, physics sanity checks
+- **Analysis**: `tests/integration/analysis/` - Results analyzer, comparison validator
+- **Reporting**: `tests/integration/reporting/` - Backtrack node behaviors, report generator completeness, quantitative summaries, metrics aggregation
+
+Smaller files that should also benefit from shared helpers: `tests/integration/test_code_agents.py`,
 `tests/integration/test_design_agents.py`,
 `tests/integration/test_invariants.py`, and
 `tests/integration/test_paper_loader_integration.py`.
