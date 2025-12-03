@@ -174,11 +174,19 @@ def ask_user_node(state: ReproState) -> Dict[str, Any]:
             }
         
         error_msg = "\n".join(f"  - {err}" for err in validation_errors)
+        
+        # Prepend error message to the first question, and keep all other questions
+        first_question = questions[0] if questions else 'Please provide a valid response.'
+        reask_questions = [
+            f"Your response had validation errors (attempt {validation_attempts}/{max_validation_attempts}):\n{error_msg}\n\n"
+            f"Please try again:\n{first_question}"
+        ]
+        
+        if len(questions) > 1:
+            reask_questions.extend(questions[1:])
+            
         return {
-            "pending_user_questions": [
-                f"Your response had validation errors (attempt {validation_attempts}/{max_validation_attempts}):\n{error_msg}\n\n"
-                f"Please try again:\n{questions[0] if questions else 'Please provide a valid response.'}"
-            ],
+            "pending_user_questions": reask_questions,
             "awaiting_user_input": True,
             "ask_user_trigger": trigger,
             "last_node_before_ask_user": state.get("last_node_before_ask_user"),

@@ -4,6 +4,154 @@ import pytest
 from unittest.mock import patch, MagicMock
 
 from src.agents.supervision import supervisor_node, _get_dependent_stages
+from src.agents.supervision.supervisor import _derive_stage_completion_outcome
+
+class TestDeriveStageCompletionOutcome:
+    """Tests for _derive_stage_completion_outcome logic."""
+
+    @patch("src.agents.supervision.supervisor.stage_comparisons_for_stage")
+    @patch("src.agents.supervision.supervisor.breakdown_comparison_classifications")
+    def test_returns_failed_on_missing_outputs(self, mock_breakdown, mock_comparisons):
+        """Should return completed_failed if outputs are missing."""
+        mock_comparisons.return_value = []
+        mock_breakdown.return_value = {"missing": ["absorption.csv"], "pending": [], "match": []}
+        
+        state = {
+            "analysis_overall_classification": "ACCEPTABLE_MATCH",
+            "comparison_verdict": "match",
+            "physics_verdict": "pass",
+            "analysis_summary": "Good match",
+        }
+        
+        status, summary = _derive_stage_completion_outcome(state, "stage1")
+        
+        assert status == "completed_failed"
+        assert "Missing outputs" in summary
+
+    @patch("src.agents.supervision.supervisor.stage_comparisons_for_stage")
+    @patch("src.agents.supervision.supervisor.breakdown_comparison_classifications")
+    def test_returns_partial_on_pending_comparisons(self, mock_breakdown, mock_comparisons):
+        """Should return completed_partial if comparisons are pending."""
+        mock_comparisons.return_value = []
+        mock_breakdown.return_value = {"missing": [], "pending": ["fig1"], "match": []}
+        
+        state = {
+            "analysis_overall_classification": "ACCEPTABLE_MATCH",
+            "comparison_verdict": "match",
+            "physics_verdict": "pass",
+        }
+        
+        status, summary = _derive_stage_completion_outcome(state, "stage1")
+        
+        assert status == "completed_partial"
+        assert "Comparisons pending" in summary
+
+    @patch("src.agents.supervision.supervisor.stage_comparisons_for_stage")
+    @patch("src.agents.supervision.supervisor.breakdown_comparison_classifications")
+    def test_returns_failed_on_bad_classification(self, mock_breakdown, mock_comparisons):
+        """Should return completed_failed on FAILED or POOR_MATCH."""
+        mock_comparisons.return_value = []
+        mock_breakdown.return_value = {"missing": [], "pending": [], "match": []}
+        
+        for classification in ["FAILED", "POOR_MATCH"]:
+            state = {
+                "analysis_overall_classification": classification,
+                "comparison_verdict": "mismatch",
+                "physics_verdict": "pass",
+                "analysis_summary": "Bad results",
+            }
+            
+            status, summary = _derive_stage_completion_outcome(state, "stage1")
+            
+            assert status == "completed_failed"
+
+    @patch("src.agents.supervision.supervisor.stage_comparisons_for_stage")
+    @patch("src.agents.supervision.supervisor.breakdown_comparison_classifications")
+    def test_returns_partial_on_needs_revision(self, mock_breakdown, mock_comparisons):
+        """Should return completed_partial if comparison_verdict is needs_revision."""
+        mock_comparisons.return_value = []
+        mock_breakdown.return_value = {"missing": [], "pending": [], "match": []}
+        
+        state = {
+            "analysis_overall_classification": "ACCEPTABLE_MATCH",
+            "comparison_verdict": "needs_revision",
+            "physics_verdict": "pass",
+        }
+        
+        status, summary = _derive_stage_completion_outcome(state, "stage1")
+        
+        assert status == "completed_partial"
+
+    @patch("src.agents.supervision.supervisor.stage_comparisons_for_stage")
+    @patch("src.agents.supervision.supervisor.breakdown_comparison_classifications")
+    def test_returns_partial_on_physics_warning(self, mock_breakdown, mock_comparisons):
+        """Should return completed_partial if physics_verdict is warning."""
+        mock_comparisons.return_value = []
+        mock_breakdown.return_value = {"missing": [], "pending": [], "match": []}
+        
+        state = {
+            "analysis_overall_classification": "ACCEPTABLE_MATCH",
+            "comparison_verdict": "match",
+            "physics_verdict": "warning",
+        }
+        
+        status, summary = _derive_stage_completion_outcome(state, "stage1")
+        
+        assert status == "completed_partial"
+
+    @patch("src.agents.supervision.supervisor.stage_comparisons_for_stage")
+    @patch("src.agents.supervision.supervisor.breakdown_comparison_classifications")
+    def test_returns_failed_on_physics_fail(self, mock_breakdown, mock_comparisons):
+        """Should return completed_failed if physics_verdict is fail."""
+        mock_comparisons.return_value = []
+        mock_breakdown.return_value = {"missing": [], "pending": [], "match": []}
+        
+        state = {
+            "analysis_overall_classification": "ACCEPTABLE_MATCH",
+            "comparison_verdict": "match",
+            "physics_verdict": "fail",
+        }
+        
+        status, summary = _derive_stage_completion_outcome(state, "stage1")
+        
+        assert status == "completed_failed"
+
+    @patch("src.agents.supervision.supervisor.stage_comparisons_for_stage")
+    @patch("src.agents.supervision.supervisor.breakdown_comparison_classifications")
+    def test_extracts_summary_from_analysis_summary(self, mock_breakdown, mock_comparisons):
+        """Should extract correct summary text from analysis_summary dict."""
+        mock_comparisons.return_value = []
+        mock_breakdown.return_value = {"missing": [], "pending": [], "match": []}
+        
+        state = {
+            "analysis_overall_classification": "ACCEPTABLE_MATCH",
+            "comparison_verdict": "match",
+            "physics_verdict": "pass",
+            "analysis_summary": {"notes": "Specific notes", "totals": {"matches": 1}},
+        }
+        
+        status, summary = _derive_stage_completion_outcome(state, "stage1")
+        
+        assert summary == "Specific notes"
+
+    @patch("src.agents.supervision.supervisor.stage_comparisons_for_stage")
+    @patch("src.agents.supervision.supervisor.breakdown_comparison_classifications")
+    def test_extracts_summary_from_totals(self, mock_breakdown, mock_comparisons):
+        """Should extract summary from totals if no notes."""
+        mock_comparisons.return_value = []
+        mock_breakdown.return_value = {"missing": [], "pending": [], "match": []}
+        
+        state = {
+            "analysis_overall_classification": "ACCEPTABLE_MATCH",
+            "comparison_verdict": "match",
+            "physics_verdict": "pass",
+            "analysis_summary": {"totals": {"matches": 2, "targets": 3}},
+        }
+        
+        status, summary = _derive_stage_completion_outcome(state, "stage1")
+        
+        assert summary == "2/3 targets matched"
+
 
 
 class TestGetDependentStages:
@@ -81,13 +229,17 @@ class TestGetDependentStages:
 class TestSupervisorNode:
     """Tests for supervisor_node function."""
 
+    @patch("src.agents.supervision.supervisor.update_progress_stage_status")
+    @patch("src.agents.supervision.supervisor.archive_stage_outputs_to_progress")
     @patch("src.agents.supervision.supervisor.call_agent_with_metrics")
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     @patch("src.agents.supervision.supervisor.build_agent_prompt")
-    def test_continues_workflow_on_success(self, mock_prompt, mock_context, mock_call, validated_supervisor_response):
+    @patch("src.agents.supervision.supervisor._derive_stage_completion_outcome")
+    def test_continues_workflow_on_success(self, mock_derive, mock_prompt, mock_context, mock_call, mock_archive, mock_update, validated_supervisor_response):
         """Should continue workflow on successful stage completion (using validated mock)."""
         mock_context.return_value = None
         mock_prompt.return_value = "system prompt"
+        mock_derive.return_value = ("completed_success", "Analysis OK")
         
         mock_response = validated_supervisor_response.copy()
         mock_response["verdict"] = "ok_continue"
@@ -106,6 +258,28 @@ class TestSupervisorNode:
         result = supervisor_node(state)
         
         assert result.get("supervisor_verdict") == "ok_continue"
+        
+        # Check archiving and status update
+        mock_archive.assert_called_once_with(state, "stage1")
+        mock_update.assert_called_once_with(state, "stage1", "completed_success", summary="Analysis OK")
+
+    @patch("src.agents.supervision.supervisor.call_agent_with_metrics")
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    @patch("src.agents.supervision.supervisor.build_agent_prompt")
+    def test_uses_updated_context_state(self, mock_prompt, mock_context, mock_call, validated_supervisor_response):
+        """Should use updated state from context check for prompt building."""
+        mock_context.return_value = {"new_flag": True}
+        mock_prompt.return_value = "prompt"
+        mock_call.return_value = validated_supervisor_response.copy()
+        
+        state = {"current_stage_id": "stage1", "supervisor_call_count": 0}
+        
+        supervisor_node(state)
+        
+        # Verify build_agent_prompt received state with new_flag
+        args, _ = mock_prompt.call_args
+        passed_state = args[1]
+        assert passed_state.get("new_flag") is True
 
     @patch("src.agents.supervision.supervisor.call_agent_with_metrics")
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
@@ -876,7 +1050,7 @@ class TestArchiveErrorRecovery:
         result = supervisor_node(state)
         
         assert result["archive_errors"] == []
-        mock_archive.assert_called()
+        mock_archive.assert_called_once_with(state, "stage1")
 
     @patch("src.agents.supervision.supervisor.call_agent_with_metrics")
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
@@ -898,6 +1072,8 @@ class TestArchiveErrorRecovery:
         result = supervisor_node(state)
         
         assert len(result["archive_errors"]) == 1
+        assert result["archive_errors"][0]["stage_id"] == "stage1"
+        mock_archive.assert_called_once_with(state, "stage1")
 
 
 class TestUserInteractionLogging:
@@ -924,19 +1100,29 @@ class TestUserInteractionLogging:
         assert len(result["progress"]["user_interactions"]) == 1
         interaction = result["progress"]["user_interactions"][0]
         assert interaction["interaction_type"] == "material_checkpoint"
+        assert interaction["id"] == "U1"
+        assert "timestamp" in interaction
+        assert interaction["context"]["stage_id"] == "stage0"
+        assert interaction["context"]["agent"] == "SupervisorAgent"
+        assert interaction["user_response"] == "APPROVE"
+
 
 
 class TestInvalidUserResponses:
     """Tests for handling invalid user_responses."""
 
+    @patch("src.agents.supervision.supervisor.logging.getLogger")
     @patch("src.agents.supervision.supervisor.call_agent_with_metrics")
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     @patch("src.agents.supervision.supervisor.build_agent_prompt")
-    def test_handles_non_dict_user_responses(self, mock_prompt, mock_context, mock_call):
-        """Should handle non-dict user_responses gracefully."""
+    def test_handles_non_dict_user_responses(self, mock_prompt, mock_context, mock_call, mock_get_logger):
+        """Should handle non-dict user_responses gracefully and log warning."""
         mock_context.return_value = None
         mock_prompt.return_value = "prompt"
         mock_call.return_value = {"verdict": "ok_continue"}
+        
+        mock_logger = MagicMock()
+        mock_get_logger.return_value = mock_logger
         
         state = {
             "user_responses": "invalid string",  # Should be dict
@@ -947,3 +1133,4 @@ class TestInvalidUserResponses:
         result = supervisor_node(state)
         
         assert result["supervisor_verdict"] == "ok_continue"
+        mock_logger.warning.assert_called()

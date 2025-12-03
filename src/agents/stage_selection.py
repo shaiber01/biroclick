@@ -118,14 +118,18 @@ def select_stage_node(state: ReproState) -> dict:
         if stage.get("status") == "needs_rerun":
             # Guard against race condition
             dependencies = stage.get("dependencies", [])
-            has_invalidated_deps = False
+            has_blocking_deps = False
+            
             for dep_id in dependencies:
                 dep_stage = next((s for s in stages if s.get("stage_id") == dep_id), None)
-                if dep_stage and dep_stage.get("status") == "invalidated":
-                    has_invalidated_deps = True
-                    break
+                if dep_stage:
+                    dep_status = dep_stage.get("status")
+                    # If dependency is invalidated or also needs rerun, dependent cannot run yet
+                    if dep_status in ["invalidated", "needs_rerun", "not_started", "in_progress", "blocked"]:
+                        has_blocking_deps = True
+                        break
             
-            if has_invalidated_deps:
+            if has_blocking_deps:
                 continue
             
             selected_stage_id = stage.get("stage_id")
@@ -159,9 +163,6 @@ def select_stage_node(state: ReproState) -> dict:
         status = stage.get("status", "not_started")
         
         if status in ["completed_success", "completed_partial", "completed_failed", "in_progress"]:
-            continue
-        
-        # Re-check blocked stages
             continue
         
         # Re-check blocked stages

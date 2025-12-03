@@ -161,8 +161,15 @@ def plan_node(state: ReproState) -> dict:
         return create_llm_error_escalation("planner", "planning", e)
     
     # Extract results from agent output
+    # Preserve paper_id from state if it exists and is valid
+    state_paper_id = state.get("paper_id")
+    if state_paper_id and state_paper_id != "unknown":
+        final_paper_id = state_paper_id
+    else:
+        final_paper_id = agent_output.get("paper_id", state_paper_id or "unknown")
+
     plan_data = {
-        "paper_id": agent_output.get("paper_id", state.get("paper_id", "unknown")),
+        "paper_id": final_paper_id,
         "paper_domain": agent_output.get("paper_domain", "other"),
         "title": agent_output.get("title", ""),
         "summary": agent_output.get("summary", ""),
@@ -253,23 +260,59 @@ def plan_reviewer_node(state: ReproState) -> dict:
             "Current plan has no stages defined."
         )
     
-    # Validate stages have targets
+    # Validate stages have targets and IDs
+    stage_ids = set()
     for stage in plan_stages:
-        stage_id = stage.get("stage_id", "unknown")
+        stage_id = stage.get("stage_id")
+        if not stage_id:
+            blocking_issues.append(
+                "PLAN_ISSUE: Found stage with missing 'stage_id'. "
+                "All stages must have a unique identifier."
+            )
+        elif stage_id in stage_ids:
+            blocking_issues.append(
+                f"PLAN_ISSUE: Duplicate stage ID '{stage_id}' detected. "
+                "Stage IDs must be unique."
+            )
+        else:
+            stage_ids.add(stage_id)
+
         targets = stage.get("targets", [])
         target_details = stage.get("target_details", [])
         
         has_targets = bool(targets) or bool(target_details)
         
         if not has_targets:
+            # If stage_id is missing, we can't reference it by name clearly, but we still report it
+            ref_id = stage_id or "unknown"
             blocking_issues.append(
-                f"PLAN_ISSUE: Stage '{stage_id}' has no targets defined. "
+                f"PLAN_ISSUE: Stage '{ref_id}' has no targets defined. "
                 "Each stage must have at least one target figure to reproduce."
             )
+
+    # Check for dependencies on non-existent stages
+    if plan_stages:
+        # Re-collect valid stage IDs for dependency checking
+        valid_stage_ids = {s.get("stage_id") for s in plan_stages if s.get("stage_id")}
+        
+        for stage in plan_stages:
+            stage_id = stage.get("stage_id")
+            if not stage_id:
+                continue
+                
+            dependencies = stage.get("dependencies", [])
+            for dep in dependencies:
+                if dep not in valid_stage_ids:
+                    blocking_issues.append(
+                        f"PLAN_ISSUE: Stage '{stage_id}' depends on missing stage '{dep}'. "
+                        "All dependencies must reference existing stage IDs."
+                    )
     
     # Detect circular dependencies
     if plan_stages:
-        stage_ids = {s.get("stage_id") for s in plan_stages if s.get("stage_id")}
+        # Use the already collected valid_stage_ids
+        stage_ids = valid_stage_ids
+
         
         def detect_cycles() -> List[List[str]]:
             """Detect circular dependencies using DFS."""

@@ -264,6 +264,10 @@ def handle_backtrack_node(state: ReproState) -> dict:
         "last_design_review_verdict": None,
         "last_code_review_verdict": None,
         "supervisor_verdict": None,
+        "design_revision_count": 0,
+        "code_revision_count": 0,
+        "execution_failure_count": 0,
+        "analysis_revision_count": 0,
     }
     
     # Clear validated materials if backtracking to Stage 0

@@ -351,7 +351,10 @@ def handle_context_overflow(
         result["should_stop"] = True
     
     else:
-        result["supervisor_verdict"] = "ok_continue"
+        result["supervisor_verdict"] = "ask_user"
+        result["pending_user_questions"] = [
+            "Please clarify: SUMMARIZE, TRUNCATE, SKIP_STAGE, or STOP?"
+        ]
 
 
 def handle_replan_limit(
@@ -385,7 +388,10 @@ def handle_replan_limit(
         result["should_stop"] = True
     
     else:
-        result["supervisor_verdict"] = "ok_continue"
+        result["supervisor_verdict"] = "ask_user"
+        result["pending_user_questions"] = [
+            "Please clarify: FORCE_ACCEPT, GUIDANCE, or STOP?"
+        ]
 
 
 def handle_backtrack_approval(
