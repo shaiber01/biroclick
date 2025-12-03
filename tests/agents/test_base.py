@@ -322,6 +322,8 @@ class TestCreateLlmErrorEscalation:
         result = create_llm_error_escalation("code_generator", "code_generation", error)
         
         assert "Code Generator" in result["pending_user_questions"][0]
+        # Check full message structure
+        assert "Code Generator failed: Error. Please check API and try again." in result["pending_user_questions"][0]
 
 
 class TestCreateLlmErrorFallback:
@@ -353,7 +355,7 @@ class TestCreateLlmErrorFallback:
         
         result = handler(error)
         
-        assert "Custom message: Connection lost" in result["supervisor_feedback"]
+        assert result["supervisor_feedback"] == "Custom message: Connection lost"
 
     def test_truncates_error_in_feedback(self):
         """Should truncate long errors in feedback."""
