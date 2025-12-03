@@ -73,6 +73,11 @@ class TestEstimateTokens:
         with pytest.raises(TypeError):
             estimate_tokens(None)  # type: ignore
 
+    def test_int_input_raises_error(self):
+        """Integer input raises TypeError."""
+        with pytest.raises(TypeError):
+            estimate_tokens(123)  # type: ignore
+
 
 # ═══════════════════════════════════════════════════════════════════════
 # check_paper_length Tests
@@ -107,13 +112,6 @@ class TestCheckPaperLength:
         text = "A" * PAPER_LENGTH_VERY_LONG
         warnings = check_paper_length(text)
         # Should be just "long" warning if logic is check > LONG then check > VERY_LONG?
-        # Let's check implementation: 
-        # if char_count > PAPER_LENGTH_VERY_LONG: ...
-        # elif char_count > PAPER_LENGTH_LONG: ...
-        # So at exact VERY_LONG, it triggers the elif (> LONG).
-        
-        # Wait, if it is exactly VERY_LONG, it is > LONG, so it gets "long" warning.
-        # If it is VERY_LONG + 1, it gets "VERY LONG" warning.
         
         assert len(warnings) == 1
         assert "long" in warnings[0].lower()
@@ -141,6 +139,11 @@ class TestCheckPaperLength:
         """Empty string returns no warnings."""
         warnings = check_paper_length("")
         assert warnings == []
+
+    def test_none_input_raises_error(self):
+        """None input raises TypeError."""
+        with pytest.raises(TypeError):
+            check_paper_length(None) # type: ignore
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -331,4 +334,98 @@ class TestEstimateTokenCost:
         assert isinstance(result["estimated_input_tokens"], int)
         assert isinstance(result["estimated_cost_usd"], float)
         assert isinstance(result["cost_breakdown"]["input_cost_usd"], float)
+
+    def test_supplementary_is_none(self):
+        """Handles case where supplementary key is None (JSON null)."""
+        paper_input = {
+            "paper_text": "A" * 400,
+            "supplementary": None
+        }
+        # Should not raise AttributeError
+        result = estimate_token_cost(paper_input)
+        # Should treat as empty supplementary
+        assert result["estimated_input_tokens"] > 0
+        
+    def test_figures_is_none(self):
+        """Handles case where figures key is None (JSON null)."""
+        paper_input = {
+            "paper_text": "A" * 400,
+            "figures": None
+        }
+        # Should not raise TypeError
+        result = estimate_token_cost(paper_input)
+        assert result["assumptions"]["num_figures"] == 0
+        
+    def test_supplementary_figures_is_none(self):
+        """Handles case where supplementary_figures is None."""
+        paper_input = {
+            "paper_text": "A" * 400,
+            "supplementary": {
+                "supplementary_figures": None
+            }
+        }
+        result = estimate_token_cost(paper_input)
+        assert result["assumptions"]["num_figures"] == 0
+
+    def test_paper_text_is_none(self):
+        """Handles case where paper_text is None."""
+        paper_input = {"paper_text": None}
+        # Should not raise TypeError
+        result = estimate_token_cost(paper_input)
+        assert result["assumptions"]["text_chars"] == 0
+
+    # --- New Robustness Tests ---
+
+    def test_invalid_figures_type_raises_error(self):
+        """Should raise TypeError if figures is not a list (e.g. a string)."""
+        # If figures is a string "foo", len("foo") is 3.
+        # The code would calculate costs for 3 figures if it doesn't validate types.
+        paper_input = {"figures": "invalid_string"}
+        
+        # We expect robust code to reject this, not silently process characters as figures.
+        with pytest.raises(TypeError, match="Expected list for figures"):
+            estimate_token_cost(paper_input)
+
+    def test_invalid_supplementary_figures_type_raises_error(self):
+        """Should raise TypeError if supplementary_figures is not a list."""
+        paper_input = {
+            "supplementary": {
+                "supplementary_figures": "invalid_string"
+            }
+        }
+        with pytest.raises(TypeError, match="Expected list for supplementary_figures"):
+            estimate_token_cost(paper_input)
+
+    def test_cost_invariant_always_holds(self):
+        """Invariant: total = input + output must always be true."""
+        inputs = [
+            {},
+            {"paper_text": "A"},
+            {"figures": [{"id": "1"}]},
+            {"supplementary": {"supplementary_text": "B"}},
+            {"paper_text": "A" * 1000, "figures": []},
+            {"paper_text": "", "figures": [{"id": "1"}, {"id": "2"}]}
+        ]
+        for i, inp in enumerate(inputs):
+            res = estimate_token_cost(inp)
+            total = res["estimated_total_tokens"]
+            inp_tok = res["estimated_input_tokens"]
+            out_tok = res["estimated_output_tokens"]
+            
+            # Using >= because sometimes total might include overhead, but here it is simple sum
+            # The implementation computes total = input + output explicitly
+            assert total == inp_tok + out_tok, f"Invariant failed for input {i}"
+
+    @pytest.mark.parametrize("num_figs, expected_stages", [
+        (0, 4),
+        (3, 4),
+        (4, 4),
+        (5, 5),
+        (10, 10)
+    ])
+    def test_stage_count_logic(self, num_figs, expected_stages):
+        """Verifies max(4, num_figs) logic explicitly."""
+        figs = [{"id": str(i)} for i in range(num_figs)]
+        res = estimate_token_cost({"figures": figs})
+        assert res["assumptions"]["num_stages_estimated"] == expected_stages
 

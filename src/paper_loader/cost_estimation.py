@@ -84,16 +84,27 @@ def estimate_token_cost(paper_input: Dict[str, Any]) -> Dict[str, Any]:
         Dictionary with token and cost estimates
     """
     # Text tokens (rough estimate: ~4 chars per token)
-    text_tokens = len(paper_input.get("paper_text", "")) / CHARS_PER_TOKEN
+    paper_text = paper_input.get("paper_text") or ""
+    text_tokens = len(paper_text) / CHARS_PER_TOKEN
     
     # Supplementary text if present
-    supplementary = paper_input.get("supplementary", {})
+    supplementary = paper_input.get("supplementary") or {}
     if supplementary.get("supplementary_text"):
         text_tokens += len(supplementary["supplementary_text"]) / CHARS_PER_TOKEN
     
     # Image tokens (approximate, varies by model)
-    figures = paper_input.get("figures", [])
-    supp_figures = supplementary.get("supplementary_figures", [])
+    figures = paper_input.get("figures")
+    if figures is None:
+        figures = []
+    elif not isinstance(figures, list):
+        raise TypeError(f"Expected list for figures, got {type(figures).__name__}")
+        
+    supp_figures = supplementary.get("supplementary_figures")
+    if supp_figures is None:
+        supp_figures = []
+    elif not isinstance(supp_figures, list):
+        raise TypeError(f"Expected list for supplementary_figures, got {type(supp_figures).__name__}")
+        
     total_figures = len(figures) + len(supp_figures)
     image_tokens = total_figures * TOKENS_PER_FIGURE
     
@@ -137,15 +148,22 @@ def estimate_token_cost(paper_input: Dict[str, Any]) -> Dict[str, Any]:
     # Output tokens (typically 20-30% of input for this use case)
     total_output_estimate = total_input_estimate * 0.25
     
+    # Total tokens (sum of integer parts to ensure consistency)
+    # If we used int(total_input + total_output), we might get 1 more token than sum of parts
+    # which looks confusing to users.
+    est_input_tokens = int(total_input_estimate)
+    est_output_tokens = int(total_output_estimate)
+    est_total_tokens = est_input_tokens + est_output_tokens
+
     # Cost calculation
     input_cost = total_input_estimate * INPUT_COST_PER_MILLION / 1_000_000
     output_cost = total_output_estimate * OUTPUT_COST_PER_MILLION / 1_000_000
     total_cost = input_cost + output_cost
     
     return {
-        "estimated_input_tokens": int(total_input_estimate),
-        "estimated_output_tokens": int(total_output_estimate),
-        "estimated_total_tokens": int(total_input_estimate + total_output_estimate),
+        "estimated_input_tokens": est_input_tokens,
+        "estimated_output_tokens": est_output_tokens,
+        "estimated_total_tokens": est_total_tokens,
         "estimated_cost_usd": round(total_cost, 2),
         "cost_breakdown": {
             "input_cost_usd": round(input_cost, 2),
@@ -154,7 +172,7 @@ def estimate_token_cost(paper_input: Dict[str, Any]) -> Dict[str, Any]:
         "assumptions": {
             "num_figures": total_figures,
             "num_stages_estimated": num_stages,
-            "text_chars": len(paper_input.get("paper_text", "")),
+            "text_chars": len(paper_text),
             "model_pricing": "approximate LLM rates (verify current pricing)",
         },
         "warning": (
@@ -163,6 +181,3 @@ def estimate_token_cost(paper_input: Dict[str, Any]) -> Dict[str, Any]:
             "Budget 2-3x this estimate for complex papers."
         )
     }
-
-
-

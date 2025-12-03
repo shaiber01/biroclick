@@ -6,6 +6,8 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 from unittest.mock import MagicMock, patch
 
+from schemas.state import create_initial_state
+
 
 # ═══════════════════════════════════════════════════════════════════════
 # Validated Mock Response Loading
@@ -62,4 +64,60 @@ def validated_results_analyzer_response():
 @pytest.fixture
 def validated_supervisor_response():
     return load_validated_mock("supervisor")
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Shared State Fixtures
+# ═══════════════════════════════════════════════════════════════════════
+
+@pytest.fixture
+def base_state():
+    """Create a base state with realistic paper content."""
+    paper_text = (
+        """
+    We study the optical properties of gold nanorods with length 100nm and 
+    diameter 40nm using FDTD simulations. The localized surface plasmon 
+    resonance (LSPR) is observed at approximately 650nm wavelength.
+    
+    Materials: Gold optical constants from Johnson & Christy (1972).
+    Surrounding medium: Water (n=1.33).
+    
+    Figure 1 shows the extinction spectrum with the longitudinal mode peak.
+    Figure 2 shows near-field enhancement maps at resonance.
+    """
+        * 5
+    )
+
+    state = create_initial_state(
+        paper_id="test_integration",
+        paper_text=paper_text,
+        paper_domain="plasmonics",
+    )
+    state["paper_figures"] = [
+        {"figure_id": "Fig1", "description": "Extinction spectrum"},
+        {"figure_id": "Fig2", "description": "Near-field map"},
+    ]
+    return state
+
+
+@pytest.fixture
+def valid_plan():
+    """A valid plan structure for testing."""
+    return {
+        "paper_id": "test_integration",
+        "title": "Gold Nanorod Optical Properties",
+        "stages": [
+            {
+                "stage_id": "stage_0",
+                "stage_type": "MATERIAL_VALIDATION",
+                "description": "Validate gold optical constants",
+                "targets": ["material_gold"],
+                "dependencies": [],
+            }
+        ],
+        "targets": [{"figure_id": "Fig1", "description": "Test"}],
+        "extracted_parameters": [
+            {"name": "length", "value": 100, "unit": "nm", "source": "text"},
+        ],
+    }
 

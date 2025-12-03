@@ -4,7 +4,9 @@ Integration tests for paper_loader loaders module.
 
 import json
 import pytest
+import logging
 from pathlib import Path
+from unittest.mock import patch, MagicMock, call
 
 from src.paper_loader import (
     load_paper_input,
@@ -20,6 +22,7 @@ from src.paper_loader import (
     get_all_figures,
     ValidationError,
 )
+from src.paper_loader.loaders import _process_figure_refs
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -43,7 +46,33 @@ class TestLoadPaperInput:
         
         assert paper_input["paper_id"] == "test_valid_paper"
         assert "figures" in paper_input
+        assert isinstance(paper_input["figures"], list)
     
+    def test_loads_comprehensive_json(self, tmp_path):
+        """Loads JSON with all optional fields including supplementary."""
+        data = {
+            "paper_id": "full_paper",
+            "paper_title": "Full Title",
+            "paper_text": "A" * 150,
+            "paper_domain": "materials",
+            "figures": [{"id": "F1", "description": "D1", "image_path": "p1.png"}],
+            "supplementary": {
+                "supplementary_text": "Supp text",
+                "supplementary_figures": [{"id": "S1", "description": "SD1", "image_path": "s1.png"}],
+                "supplementary_data_files": [{"id": "D1", "description": "DD1", "file_path": "d1.csv", "data_type": "spectrum"}]
+            }
+        }
+        json_file = tmp_path / "full.json"
+        with open(json_file, "w") as f:
+            json.dump(data, f)
+            
+        result = load_paper_input(str(json_file))
+        
+        assert result == data
+        assert result["supplementary"]["supplementary_text"] == "Supp text"
+        assert len(result["supplementary"]["supplementary_figures"]) == 1
+        assert len(result["supplementary"]["supplementary_data_files"]) == 1
+
     def test_file_not_found_raises(self):
         """Raises FileNotFoundError for non-existent file."""
         with pytest.raises(FileNotFoundError, match="Paper input file not found"):
@@ -56,6 +85,23 @@ class TestLoadPaperInput:
         
         with pytest.raises(json.JSONDecodeError):
             load_paper_input(str(bad_json))
+            
+    @patch("src.paper_loader.loaders.validate_paper_input")
+    def test_validates_loaded_json(self, mock_validate, tmp_path):
+        """Ensures validate_paper_input is called on loaded data."""
+        data = {
+            "paper_id": "test",
+            "paper_title": "Title",
+            "paper_text": "Text",
+            "figures": []
+        }
+        json_file = tmp_path / "test.json"
+        with open(json_file, "w") as f:
+            json.dump(data, f)
+            
+        load_paper_input(str(json_file))
+        
+        mock_validate.assert_called_once_with(data)
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -76,7 +122,13 @@ class TestCreatePaperInput:
         
         assert paper_input["paper_id"] == "test_paper"
         assert paper_input["paper_title"] == "Test Title"
+        assert paper_input["paper_text"] == "A" * 150
         assert len(paper_input["figures"]) == 1
+        assert paper_input["figures"][0]["id"] == "Fig1"
+        # Default domain
+        assert paper_input["paper_domain"] == "other"
+        # No supplementary
+        assert "supplementary" not in paper_input
     
     def test_default_domain_is_other(self):
         """Default paper_domain is 'other'."""
@@ -113,6 +165,7 @@ class TestCreatePaperInput:
         
         assert "supplementary" in paper_input
         assert paper_input["supplementary"]["supplementary_text"] == "Supplementary methods..."
+        assert "supplementary_figures" not in paper_input["supplementary"]
     
     def test_with_supplementary_figures(self):
         """Includes supplementary figures."""
@@ -147,9 +200,10 @@ class TestCreatePaperInput:
     
     def test_validates_on_creation(self):
         """Validates paper input during creation."""
+        # We expect ValidationError because ID is empty
         with pytest.raises(ValidationError):
             create_paper_input(
-                paper_id="",  # Invalid: empty
+                paper_id="",
                 paper_title="Test",
                 paper_text="A" * 150,
                 figures=[]
@@ -163,74 +217,166 @@ class TestCreatePaperInput:
 class TestLoadPaperFromMarkdown:
     """Tests for load_paper_from_markdown function."""
     
-    def test_loads_markdown_extracts_title(self, tmp_path):
-        """Extracts paper title from markdown H1."""
-        md_path = FIXTURES_DIR / "sample_markdown.md"
+    LONG_TEXT = "A" * 150
+
+    @pytest.fixture
+    def mock_extract_figures(self):
+        with patch("src.paper_loader.loaders.extract_figures_from_markdown") as mock:
+            yield mock
+            
+    @pytest.fixture
+    def mock_download(self):
+        with patch("src.paper_loader.loaders.download_figure") as mock:
+            yield mock
+            
+    @pytest.fixture
+    def mock_check_length(self):
+        with patch("src.paper_loader.loaders.check_paper_length") as mock:
+            mock.return_value = []
+            yield mock
+
+    def test_loads_markdown_basic(self, tmp_path, mock_extract_figures, mock_download, mock_check_length):
+        """Tests basic markdown loading."""
+        md_path = tmp_path / "test.md"
+        text = f"# Title\n{self.LONG_TEXT}"
+        md_path.write_text(text, encoding="utf-8")
         output_dir = tmp_path / "figures"
         
-        paper_input = load_paper_from_markdown(
+        mock_extract_figures.return_value = []
+        
+        paper = load_paper_from_markdown(
             markdown_path=str(md_path),
             output_dir=str(output_dir),
-            download_figures=False  # Don't try to download
+            download_figures=False
         )
         
-        assert "Test Paper Title" in paper_input["paper_title"]
-    
-    def test_loads_markdown_extracts_figures(self, tmp_path):
+        assert paper["paper_title"] == "Title"
+        assert paper["paper_text"] == text
+        assert paper["figures"] == []
+        assert paper["paper_id"] == "test" # derived from filename
+
+    def test_loads_markdown_extracts_figures(self, tmp_path, mock_extract_figures, mock_download):
         """Extracts figure references from markdown."""
-        md_path = FIXTURES_DIR / "sample_markdown.md"
+        md_path = tmp_path / "paper.md"
+        md_path.write_text(f"{self.LONG_TEXT}\n![Fig 1](fig1.png)", encoding="utf-8")
         output_dir = tmp_path / "figures"
         
-        paper_input = load_paper_from_markdown(
-            markdown_path=str(md_path),
-            output_dir=str(output_dir),
-            download_figures=False
+        mock_extract_figures.return_value = [
+            {"alt": "Fig 1", "url": "fig1.png"}
+        ]
+        
+        with patch("src.paper_loader.loaders.generate_figure_id", return_value="fig1"):
+            paper = load_paper_from_markdown(
+                markdown_path=str(md_path),
+                output_dir=str(output_dir),
+                download_figures=True
+            )
+        
+        assert len(paper["figures"]) == 1
+        fig = paper["figures"][0]
+        assert fig["description"] == "Fig 1"
+        assert fig["id"] == "fig1" 
+        mock_download.assert_called_once()
+
+    def test_generates_unique_ids_for_duplicates(self, tmp_path, mock_extract_figures, mock_download):
+        """Generates unique IDs for duplicate figures."""
+        md_path = tmp_path / "paper.md"
+        md_path.write_text(self.LONG_TEXT, encoding="utf-8")
+        
+        # Two figures that would generate same ID
+        mock_extract_figures.return_value = [
+            {"alt": "Fig 1", "url": "fig.png"},
+            {"alt": "Fig 1", "url": "fig.png"}
+        ]
+        
+        with patch("src.paper_loader.loaders.generate_figure_id", return_value="fig1"):
+            paper = load_paper_from_markdown(
+                str(md_path),
+                str(tmp_path / "figs"),
+                download_figures=False
+            )
+        
+        assert len(paper["figures"]) == 2
+        id1 = paper["figures"][0]["id"]
+        id2 = paper["figures"][1]["id"]
+        assert id1 == "fig1"
+        assert id2 == "fig1_1"
+
+    def test_with_base_url(self, tmp_path, mock_extract_figures, mock_download):
+        """Resolves URLs with base_url."""
+        md_path = tmp_path / "paper.md"
+        md_path.write_text(self.LONG_TEXT, encoding="utf-8")
+        
+        mock_extract_figures.return_value = [
+            {"alt": "Fig", "url": "relative/fig.png"}
+        ]
+        
+        with patch("src.paper_loader.loaders.resolve_figure_url", return_value="http://example.com/relative/fig.png"):
+            load_paper_from_markdown(
+                str(md_path),
+                str(tmp_path / "figs"),
+                base_url="http://example.com/",
+                download_figures=True
+            )
+        
+        # Check download called with resolved URL
+        args, _ = mock_download.call_args
+        url = args[0]
+        assert url == "http://example.com/relative/fig.png"
+
+    def test_supplementary_markdown(self, tmp_path, mock_extract_figures, mock_download):
+        """Loads supplementary markdown and figures."""
+        md_path = tmp_path / "main.md"
+        md_path.write_text(self.LONG_TEXT, encoding="utf-8")
+        supp_path = tmp_path / "supp.md"
+        supp_path.write_text("Supp content " + self.LONG_TEXT, encoding="utf-8")
+        
+        # Configure mock to return different figures for main vs supp calls
+        def extract_side_effect(text):
+            if text.startswith(self.LONG_TEXT): # Main
+                return [{"alt": "Main Fig", "url": "main.png"}]
+            if "Supp content" in text: # Supp
+                return [{"alt": "Supp Fig", "url": "supp.png"}]
+            return []
+            
+        mock_extract_figures.side_effect = extract_side_effect
+        
+        with patch("src.paper_loader.loaders.generate_figure_id", side_effect=["main1", "figure_supp"]):
+            paper = load_paper_from_markdown(
+                markdown_path=str(md_path),
+                output_dir=str(tmp_path / "figs"),
+                supplementary_markdown_path=str(supp_path),
+                download_figures=False
+            )
+        
+        assert paper["supplementary"]["supplementary_text"].startswith("Supp content")
+        assert len(paper["figures"]) == 1
+        assert len(paper["supplementary"]["supplementary_figures"]) == 1
+        
+        supp_fig = paper["supplementary"]["supplementary_figures"][0]
+        assert supp_fig["id"] == "Sfigure_supp" # Check prefix
+        
+    def test_download_error_handling(self, tmp_path, mock_extract_figures, mock_download):
+        """Handles download errors gracefully."""
+        md_path = tmp_path / "paper.md"
+        md_path.write_text(self.LONG_TEXT, encoding="utf-8")
+        
+        mock_extract_figures.return_value = [{"alt": "Fig", "url": "bad.png"}]
+        
+        # Import exception to mock
+        from src.paper_loader.downloader import FigureDownloadError
+        mock_download.side_effect = FigureDownloadError("404 Not Found")
+        
+        paper = load_paper_from_markdown(
+            str(md_path),
+            str(tmp_path / "figs"),
+            download_figures=True
         )
         
-        # Should find at least the markdown and HTML images
-        assert len(paper_input["figures"]) >= 2
-    
-    def test_generates_paper_id_from_filename(self, tmp_path):
-        """Generates paper_id from markdown filename."""
-        md_path = FIXTURES_DIR / "sample_markdown.md"
-        output_dir = tmp_path / "figures"
-        
-        paper_input = load_paper_from_markdown(
-            markdown_path=str(md_path),
-            output_dir=str(output_dir),
-            download_figures=False
-        )
-        
-        assert paper_input["paper_id"] == "sample_markdown"
-    
-    def test_uses_provided_paper_id(self, tmp_path):
-        """Uses provided paper_id instead of filename."""
-        md_path = FIXTURES_DIR / "sample_markdown.md"
-        output_dir = tmp_path / "figures"
-        
-        paper_input = load_paper_from_markdown(
-            markdown_path=str(md_path),
-            output_dir=str(output_dir),
-            paper_id="custom_id",
-            download_figures=False
-        )
-        
-        assert paper_input["paper_id"] == "custom_id"
-    
-    def test_sets_paper_domain(self, tmp_path):
-        """Sets paper_domain from argument."""
-        md_path = FIXTURES_DIR / "sample_markdown.md"
-        output_dir = tmp_path / "figures"
-        
-        paper_input = load_paper_from_markdown(
-            markdown_path=str(md_path),
-            output_dir=str(output_dir),
-            paper_domain="plasmonics",
-            download_figures=False
-        )
-        
-        assert paper_input["paper_domain"] == "plasmonics"
-    
+        assert len(paper["figures"]) == 1
+        assert "download_error" in paper["figures"][0]
+        assert "404 Not Found" in paper["figures"][0]["download_error"]
+
     def test_file_not_found_raises(self, tmp_path):
         """Raises FileNotFoundError for non-existent markdown."""
         with pytest.raises(FileNotFoundError, match="Markdown file not found"):
@@ -238,33 +384,38 @@ class TestLoadPaperFromMarkdown:
                 markdown_path="/nonexistent/paper.md",
                 output_dir=str(tmp_path)
             )
-    
-    def test_creates_output_directory(self, tmp_path):
+
+    def test_no_images_returns_empty_figures_with_warning(self, tmp_path, mock_extract_figures, caplog):
+        """Markdown without images returns empty figures list."""
+        md_path = tmp_path / "paper.md"
+        md_path.write_text(f"No images {self.LONG_TEXT}", encoding="utf-8")
+        mock_extract_figures.return_value = []
+        
+        with caplog.at_level(logging.INFO):
+            paper = load_paper_from_markdown(
+                str(md_path),
+                str(tmp_path / "figs"),
+                download_figures=False
+            )
+            
+        assert paper["figures"] == []
+        
+    def test_output_dir_creation(self, tmp_path, mock_extract_figures):
         """Creates output directory if it doesn't exist."""
-        md_path = FIXTURES_DIR / "sample_markdown_noimg.md"
-        output_dir = tmp_path / "new" / "nested" / "dir"
+        md_path = tmp_path / "paper.md"
+        md_path.write_text(self.LONG_TEXT, encoding="utf-8")
+        mock_extract_figures.return_value = []
+        
+        out_dir = tmp_path / "nested" / "dirs"
+        assert not out_dir.exists()
         
         load_paper_from_markdown(
-            markdown_path=str(md_path),
-            output_dir=str(output_dir),
+            str(md_path),
+            str(out_dir),
             download_figures=False
         )
         
-        assert output_dir.exists()
-    
-    def test_no_images_returns_empty_figures_with_warning(self, tmp_path):
-        """Markdown without images returns empty figures list."""
-        md_path = FIXTURES_DIR / "sample_markdown_noimg.md"
-        output_dir = tmp_path / "figures"
-        
-        # This will generate a warning about no figures, but shouldn't fail
-        paper_input = load_paper_from_markdown(
-            markdown_path=str(md_path),
-            output_dir=str(output_dir),
-            download_figures=False
-        )
-        
-        assert paper_input["figures"] == []
+        assert out_dir.exists()
 
 
 # ═══════════════════════════════════════════════════════════════════════

@@ -48,64 +48,76 @@ def validate_paper_input(paper_input: Dict[str, Any]) -> List[str]:
             errors.append(f"Missing required field: {field}")
     
     if errors:
-        raise ValidationError(f"Paper input validation failed:\n" + "\n".join(errors))
+        # If critical required fields are missing, we might want to stop here
+        # because further validation might crash (e.g. None types)
+        # But let's see if we can continue safely.
+        # The original code raised here. To accumulate more errors, we need to be careful.
+        # For now, we will continue but check for existence before validating.
+        pass
     
     # Validate paper_id format
-    paper_id = paper_input["paper_id"]
-    if not paper_id or not isinstance(paper_id, str):
-        raise ValidationError("paper_id must be a non-empty string")
-    if " " in paper_id:
-        warnings.append(f"paper_id contains spaces: '{paper_id}' - consider using underscores")
+    if "paper_id" in paper_input:
+        paper_id = paper_input["paper_id"]
+        if not paper_id or not isinstance(paper_id, str):
+            errors.append("paper_id must be a non-empty string")
+        elif " " in paper_id:
+            warnings.append(f"paper_id contains spaces: '{paper_id}' - consider using underscores")
     
     # Validate paper_text is not empty
-    paper_text = paper_input["paper_text"]
-    if not paper_text or len(paper_text.strip()) < 100:
-        raise ValidationError("paper_text is empty or too short (< 100 chars)")
-    
-    # Validate paper_text is not too long (v1: hard limit, no auto-trimming)
-    # See CONTEXT_WINDOW_LIMITS in schemas/state.py for the canonical source
-    max_chars = CONTEXT_WINDOW_LIMITS["max_paper_chars"]
-    paper_length = len(paper_text)
-    if paper_length > max_chars:
-        raise ValidationError(
-            f"Paper exceeds maximum length ({max_chars:,} chars). "
-            f"Current length: {paper_length:,} chars (~{paper_length // 4:,} tokens).\n\n"
-            f"Please manually trim the paper before loading:\n"
-            f"1. Remove the References section\n"
-            f"2. Remove Acknowledgments, Author Contributions, Funding sections\n"
-            f"3. Remove detailed literature review paragraphs\n\n"
-            f"DO NOT remove: Methods, Results, Figure captions, or Key equations.\n\n"
-            f"Future versions will support automatic trimming and chunking."
-        )
+    if "paper_text" in paper_input:
+        paper_text = paper_input["paper_text"]
+        if not paper_text or not isinstance(paper_text, str) or len(paper_text.strip()) < 100:
+            errors.append("paper_text is empty or too short (< 100 chars)")
+        else:
+            # Validate paper_text is not too long (v1: hard limit, no auto-trimming)
+            # See CONTEXT_WINDOW_LIMITS in schemas/state.py for the canonical source
+            max_chars = CONTEXT_WINDOW_LIMITS["max_paper_chars"]
+            paper_length = len(paper_text)
+            if paper_length > max_chars:
+                errors.append(
+                    f"Paper exceeds maximum length ({max_chars:,} chars). "
+                    f"Current length: {paper_length:,} chars (~{paper_length // 4:,} tokens).\n\n"
+                    f"Please manually trim the paper before loading:\n"
+                    f"1. Remove the References section\n"
+                    f"2. Remove Acknowledgments, Author Contributions, Funding sections\n"
+                    f"3. Remove detailed literature review paragraphs\n\n"
+                    f"DO NOT remove: Methods, Results, Figure captions, or Key equations.\n\n"
+                    f"Future versions will support automatic trimming and chunking."
+                )
     
     # Validate figures
-    figures = paper_input["figures"]
-    if not isinstance(figures, list):
-        raise ValidationError("figures must be a list")
-    
-    if len(figures) == 0:
-        warnings.append("No figures provided - system needs figure images for visual comparison")
-    
-    for i, fig in enumerate(figures):
-        # Check required figure fields
-        if "id" not in fig:
-            errors.append(f"Figure {i}: missing 'id' field")
-        if "image_path" not in fig:
-            errors.append(f"Figure {i} ({fig.get('id', 'unknown')}): missing 'image_path' field")
-        
-        # Check if image file exists
-        if "image_path" in fig:
-            img_path = Path(fig["image_path"])
-            if not img_path.exists():
-                warnings.append(f"Figure {fig.get('id', i)}: image file not found: {fig['image_path']}")
-            elif img_path.suffix.lower() not in ['.png', '.jpg', '.jpeg', '.gif', '.webp']:
-                warnings.append(f"Figure {fig.get('id', i)}: unusual image format: {img_path.suffix}")
-        
-        # Check digitized data if provided
-        if fig.get("digitized_data_path"):
-            data_path = Path(fig["digitized_data_path"])
-            if not data_path.exists():
-                warnings.append(f"Figure {fig.get('id', i)}: digitized data file not found: {fig['digitized_data_path']}")
+    if "figures" in paper_input:
+        figures = paper_input["figures"]
+        if not isinstance(figures, list):
+            errors.append("figures must be a list")
+        else:
+            if len(figures) == 0:
+                warnings.append("No figures provided - system needs figure images for visual comparison")
+            
+            for i, fig in enumerate(figures):
+                # Check required figure fields
+                if not isinstance(fig, dict):
+                     errors.append(f"Figure {i}: must be a dictionary")
+                     continue
+
+                if "id" not in fig:
+                    errors.append(f"Figure {i}: missing 'id' field")
+                if "image_path" not in fig:
+                    errors.append(f"Figure {i} ({fig.get('id', 'unknown')}): missing 'image_path' field")
+                
+                # Check if image file exists
+                if "image_path" in fig:
+                    img_path = Path(fig["image_path"])
+                    if not img_path.exists():
+                        warnings.append(f"Figure {fig.get('id', i)}: image file not found: {fig['image_path']}")
+                    elif img_path.suffix.lower() not in ['.png', '.jpg', '.jpeg', '.gif', '.webp']:
+                        warnings.append(f"Figure {fig.get('id', i)}: unusual image format: {img_path.suffix}")
+                
+                # Check digitized data if provided
+                if fig.get("digitized_data_path"):
+                    data_path = Path(fig["digitized_data_path"])
+                    if not data_path.exists():
+                        warnings.append(f"Figure {fig.get('id', i)}: digitized data file not found: {fig['digitized_data_path']}")
     
     if errors:
         raise ValidationError(f"Paper input validation failed:\n" + "\n".join(errors))

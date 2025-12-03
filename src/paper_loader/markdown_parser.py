@@ -35,7 +35,8 @@ def extract_figures_from_markdown(markdown_text: str) -> List[Dict[str, str]]:
     figures: List[Dict[str, str]] = []
     
     # Pattern for markdown images: ![alt](url) or ![alt](url "title")
-    markdown_pattern = r'!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)'
+    # Supports one level of nested brackets in alt text and parentheses in URL
+    markdown_pattern = r'!\[((?:[^\[\]]|\[[^\]]*\])*)\]\(((?:[^()\s]|\([^)]*\))+)(?:\s+"[^"]*")?\)'
     for match in re.finditer(markdown_pattern, markdown_text):
         alt_text = match.group(1).strip()
         url = match.group(2).strip()
@@ -126,14 +127,14 @@ def generate_figure_id(index: int, alt_text: str, url: str) -> str:
         A figure ID string like "Fig1" or "Fig3a"
     """
     # Try to extract figure number from alt text
-    fig_match = re.search(r'(?:fig(?:ure)?|fig\.?)\s*(\d+[a-z]?)', alt_text, re.IGNORECASE)
+    fig_match = re.search(r'(?:fig(?:ure)?|fig\.?)\s*(\d+(?:[.\-]\d+)?[a-z]?)', alt_text, re.IGNORECASE)
     if fig_match:
         return f"Fig{fig_match.group(1)}"
     
     # Try to extract from URL filename
     parsed = urlparse(url)
     filename = Path(unquote(parsed.path)).stem
-    fig_match = re.search(r'fig(?:ure)?[_\-]?(\d+[a-z]?)', filename, re.IGNORECASE)
+    fig_match = re.search(r'fig(?:ure)?[_\-]?(\d+(?:[.\-]\d+)?[a-z]?)', filename, re.IGNORECASE)
     if fig_match:
         return f"Fig{fig_match.group(1)}"
     
