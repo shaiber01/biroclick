@@ -31,9 +31,10 @@ class TestResultsAnalyzerNode:
         # Verify analysis_summary is set correctly
         assert "analysis_summary" in result
         assert result["analysis_summary"] == "Analysis skipped: No outputs available"
-        # Verify no other state fields are incorrectly set
-        assert "analysis_overall_classification" not in result
-        assert "figure_comparisons" not in result
+        # When analysis fails due to missing outputs, classification is set to FAILED
+        assert result["analysis_overall_classification"] == AnalysisClassification.FAILED
+        assert result["figure_comparisons"] == []
+        assert result["analysis_result_reports"] == []
 
     def test_analyzer_plan_none(self, base_state):
         """Test handling when plan is None (should default gracefully or fail safely)."""
@@ -103,8 +104,10 @@ class TestResultsAnalyzerNode:
         # Verify analysis_summary indicates skip
         assert "analysis_summary" in result
         assert "Analysis skipped" in result["analysis_summary"] or isinstance(result["analysis_summary"], dict)
-        # Verify no classification is set (analysis skipped)
-        assert "analysis_overall_classification" not in result
+        # When analysis fails due to missing outputs, classification is set to FAILED
+        assert result["analysis_overall_classification"] == AnalysisClassification.FAILED
+        assert result["figure_comparisons"] == []
+        assert result["analysis_result_reports"] == []
 
     @patch("src.agents.analysis.check_context_or_escalate", return_value=None)
     @patch("src.agents.analysis.build_agent_prompt", return_value="Prompt")
@@ -222,8 +225,10 @@ class TestResultsAnalyzerNode:
         assert result["workflow_phase"] == "analysis"
         # Verify analysis_summary indicates skip
         assert "analysis_summary" in result
-        # Verify no classification is set (analysis skipped)
-        assert "analysis_overall_classification" not in result
+        # When analysis fails due to missing outputs, classification is set to FAILED
+        assert result["analysis_overall_classification"] == AnalysisClassification.FAILED
+        assert result["figure_comparisons"] == []
+        assert result["analysis_result_reports"] == []
 
     @patch("src.agents.analysis.check_context_or_escalate")
     def test_returns_escalation_on_context_overflow(self, mock_context, base_state):

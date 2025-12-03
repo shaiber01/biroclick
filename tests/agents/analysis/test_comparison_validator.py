@@ -583,10 +583,11 @@ class TestComparisonValidatorNode:
         
         result = comparison_validator_node(base_state)
         
-        # Should return state unchanged (early return)
-        assert result["awaiting_user_input"] is True
-        # Should not have processed - no workflow_phase set
-        assert "workflow_phase" not in result or result.get("workflow_phase") != "comparison_validation"
+        # Should return empty dict (no state changes) - this preserves awaiting_user_input=True
+        # in the merged state since LangGraph merges the result dict into state
+        assert result == {}
+        # Verify workflow_phase was NOT set (processing was skipped)
+        assert "workflow_phase" not in result
     
     @patch("src.agents.analysis.check_context_or_escalate", return_value=None)
     def test_handles_comparisons_for_wrong_stage(self, mock_check, base_state):

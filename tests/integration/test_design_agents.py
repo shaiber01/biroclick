@@ -82,8 +82,8 @@ class TestDesignReviewerVerdictHandling:
         # Feedback should contain the actual feedback content
         assert "wavelength" in result["reviewer_feedback"].lower()
 
-    def test_design_reviewer_missing_verdict_defaults_to_approve(self, base_state):
-        """Missing verdict in LLM response should default to approve."""
+    def test_design_reviewer_missing_verdict_defaults_to_needs_revision(self, base_state):
+        """Missing verdict in LLM response should default to needs_revision (fail-closed)."""
         from src.agents.design import design_reviewer_node
 
         mock_response = {
@@ -101,9 +101,9 @@ class TestDesignReviewerVerdictHandling:
         ):
             result = design_reviewer_node(base_state)
 
-        # Should default to approve, not crash
-        assert result["last_design_review_verdict"] == "approve"
-        assert result["design_revision_count"] == 0  # Not incremented
+        # Fail-closed: missing verdict should default to needs_revision (safer)
+        assert result["last_design_review_verdict"] == "needs_revision"
+        assert result["design_revision_count"] == 1  # Incremented for needs_revision
 
 
 class TestDesignReviewerVerdictNormalization:
@@ -235,8 +235,8 @@ class TestDesignReviewerVerdictNormalization:
         assert result["last_design_review_verdict"] == "needs_revision"
         assert result["design_revision_count"] == 2
 
-    def test_unknown_verdict_defaults_to_approve(self, base_state):
-        """Unknown verdict string should default to 'approve' with warning."""
+    def test_unknown_verdict_defaults_to_needs_revision(self, base_state):
+        """Unknown verdict string should default to needs_revision (fail-closed safety)."""
         from src.agents.design import design_reviewer_node
 
         mock_response = {
@@ -254,9 +254,9 @@ class TestDesignReviewerVerdictNormalization:
         ):
             result = design_reviewer_node(base_state)
 
-        # Unknown verdict should default to approve (don't block workflow)
-        assert result["last_design_review_verdict"] == "approve"
-        assert result["design_revision_count"] == 0  # Not incremented
+        # Fail-closed: unknown verdict should default to needs_revision (safer)
+        assert result["last_design_review_verdict"] == "needs_revision"
+        assert result["design_revision_count"] == 1  # Incremented for needs_revision
 
 
 class TestDesignRevisionCounters:
@@ -436,10 +436,10 @@ class TestDesignReviewerFeedback:
 
 
 class TestDesignReviewerLLMFailure:
-    """Verify design reviewer handles LLM failures with auto-approve."""
+    """Verify design reviewer handles LLM failures with fail-closed safety."""
 
-    def test_design_reviewer_auto_approves_on_llm_exception(self, base_state):
-        """LLM call failure should result in auto-approve to unblock workflow."""
+    def test_design_reviewer_defaults_to_needs_revision_on_llm_exception(self, base_state):
+        """LLM call failure should result in needs_revision (fail-closed safety)."""
         from src.agents.design import design_reviewer_node
 
         base_state["current_stage_id"] = "stage_0"
@@ -452,10 +452,10 @@ class TestDesignReviewerLLMFailure:
         ):
             result = design_reviewer_node(base_state)
 
-        # Should auto-approve, not crash
-        assert result["last_design_review_verdict"] == "approve"
-        # Counter should NOT be incremented on auto-approve
-        assert result["design_revision_count"] == 1
+        # Fail-closed: LLM error should trigger needs_revision (safer than auto-approve)
+        assert result["last_design_review_verdict"] == "needs_revision"
+        # Counter should be incremented for needs_revision
+        assert result["design_revision_count"] == 2
         # Should have some indication of the error
         assert len(result.get("reviewer_issues", [])) > 0
 

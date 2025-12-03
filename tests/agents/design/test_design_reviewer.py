@@ -158,8 +158,8 @@ class TestDesignReviewerNode:
     @patch("src.agents.base.check_context_or_escalate")
     @patch("src.agents.design.build_agent_prompt")
     @patch("src.agents.design.call_agent_with_metrics")
-    def test_reviewer_llm_failure_auto_approve(self, mock_llm, mock_prompt, mock_check, base_state):
-        """Test reviewer defaults to auto-approve on LLM failure."""
+    def test_reviewer_llm_failure_defaults_to_needs_revision(self, mock_llm, mock_prompt, mock_check, base_state):
+        """Test reviewer defaults to needs_revision on LLM failure (fail-closed safety)."""
         mock_check.return_value = None
         mock_prompt.return_value = "Prompt"
         error_msg = "API Error"
@@ -168,8 +168,8 @@ class TestDesignReviewerNode:
         
         result = design_reviewer_node(base_state)
         
-        # Verify auto-approve verdict
-        assert result["last_design_review_verdict"] == "approve"
+        # Fail-closed: LLM failure should trigger needs_revision (safer than auto-approve)
+        assert result["last_design_review_verdict"] == "needs_revision"
         # Verify issues contain error info with exact format
         assert result["reviewer_issues"] is not None
         assert isinstance(result["reviewer_issues"], list)
@@ -178,18 +178,18 @@ class TestDesignReviewerNode:
         issue_descriptions = [issue.get("description", "") for issue in result["reviewer_issues"]]
         assert any("LLM review unavailable" in desc for desc in issue_descriptions)
         assert any(error_msg[:200] in desc for desc in issue_descriptions)  # Error truncated to 200 chars
-        # Verify revision count is NOT incremented on error
-        assert result["design_revision_count"] == initial_count
+        # Verify revision count IS incremented for needs_revision
+        assert result["design_revision_count"] == initial_count + 1
         # Verify workflow phase is set
         assert result["workflow_phase"] == "design_review"
-        # Verify feedback is NOT set for auto-approve
-        assert "reviewer_feedback" not in result
+        # Verify feedback IS set for needs_revision
+        assert "reviewer_feedback" in result
 
     @patch("src.agents.base.check_context_or_escalate")
     @patch("src.agents.design.build_agent_prompt")
     @patch("src.agents.design.call_agent_with_metrics")
-    def test_reviewer_missing_verdict(self, mock_llm, mock_prompt, mock_check, base_state):
-        """Test handling when LLM returns JSON without 'verdict'."""
+    def test_reviewer_missing_verdict_defaults_to_needs_revision(self, mock_llm, mock_prompt, mock_check, base_state):
+        """Test handling when LLM returns JSON without 'verdict' (fail-closed safety)."""
         mock_check.return_value = None
         mock_prompt.return_value = "Prompt"
         mock_llm.return_value = {"feedback": "Some feedback but no verdict"}
@@ -197,17 +197,17 @@ class TestDesignReviewerNode:
         
         result = design_reviewer_node(base_state)
         
-        # Verify defaults to approve when verdict missing
-        assert result["last_design_review_verdict"] == "approve"
+        # Fail-closed: missing verdict should default to needs_revision (safer)
+        assert result["last_design_review_verdict"] == "needs_revision"
         # Verify issues default to empty list (or from output if present)
         issues = result.get("reviewer_issues", [])
         assert isinstance(issues, list)
-        # Verify revision count is NOT incremented (approve verdict)
-        assert result["design_revision_count"] == initial_count
+        # Verify revision count IS incremented for needs_revision
+        assert result["design_revision_count"] == initial_count + 1
         # Verify workflow phase is set
         assert result["workflow_phase"] == "design_review"
-        # Verify feedback is NOT set (approve verdict)
-        assert "reviewer_feedback" not in result
+        # Verify feedback IS set for needs_revision (uses feedback from LLM response)
+        assert result["reviewer_feedback"] == "Some feedback but no verdict"
 
     @patch("src.agents.design.call_agent_with_metrics")
     @patch("src.agents.design.build_agent_prompt")

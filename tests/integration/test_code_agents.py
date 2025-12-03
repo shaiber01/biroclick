@@ -583,12 +583,13 @@ class TestCodeReviewerEscalation:
 class TestCodeReviewerLLMErrors:
     """Verify LLM error handling in code reviewer."""
 
-    def test_code_reviewer_auto_approves_on_llm_error(self, base_state):
-        """Should auto-approve and continue when LLM call fails."""
+    def test_code_reviewer_defaults_to_needs_revision_on_llm_error(self, base_state):
+        """Should default to needs_revision (fail-closed) when LLM call fails."""
         from src.agents.code import code_reviewer_node
 
         base_state["current_stage_id"] = "stage_0"
         base_state["code"] = "import meep as mp\nsim = mp.Simulation()"
+        initial_count = base_state.get("code_revision_count", 0)
 
         # Make the LLM call raise an exception
         with patch(
@@ -597,14 +598,12 @@ class TestCodeReviewerLLMErrors:
         ):
             result = code_reviewer_node(base_state)
 
-        # Should auto-approve instead of failing
-        assert result.get("last_code_review_verdict") == "approve", (
-            f"Should auto-approve on LLM error. Got: {result.get('last_code_review_verdict')}"
+        # Fail-closed: LLM error should trigger needs_revision (safer than auto-approve)
+        assert result.get("last_code_review_verdict") == "needs_revision", (
+            f"Should default to needs_revision on LLM error. Got: {result.get('last_code_review_verdict')}"
         )
-        # Should NOT block workflow
-        assert result.get("awaiting_user_input") is not True, (
-            "Should not block workflow on reviewer LLM error"
-        )
+        # Counter should be incremented for needs_revision
+        assert result["code_revision_count"] == initial_count + 1
 
     def test_code_reviewer_llm_error_includes_issue_note(self, base_state):
         """Auto-approval on LLM error should include note in issues."""

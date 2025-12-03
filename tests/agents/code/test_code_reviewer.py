@@ -171,16 +171,18 @@ class TestCodeReviewerNode:
 
     @patch("src.agents.code.build_agent_prompt")
     @patch("src.agents.code.call_agent_with_metrics")
-    def test_reviewer_llm_failure_auto_approve(self, mock_llm, mock_prompt, base_state):
-        """Test reviewer defaults to auto-approve on LLM failure (non-critical)."""
+    def test_reviewer_llm_failure_defaults_to_needs_revision(self, mock_llm, mock_prompt, base_state):
+        """Test reviewer defaults to needs_revision on LLM failure (fail-closed safety)."""
         mock_prompt.return_value = "Prompt"
         mock_llm.side_effect = Exception("API Error")
+        initial_count = base_state.get("code_revision_count", 0)
         
         result = code_reviewer_node(base_state)
         
-        # Auto-approve logic for reviewers
-        assert result["last_code_review_verdict"] == "approve"
-        assert result["code_revision_count"] == base_state.get("code_revision_count", 0)
+        # Fail-closed: LLM failure should trigger needs_revision (safer than auto-approve)
+        assert result["last_code_review_verdict"] == "needs_revision"
+        # Revision count should be incremented
+        assert result["code_revision_count"] == initial_count + 1
         
         # Verify issues structure
         assert "reviewer_issues" in result
@@ -189,8 +191,8 @@ class TestCodeReviewerNode:
         assert "LLM review unavailable" in result["reviewer_issues"][0]["description"]
         assert "API Error" in result["reviewer_issues"][0]["description"]
         
-        # Should not set feedback on auto-approve
-        assert "reviewer_feedback" not in result
+        # Feedback should be set for needs_revision
+        assert "reviewer_feedback" in result
 
     @patch("src.agents.code.build_agent_prompt")
     @patch("src.agents.code.call_agent_with_metrics")
@@ -203,7 +205,8 @@ class TestCodeReviewerNode:
         
         result = code_reviewer_node(base_state)
         
-        assert result["last_code_review_verdict"] == "approve"
+        # Fail-closed: LLM failure should trigger needs_revision
+        assert result["last_code_review_verdict"] == "needs_revision"
         assert len(result["reviewer_issues"]) == 1
         assert "LLM review unavailable" in result["reviewer_issues"][0]["description"]
 

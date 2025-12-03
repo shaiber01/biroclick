@@ -6,6 +6,13 @@ from copy import deepcopy
 from typing import Any, Dict, Optional
 from unittest.mock import MagicMock, patch
 
+from schemas.state import (
+    MAX_CODE_REVISIONS,
+    MAX_DESIGN_REVISIONS,
+    MAX_EXECUTION_FAILURES,
+    MAX_PHYSICS_FAILURES,
+    MAX_REPLANS,
+)
 from tests.agents.shared_objects import (
     CLI_MATERIAL_CHECKPOINT_PROMPT,
     LONG_FALLBACK_JSON,
@@ -360,8 +367,8 @@ _CODE_STATE_TEMPLATE = {
     "code_revision_count": 0,
     "design_revision_count": 0,
     "runtime_config": {
-        "max_code_revisions": 3,
-        "max_design_revisions": 3,
+        "max_code_revisions": MAX_CODE_REVISIONS,
+        "max_design_revisions": MAX_DESIGN_REVISIONS,
     },
 }
 
@@ -380,7 +387,7 @@ _DESIGN_STATE_TEMPLATE = {
         ]
     },
     "design_revision_count": 0,
-    "runtime_config": {"max_design_revisions": 3},
+    "runtime_config": {"max_design_revisions": MAX_DESIGN_REVISIONS},
     "assumptions": {
         "global_assumptions": [
             {"id": "existing_1", "description": "Existing assumption"}
@@ -407,9 +414,9 @@ _EXECUTION_STATE_TEMPLATE = {
     "design_revision_count": 0,
     "design_description": {"parameters": {"p1": 10}},
     "runtime_config": {
-        "max_execution_failures": 3,
-        "max_physics_failures": 3,
-        "max_design_revisions": 3,
+        "max_execution_failures": MAX_EXECUTION_FAILURES,
+        "max_physics_failures": MAX_PHYSICS_FAILURES,
+        "max_design_revisions": MAX_DESIGN_REVISIONS,
     },
 }
 
@@ -417,7 +424,7 @@ _PLAN_STATE_TEMPLATE = {
     "paper_text": "x" * 500,
     "paper_id": "test_paper",
     "replan_count": 0,
-    "runtime_config": {"max_replans": 3},
+    "runtime_config": {"max_replans": MAX_REPLANS},
 }
 
 _PLANNER_LLM_OUTPUT_TEMPLATE = {

@@ -245,11 +245,12 @@ class TestPlannerErrorHandling:
                 assert result.get("awaiting_user_input") is True
                 assert result.get("workflow_phase") == "planning"
 
-    def test_reviewer_llm_error_auto_approves(self, base_state, valid_plan):
-        """Test that reviewer LLM errors result in auto-approval."""
+    def test_reviewer_llm_error_defaults_to_needs_revision(self, base_state, valid_plan):
+        """Test that reviewer LLM errors result in needs_revision (fail-closed safety)."""
         from src.agents.planning import plan_reviewer_node
 
         base_state["plan"] = valid_plan
+        initial_replan_count = base_state.get("replan_count", 0)
 
         with patch(
             "src.agents.planning.call_agent_with_metrics",
@@ -257,18 +258,18 @@ class TestPlannerErrorHandling:
         ):
             result = plan_reviewer_node(base_state)
 
-        assert result.get("last_plan_review_verdict") == "approve", (
-            f"Expected verdict='approve', got {result.get('last_plan_review_verdict')}"
+        # Fail-closed: LLM error should trigger needs_revision (safer than auto-approve)
+        assert result.get("last_plan_review_verdict") == "needs_revision", (
+            f"Expected verdict='needs_revision', got {result.get('last_plan_review_verdict')}"
         )
         assert result.get("workflow_phase") == "plan_review", (
             f"Expected workflow_phase='plan_review', got {result.get('workflow_phase')}"
         )
-        # Should not escalate to user
-        assert result.get("awaiting_user_input") is not True
-        assert result.get("ask_user_trigger") is None
+        # Counter should be incremented for needs_revision
+        assert result.get("replan_count") == initial_replan_count + 1
 
-    def test_reviewer_llm_error_preserves_replan_count(self, base_state, valid_plan):
-        """Test that reviewer auto-approval doesn't modify replan_count."""
+    def test_reviewer_llm_error_increments_replan_count(self, base_state, valid_plan):
+        """Test that reviewer needs_revision on LLM error increments replan_count."""
         from src.agents.planning import plan_reviewer_node
 
         base_state["plan"] = valid_plan
@@ -280,9 +281,10 @@ class TestPlannerErrorHandling:
         ):
             result = plan_reviewer_node(base_state)
 
-        assert result.get("last_plan_review_verdict") == "approve"
-        # Should not increment replan_count on auto-approve
-        assert "replan_count" not in result or result.get("replan_count") == 2
+        # Fail-closed: LLM error should trigger needs_revision
+        assert result.get("last_plan_review_verdict") == "needs_revision"
+        # Counter should be incremented for needs_revision
+        assert result.get("replan_count") == 3
 
 
 class TestPlanNodeMalformedData:
