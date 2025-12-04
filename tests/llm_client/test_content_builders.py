@@ -2204,3 +2204,324 @@ class TestGetImagesForAnalyzer:
         assert str(fig1) in image_paths
         assert str(output_img) in image_paths
         assert str(fig2) not in image_paths
+
+    # =========================================================================
+    # Behavior-focused tests that verify correct operation in realistic scenarios
+    # These tests would have caught the original bugs:
+    # 1. All paper figures being sent instead of just stage targets
+    # 2. Relative simulation output paths not being resolved
+    # =========================================================================
+
+    def test_multi_stage_workflow_each_stage_gets_only_its_targets(self, tmp_path):
+        """
+        Test that in a multi-stage workflow, each stage only gets its target figures.
+        
+        This test would have caught the bug where ALL paper figures were sent
+        to the analyzer regardless of which stage was being analyzed.
+        """
+        # Create paper figures for different stages
+        figures_dir = tmp_path / "figures"
+        figures_dir.mkdir()
+        fig2a = figures_dir / "fig2a.png"
+        fig2b = figures_dir / "fig2b.png"
+        fig3a = figures_dir / "fig3a.png"
+        fig3b = figures_dir / "fig3b.png"
+        for f in [fig2a, fig2b, fig3a, fig3b]:
+            f.write_bytes(b"paper figure data")
+        
+        # Common plan with multiple stages, each targeting different figures
+        plan = {
+            "stages": [
+                {"stage_id": "stage0_material_validation", "targets": ["fig2a"]},
+                {"stage_id": "stage1_bare_disk", "targets": ["fig2b", "fig3a"]},
+                {"stage_id": "stage2_coupled", "targets": ["fig3b"]},
+            ]
+        }
+        
+        paper_figures = [
+            {"id": "fig2a", "image_path": str(fig2a)},
+            {"id": "fig2b", "image_path": str(fig2b)},
+            {"id": "fig3a", "image_path": str(fig3a)},
+            {"id": "fig3b", "image_path": str(fig3b)},
+        ]
+        
+        # Test stage0 - should only get fig2a
+        state_stage0 = {
+            "current_stage_id": "stage0_material_validation",
+            "plan": plan,
+            "paper_figures": paper_figures,
+        }
+        images_stage0 = get_images_for_analyzer(state_stage0)
+        assert len(images_stage0) == 1
+        assert str(fig2a) in [str(img) for img in images_stage0]
+        
+        # Test stage1 - should only get fig2b and fig3a
+        state_stage1 = {
+            "current_stage_id": "stage1_bare_disk",
+            "plan": plan,
+            "paper_figures": paper_figures,
+        }
+        images_stage1 = get_images_for_analyzer(state_stage1)
+        assert len(images_stage1) == 2
+        image_paths = [str(img) for img in images_stage1]
+        assert str(fig2b) in image_paths
+        assert str(fig3a) in image_paths
+        assert str(fig2a) not in image_paths  # Not a target for this stage
+        assert str(fig3b) not in image_paths  # Not a target for this stage
+        
+        # Test stage2 - should only get fig3b
+        state_stage2 = {
+            "current_stage_id": "stage2_coupled",
+            "plan": plan,
+            "paper_figures": paper_figures,
+        }
+        images_stage2 = get_images_for_analyzer(state_stage2)
+        assert len(images_stage2) == 1
+        assert str(fig3b) in [str(img) for img in images_stage2]
+
+    def test_simulation_outputs_require_path_resolution(self, tmp_path):
+        """
+        Test that simulation outputs with just filenames are correctly resolved.
+        
+        This test would have caught the bug where relative filenames like
+        "stage0_materials_plot.png" weren't being found because they were
+        checked in the current working directory instead of the stage output dir.
+        """
+        # Create realistic directory structure matching production
+        run_dir = tmp_path / "outputs" / "aluminum_paper" / "run_20251204_194932"
+        stage_dir = run_dir / "stage0_material_validation"
+        stage_dir.mkdir(parents=True)
+        
+        # Create simulation output (like code_runner produces)
+        plot_file = stage_dir / "stage0_materials_plot.png"
+        plot_file.write_bytes(b"matplotlib plot data")
+        
+        # State as it would be in production - files list has just filenames
+        state = {
+            "current_stage_id": "stage0_material_validation",
+            "run_output_dir": str(run_dir),
+            "stage_outputs": {
+                "files": [
+                    "stage0_material_glass.csv",
+                    "stage0_material_aluminum.csv", 
+                    "stage0_materials_plot.png",  # Just filename, not full path
+                ],
+            },
+        }
+        
+        images = get_images_for_analyzer(state)
+        
+        # Should find the plot file by resolving: run_dir / stage_id / filename
+        assert len(images) == 1
+        assert str(images[0]) == str(plot_file)
+
+    def test_only_filenames_in_stage_outputs_realistic_scenario(self, tmp_path):
+        """
+        Test the exact scenario from the bug: stage_outputs.files contains
+        only filenames (as produced by code_runner), not full paths.
+        
+        Before the fix, these files would NOT be found because:
+        - Path("stage0_materials_plot.png").exists() checks current working dir
+        - The actual file is in outputs/paper_id/run_id/stage_id/
+        """
+        # Simulate the exact production structure
+        run_dir = tmp_path / "outputs" / "paper_123" / "run_20251204"
+        stage0_dir = run_dir / "stage0_material_validation"
+        stage1_dir = run_dir / "stage1_bare_disk"
+        stage0_dir.mkdir(parents=True)
+        stage1_dir.mkdir(parents=True)
+        
+        # Stage 0 outputs
+        stage0_plot = stage0_dir / "materials_plot.png"
+        stage0_plot.write_bytes(b"stage0 plot")
+        
+        # Stage 1 outputs  
+        stage1_plot = stage1_dir / "absorption_spectrum.png"
+        stage1_plot.write_bytes(b"stage1 plot")
+        
+        # Test stage0 - should find stage0's plot
+        state_stage0 = {
+            "current_stage_id": "stage0_material_validation",
+            "run_output_dir": str(run_dir),
+            "stage_outputs": {
+                "files": ["materials_plot.png", "data.csv"],  # Just filenames!
+            },
+        }
+        images_stage0 = get_images_for_analyzer(state_stage0)
+        assert len(images_stage0) == 1
+        assert str(images_stage0[0]) == str(stage0_plot)
+        
+        # Test stage1 - should find stage1's plot (not stage0's!)
+        state_stage1 = {
+            "current_stage_id": "stage1_bare_disk",
+            "run_output_dir": str(run_dir),
+            "stage_outputs": {
+                "files": ["absorption_spectrum.png", "spectrum.csv"],
+            },
+        }
+        images_stage1 = get_images_for_analyzer(state_stage1)
+        assert len(images_stage1) == 1
+        assert str(images_stage1[0]) == str(stage1_plot)
+
+    def test_figure_id_matching_is_exact(self, tmp_path):
+        """Test that figure ID matching is exact - 'fig2' doesn't match 'fig2a'."""
+        fig2 = tmp_path / "fig2.png"
+        fig2a = tmp_path / "fig2a.png"
+        fig2.write_bytes(b"data")
+        fig2a.write_bytes(b"data")
+        
+        state = {
+            "current_stage_id": "stage1",
+            "plan": {
+                "stages": [
+                    {"stage_id": "stage1", "targets": ["fig2"]},  # Exact match required
+                ]
+            },
+            "paper_figures": [
+                {"id": "fig2", "image_path": str(fig2)},
+                {"id": "fig2a", "image_path": str(fig2a)},  # Similar but different ID
+            ],
+        }
+        
+        images = get_images_for_analyzer(state)
+        
+        # Only fig2 should match, not fig2a
+        assert len(images) == 1
+        assert str(fig2) in [str(img) for img in images]
+        assert str(fig2a) not in [str(img) for img in images]
+
+    def test_targets_not_in_paper_figures_are_silently_skipped(self, tmp_path):
+        """Test that targets referencing non-existent figure IDs don't crash."""
+        fig1 = tmp_path / "fig1.png"
+        fig1.write_bytes(b"data")
+        
+        state = {
+            "current_stage_id": "stage1",
+            "plan": {
+                "stages": [
+                    {"stage_id": "stage1", "targets": ["fig1", "fig_nonexistent"]},
+                ]
+            },
+            "paper_figures": [
+                {"id": "fig1", "image_path": str(fig1)},
+                # fig_nonexistent is not in paper_figures
+            ],
+        }
+        
+        images = get_images_for_analyzer(state)
+        
+        # Should return fig1, silently skip the nonexistent target
+        assert len(images) == 1
+        assert str(fig1) in [str(img) for img in images]
+
+    def test_paper_figure_without_id_is_not_filtered(self, tmp_path):
+        """Test that paper figures without 'id' field are included when filtering."""
+        fig_with_id = tmp_path / "fig_with_id.png"
+        fig_without_id = tmp_path / "fig_without_id.png"
+        fig_with_id.write_bytes(b"data")
+        fig_without_id.write_bytes(b"data")
+        
+        state = {
+            "current_stage_id": "stage1",
+            "plan": {
+                "stages": [
+                    {"stage_id": "stage1", "targets": ["fig1"]},
+                ]
+            },
+            "paper_figures": [
+                {"id": "fig1", "image_path": str(fig_with_id)},
+                {"image_path": str(fig_without_id)},  # No id field
+            ],
+        }
+        
+        images = get_images_for_analyzer(state)
+        
+        # Only fig1 should be included (has matching id)
+        # Figure without id has empty string id, doesn't match "fig1"
+        assert len(images) == 1
+        assert str(fig_with_id) in [str(img) for img in images]
+
+    def test_realistic_aluminum_nanoantenna_scenario(self, tmp_path):
+        """
+        Test with realistic data matching the aluminum_nanoantenna_complexes paper.
+        
+        This integration-style test verifies the function works correctly with
+        realistic state data similar to actual production runs.
+        """
+        # Create figures directory
+        figures_dir = tmp_path / "figures"
+        figures_dir.mkdir()
+        
+        # Create paper figures (like in real paper)
+        fig2a = figures_dir / "fig2a_TDBC_absorption.png"
+        fig2b = figures_dir / "fig2b_bare_disk_spectrum.png"
+        fig3a = figures_dir / "fig3a_coupled_spectrum.png"
+        for f in [fig2a, fig2b, fig3a]:
+            f.write_bytes(b"paper figure")
+        
+        # Create run output directory
+        run_dir = tmp_path / "outputs" / "aluminum_nanoantenna" / "run_20251204_194932"
+        
+        # Create stage0 output
+        stage0_dir = run_dir / "stage0_material_validation"
+        stage0_dir.mkdir(parents=True)
+        stage0_plot = stage0_dir / "stage0_materials_plot.png"
+        stage0_plot.write_bytes(b"materials validation plot")
+        
+        # Realistic plan
+        plan = {
+            "stages": [
+                {
+                    "stage_id": "stage0_material_validation",
+                    "targets": ["fig2a"],
+                    "description": "Validate TDBC absorption matches paper"
+                },
+                {
+                    "stage_id": "stage1_bare_disk",
+                    "targets": ["fig2b"],
+                    "description": "Reproduce bare disk spectrum"
+                },
+                {
+                    "stage_id": "stage2_coupled",
+                    "targets": ["fig3a"],
+                    "description": "Reproduce coupled system spectrum"
+                },
+            ]
+        }
+        
+        paper_figures = [
+            {"id": "fig2a", "image_path": str(fig2a), "description": "TDBC absorption"},
+            {"id": "fig2b", "image_path": str(fig2b), "description": "Bare disk spectrum"},
+            {"id": "fig3a", "image_path": str(fig3a), "description": "Coupled spectrum"},
+        ]
+        
+        # Test analyzing stage0
+        state = {
+            "current_stage_id": "stage0_material_validation",
+            "run_output_dir": str(run_dir),
+            "plan": plan,
+            "paper_figures": paper_figures,
+            "stage_outputs": {
+                "files": [
+                    "stage0_material_glass.csv",
+                    "stage0_material_aluminum.csv",
+                    "stage0_material_tdbc.csv",
+                    "stage0_materials_plot.png",
+                ],
+            },
+        }
+        
+        images = get_images_for_analyzer(state)
+        
+        # Should get: fig2a (target) + stage0_materials_plot.png (simulation output)
+        assert len(images) == 2
+        image_paths = [str(img) for img in images]
+        
+        # Paper figure for this stage's target
+        assert str(fig2a) in image_paths
+        # Simulation output resolved correctly
+        assert str(stage0_plot) in image_paths
+        
+        # Should NOT include figures from other stages
+        assert str(fig2b) not in image_paths
+        assert str(fig3a) not in image_paths

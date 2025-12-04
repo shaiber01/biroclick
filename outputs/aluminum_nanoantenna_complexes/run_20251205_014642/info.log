@@ -1,0 +1,19 @@
+2025-12-05 01:46:56,231 - __main__ - INFO - 📁 Run output directory: outputs/aluminum_nanoantenna_complexes/run_20251205_014642
+2025-12-05 01:46:56,324 - src.callbacks - INFO - 🔄 Entering node: adapt_prompts
+2025-12-05 01:48:19,063 - httpx - INFO - HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2025-12-05 01:48:19,080 - src.agents.planning - INFO - 📝 adapt_prompts: domain=plasmonics (unchanged), no adaptations needed
+2025-12-05 01:48:19,082 - src.callbacks - INFO - 🔄 Entering node: planning
+2025-12-05 01:50:57,539 - httpx - INFO - HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2025-12-05 01:50:57,679 - src.agents.planning - INFO - 📋 planning: 4 stage(s) [?, ?, ?, ?], 4 target(s)
+2025-12-05 01:50:57,680 - src.callbacks - INFO - 🔄 Entering node: route_after_plan
+2025-12-05 01:50:57,685 - src.callbacks - INFO - 🔄 Entering node: plan_review
+2025-12-05 01:52:04,628 - httpx - INFO - HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2025-12-05 01:52:04,765 - src.callbacks - INFO - 🔄 Entering node: router
+2025-12-05 01:52:04,766 - src.routing - INFO - ✅ plan_review: verdict=approve → select_stage
+2025-12-05 01:52:04,767 - src.callbacks - INFO - 🔄 Entering node: select_stage
+2025-12-05 01:52:04,768 - src.agents.stage_selection - INFO - 🎯 select_stage: stage0_material_validation (MATERIAL_VALIDATION, ready)
+2025-12-05 01:52:04,768 - src.callbacks - INFO - 🔄 Entering node: route_after_select_stage
+2025-12-05 01:52:04,770 - src.callbacks - INFO - 🔄 Entering node: design
+2025-12-05 01:53:14,074 - httpx - INFO - HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2025-12-05 01:53:14,087 - src.agents.design - INFO - 🔧 design: stage=stage0_material_validation, geometry=unknown, domain=?x?
+2025-12-05 01:53:14,089 - src.callbacks - INFO - 🔄 Entering node: design_review
