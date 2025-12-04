@@ -10,6 +10,7 @@ This module provides the main entry points for loading paper inputs:
 
 import json
 import logging
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
 
@@ -422,9 +423,14 @@ def load_paper_from_markdown(
     # Extract figure references
     figure_refs = extract_figures_from_markdown(markdown_text)
     
-    # Set up output directory
-    output_path = Path(output_dir)
-    output_path.mkdir(parents=True, exist_ok=True)
+    # Set up output directory with paper-specific and run-specific subfolders
+    # Structure: {output_dir}/{paper_id}/run_{timestamp}/figures/
+    run_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    run_folder_name = f"run_{run_timestamp}"
+    paper_output_dir = Path(output_dir) / paper_id
+    run_output_dir = paper_output_dir / run_folder_name
+    figures_output_path = run_output_dir / "figures"
+    figures_output_path.mkdir(parents=True, exist_ok=True)
     
     # Base path for resolving relative local paths
     md_base_path = md_path.parent
@@ -433,7 +439,7 @@ def load_paper_from_markdown(
     logger.info("Processing %d main figure(s)...", len(figure_refs))
     figures, download_errors = _process_figure_refs(
         figure_refs=figure_refs,
-        output_path=output_path,
+        output_path=figures_output_path,
         base_path=md_base_path,
         base_url=base_url,
         download_figures=download_figures,
@@ -468,7 +474,7 @@ def load_paper_from_markdown(
             existing_main_ids = [f['id'] for f in figures]
             supplementary_figures, supp_errors = _process_figure_refs(
                 figure_refs=supp_figure_refs,
-                output_path=output_path,
+                output_path=figures_output_path,
                 base_path=supp_base_path,
                 base_url=supp_base,
                 download_figures=download_figures,
@@ -486,6 +492,7 @@ def load_paper_from_markdown(
         'paper_text': markdown_text,
         'paper_domain': paper_domain,
         'figures': figures,
+        'run_output_dir': str(run_output_dir),
     }
     
     # Add supplementary section if we have any supplementary content

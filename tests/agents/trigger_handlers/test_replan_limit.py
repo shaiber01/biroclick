@@ -59,7 +59,7 @@ class TestReplanLimitTrigger:
         
         result = supervisor_node(state)
         
-        assert result["supervisor_verdict"] == "replan_needed"
+        assert result["supervisor_verdict"] == "replan_with_guidance"
         assert result["replan_count"] == 0
         assert "planner_feedback" in result
         assert "Focus on single wavelength first" in result["planner_feedback"]
@@ -112,7 +112,7 @@ class TestHandleReplanLimit:
         user_input = {"q1": "GUIDANCE: Try this."}
         trigger_handlers.handle_replan_limit(mock_state, mock_result, user_input, "stage1")
         
-        assert mock_result["supervisor_verdict"] == "replan_needed"
+        assert mock_result["supervisor_verdict"] == "replan_with_guidance"
         assert mock_result["replan_count"] == 0
         assert "planner_feedback" in mock_result
         assert mock_result["planner_feedback"] == "User guidance: Try this."
@@ -196,7 +196,7 @@ class TestHandleReplanLimit:
             user_input = {"q1": response}
             trigger_handlers.handle_replan_limit(mock_state, mock_result, user_input, "stage1")
             
-            assert mock_result["supervisor_verdict"] == "replan_needed", \
+            assert mock_result["supervisor_verdict"] == "replan_with_guidance", \
                 f"Failed for response: {response}"
             assert mock_result["replan_count"] == 0
             assert "planner_feedback" in mock_result
@@ -253,7 +253,7 @@ class TestHandleReplanLimit:
         user_input = {"q1": "GUIDANCE:"}
         trigger_handlers.handle_replan_limit(mock_state, mock_result, user_input, "stage1")
         
-        assert mock_result["supervisor_verdict"] == "replan_needed"
+        assert mock_result["supervisor_verdict"] == "replan_with_guidance"
         assert mock_result["replan_count"] == 0
         assert mock_result["planner_feedback"] == "User guidance: "
 
@@ -340,7 +340,7 @@ class TestHandleReplanLimit:
         trigger_handlers.handle_replan_limit(mock_state, mock_result, user_input, "stage1")
         
         # GUIDANCE comes first, so should match GUIDANCE
-        assert mock_result["supervisor_verdict"] == "replan_needed"
+        assert mock_result["supervisor_verdict"] == "replan_with_guidance"
         assert mock_result.get("should_stop") is not True
 
     def test_handle_replan_limit_resets_replan_count_on_guidance(self, mock_state, mock_result):
@@ -432,7 +432,7 @@ class TestHandleReplanLimit:
         trigger_handlers.handle_replan_limit(mock_state, mock_result, user_input, "stage1")
         
         # Should use last response (q3), which contains GUIDANCE
-        assert mock_result["supervisor_verdict"] == "replan_needed"
+        assert mock_result["supervisor_verdict"] == "replan_with_guidance"
         assert mock_result["planner_feedback"] == "User guidance: Last guidance"
 
     def test_handle_replan_limit_partial_match_force_no_match(self, mock_state, mock_result):
@@ -457,7 +457,7 @@ class TestHandleReplanLimit:
         trigger_handlers.handle_replan_limit(mock_state, mock_result, user_input, "stage1")
         
         # GUIDANCE is the keyword itself, not a partial match
-        assert mock_result["supervisor_verdict"] == "replan_needed"
+        assert mock_result["supervisor_verdict"] == "replan_with_guidance"
         assert mock_result["replan_count"] == 0
 
     def test_handle_replan_limit_partial_match_stop_no_match(self, mock_state, mock_result):

@@ -759,7 +759,7 @@ class TestSupervisorReplanLimit:
         result = supervisor_node(base_state)
 
         assert result.get("replan_count") == 0
-        assert result.get("supervisor_verdict") == "replan_needed"
+        assert result.get("supervisor_verdict") == "replan_with_guidance"
         assert "Focus on the main figure" in result.get("planner_feedback", "")
 
     def test_supervisor_handles_replan_limit_stop(self, base_state):

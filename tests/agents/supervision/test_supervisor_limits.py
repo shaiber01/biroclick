@@ -611,7 +611,7 @@ class TestReplanLimitTrigger:
 
         result = supervisor_node(state)
 
-        assert result["supervisor_verdict"] == "replan_needed"
+        assert result["supervisor_verdict"] == "replan_with_guidance"
         assert result["replan_count"] == 0
         assert result["ask_user_trigger"] is None  # Should be cleared
         assert "planner_feedback" in result
@@ -659,7 +659,7 @@ class TestReplanLimitTrigger:
         result = supervisor_node(state)
 
         assert result["replan_count"] == 0
-        assert result["supervisor_verdict"] == "replan_needed"
+        assert result["supervisor_verdict"] == "replan_with_guidance"
 
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_handles_unclear_response(self, mock_context):
@@ -717,7 +717,7 @@ class TestReplanLimitTrigger:
         result = supervisor_node(state)
 
         assert result["replan_count"] == 0
-        assert result["supervisor_verdict"] == "replan_needed"
+        assert result["supervisor_verdict"] == "replan_with_guidance"
 
 
 class TestErrorHandling:
@@ -1694,7 +1694,7 @@ class TestUserResponseVariations:
         result = supervisor_node(state)
 
         assert result["replan_count"] == 0
-        assert result["supervisor_verdict"] == "replan_needed"
+        assert result["supervisor_verdict"] == "replan_with_guidance"
         assert "Step one" in result["planner_feedback"]
 
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")

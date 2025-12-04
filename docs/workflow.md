@@ -1395,11 +1395,23 @@ workflow.compile(checkpointer=checkpointer, interrupt_before=["ask_user"])
 
 ```
 outputs/<paper_id>/
-├── _artifact_plan.json           # Underscore prefix = artifact (not for execution)
+└── run_20251204_103000/                   # Run-specific folder (auto-generated timestamp)
+    ├── figures/                           # Downloaded paper figures
+    ├── checkpoints/                       # LangGraph checkpoints for this run
+    │   ├── checkpoint_*.json              # Resumable checkpoints
+    │   └── checkpoint_*_latest.json       # Symlink to most recent
+    └── stage_*/                           # Stage outputs (simulations, data)
+
+# Legacy structure (pre-run-folder) is also supported for backwards compatibility:
+outputs/<paper_id>/
+├── checkpoints/checkpoint_*.json          # Old-style checkpoints
+├── _artifact_plan.json                    # Underscore prefix = artifact (not for execution)
 ├── _artifact_assumptions.json
-├── _artifact_progress.json
-└── checkpoints/checkpoint_*.json  # LangGraph checkpoints (resumable)
+└── _artifact_progress.json
 ```
+
+The `run_output_dir` field in `ReproState` points to the run-specific folder.
+Each `load_paper_from_markdown()` call generates a new timestamped run folder.
 
 **Purpose**: Human-readable artifacts, debugging, manual inspection
 **Used for**: Reviewing what happened, debugging failures, archival
@@ -1482,14 +1494,15 @@ from schemas.state import save_checkpoint, load_checkpoint, list_checkpoints
 
 # Save checkpoint after planning
 checkpoint_path = save_checkpoint(state, "after_plan")
-# Creates: outputs/<paper_id>/checkpoints/checkpoint_<paper_id>_after_plan_<timestamp>.json
+# With run_output_dir: outputs/<paper_id>/run_<timestamp>/checkpoints/checkpoint_<paper_id>_after_plan_<timestamp>.json
+# Without run_output_dir (legacy): outputs/<paper_id>/checkpoints/checkpoint_<paper_id>_after_plan_<timestamp>.json
 
 # Save checkpoint after stage completion
 checkpoint_path = save_checkpoint(state, f"stage{stage_num}_complete")
 
-# List all checkpoints for a paper
+# List all checkpoints for a paper (searches both new and legacy structures)
 checkpoints = list_checkpoints("aluminum_nanoantenna_2013")
-# Returns: [{"name": "after_plan", "timestamp": "20251130_143022", "path": "...", "size_kb": 45.2}, ...]
+# Returns: [{"name": "after_plan", "timestamp": "20251130_143022", "path": "...", "size_kb": 45.2, "run_folder": "run_20251130_143000"}, ...]
 
 # Resume from checkpoint
 state = load_checkpoint("aluminum_nanoantenna_2013", checkpoint_name="after_plan")
@@ -1512,10 +1525,15 @@ When resuming from a checkpoint:
 ### Checkpoint File Structure
 
 ```
-outputs/<paper_id>/checkpoints/
+# New run-based structure (recommended)
+outputs/<paper_id>/run_<run_timestamp>/checkpoints/
 ├── checkpoint_<paper_id>_after_plan_20251130_143022.json
 ├── checkpoint_after_plan_latest.json  (symlink to most recent)
 ├── checkpoint_<paper_id>_stage1_complete_20251130_144515.json
+
+# Legacy structure (still supported for backwards compatibility)
+outputs/<paper_id>/checkpoints/
+├── checkpoint_<paper_id>_after_plan_20251130_143022.json
 ├── checkpoint_stage1_complete_latest.json
 └── ...
 ```

@@ -143,7 +143,13 @@ def results_analyzer_node(state: ReproState) -> dict:
     
     # Validate output files exist on disk
     paper_id = state.get("paper_id", "unknown")
-    base_output_dir = PROJECT_ROOT / "outputs" / paper_id / current_stage_id
+    # Use run_output_dir if available, otherwise fall back to legacy path
+    run_output_dir = state.get("run_output_dir", "")
+    if run_output_dir:
+        base_output_dir = Path(run_output_dir) / current_stage_id
+    else:
+        # Legacy path for backwards compatibility
+        base_output_dir = PROJECT_ROOT / "outputs" / paper_id / current_stage_id
     
     # Use stage_outputs.files from state
     stage_outputs = state.get("stage_outputs") or {}

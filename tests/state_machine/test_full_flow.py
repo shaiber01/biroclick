@@ -1151,6 +1151,135 @@ class TestInterruptResumeFlow:
 
             print("\n✅ Interrupt resume flow test passed!")
 
+    def test_invoke_pattern_handles_interrupt_correctly(self, initial_state):
+        """
+        Test the simple invoke() + get_state().next pattern used in runner scripts.
+        
+        This validates the recommended pattern for handling interrupts:
+        1. Call invoke() - returns when graph pauses at interrupt
+        2. Check get_state().next to see if paused at ask_user
+        3. Resume with invoke() passing user response
+        
+        This pattern is simpler than streaming and is what users typically write.
+        """
+        state = initial_state.copy()
+        # Set low limit to trigger interrupt quickly
+        state["runtime_config"] = {
+            **(state.get("runtime_config") or {}),
+            "max_replans": 1,
+        }
+
+        # Track checkpoint for detecting that graph progressed
+        initial_checkpoint_id = {"value": None}
+        
+        def mock_llm(*args, **kwargs):
+            agent = kwargs.get("agent_name", "unknown")
+
+            if agent == "plan_reviewer":
+                # Always reject to trigger replan limit
+                return MockLLMResponses.plan_reviewer_reject()
+            
+            if agent == "supervisor":
+                return MockLLMResponses.supervisor_continue()
+
+            responses = {
+                "prompt_adaptor": MockLLMResponses.prompt_adaptor(),
+                "planner": MockLLMResponses.planner(),
+            }
+            return responses.get(agent, {})
+
+        mock_ask_user = create_mock_ask_user_node()
+
+        with MultiPatch(LLM_PATCH_LOCATIONS, side_effect=mock_llm), MultiPatch(
+            CHECKPOINT_PATCH_LOCATIONS, return_value="/tmp/cp.json"
+        ), patch("src.agents.user_interaction.ask_user_node", side_effect=mock_ask_user), patch(
+            "src.graph.ask_user_node", side_effect=mock_ask_user
+        ):
+            print("\n" + "=" * 60)
+            print("TEST: Invoke Pattern Handles Interrupt (Runner Script Pattern)")
+            print("=" * 60)
+
+            graph = create_repro_graph()
+            config = {"configurable": {"thread_id": unique_thread_id("invoke_pattern")}}
+
+            # ============================================================
+            # Step 1: Initial invoke - should pause at ask_user
+            # ============================================================
+            print("\n--- Step 1: Initial invoke() ---")
+            result = graph.invoke(state, config)
+            
+            # ============================================================
+            # Step 2: Check if we're paused (the key pattern from runner.py)
+            # This is the CRITICAL test - verifying get_state().next works
+            # ============================================================
+            print("\n--- Step 2: Check get_state().next ---")
+            snapshot = graph.get_state(config)
+            
+            # This is the critical assertion - invoke returns, and we can check next
+            assert snapshot.next is not None, "snapshot.next should exist after invoke"
+            print(f"  snapshot.next = {snapshot.next}")
+            
+            # Should be paused at ask_user
+            assert "ask_user" in snapshot.next, (
+                f"Graph should be paused at ask_user, but next={snapshot.next}. "
+                "This means invoke() didn't properly pause at the interrupt point."
+            )
+            
+            # Verify state shows we're awaiting input
+            paused_state = snapshot.values
+            assert paused_state.get("awaiting_user_input") is True or \
+                   paused_state.get("ask_user_trigger") is not None, \
+                "State should indicate we're waiting for user input"
+            
+            trigger = paused_state.get("ask_user_trigger", "unknown")
+            questions = paused_state.get("pending_user_questions", [])
+            print(f"  trigger = {trigger}")
+            print(f"  questions present = {len(questions) > 0}")
+            
+            # Save checkpoint ID to verify progress
+            initial_checkpoint_id["value"] = snapshot.config.get("configurable", {}).get("checkpoint_id")
+            print(f"  checkpoint_id = {initial_checkpoint_id['value']}")
+            
+            # ============================================================
+            # Step 3: Resume with user response (the runner.py pattern)
+            # ============================================================
+            print("\n--- Step 3: Resume with user response ---")
+            resume_result = graph.invoke(
+                {"user_responses": {trigger: "APPROVE_PLAN"}},
+                config
+            )
+            
+            # ============================================================
+            # Step 4: Verify the graph progressed (checkpoint changed)
+            # ============================================================
+            print("\n--- Step 4: Verify resume worked ---")
+            post_resume_snapshot = graph.get_state(config)
+            post_checkpoint_id = post_resume_snapshot.config.get("configurable", {}).get("checkpoint_id")
+            
+            # The checkpoint ID should have changed, indicating the graph progressed
+            assert post_checkpoint_id != initial_checkpoint_id["value"], (
+                "Checkpoint ID should change after resume, indicating graph progressed. "
+                f"Before: {initial_checkpoint_id['value']}, After: {post_checkpoint_id}"
+            )
+            print(f"  checkpoint_id changed: {initial_checkpoint_id['value'][:20]}... → {post_checkpoint_id[:20]}...")
+            
+            # The user response should be recorded in state
+            post_state = post_resume_snapshot.values
+            user_responses = post_state.get("user_responses", {})
+            assert trigger in user_responses, \
+                f"User response for trigger '{trigger}' should be recorded in state"
+            print(f"  User response recorded for trigger: {trigger}")
+            
+            # The step count should have increased
+            initial_step = snapshot.metadata.get("step", 0)
+            post_step = post_resume_snapshot.metadata.get("step", 0)
+            assert post_step > initial_step, (
+                f"Step should increase after resume. Before: {initial_step}, After: {post_step}"
+            )
+            print(f"  Step progressed: {initial_step} → {post_step}")
+            
+            print("\n✅ Invoke pattern test passed!")
+
 
 class TestSupervisorBacktrackFlow:
     """Test supervisor backtrack_to_stage verdict."""

@@ -74,6 +74,7 @@ def create_state_from_paper_input(
         runtime_budget_minutes=runtime_budget_minutes,
         runtime_config=rt_config,
         hardware_config=hw_config,
+        run_output_dir=paper_input.get("run_output_dir", ""),
     )
     
     # Explicit field mapping: PaperInput → ReproState

@@ -79,6 +79,7 @@ class PaperInput(TypedDict):
         paper_domain: Optional domain: plasmonics | photonic_crystal | etc.
         figures: Figures to reproduce with image paths
         supplementary: Structured supplementary materials
+        run_output_dir: Auto-generated run-specific output folder path
     """
     paper_id: str
     paper_title: str
@@ -86,6 +87,7 @@ class PaperInput(TypedDict):
     paper_domain: NotRequired[str]
     figures: List[FigureInput]
     supplementary: NotRequired[SupplementaryInput]
+    run_output_dir: NotRequired[str]
 
 
 # ═══════════════════════════════════════════════════════════════════════

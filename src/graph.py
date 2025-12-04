@@ -176,6 +176,10 @@ def route_after_supervisor(state: ReproState) -> Literal["select_stage", "planni
         else:
             save_checkpoint(state, "before_ask_user_replan_limit")
             return "ask_user"
+    
+    # User-initiated replan with guidance bypasses count check
+    elif verdict == "replan_with_guidance":
+        return "planning"
             
     elif verdict == "ask_user":
         return "ask_user"

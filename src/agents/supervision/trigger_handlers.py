@@ -441,7 +441,7 @@ def handle_replan_limit(
                     # No colon, just remove "GUIDANCE" keyword
                     guidance_text = guidance_text[len("GUIDANCE"):].strip()
         result["planner_feedback"] = f"User guidance: {guidance_text}"
-        result["supervisor_verdict"] = "replan_needed"
+        result["supervisor_verdict"] = "replan_with_guidance"
     
     elif check_keywords(response_text, ["STOP"]):
         result["supervisor_verdict"] = "all_complete"

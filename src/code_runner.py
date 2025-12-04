@@ -768,8 +768,13 @@ def run_code_node(state: Dict[str, Any]) -> Dict[str, Any]:
         runtime_budget = runtime_budget_raw
     runtime_config = state.get("runtime_config", {})
     
-    # Build output directory
-    output_base = Path("outputs") / paper_id / stage_id
+    # Build output directory using run_output_dir if available, otherwise legacy path
+    run_output_dir = state.get("run_output_dir", "")
+    if run_output_dir:
+        output_base = Path(run_output_dir) / stage_id
+    else:
+        # Legacy path for backwards compatibility
+        output_base = Path("outputs") / paper_id / stage_id
     output_base.mkdir(parents=True, exist_ok=True)
     
     # Build execution config

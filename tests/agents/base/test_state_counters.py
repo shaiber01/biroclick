@@ -293,6 +293,74 @@ class TestCheckKeywords:
         assert check_keywords("APPROVE", [None]) is False  # None is skipped, not converted
         assert check_keywords("NONE", [None]) is False  # None is skipped, not converted to "NONE"
 
+
+class TestCheckKeywordsWorkflowKeywords:
+    """Tests for check_keywords with actual workflow keywords used in user interactions."""
+
+    def test_stop_keyword_case_variations(self):
+        """STOP keyword should be recognized regardless of case."""
+        assert check_keywords("stop", ["STOP"]) is True
+        assert check_keywords("STOP", ["STOP"]) is True
+        assert check_keywords("Stop", ["STOP"]) is True
+        assert check_keywords("sToP", ["STOP"]) is True
+
+    def test_stop_keyword_with_punctuation(self):
+        """STOP keyword should be recognized with attached punctuation."""
+        assert check_keywords("stop-", ["STOP"]) is True
+        assert check_keywords("stop:", ["STOP"]) is True
+        assert check_keywords("stop!", ["STOP"]) is True
+        assert check_keywords("STOP the workflow", ["STOP"]) is True
+
+    def test_stop_keyword_partial_word_rejection(self):
+        """STOP should not match when part of another word."""
+        assert check_keywords("stopper", ["STOP"]) is False
+        assert check_keywords("nonstop", ["STOP"]) is False
+        assert check_keywords("unstoppable", ["STOP"]) is False
+
+    def test_guidance_keyword_case_variations(self):
+        """GUIDANCE keyword should be recognized regardless of case."""
+        assert check_keywords("guidance", ["GUIDANCE"]) is True
+        assert check_keywords("GUIDANCE", ["GUIDANCE"]) is True
+        assert check_keywords("Guidance", ["GUIDANCE"]) is True
+
+    def test_guidance_keyword_with_colon_and_text(self):
+        """GUIDANCE keyword should be recognized when followed by colon and feedback text."""
+        assert check_keywords("guidance:", ["GUIDANCE"]) is True
+        assert check_keywords("guidance: please do X", ["GUIDANCE"]) is True
+        assert check_keywords("GUIDANCE: Use a finer mesh", ["GUIDANCE"]) is True
+        assert check_keywords("guidance-text", ["GUIDANCE"]) is True
+
+    def test_compound_keywords_with_underscores(self):
+        """Compound keywords with underscores should work case-insensitively."""
+        # RETRY_WITH_GUIDANCE
+        assert check_keywords("retry_with_guidance", ["RETRY_WITH_GUIDANCE"]) is True
+        assert check_keywords("RETRY_WITH_GUIDANCE", ["RETRY_WITH_GUIDANCE"]) is True
+        assert check_keywords("retry_with_guidance: my hint", ["RETRY_WITH_GUIDANCE"]) is True
+
+        # SKIP_STAGE
+        assert check_keywords("skip_stage", ["SKIP_STAGE"]) is True
+        assert check_keywords("SKIP_STAGE", ["SKIP_STAGE"]) is True
+
+        # PROVIDE_HINT
+        assert check_keywords("provide_hint", ["PROVIDE_HINT"]) is True
+        assert check_keywords("PROVIDE_HINT: try changing X", ["PROVIDE_HINT"]) is True
+
+    def test_approve_keyword_variations(self):
+        """APPROVE keyword should be recognized but not false positives."""
+        assert check_keywords("approve", ["APPROVE"]) is True
+        assert check_keywords("APPROVE", ["APPROVE"]) is True
+        assert check_keywords("approve!", ["APPROVE"]) is True
+        # Should NOT match
+        assert check_keywords("DISAPPROVE", ["APPROVE"]) is False
+        assert check_keywords("UNAPPROVED", ["APPROVE"]) is False
+
+    def test_skip_keyword_variations(self):
+        """SKIP keyword should be recognized regardless of case."""
+        assert check_keywords("skip", ["SKIP"]) is True
+        assert check_keywords("SKIP", ["SKIP"]) is True
+        assert check_keywords("skip this stage", ["SKIP"]) is True
+
+
 class TestIncrementCounterWithMax:
     """Tests for increment_counter_with_max function."""
 

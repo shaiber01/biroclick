@@ -597,8 +597,8 @@ class TestPlanReviewLimit:
             )
             
             # Verify ask_user trigger
-            assert limit_state.get("ask_user_trigger") == "plan_review_limit", (
-                f"Expected ask_user_trigger='plan_review_limit', got '{limit_state.get('ask_user_trigger')}'"
+            assert limit_state.get("ask_user_trigger") == "replan_limit", (
+                f"Expected ask_user_trigger='replan_limit', got '{limit_state.get('ask_user_trigger')}'"
             )
             assert limit_state.get("awaiting_user_input") is True
 

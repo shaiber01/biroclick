@@ -1943,7 +1943,7 @@ class TestTriggerHandlerIntegration:
         
         # Verify counter reset and guidance passed
         assert result["replan_count"] == 0
-        assert result["supervisor_verdict"] == "replan_needed"
+        assert result["supervisor_verdict"] == "replan_with_guidance"
         assert "optical" in result["planner_feedback"].lower()
 
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")

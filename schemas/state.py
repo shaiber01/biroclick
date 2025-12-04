@@ -715,6 +715,11 @@ class ReproState(TypedDict, total=False):
     paper_title: str
     paper_citation: Optional[Dict[str, Any]] # Added for report schema compatibility
     
+    # ─── Run Output Directory ─────────────────────────────────────────────
+    # Auto-generated path to run-specific output folder: outputs/{paper_id}/run_{timestamp}/
+    # Used by checkpoints, figures, and simulation outputs. Empty string means use legacy path.
+    run_output_dir: str
+    
     # ─── Runtime & Hardware Configuration ────────────────────────────────
     # These control execution behavior, timeouts, and resource limits.
     # Passed in via create_initial_state() or use defaults.
@@ -913,7 +918,8 @@ def create_initial_state(
     paper_domain: str = "other",
     runtime_budget_minutes: float = 120.0,
     hardware_config: Optional[HardwareConfig] = None,
-    runtime_config: Optional[RuntimeConfig] = None
+    runtime_config: Optional[RuntimeConfig] = None,
+    run_output_dir: str = ""
 ) -> ReproState:
     """
     Create initial state for a new paper reproduction.
@@ -927,6 +933,8 @@ def create_initial_state(
                         Defaults to DEFAULT_HARDWARE_CONFIG if not provided.
         runtime_config: Optional runtime configuration (timeouts, debug mode, etc.)
                        Defaults to DEFAULT_RUNTIME_CONFIG if not provided.
+        run_output_dir: Optional run-specific output directory path.
+                       When empty, downstream functions fall back to legacy path.
     
     Returns:
         Initialized ReproState ready for the planning phase
@@ -959,6 +967,9 @@ def create_initial_state(
         paper_domain=paper_domain,
         paper_text=paper_text,
         paper_title="",
+        
+        # Run output directory (empty string means use legacy path)
+        run_output_dir=run_output_dir,
         
         # Runtime & hardware configuration
         runtime_config=rt_config,
@@ -2133,7 +2144,13 @@ def save_checkpoint(
     # Use microseconds to ensure uniqueness even when checkpoints are created rapidly
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     
-    checkpoint_dir = Path(output_dir) / paper_id / "checkpoints"
+    # Use run_output_dir if available, otherwise fall back to legacy path
+    run_output_dir = state.get("run_output_dir", "")
+    if run_output_dir:
+        checkpoint_dir = Path(run_output_dir) / "checkpoints"
+    else:
+        # Legacy path for backwards compatibility
+        checkpoint_dir = Path(output_dir) / paper_id / "checkpoints"
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
     
     filename = f"checkpoint_{paper_id}_{checkpoint_name}_{timestamp}.json"
@@ -2190,6 +2207,9 @@ def load_checkpoint(
     """
     Load a checkpoint to resume a reproduction.
     
+    Searches both new structure (outputs/{paper_id}/run_*/checkpoints/) and
+    legacy structure (outputs/{paper_id}/checkpoints/) for backwards compatibility.
+    
     Args:
         paper_id: Paper identifier
         checkpoint_name: Specific checkpoint name or "latest" for most recent
@@ -2201,38 +2221,61 @@ def load_checkpoint(
     import json
     from pathlib import Path
     
-    checkpoint_dir = Path(output_dir) / paper_id / "checkpoints"
+    paper_dir = Path(output_dir) / paper_id
+    
+    # Collect checkpoint directories from both new and legacy structures
+    checkpoint_dirs = []
+    
+    # New structure: outputs/{paper_id}/run_*/checkpoints/
+    if paper_dir.exists():
+        for run_dir in paper_dir.glob("run_*"):
+            cp_dir = run_dir / "checkpoints"
+            if cp_dir.exists():
+                checkpoint_dirs.append(cp_dir)
+    
+    # Legacy structure: outputs/{paper_id}/checkpoints/
+    legacy_dir = paper_dir / "checkpoints"
+    if legacy_dir.exists():
+        checkpoint_dirs.append(legacy_dir)
+    
+    if not checkpoint_dirs:
+        return None
     
     if checkpoint_name == "latest":
-        # Find most recent checkpoint
-        checkpoints = list(checkpoint_dir.glob("checkpoint_*.json"))
-        if not checkpoints:
-            return None
-        # Filter out broken symlinks and _latest pointer files
-        valid_checkpoints = []
-        for cp in checkpoints:
-            if "_latest" in cp.name:
-                continue  # Skip latest pointer files
-            try:
-                # Try to stat the file to ensure it's not a broken symlink
-                cp.stat()
-                valid_checkpoints.append(cp)
-            except (OSError, FileNotFoundError):
-                continue  # Skip broken symlinks
-        if not valid_checkpoints:
+        # Find most recent checkpoint across all directories
+        all_checkpoints = []
+        for cp_dir in checkpoint_dirs:
+            for cp in cp_dir.glob("checkpoint_*.json"):
+                if "_latest" in cp.name:
+                    continue  # Skip latest pointer files
+                try:
+                    cp.stat()
+                    all_checkpoints.append(cp)
+                except (OSError, FileNotFoundError):
+                    continue  # Skip broken symlinks
+        
+        if not all_checkpoints:
             return None
         # Sort by modification time, get most recent
-        latest = max(valid_checkpoints, key=lambda p: p.stat().st_mtime)
+        latest = max(all_checkpoints, key=lambda p: p.stat().st_mtime)
         filepath = latest
     else:
-        # Look for specific checkpoint
-        filepath = checkpoint_dir / f"checkpoint_{checkpoint_name}_latest.json"
-        if not filepath.exists():
+        # Look for specific checkpoint in any directory
+        filepath = None
+        for cp_dir in checkpoint_dirs:
+            # Try latest pointer first
+            latest_path = cp_dir / f"checkpoint_{checkpoint_name}_latest.json"
+            if latest_path.exists():
+                filepath = latest_path
+                break
             # Try with timestamp pattern
-            matches = list(checkpoint_dir.glob(f"checkpoint_{paper_id}_{checkpoint_name}_*.json"))
-            if not matches:
-                return None
-            filepath = max(matches, key=lambda p: p.stat().st_mtime)
+            matches = list(cp_dir.glob(f"checkpoint_{paper_id}_{checkpoint_name}_*.json"))
+            if matches:
+                filepath = max(matches, key=lambda p: p.stat().st_mtime)
+                break
+        
+        if filepath is None:
+            return None
     
     with open(filepath, 'r', encoding='utf-8') as f:
         state_dict = json.load(f)
@@ -2244,63 +2287,83 @@ def list_checkpoints(paper_id: str, output_dir: str = "outputs") -> List[Dict[st
     """
     List all available checkpoints for a paper.
     
+    Searches both new structure (outputs/{paper_id}/run_*/checkpoints/) and
+    legacy structure (outputs/{paper_id}/checkpoints/) for backwards compatibility.
+    
     Args:
         paper_id: Paper identifier
         output_dir: Base output directory
         
     Returns:
-        List of checkpoint info dicts with name, timestamp, path
+        List of checkpoint info dicts with name, timestamp, path, run_dir
     """
     from pathlib import Path
     
-    checkpoint_dir = Path(output_dir) / paper_id / "checkpoints"
+    paper_dir = Path(output_dir) / paper_id
     
-    if not checkpoint_dir.exists():
+    # Collect checkpoint directories from both new and legacy structures
+    checkpoint_dirs_with_run = []  # List of (checkpoint_dir, run_folder_name or None)
+    
+    # New structure: outputs/{paper_id}/run_*/checkpoints/
+    if paper_dir.exists():
+        for run_dir in paper_dir.glob("run_*"):
+            cp_dir = run_dir / "checkpoints"
+            if cp_dir.exists():
+                checkpoint_dirs_with_run.append((cp_dir, run_dir.name))
+    
+    # Legacy structure: outputs/{paper_id}/checkpoints/
+    legacy_dir = paper_dir / "checkpoints"
+    if legacy_dir.exists():
+        checkpoint_dirs_with_run.append((legacy_dir, None))
+    
+    if not checkpoint_dirs_with_run:
         return []
     
     checkpoints = []
-    for cp_file in checkpoint_dir.glob("checkpoint_*.json"):
-        # Skip "latest" pointer files (symlinks or copies)
-        # These end with _latest.json, e.g., checkpoint_my_checkpoint_latest.json
-        if cp_file.name.endswith("_latest.json"):
-            continue
-        
-        # Parse filename: checkpoint_<paper_id>_<name>_<YYYYMMDD>_<HHMMSS>_<microseconds>.json
-        # The timestamp has 3 underscore-separated parts at the end
-        # Example: checkpoint_test_paper_my_checkpoint_20251203_203659_291967.json
-        #          parts[0] = 'checkpoint'
-        #          parts[1:N-3] contains paper_id + checkpoint_name
-        #          parts[-3:] contains timestamp (YYYYMMDD_HHMMSS_microseconds)
-        
-        # Use known paper_id to find where checkpoint_name starts
-        # prefix = "checkpoint_{paper_id}_"
-        prefix = f"checkpoint_{paper_id}_"
-        
-        stem = cp_file.stem  # filename without extension
-        if stem.startswith(prefix):
-            # Remove prefix to get "{checkpoint_name}_{timestamp}"
-            remaining = stem[len(prefix):]
-            # Split and extract timestamp (last 3 parts)
-            parts = remaining.split("_")
-            if len(parts) >= 4:
-                # Timestamp is last 3 parts
-                name = "_".join(parts[:-3])
-                timestamp = "_".join(parts[-3:])
+    for checkpoint_dir, run_folder in checkpoint_dirs_with_run:
+        for cp_file in checkpoint_dir.glob("checkpoint_*.json"):
+            # Skip "latest" pointer files (symlinks or copies)
+            # These end with _latest.json, e.g., checkpoint_my_checkpoint_latest.json
+            if cp_file.name.endswith("_latest.json"):
+                continue
+            
+            # Parse filename: checkpoint_<paper_id>_<name>_<YYYYMMDD>_<HHMMSS>_<microseconds>.json
+            # The timestamp has 3 underscore-separated parts at the end
+            # Example: checkpoint_test_paper_my_checkpoint_20251203_203659_291967.json
+            #          parts[0] = 'checkpoint'
+            #          parts[1:N-3] contains paper_id + checkpoint_name
+            #          parts[-3:] contains timestamp (YYYYMMDD_HHMMSS_microseconds)
+            
+            # Use known paper_id to find where checkpoint_name starts
+            # prefix = "checkpoint_{paper_id}_"
+            prefix = f"checkpoint_{paper_id}_"
+            
+            stem = cp_file.stem  # filename without extension
+            if stem.startswith(prefix):
+                # Remove prefix to get "{checkpoint_name}_{timestamp}"
+                remaining = stem[len(prefix):]
+                # Split and extract timestamp (last 3 parts)
+                parts = remaining.split("_")
+                if len(parts) >= 4:
+                    # Timestamp is last 3 parts
+                    name = "_".join(parts[:-3])
+                    timestamp = "_".join(parts[-3:])
+                else:
+                    # Fallback for unexpected format
+                    name = remaining
+                    timestamp = "unknown"
             else:
-                # Fallback for unexpected format
-                name = remaining
+                # Filename doesn't match expected format
+                name = stem
                 timestamp = "unknown"
-        else:
-            # Filename doesn't match expected format
-            name = stem
-            timestamp = "unknown"
-        
-        checkpoints.append({
-            "name": name,
-            "timestamp": timestamp,
-            "path": str(cp_file),
-            "size_kb": cp_file.stat().st_size / 1024
-        })
+            
+            checkpoints.append({
+                "name": name,
+                "timestamp": timestamp,
+                "path": str(cp_file),
+                "size_kb": cp_file.stat().st_size / 1024,
+                "run_folder": run_folder,  # None for legacy structure
+            })
     
     # Sort by timestamp (most recent first)
     checkpoints.sort(key=lambda x: x["timestamp"], reverse=True)
@@ -2696,7 +2759,7 @@ def sync_extracted_parameters(state: ReproState) -> ReproState:
         state = sync_extracted_parameters(state)
         
         # Or in workflow runner
-        if current_node == "plan":
+        if current_node == "planning":
             state = sync_extracted_parameters(state)
     """
     plan = state.get("plan", {})

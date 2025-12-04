@@ -490,7 +490,7 @@ def plan_reviewer_node(state: ReproState) -> dict:
             
             if new_count >= max_replans:
                 feedback_text = agent_output.get("feedback", agent_output.get("summary", "No feedback available"))
-                result["ask_user_trigger"] = "plan_review_limit"
+                result["ask_user_trigger"] = "replan_limit"
                 result["pending_user_questions"] = [
                     f"Plan review rejected {new_count}/{max_replans} times.\n\n"
                     f"- Latest feedback: {feedback_text}\n\n"

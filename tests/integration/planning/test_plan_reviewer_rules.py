@@ -1354,8 +1354,8 @@ class TestAskUserEscalation:
 
         assert result["last_plan_review_verdict"] == "needs_revision", "Should still be needs_revision"
         assert result.get("replan_count") == MAX_REPLANS, f"Should be at max ({MAX_REPLANS})"
-        assert result.get("ask_user_trigger") == "plan_review_limit", (
-            f"Should trigger ask_user with 'plan_review_limit', got '{result.get('ask_user_trigger')}'"
+        assert result.get("ask_user_trigger") == "replan_limit", (
+            f"Should trigger ask_user with 'replan_limit', got '{result.get('ask_user_trigger')}'"
         )
         assert result.get("awaiting_user_input") is True, "Should be awaiting user input"
         assert "pending_user_questions" in result, "Should have pending_user_questions"
@@ -1394,7 +1394,7 @@ class TestAskUserEscalation:
             result = plan_reviewer_node(base_state)
 
         assert result.get("replan_count") == custom_max, f"Should be at custom max ({custom_max})"
-        assert result.get("ask_user_trigger") == "plan_review_limit", "Should escalate at custom max"
+        assert result.get("ask_user_trigger") == "replan_limit", "Should escalate at custom max"
         assert result.get("awaiting_user_input") is True, "Should be awaiting user input"
 
     def test_plan_reviewer_does_not_escalate_before_max_replans(self, base_state):

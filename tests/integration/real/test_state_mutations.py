@@ -533,7 +533,7 @@ class TestStateMutations:
 
         # After incrementing, we hit the max - should escalate
         assert result["replan_count"] == MAX_REPLANS
-        assert result.get("ask_user_trigger") == "plan_review_limit"
+        assert result.get("ask_user_trigger") == "replan_limit"
         assert result.get("awaiting_user_input") is True
         assert "pending_user_questions" in result
         assert len(result["pending_user_questions"]) > 0

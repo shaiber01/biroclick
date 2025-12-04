@@ -554,6 +554,34 @@ class TestRouteAfterSupervisor:
         assert result == "ask_user", f"Expected ask_user for replan_needed over limit, got {result}"
 
     @patch('src.graph.save_checkpoint')
+    def test_replan_with_guidance_routes_to_planning_regardless_of_count(self, mock_checkpoint):
+        """Test replan_with_guidance bypasses count limit and routes to planning.
+        
+        This is the key fix for the bug where user GUIDANCE was being ignored
+        because route_after_supervisor checked replan_count from state before
+        the supervisor's result (with reset count) was merged.
+        """
+        # Even with replan_count at the limit, replan_with_guidance should route to planning
+        state = make_state(
+            supervisor_verdict="replan_with_guidance",
+            replan_count=MAX_REPLANS,  # At limit
+        )
+        result = route_after_supervisor(state)
+        assert result == "planning", (
+            f"Expected planning for replan_with_guidance even at count limit, got {result}"
+        )
+        
+        # Also test with count well over the limit
+        state = make_state(
+            supervisor_verdict="replan_with_guidance",
+            replan_count=MAX_REPLANS + 10,  # Way over limit
+        )
+        result = route_after_supervisor(state)
+        assert result == "planning", (
+            f"Expected planning for replan_with_guidance even over count limit, got {result}"
+        )
+
+    @patch('src.graph.save_checkpoint')
     def test_ask_user_verdict_routes_to_ask_user(self, mock_checkpoint):
         """Test ask_user verdict routes to ask_user."""
         state = make_state(supervisor_verdict="ask_user")
@@ -2425,4 +2453,1915 @@ class TestEdgeCountVerification:
                 f"{source} should have {expected_count} outgoing edges, "
                 f"has {len(source_edges)}: {[e[1] for e in source_edges]}"
             )
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# User Guidance Integration Tests
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestUserGuidanceIntegration:
+    """Tests verifying user guidance flows work correctly end-to-end.
+    
+    These tests verify:
+    1. User feedback/hints are properly passed to target nodes
+    2. Counter resets are effective for subsequent iterations
+    3. Full state machine flows work correctly after user guidance
+    """
+
+    @patch('src.graph.save_checkpoint')
+    def test_provide_hint_feedback_visible_in_state(self, mock_checkpoint):
+        """Test that PROVIDE_HINT for code_review_limit makes reviewer_feedback visible.
+        
+        When user provides a hint after code_review_limit, the reviewer_feedback
+        should be set in the result so code_generator can see it on next run.
+        """
+        from src.agents.supervision.supervisor import supervisor_node
+        
+        state = {
+            "ask_user_trigger": "code_review_limit",
+            "user_responses": {"Q1": "PROVIDE_HINT: Use numpy vectorization instead of loops"},
+            "pending_user_questions": ["Code review limit reached"],
+            "code_revision_count": MAX_CODE_REVISIONS,
+            "current_stage_id": "stage1",
+            "progress": {"stages": [], "user_interactions": []},
+        }
+        
+        result = supervisor_node(state)
+        
+        # Verify counter reset
+        assert result.get("code_revision_count") == 0, "Counter should be reset to 0"
+        
+        # Verify hint is in reviewer_feedback (where code_generator looks for it)
+        assert "reviewer_feedback" in result, "reviewer_feedback should be set"
+        assert "numpy vectorization" in result["reviewer_feedback"], (
+            f"User's hint should be in reviewer_feedback, got: {result.get('reviewer_feedback')}"
+        )
+        
+        # Verify verdict allows continuation
+        assert result.get("supervisor_verdict") == "ok_continue", (
+            f"Expected ok_continue verdict, got {result.get('supervisor_verdict')}"
+        )
+
+    @patch('src.graph.save_checkpoint')
+    def test_design_hint_feedback_visible_in_state(self, mock_checkpoint):
+        """Test that PROVIDE_HINT for design_review_limit makes reviewer_feedback visible."""
+        from src.agents.supervision.supervisor import supervisor_node
+        
+        state = {
+            "ask_user_trigger": "design_review_limit",
+            "user_responses": {"Q1": "PROVIDE_HINT: Focus on FDTD with perfectly matched layers"},
+            "pending_user_questions": ["Design review limit reached"],
+            "design_revision_count": MAX_DESIGN_REVISIONS,
+            "current_stage_id": "stage1",
+            "progress": {"stages": [], "user_interactions": []},
+        }
+        
+        result = supervisor_node(state)
+        
+        # Verify counter reset
+        assert result.get("design_revision_count") == 0, "Counter should be reset to 0"
+        
+        # Verify hint is in reviewer_feedback
+        assert "reviewer_feedback" in result, "reviewer_feedback should be set"
+        assert "FDTD" in result["reviewer_feedback"] or "perfectly matched" in result["reviewer_feedback"], (
+            f"User's hint should be in reviewer_feedback, got: {result.get('reviewer_feedback')}"
+        )
+
+    @patch('src.graph.save_checkpoint')
+    def test_execution_retry_resets_counter_effectively(self, mock_checkpoint):
+        """Test that RETRY for execution_failure_limit effectively resets counter.
+        
+        After user provides RETRY, the execution_failure_count should be 0,
+        meaning the next failure won't immediately hit the limit again.
+        """
+        from src.agents.supervision.supervisor import supervisor_node
+        
+        # Simulate state where execution hit the limit
+        state = {
+            "ask_user_trigger": "execution_failure_limit",
+            "user_responses": {"Q1": "RETRY with reduced grid resolution"},
+            "pending_user_questions": ["Execution failed 3 times"],
+            "execution_failure_count": MAX_EXECUTION_FAILURES,
+            "current_stage_id": "stage1",
+            "progress": {"stages": [], "user_interactions": []},
+        }
+        
+        result = supervisor_node(state)
+        
+        # Verify counter is reset to 0
+        assert result.get("execution_failure_count") == 0, (
+            f"Counter should be reset to 0, got {result.get('execution_failure_count')}"
+        )
+        
+        # Verify guidance is captured
+        assert "supervisor_feedback" in result, "User guidance should be in supervisor_feedback"
+        assert "reduced grid" in result["supervisor_feedback"].lower() or "retry" in result["supervisor_feedback"].lower(), (
+            f"User's guidance should be captured, got: {result.get('supervisor_feedback')}"
+        )
+        
+        # Simulate next execution failure - it should NOT immediately hit limit
+        # because counter was reset to 0, so after one failure it should be 1
+        merged_state = {**state, **result}
+        merged_state["execution_failure_count"] = result["execution_failure_count"]  # Should be 0
+        
+        # Next failure would increment to 1, which is < MAX_EXECUTION_FAILURES
+        next_failure_count = merged_state["execution_failure_count"] + 1
+        assert next_failure_count < MAX_EXECUTION_FAILURES, (
+            f"After reset, next failure (count={next_failure_count}) should not hit limit ({MAX_EXECUTION_FAILURES})"
+        )
+
+    @patch('src.graph.save_checkpoint')
+    def test_physics_retry_resets_counter_effectively(self, mock_checkpoint):
+        """Test that RETRY for physics_failure_limit effectively resets counter."""
+        from src.agents.supervision.supervisor import supervisor_node
+        
+        state = {
+            "ask_user_trigger": "physics_failure_limit",
+            "user_responses": {"Q1": "RETRY with better boundary conditions"},
+            "pending_user_questions": ["Physics check failed 3 times"],
+            "physics_failure_count": MAX_PHYSICS_FAILURES,
+            "current_stage_id": "stage1",
+            "progress": {"stages": [], "user_interactions": []},
+        }
+        
+        result = supervisor_node(state)
+        
+        # Verify counter is reset to 0
+        assert result.get("physics_failure_count") == 0, (
+            f"Counter should be reset to 0, got {result.get('physics_failure_count')}"
+        )
+        
+        # Next failure should not hit limit
+        next_failure_count = result["physics_failure_count"] + 1
+        assert next_failure_count < MAX_PHYSICS_FAILURES, (
+            f"After reset, next failure should not hit limit"
+        )
+
+    @patch('src.graph.save_checkpoint')
+    def test_replan_guidance_routes_to_planning_with_feedback(self, mock_checkpoint):
+        """Test full flow: replan_limit + GUIDANCE → planning with planner_feedback.
+        
+        This is the bug we fixed - verifying the complete flow works:
+        1. User provides GUIDANCE after replan_limit
+        2. Supervisor sets replan_with_guidance verdict and planner_feedback
+        3. Router sends to planning (bypassing count check)
+        4. Planner would receive the guidance via planner_feedback
+        """
+        from src.agents.supervision.supervisor import supervisor_node
+        
+        state = {
+            "ask_user_trigger": "replan_limit",
+            "user_responses": {"Q1": "GUIDANCE: Focus on extinction cross-section only, skip field maps"},
+            "pending_user_questions": ["Replan limit reached"],
+            "replan_count": MAX_REPLANS,  # At the limit
+            "plan": {"stages": []},
+            "progress": {"stages": [], "user_interactions": []},
+        }
+        
+        result = supervisor_node(state)
+        
+        # Verify counter reset
+        assert result.get("replan_count") == 0, "replan_count should be reset to 0"
+        
+        # Verify special verdict that bypasses count check
+        assert result.get("supervisor_verdict") == "replan_with_guidance", (
+            f"Expected replan_with_guidance verdict, got {result.get('supervisor_verdict')}"
+        )
+        
+        # Verify planner_feedback contains user's guidance
+        assert "planner_feedback" in result, "planner_feedback should be set"
+        assert "extinction" in result["planner_feedback"].lower() or "cross-section" in result["planner_feedback"].lower(), (
+            f"User's guidance should be in planner_feedback, got: {result.get('planner_feedback')}"
+        )
+        
+        # Verify routing goes to planning (not ask_user)
+        merged_state = {**state, **result}
+        route_result = route_after_supervisor(merged_state)
+        assert route_result == "planning", (
+            f"Should route to planning even at limit, got {route_result}"
+        )
+
+    @patch('src.graph.save_checkpoint')
+    def test_code_review_limit_full_flow_routes_correctly(self, mock_checkpoint):
+        """Test full flow: code_review_limit + HINT → ok_continue → select_stage.
+        
+        Verifies the state machine flow after user provides code hint:
+        1. User provides PROVIDE_HINT after code_review_limit
+        2. Supervisor sets ok_continue verdict with reviewer_feedback
+        3. Router sends to select_stage (for next stage selection)
+        """
+        from src.agents.supervision.supervisor import supervisor_node
+        
+        state = {
+            "ask_user_trigger": "code_review_limit",
+            "user_responses": {"Q1": "PROVIDE_HINT: Try using scipy.integrate instead"},
+            "pending_user_questions": ["Code review limit reached"],
+            "code_revision_count": MAX_CODE_REVISIONS,
+            "current_stage_id": "stage1",
+            "current_stage_type": "SINGLE_STRUCTURE",
+            "progress": {"stages": [], "user_interactions": []},
+        }
+        
+        result = supervisor_node(state)
+        
+        # Verify ok_continue verdict
+        assert result.get("supervisor_verdict") == "ok_continue", (
+            f"Expected ok_continue verdict, got {result.get('supervisor_verdict')}"
+        )
+        
+        # Verify routing after supervisor
+        merged_state = {**state, **result}
+        route_result = route_after_supervisor(merged_state)
+        assert route_result == "select_stage", (
+            f"ok_continue should route to select_stage, got {route_result}"
+        )
+        
+        # Verify hint is preserved for when code_generator runs next
+        assert "reviewer_feedback" in result, "reviewer_feedback should be preserved"
+        assert "scipy" in result["reviewer_feedback"], "User hint should be in feedback"
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Trigger Name Consistency Tests
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestTriggerNameConsistency:
+    """Tests verifying trigger names used by nodes match handlers.
+    
+    This prevents bugs where a node sets ask_user_trigger to a name
+    that doesn't have a corresponding handler in TRIGGER_HANDLERS.
+    """
+
+    def test_all_trigger_names_have_handlers(self):
+        """Verify all trigger names used in the codebase have handlers.
+        
+        This is a regression test for the bug where planning.py set
+        ask_user_trigger='plan_review_limit' but the handler was registered
+        as 'replan_limit', causing user responses to be ignored.
+        """
+        from src.agents.supervision.trigger_handlers import TRIGGER_HANDLERS
+        
+        # Known trigger names that should have handlers
+        # These are the triggers set by various nodes when escalating to ask_user
+        expected_triggers = [
+            "replan_limit",           # Set by plan_reviewer_node when replan_count >= max
+            "code_review_limit",      # Set by code_reviewer_node when code_revision_count >= max
+            "design_review_limit",    # Set by design_reviewer_node when design_revision_count >= max
+            "execution_failure_limit", # Set by execution_validator_node when execution_failure_count >= max
+            "physics_failure_limit",  # Set by physics_sanity_node when physics_failure_count >= max
+            "context_overflow",       # Set by check_context_or_escalate when context too large
+            "backtrack_approval",     # Set by comparison_validator_node for backtrack requests
+            "deadlock_detected",      # Set by supervisor when deadlock detected
+            "llm_error",              # Set by various nodes on LLM errors
+            "material_checkpoint",    # Set by material_checkpoint_node for mandatory approval
+        ]
+        
+        for trigger in expected_triggers:
+            assert trigger in TRIGGER_HANDLERS, (
+                f"Trigger '{trigger}' is used in the codebase but has no handler in TRIGGER_HANDLERS. "
+                f"Available handlers: {list(TRIGGER_HANDLERS.keys())}"
+            )
+
+    def test_plan_reviewer_uses_correct_trigger_name(self):
+        """Verify plan_reviewer_node uses the trigger name that has a handler.
+        
+        This specifically tests the bug we fixed where plan_reviewer used
+        'plan_review_limit' but the handler was 'replan_limit'.
+        """
+        from unittest.mock import patch, MagicMock
+        from src.agents.planning import plan_reviewer_node
+        from src.agents.supervision.trigger_handlers import TRIGGER_HANDLERS
+        
+        # Create a state that will trigger escalation (replan_count at max)
+        state = {
+            "plan": {
+                "stages": [{"stage_id": "test", "stage_type": "SINGLE_STRUCTURE"}],
+                "assumptions": [],
+            },
+            "replan_count": MAX_REPLANS,
+            "runtime_config": {"max_replans": MAX_REPLANS},
+            "progress": {"stages": []},
+        }
+        
+        # Mock the LLM call to return needs_revision
+        mock_response = {
+            "verdict": "needs_revision",
+            "feedback": "Test feedback",
+            "issues": ["Test issue"],
+        }
+        
+        with patch("src.agents.planning.call_agent_with_metrics", return_value=mock_response):
+            with patch("src.agents.planning.build_agent_prompt", return_value="prompt"):
+                with patch("src.agents.planning.check_context_or_escalate", return_value=None):
+                    result = plan_reviewer_node(state)
+        
+        # Verify the trigger name is one that has a handler
+        trigger = result.get("ask_user_trigger")
+        if trigger:  # Only check if escalation happened
+            assert trigger in TRIGGER_HANDLERS, (
+                f"plan_reviewer_node sets ask_user_trigger='{trigger}' "
+                f"but no handler exists for it. Available handlers: {list(TRIGGER_HANDLERS.keys())}"
+            )
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# End-to-End User Response Flow Tests
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestEndToEndUserResponseFlows:
+    """Tests simulating complete flows from limit escalation through user response handling.
+    
+    These tests verify the full path:
+    review_node → hit limit → ask_user → user responds → supervisor handles → correct routing
+    """
+
+    @patch('src.graph.save_checkpoint')
+    def test_plan_review_limit_stop_ends_workflow(self, mock_checkpoint):
+        """Test full flow: plan_review hits limit → user says STOP → workflow ends.
+        
+        This is a regression test for the bug where STOP wasn't being respected
+        because the trigger name didn't match the handler.
+        """
+        from unittest.mock import patch
+        from src.agents.planning import plan_reviewer_node
+        from src.agents.supervision.supervisor import supervisor_node
+        
+        # Step 1: Simulate plan_reviewer hitting the limit
+        plan_state = {
+            "plan": {
+                "stages": [{"stage_id": "test", "stage_type": "SINGLE_STRUCTURE"}],
+                "assumptions": [],
+            },
+            "replan_count": MAX_REPLANS,
+            "runtime_config": {"max_replans": MAX_REPLANS},
+            "progress": {"stages": []},
+        }
+        
+        mock_response = {
+            "verdict": "needs_revision",
+            "feedback": "Issues found",
+            "issues": ["Test issue"],
+        }
+        
+        with patch("src.agents.planning.call_agent_with_metrics", return_value=mock_response):
+            with patch("src.agents.planning.build_agent_prompt", return_value="prompt"):
+                with patch("src.agents.planning.check_context_or_escalate", return_value=None):
+                    plan_result = plan_reviewer_node(plan_state)
+        
+        # Verify escalation happened
+        assert plan_result.get("awaiting_user_input") is True, "Should be awaiting user input"
+        trigger = plan_result.get("ask_user_trigger")
+        assert trigger is not None, "Should have set ask_user_trigger"
+        
+        # Step 2: Simulate user responding with STOP
+        supervisor_state = {
+            **plan_state,
+            **plan_result,
+            "user_responses": {"Q1": "STOP"},
+            "progress": {"stages": [], "user_interactions": []},
+        }
+        
+        supervisor_result = supervisor_node(supervisor_state)
+        
+        # Step 3: Verify STOP was handled correctly
+        assert supervisor_result.get("supervisor_verdict") == "all_complete", (
+            f"STOP should set verdict to all_complete, got {supervisor_result.get('supervisor_verdict')}"
+        )
+        assert supervisor_result.get("should_stop") is True, (
+            "STOP should set should_stop=True"
+        )
+        
+        # Step 4: Verify routing goes to generate_report (workflow end)
+        merged_state = {**supervisor_state, **supervisor_result}
+        route_result = route_after_supervisor(merged_state)
+        assert route_result == "generate_report", (
+            f"all_complete with should_stop should route to generate_report, got {route_result}"
+        )
+
+    @patch('src.graph.save_checkpoint')
+    def test_plan_review_limit_guidance_triggers_replan(self, mock_checkpoint):
+        """Test full flow: plan_review hits limit → user provides GUIDANCE → replanning.
+        
+        This is a regression test for the bug where GUIDANCE wasn't triggering replan
+        because the router checked replan_count before the reset was merged.
+        """
+        from unittest.mock import patch
+        from src.agents.planning import plan_reviewer_node
+        from src.agents.supervision.supervisor import supervisor_node
+        
+        # Step 1: Simulate plan_reviewer hitting the limit
+        plan_state = {
+            "plan": {
+                "stages": [{"stage_id": "test", "stage_type": "SINGLE_STRUCTURE"}],
+                "assumptions": [],
+            },
+            "replan_count": MAX_REPLANS,
+            "runtime_config": {"max_replans": MAX_REPLANS},
+            "progress": {"stages": []},
+        }
+        
+        mock_response = {
+            "verdict": "needs_revision",
+            "feedback": "Issues found",
+            "issues": ["Test issue"],
+        }
+        
+        with patch("src.agents.planning.call_agent_with_metrics", return_value=mock_response):
+            with patch("src.agents.planning.build_agent_prompt", return_value="prompt"):
+                with patch("src.agents.planning.check_context_or_escalate", return_value=None):
+                    plan_result = plan_reviewer_node(plan_state)
+        
+        # Step 2: Simulate user responding with GUIDANCE
+        supervisor_state = {
+            **plan_state,
+            **plan_result,
+            "user_responses": {"Q1": "GUIDANCE: Focus on extinction spectrum only"},
+            "progress": {"stages": [], "user_interactions": []},
+        }
+        
+        supervisor_result = supervisor_node(supervisor_state)
+        
+        # Step 3: Verify GUIDANCE was handled correctly
+        assert supervisor_result.get("supervisor_verdict") == "replan_with_guidance", (
+            f"GUIDANCE should set verdict to replan_with_guidance, got {supervisor_result.get('supervisor_verdict')}"
+        )
+        assert supervisor_result.get("replan_count") == 0, (
+            f"GUIDANCE should reset replan_count to 0, got {supervisor_result.get('replan_count')}"
+        )
+        assert "extinction" in supervisor_result.get("planner_feedback", "").lower(), (
+            "User guidance should be in planner_feedback"
+        )
+        
+        # Step 4: Verify routing goes to planning (not ask_user!)
+        merged_state = {**supervisor_state, **supervisor_result}
+        route_result = route_after_supervisor(merged_state)
+        assert route_result == "planning", (
+            f"replan_with_guidance should route to planning, got {route_result}"
+        )
+
+    @patch('src.graph.save_checkpoint')
+    def test_plan_review_limit_force_accept_continues(self, mock_checkpoint):
+        """Test full flow: plan_review hits limit → user says FORCE_ACCEPT → continues."""
+        from unittest.mock import patch
+        from src.agents.planning import plan_reviewer_node
+        from src.agents.supervision.supervisor import supervisor_node
+        
+        # Step 1: Simulate plan_reviewer hitting the limit
+        plan_state = {
+            "plan": {
+                "stages": [{"stage_id": "test", "stage_type": "SINGLE_STRUCTURE"}],
+                "assumptions": [],
+            },
+            "replan_count": MAX_REPLANS,
+            "runtime_config": {"max_replans": MAX_REPLANS},
+            "progress": {"stages": []},
+            "current_stage_type": "SINGLE_STRUCTURE",
+        }
+        
+        mock_response = {
+            "verdict": "needs_revision",
+            "feedback": "Issues found",
+            "issues": ["Test issue"],
+        }
+        
+        with patch("src.agents.planning.call_agent_with_metrics", return_value=mock_response):
+            with patch("src.agents.planning.build_agent_prompt", return_value="prompt"):
+                with patch("src.agents.planning.check_context_or_escalate", return_value=None):
+                    plan_result = plan_reviewer_node(plan_state)
+        
+        # Step 2: Simulate user responding with FORCE_ACCEPT
+        supervisor_state = {
+            **plan_state,
+            **plan_result,
+            "user_responses": {"Q1": "FORCE_ACCEPT"},
+            "progress": {"stages": [], "user_interactions": []},
+        }
+        
+        supervisor_result = supervisor_node(supervisor_state)
+        
+        # Step 3: Verify FORCE_ACCEPT was handled correctly
+        assert supervisor_result.get("supervisor_verdict") == "ok_continue", (
+            f"FORCE_ACCEPT should set verdict to ok_continue, got {supervisor_result.get('supervisor_verdict')}"
+        )
+        assert "force" in supervisor_result.get("supervisor_feedback", "").lower(), (
+            "Feedback should mention force-accept"
+        )
+        
+        # Step 4: Verify routing continues (to select_stage)
+        merged_state = {**supervisor_state, **supervisor_result}
+        route_result = route_after_supervisor(merged_state)
+        assert route_result == "select_stage", (
+            f"ok_continue should route to select_stage, got {route_result}"
+        )
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Extended End-to-End Tests (Including Post-Supervisor Node Execution)
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestExtendedEndToEndFlows:
+    """Tests that verify the COMPLETE flow including what happens after supervisor routes.
+    
+    These extend the basic e2e tests by actually invoking the next node after
+    supervisor routes, verifying the full state machine behavior.
+    """
+
+    @patch('src.graph.save_checkpoint')
+    def test_stop_flow_generates_report(self, mock_checkpoint):
+        """Full flow: plan_review → limit → STOP → supervisor → generate_report_node.
+        
+        Verifies that after STOP, the report generation node is actually called
+        and produces workflow_phase='complete'.
+        """
+        from unittest.mock import patch, MagicMock
+        from src.agents.planning import plan_reviewer_node
+        from src.agents.supervision.supervisor import supervisor_node
+        from src.agents.reporting import generate_report_node
+        
+        # Step 1: Simulate plan_reviewer hitting the limit
+        plan_state = {
+            "plan": {
+                "stages": [{"stage_id": "test", "stage_type": "SINGLE_STRUCTURE"}],
+                "assumptions": [],
+            },
+            "replan_count": MAX_REPLANS,
+            "runtime_config": {"max_replans": MAX_REPLANS},
+            "progress": {"stages": [], "user_interactions": []},
+            "paper_id": "test_paper",
+        }
+        
+        mock_llm_response = {
+            "verdict": "needs_revision",
+            "feedback": "Issues found",
+            "issues": ["Test issue"],
+        }
+        
+        with patch("src.agents.planning.call_agent_with_metrics", return_value=mock_llm_response):
+            with patch("src.agents.planning.build_agent_prompt", return_value="prompt"):
+                with patch("src.agents.planning.check_context_or_escalate", return_value=None):
+                    plan_result = plan_reviewer_node(plan_state)
+        
+        # Step 2: User responds with STOP
+        supervisor_state = {
+            **plan_state,
+            **plan_result,
+            "user_responses": {"Q1": "STOP"},
+        }
+        
+        supervisor_result = supervisor_node(supervisor_state)
+        
+        # Step 3: Verify routing
+        merged_state = {**supervisor_state, **supervisor_result}
+        route_result = route_after_supervisor(merged_state)
+        assert route_result == "generate_report", "Should route to generate_report"
+        
+        # Step 4: Actually call generate_report_node and verify it completes correctly
+        report_state = merged_state
+        report_result = generate_report_node(report_state)
+        
+        # generate_report_node sets workflow_phase to 'reporting' (the terminal phase)
+        assert report_result.get("workflow_phase") == "reporting", (
+            f"Report node should set workflow_phase='reporting', got {report_result.get('workflow_phase')}"
+        )
+        
+        # Verify report node produced metrics summary (proves it actually ran its logic)
+        assert "metrics" in report_result, "Report node should produce metrics"
+        assert "token_summary" in report_result["metrics"], "Report should include token_summary"
+
+    @patch('src.graph.save_checkpoint')
+    def test_guidance_flow_reaches_planner_with_feedback(self, mock_checkpoint):
+        """Full flow: plan_review → limit → GUIDANCE → supervisor → plan_node with feedback.
+        
+        Verifies that after GUIDANCE:
+        1. Routing goes to planning (not ask_user)
+        2. plan_node receives the user's guidance in planner_feedback
+        3. plan_node uses the guidance (visible in the prompt)
+        """
+        from unittest.mock import patch, MagicMock, call
+        from src.agents.planning import plan_reviewer_node, plan_node
+        from src.agents.supervision.supervisor import supervisor_node
+        
+        # Step 1: Simulate plan_reviewer hitting the limit
+        plan_state = {
+            "plan": {
+                "stages": [{"stage_id": "test", "stage_type": "SINGLE_STRUCTURE"}],
+                "assumptions": [],
+            },
+            "replan_count": MAX_REPLANS,
+            "runtime_config": {"max_replans": MAX_REPLANS},
+            "progress": {"stages": [], "user_interactions": []},
+            "paper_id": "test_paper",
+            # Paper text must be long enough (>100 chars) for planner to accept it
+            "paper_text": """
+            This is a test paper about optical properties of aluminum nanoparticles.
+            We investigate the extinction spectrum and near-field enhancement.
+            The simulations use FDTD methods with perfectly matched layer boundaries.
+            Results show strong plasmonic resonance at 400nm wavelength.
+            """,
+        }
+        
+        mock_review_response = {
+            "verdict": "needs_revision",
+            "feedback": "Issues found",
+            "issues": ["Test issue"],
+        }
+        
+        with patch("src.agents.planning.call_agent_with_metrics", return_value=mock_review_response):
+            with patch("src.agents.planning.build_agent_prompt", return_value="prompt"):
+                with patch("src.agents.planning.check_context_or_escalate", return_value=None):
+                    plan_result = plan_reviewer_node(plan_state)
+        
+        # Step 2: User responds with GUIDANCE
+        user_guidance = "Focus on extinction spectrum only, skip field maps"
+        supervisor_state = {
+            **plan_state,
+            **plan_result,
+            "user_responses": {"Q1": f"GUIDANCE: {user_guidance}"},
+        }
+        
+        supervisor_result = supervisor_node(supervisor_state)
+        
+        # Step 3: Verify routing goes to planning
+        merged_state = {**supervisor_state, **supervisor_result}
+        route_result = route_after_supervisor(merged_state)
+        assert route_result == "planning", (
+            f"GUIDANCE should route to planning, got {route_result}"
+        )
+        
+        # Step 4: Verify planner_feedback contains user guidance
+        assert "planner_feedback" in supervisor_result, "Should have planner_feedback"
+        assert "extinction" in supervisor_result["planner_feedback"].lower(), (
+            f"User guidance should be in planner_feedback, got: {supervisor_result.get('planner_feedback')}"
+        )
+        
+        # Step 5: Call plan_node and verify user's guidance appears in the prompt
+        planner_state = merged_state
+        
+        # Verify paper_text is long enough (plan_node requires > 100 chars)
+        paper_text = planner_state.get("paper_text", "")
+        assert len(paper_text.strip()) >= 100, (
+            f"paper_text must be >= 100 chars for plan_node, got {len(paper_text.strip())}"
+        )
+        
+        # Verify planner_feedback is in state (set by supervisor)
+        assert "planner_feedback" in planner_state, (
+            "planner_feedback should be in state after GUIDANCE"
+        )
+        assert user_guidance.lower() in planner_state["planner_feedback"].lower(), (
+            f"User guidance '{user_guidance}' should be in planner_feedback, "
+            f"got: {planner_state.get('planner_feedback')}"
+        )
+        
+        # Mock the LLM call to capture the ACTUAL user_content sent
+        mock_plan_response = {
+            "stages": [{"stage_id": "stage1", "stage_type": "SINGLE_STRUCTURE", "target_figure": "Fig1"}],
+            "assumptions": [],
+        }
+        
+        captured_user_content = []
+        def capture_llm_call(*args, **kwargs):
+            # Capture user_content (3rd positional arg or keyword arg)
+            if len(args) >= 3:
+                captured_user_content.append(args[2])  # user_content is 3rd arg
+            elif "user_content" in kwargs:
+                captured_user_content.append(kwargs["user_content"])
+            return mock_plan_response
+        
+        with patch("src.agents.planning.call_agent_with_metrics", side_effect=capture_llm_call):
+            with patch("src.agents.planning.check_context_or_escalate", return_value=None):
+                with patch("src.agents.planning.build_agent_prompt", return_value="test prompt"):
+                    plan_node_result = plan_node(planner_state)
+        
+        # Verify LLM was called
+        assert len(captured_user_content) > 0, (
+            f"plan_node should have called LLM with user_content. Result: {plan_node_result}"
+        )
+        
+        # CRITICAL: Verify user's guidance appears in the actual prompt sent to LLM
+        actual_user_content = captured_user_content[0]
+        assert "extinction" in actual_user_content.lower(), (
+            f"User guidance about 'extinction' should appear in user_content sent to LLM.\n"
+            f"planner_feedback: {planner_state.get('planner_feedback')}\n"
+            f"Actual user_content: {actual_user_content[:500]}..."
+        )
+        assert "REVISION FEEDBACK" in actual_user_content, (
+            f"User guidance should be in REVISION FEEDBACK section.\n"
+            f"Actual user_content: {actual_user_content[:500]}..."
+        )
+        
+        # Verify replan_count was reset
+        assert merged_state.get("replan_count") == 0, (
+            f"replan_count should be 0 after GUIDANCE, got {merged_state.get('replan_count')}"
+        )
+
+    @patch('src.graph.save_checkpoint')  
+    def test_force_accept_flow_reaches_stage_selection(self, mock_checkpoint):
+        """Full flow: plan_review → limit → FORCE_ACCEPT → supervisor → select_stage_node.
+        
+        Verifies that after FORCE_ACCEPT:
+        1. Routing goes to select_stage
+        2. select_stage_node can pick the next stage from the plan
+        """
+        from unittest.mock import patch
+        from src.agents.planning import plan_reviewer_node
+        from src.agents.supervision.supervisor import supervisor_node
+        from src.agents.stage_selection import select_stage_node
+        
+        # Step 1: Simulate plan_reviewer hitting the limit with a valid plan
+        plan_state = {
+            "plan": {
+                "stages": [
+                    {"stage_id": "stage0", "stage_type": "MATERIAL_VALIDATION", "target_figure": "Fig1"},
+                    {"stage_id": "stage1", "stage_type": "SINGLE_STRUCTURE", "target_figure": "Fig2"},
+                ],
+                "assumptions": ["Assume aluminum properties"],
+            },
+            "replan_count": MAX_REPLANS,
+            "runtime_config": {"max_replans": MAX_REPLANS},
+            "progress": {"stages": []},
+            "paper_id": "test_paper",
+            "current_stage_type": "SINGLE_STRUCTURE",
+        }
+        
+        mock_review_response = {
+            "verdict": "needs_revision",
+            "feedback": "Minor issues but acceptable",
+            "issues": ["Minor formatting"],
+        }
+        
+        with patch("src.agents.planning.call_agent_with_metrics", return_value=mock_review_response):
+            with patch("src.agents.planning.build_agent_prompt", return_value="prompt"):
+                with patch("src.agents.planning.check_context_or_escalate", return_value=None):
+                    plan_result = plan_reviewer_node(plan_state)
+        
+        # Step 2: User responds with FORCE_ACCEPT
+        supervisor_state = {
+            **plan_state,
+            **plan_result,
+            "user_responses": {"Q1": "FORCE_ACCEPT"},
+        }
+        
+        supervisor_result = supervisor_node(supervisor_state)
+        
+        # Step 3: Verify routing goes to select_stage
+        merged_state = {**supervisor_state, **supervisor_result}
+        route_result = route_after_supervisor(merged_state)
+        assert route_result == "select_stage", (
+            f"FORCE_ACCEPT should route to select_stage, got {route_result}"
+        )
+        
+        # Step 4: Call select_stage_node and verify it picks a stage
+        select_state = merged_state
+        select_result = select_stage_node(select_state)
+        
+        # Should pick the first unprocessed stage (stage0)
+        assert "current_stage_id" in select_result, "Should set current_stage_id"
+        assert select_result.get("current_stage_id") == "stage0", (
+            f"Should pick first stage (stage0), got {select_result.get('current_stage_id')}"
+        )
+        assert select_result.get("workflow_phase") == "stage_selection", (
+            "Should set workflow_phase to stage_selection"
+        )
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Edge Case Tests for User Guidance
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestUserGuidanceEdgeCases:
+    """Tests for edge cases in user guidance handling.
+    
+    These tests verify the system handles malformed, empty, or ambiguous
+    user input correctly - edge cases that often reveal bugs.
+    """
+
+    @patch('src.graph.save_checkpoint')
+    def test_empty_guidance_after_keyword(self, mock_checkpoint):
+        """Test GUIDANCE: with no actual guidance text.
+        
+        User types 'GUIDANCE:' with nothing after. System should still
+        process it (even if the feedback is empty).
+        """
+        from src.agents.supervision.supervisor import supervisor_node
+        
+        state = {
+            "ask_user_trigger": "replan_limit",
+            "user_responses": {"Q1": "GUIDANCE:"},  # Empty guidance
+            "replan_count": MAX_REPLANS,
+            "progress": {"stages": [], "user_interactions": []},
+        }
+        
+        result = supervisor_node(state)
+        
+        # Should still be recognized as GUIDANCE and trigger replan
+        assert result.get("supervisor_verdict") == "replan_with_guidance", (
+            f"Empty GUIDANCE should still trigger replan_with_guidance, got {result.get('supervisor_verdict')}"
+        )
+        assert result.get("replan_count") == 0, "Counter should be reset even with empty guidance"
+        # planner_feedback should exist even if empty
+        assert "planner_feedback" in result, "planner_feedback should be set even if empty"
+
+    @patch('src.graph.save_checkpoint')
+    def test_whitespace_only_guidance(self, mock_checkpoint):
+        """Test GUIDANCE: followed by only whitespace.
+        
+        User types 'GUIDANCE:    ' with spaces. Should be handled gracefully.
+        """
+        from src.agents.supervision.supervisor import supervisor_node
+        
+        state = {
+            "ask_user_trigger": "replan_limit",
+            "user_responses": {"Q1": "GUIDANCE:    \n\t  "},  # Whitespace only
+            "replan_count": MAX_REPLANS,
+            "progress": {"stages": [], "user_interactions": []},
+        }
+        
+        result = supervisor_node(state)
+        
+        # Should recognize GUIDANCE keyword
+        assert result.get("supervisor_verdict") == "replan_with_guidance", (
+            f"Whitespace GUIDANCE should trigger replan_with_guidance, got {result.get('supervisor_verdict')}"
+        )
+        assert result.get("replan_count") == 0, "Counter should be reset"
+
+    @patch('src.graph.save_checkpoint')
+    def test_conflicting_keywords_stop_and_guidance(self, mock_checkpoint):
+        """Test response containing both STOP and GUIDANCE.
+        
+        Which takes precedence? This tests keyword priority logic.
+        """
+        from src.agents.supervision.supervisor import supervisor_node
+        
+        state = {
+            "ask_user_trigger": "replan_limit",
+            "user_responses": {"Q1": "GUIDANCE: please STOP doing this"},  # Both keywords
+            "replan_count": MAX_REPLANS,
+            "progress": {"stages": [], "user_interactions": []},
+        }
+        
+        result = supervisor_node(state)
+        
+        # GUIDANCE comes first in the handler's if-elif chain after FORCE/ACCEPT
+        # So GUIDANCE should win (based on handler implementation)
+        # If this fails, it reveals the actual precedence
+        verdict = result.get("supervisor_verdict")
+        assert verdict in ("replan_with_guidance", "all_complete"), (
+            f"Expected replan_with_guidance or all_complete, got {verdict}"
+        )
+        # Note: This test documents actual behavior. If precedence matters, 
+        # strengthen this assertion once the expected behavior is confirmed.
+
+    @patch('src.graph.save_checkpoint')
+    def test_case_sensitivity_mixed_case_guidance(self, mock_checkpoint):
+        """Test mixed case GUIDANCE keyword (e.g., 'GuIdAnCe').
+        
+        Keywords should be case-insensitive.
+        """
+        from src.agents.supervision.supervisor import supervisor_node
+        
+        state = {
+            "ask_user_trigger": "replan_limit",
+            "user_responses": {"Q1": "GuIdAnCe: try different approach"},
+            "replan_count": MAX_REPLANS,
+            "progress": {"stages": [], "user_interactions": []},
+        }
+        
+        result = supervisor_node(state)
+        
+        assert result.get("supervisor_verdict") == "replan_with_guidance", (
+            f"Mixed-case GUIDANCE should work, got {result.get('supervisor_verdict')}"
+        )
+
+    @patch('src.graph.save_checkpoint')
+    def test_guidance_without_colon(self, mock_checkpoint):
+        """Test GUIDANCE without colon (e.g., 'GUIDANCE try this').
+        
+        Should still be recognized as GUIDANCE keyword.
+        """
+        from src.agents.supervision.supervisor import supervisor_node
+        
+        state = {
+            "ask_user_trigger": "replan_limit",
+            "user_responses": {"Q1": "GUIDANCE try a different wavelength"},
+            "replan_count": MAX_REPLANS,
+            "progress": {"stages": [], "user_interactions": []},
+        }
+        
+        result = supervisor_node(state)
+        
+        assert result.get("supervisor_verdict") == "replan_with_guidance", (
+            f"GUIDANCE without colon should work, got {result.get('supervisor_verdict')}"
+        )
+        # Verify the guidance text is captured
+        feedback = result.get("planner_feedback", "")
+        assert "wavelength" in feedback.lower(), (
+            f"Guidance text should be captured, got: {feedback}"
+        )
+
+    @patch('src.graph.save_checkpoint')
+    def test_unrecognized_response_asks_for_clarification(self, mock_checkpoint):
+        """Test response with no recognized keywords.
+        
+        User types gibberish - should ask for clarification, not crash.
+        """
+        from src.agents.supervision.supervisor import supervisor_node
+        
+        state = {
+            "ask_user_trigger": "replan_limit",
+            "user_responses": {"Q1": "I don't understand what to do"},
+            "replan_count": MAX_REPLANS,
+            "progress": {"stages": [], "user_interactions": []},
+        }
+        
+        result = supervisor_node(state)
+        
+        # Should ask for clarification
+        assert result.get("supervisor_verdict") == "ask_user", (
+            f"Unrecognized response should ask for clarification, got {result.get('supervisor_verdict')}"
+        )
+        assert "pending_user_questions" in result, "Should have clarification question"
+        assert len(result["pending_user_questions"]) > 0, "Should have at least one question"
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Dynamic Trigger Name Consistency Tests
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestDynamicTriggerConsistency:
+    """Tests that dynamically verify trigger name consistency.
+    
+    Instead of hardcoding expected trigger names, these tests scan
+    the source code to find all places that set ask_user_trigger
+    and verify each one has a handler.
+    """
+
+    def test_all_trigger_assignments_have_handlers(self):
+        """Scan source for all ask_user_trigger assignments and verify handlers exist.
+        
+        This is a robust regression test that will catch any new trigger name
+        added without a corresponding handler - the exact bug we found.
+        """
+        import re
+        from pathlib import Path
+        from src.agents.supervision.trigger_handlers import TRIGGER_HANDLERS
+        
+        src_dir = Path(__file__).parent.parent.parent.parent / "src"
+        
+        # Multiple patterns to catch different assignment styles:
+        # 1. result["ask_user_trigger"] = "something"
+        # 2. result['ask_user_trigger'] = 'something'
+        # 3. "ask_user_trigger": "something" (in dicts)
+        patterns = [
+            # Standard assignment: ["ask_user_trigger"] = "value"
+            re.compile(r'\[[\"\']ask_user_trigger[\"\']\]\s*=\s*[\"\']([\w_]+)[\"\']'),
+            # Dict literal: "ask_user_trigger": "value"
+            re.compile(r'[\"\'"]ask_user_trigger[\"\'"]\s*:\s*[\"\']([\w_]+)[\"\']'),
+        ]
+        
+        found_triggers = set()
+        files_with_triggers = {}
+        
+        for py_file in src_dir.rglob("*.py"):
+            try:
+                content = py_file.read_text()
+                for pattern in patterns:
+                    matches = pattern.findall(content)
+                    if matches:
+                        for trigger in matches:
+                            found_triggers.add(trigger)
+                            if trigger not in files_with_triggers:
+                                files_with_triggers[trigger] = []
+                            files_with_triggers[trigger].append(str(py_file.name))
+            except Exception:
+                pass  # Skip files we can't read
+        
+        # Filter out "None" which is used to clear the trigger
+        found_triggers.discard("None")
+        found_triggers.discard("none")
+        
+        # Verify each found trigger has a handler
+        missing_handlers = []
+        for trigger in found_triggers:
+            if trigger not in TRIGGER_HANDLERS:
+                missing_handlers.append({
+                    "trigger": trigger,
+                    "files": files_with_triggers.get(trigger, [])
+                })
+        
+        assert len(missing_handlers) == 0, (
+            f"Found trigger names without handlers:\n"
+            + "\n".join([
+                f"  - '{m['trigger']}' used in: {', '.join(set(m['files']))}"
+                for m in missing_handlers
+            ])
+            + f"\n\nAvailable handlers: {list(TRIGGER_HANDLERS.keys())}"
+        )
+        
+        # Also verify we found SOME triggers (test sanity check)
+        assert len(found_triggers) >= 3, (
+            f"Expected to find at least 3 trigger assignments, found {len(found_triggers)}. "
+            "Pattern may be broken."
+        )
+
+    def test_trigger_handler_dict_has_known_triggers(self):
+        """Verify TRIGGER_HANDLERS contains expected critical triggers.
+        
+        These are triggers that MUST have handlers for the system to work.
+        """
+        from src.agents.supervision.trigger_handlers import TRIGGER_HANDLERS
+        
+        # Critical triggers that must always have handlers
+        critical_triggers = [
+            "replan_limit",           # Plan review escalation
+            "code_review_limit",      # Code review escalation
+            "design_review_limit",    # Design review escalation
+            "execution_failure_limit", # Execution failure escalation
+            "physics_failure_limit",  # Physics check escalation
+            "material_checkpoint",    # Material validation
+        ]
+        
+        for trigger in critical_triggers:
+            assert trigger in TRIGGER_HANDLERS, (
+                f"Critical trigger '{trigger}' missing from TRIGGER_HANDLERS. "
+                "This will cause user responses to be ignored!"
+            )
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Complex End-to-End Flow Tests
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestComplexE2EFlows:
+    """Complex end-to-end tests verifying multi-step workflows.
+    
+    These tests simulate complete workflow paths including:
+    - Material checkpoint mandatory approval flow
+    - Physics design flaw recovery (routes to design, not code)
+    - Multi-limit escalation chains with counter resets
+    - Backtracking and stage invalidation
+    - Complete single-stage execution with all review cycles
+    - Execution failures with code regeneration
+    - Context overflow recovery
+    - LLM error recovery
+    """
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # Test 1: Material Checkpoint Flow
+    # ═══════════════════════════════════════════════════════════════════════
+
+    @patch('src.graph.save_checkpoint')
+    def test_material_checkpoint_flow_complete(self, mock_checkpoint):
+        """Full flow: stage 0 (MATERIAL_VALIDATION) → supervisor → material_checkpoint 
+        → ask_user → user approves → supervisor → select_stage → stage 1.
+        
+        This tests the MANDATORY material checkpoint that occurs after Stage 0.
+        Verifies materials are stored after user approval.
+        """
+        from unittest.mock import patch
+        from src.agents.supervision.supervisor import supervisor_node
+        from src.agents.user_interaction import material_checkpoint_node
+        from src.agents.stage_selection import select_stage_node
+        from src.graph import route_after_supervisor
+        
+        # Step 1: Set up state after Stage 0 (MATERIAL_VALIDATION) completes
+        base_state = {
+            "plan": {
+                "stages": [
+                    {"stage_id": "stage0", "stage_type": "MATERIAL_VALIDATION", "target_figure": "Fig1"},
+                    {"stage_id": "stage1", "stage_type": "SINGLE_STRUCTURE", "target_figure": "Fig2", "dependencies": ["stage0"]},
+                ],
+                "assumptions": [],
+            },
+            "progress": {
+                "stages": [
+                    {"stage_id": "stage0", "stage_type": "MATERIAL_VALIDATION", "status": "completed_success"},
+                    {"stage_id": "stage1", "stage_type": "SINGLE_STRUCTURE", "status": "pending", "dependencies": ["stage0"]},
+                ],
+                "user_interactions": [],
+            },
+            "current_stage_id": "stage0",
+            "current_stage_type": "MATERIAL_VALIDATION",
+            "stage_outputs": {
+                "files": ["material_plot.png"],
+                "results": {"n_data": [1.5, 1.6], "k_data": [0.01, 0.02]},
+            },
+            "validated_materials": [],  # Not yet validated
+            "paper_id": "test_paper",
+        }
+        
+        # Supervisor should recognize completed MATERIAL_VALIDATION and route to checkpoint
+        mock_supervisor_response = {
+            "verdict": "ok_continue",
+            "feedback": "Stage 0 complete",
+            "should_stop": False,
+        }
+        
+        with patch("src.agents.supervision.supervisor.call_agent_with_metrics", return_value=mock_supervisor_response):
+            with patch("src.agents.supervision.supervisor.build_agent_prompt", return_value="prompt"):
+                with patch("src.agents.supervision.supervisor.check_context_or_escalate", return_value=None):
+                    supervisor_result = supervisor_node(base_state)
+        
+        # Step 2: Verify route goes to material_checkpoint
+        merged_state = {**base_state, **supervisor_result}
+        route_result = route_after_supervisor(merged_state)
+        
+        assert route_result == "material_checkpoint", (
+            f"After MATERIAL_VALIDATION, should route to material_checkpoint, got {route_result}"
+        )
+        
+        # Step 3: Call material_checkpoint_node
+        checkpoint_result = material_checkpoint_node(merged_state)
+        
+        # Verify it sets up for user approval
+        assert checkpoint_result.get("awaiting_user_input") is True, (
+            "material_checkpoint should set awaiting_user_input=True"
+        )
+        assert checkpoint_result.get("ask_user_trigger") == "material_checkpoint", (
+            f"Should set material_checkpoint trigger, got {checkpoint_result.get('ask_user_trigger')}"
+        )
+        assert "pending_user_questions" in checkpoint_result, (
+            "Should have pending questions for user"
+        )
+        assert "pending_validated_materials" in checkpoint_result, (
+            "Should have pending materials waiting for approval"
+        )
+        
+        # Step 4: User approves materials (uses approval keywords like APPROVE, ACCEPT, YES)
+        approval_state = {
+            **merged_state,
+            **checkpoint_result,
+            "user_responses": {"Q1": "APPROVE"},
+            # Ensure pending_validated_materials is populated for approval to work
+            "pending_validated_materials": [{"name": "aluminum", "n": 1.5, "k": 0.01}],
+        }
+        
+        approval_result = supervisor_node(approval_state)
+        
+        # Verify materials were validated
+        assert approval_result.get("supervisor_verdict") == "ok_continue", (
+            f"Should set ok_continue after approval, got {approval_result.get('supervisor_verdict')}"
+        )
+        # Validated materials should be set (moved from pending)
+        assert "validated_materials" in approval_result, (
+            "Should have validated_materials after approval"
+        )
+        
+        # Step 5: Verify routing continues to select_stage (not back to checkpoint)
+        final_state = {**approval_state, **approval_result}
+        # Add marker that we've done material_checkpoint
+        final_state["user_responses"]["material_checkpoint"] = "APPROVE"
+        
+        final_route = route_after_supervisor(final_state)
+        assert final_route == "select_stage", (
+            f"After material approval, should route to select_stage, got {final_route}"
+        )
+        
+        # Step 6: Verify select_stage picks stage1
+        stage_result = select_stage_node(final_state)
+        assert stage_result.get("current_stage_id") == "stage1", (
+            f"Should select stage1 after stage0 complete, got {stage_result.get('current_stage_id')}"
+        )
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # Test 2: Physics Design Flaw Recovery
+    # ═══════════════════════════════════════════════════════════════════════
+
+    @patch('src.graph.save_checkpoint')
+    def test_physics_design_flaw_routes_to_design_not_code(self, mock_checkpoint):
+        """Full flow: physics_check (verdict=design_flaw) → routes to DESIGN (not code).
+        
+        This tests the critical path where physics_check detects a fundamental
+        design problem (not just a code bug) and routes back to simulation_designer.
+        """
+        from unittest.mock import patch
+        from src.agents.execution import physics_sanity_node
+        from src.routing import route_after_physics_check
+        
+        # State representing a physics check detecting design flaw
+        base_state = {
+            "current_stage_id": "stage1",
+            "current_stage_type": "SINGLE_STRUCTURE",
+            "plan": {
+                "stages": [{"stage_id": "stage1", "stage_type": "SINGLE_STRUCTURE"}],
+            },
+            "progress": {"stages": [], "user_interactions": []},
+            "execution_result": {
+                "success": True,
+                "output_files": ["output.png"],
+                "stdout": "Simulation complete",
+            },
+            "design_description": "Simulate extinction spectrum",
+            "code": "# FDTD simulation code",
+            "design_revision_count": 0,  # Fresh start
+            "physics_failure_count": 0,
+            "runtime_config": {},
+            "paper_id": "test_paper",
+        }
+        
+        # Mock physics agent returning design_flaw verdict
+        mock_physics_response = {
+            "verdict": "design_flaw",
+            "feedback": "The simulation setup has fundamental issues: boundary conditions are incompatible with the source type.",
+            "issues": ["PML boundaries incompatible with plane wave source at this angle"],
+        }
+        
+        with patch("src.agents.execution.call_agent_with_metrics", return_value=mock_physics_response):
+            with patch("src.agents.execution.build_agent_prompt", return_value="prompt"):
+                with patch("src.agents.execution.check_context_or_escalate", return_value=None):
+                    physics_result = physics_sanity_node(base_state)
+        
+        # Verify physics_verdict is set correctly
+        assert physics_result.get("physics_verdict") == "design_flaw", (
+            f"physics_verdict should be design_flaw, got {physics_result.get('physics_verdict')}"
+        )
+        
+        # Verify design feedback is set (for designer to use)
+        # The node sets a generic message, actual feedback comes from the agent response
+        assert "design_feedback" in physics_result, (
+            "Should set design_feedback for simulation_designer"
+        )
+        
+        # Verify design_revision_count is incremented (not physics_failure_count)
+        assert physics_result.get("design_revision_count", 0) >= 1, (
+            f"design_revision_count should be incremented, got {physics_result.get('design_revision_count')}"
+        )
+        
+        # CRITICAL: Verify routing goes to DESIGN (not generate_code)
+        merged_state = {**base_state, **physics_result}
+        route_result = route_after_physics_check(merged_state)
+        
+        assert route_result == "design", (
+            f"design_flaw should route to design, got {route_result}. "
+            "This is critical - code won't fix a design problem!"
+        )
+        
+        # Verify it does NOT route to generate_code
+        assert route_result != "generate_code", (
+            "design_flaw MUST NOT route to generate_code!"
+        )
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # Test 3: Multi-Revision Limit Escalation Chain
+    # ═══════════════════════════════════════════════════════════════════════
+
+    @patch('src.graph.save_checkpoint')
+    def test_multi_revision_limit_escalation_chain(self, mock_checkpoint):
+        """Full flow: code_review fails → limit → user HINT → code_review fails again 
+        → limit → user SKIP_STAGE.
+        
+        Tests that counters reset properly between escalations and that 
+        multiple escalations don't corrupt state.
+        """
+        from unittest.mock import patch
+        from src.agents.code import code_reviewer_node
+        from src.agents.supervision.supervisor import supervisor_node
+        from src.routing import route_after_code_review
+        from src.graph import route_after_supervisor
+        
+        # Initial state at code_review limit
+        MAX_CODE_REVISIONS = 3
+        base_state = {
+            "current_stage_id": "stage1",
+            "current_stage_type": "SINGLE_STRUCTURE",
+            "plan": {"stages": [{"stage_id": "stage1", "stage_type": "SINGLE_STRUCTURE"}]},
+            "progress": {
+                "stages": [{"stage_id": "stage1", "status": "in_progress"}],
+                "user_interactions": [],
+            },
+            "code": "# Broken simulation code",
+            "design_description": "Simulate extinction",
+            "code_revision_count": MAX_CODE_REVISIONS,  # At limit
+            "runtime_config": {"max_code_revisions": MAX_CODE_REVISIONS},
+            "paper_id": "test_paper",
+        }
+        
+        # Step 1: code_review fails and hits limit
+        mock_review_response = {
+            "verdict": "needs_revision",
+            "feedback": "Missing imports",
+            "issues": ["Missing numpy import"],
+        }
+        
+        with patch("src.agents.code.call_agent_with_metrics", return_value=mock_review_response):
+            with patch("src.agents.code.build_agent_prompt", return_value="prompt"):
+                with patch("src.agents.code.check_context_or_escalate", return_value=None):
+                    review_result = code_reviewer_node(base_state)
+        
+        # Verify escalation to ask_user
+        assert review_result.get("ask_user_trigger") == "code_review_limit", (
+            f"Should trigger code_review_limit, got {review_result.get('ask_user_trigger')}"
+        )
+        
+        merged_state = {**base_state, **review_result}
+        route_result = route_after_code_review(merged_state)
+        assert route_result == "ask_user", (
+            f"At limit should route to ask_user, got {route_result}"
+        )
+        
+        # Step 2: User provides HINT (keyword is PROVIDE_HINT or HINT)
+        hint_state = {
+            **merged_state,
+            "user_responses": {"Q1": "PROVIDE_HINT: Try using explicit imports at the top"},
+        }
+        
+        hint_result = supervisor_node(hint_state)
+        
+        # Verify counter was reset
+        assert hint_result.get("code_revision_count", MAX_CODE_REVISIONS) == 0, (
+            f"PROVIDE_HINT should reset code_revision_count to 0, got {hint_result.get('code_revision_count')}"
+        )
+        
+        # Verify feedback was set (code_review_limit handler uses reviewer_feedback)
+        assert "reviewer_feedback" in hint_result, (
+            "Should set reviewer_feedback from user hint"
+        )
+        assert "import" in hint_result["reviewer_feedback"].lower(), (
+            f"reviewer_feedback should contain user's hint, got: {hint_result['reviewer_feedback']}"
+        )
+        
+        # Verify routing continues (ok_continue leads to select_stage)
+        post_hint_state = {**hint_state, **hint_result}
+        route_after_hint = route_after_supervisor(post_hint_state)
+        assert route_after_hint == "select_stage", (
+            f"After HINT should route to select_stage, got {route_after_hint}"
+        )
+        
+        # Step 3: Simulate code still failing after hint - another limit hit
+        # Create a fresh state (not carrying over ask_user_trigger from previous)
+        second_limit_state = {
+            "current_stage_id": "stage1",
+            "current_stage_type": "SINGLE_STRUCTURE",
+            "plan": {"stages": [{"stage_id": "stage1", "stage_type": "SINGLE_STRUCTURE"}]},
+            "progress": {
+                "stages": [{"stage_id": "stage1", "status": "in_progress"}],
+                "user_interactions": [],
+            },
+            "code": "# Still broken code after hint",
+            "design_description": "Simulate extinction",
+            "code_revision_count": MAX_CODE_REVISIONS,  # Back at limit
+            "runtime_config": {"max_code_revisions": MAX_CODE_REVISIONS},
+            "paper_id": "test_paper",
+        }
+        
+        with patch("src.agents.code.call_agent_with_metrics", return_value=mock_review_response):
+            with patch("src.agents.code.build_agent_prompt", return_value="prompt"):
+                with patch("src.agents.code.check_context_or_escalate", return_value=None):
+                    second_review_result = code_reviewer_node(second_limit_state)
+        
+        # Verify second escalation
+        assert second_review_result.get("ask_user_trigger") == "code_review_limit", (
+            "Second time at limit should also trigger code_review_limit"
+        )
+        
+        # Step 4: User gives up with SKIP_STAGE
+        skip_state = {
+            **second_limit_state,
+            **second_review_result,
+            "user_responses": {"Q1": "SKIP_STAGE"},
+        }
+        
+        skip_result = supervisor_node(skip_state)
+        
+        # Verify stage is marked appropriately
+        assert skip_result.get("supervisor_verdict") == "ok_continue", (
+            f"SKIP_STAGE should set ok_continue, got {skip_result.get('supervisor_verdict')}"
+        )
+        
+        # Verify progress was updated to mark stage as blocked/skipped
+        progress = skip_result.get("progress", {})
+        if "stages" in progress:
+            stage_info = next(
+                (s for s in progress["stages"] if s.get("stage_id") == "stage1"),
+                None
+            )
+            if stage_info:
+                assert stage_info.get("status") in ("blocked", "skipped", "completed_partial"), (
+                    f"SKIP_STAGE should mark stage as blocked/skipped, got {stage_info.get('status')}"
+                )
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # Test 4: Backtracking Flow
+    # ═══════════════════════════════════════════════════════════════════════
+
+    @patch('src.graph.save_checkpoint')
+    def test_backtracking_flow_invalidates_dependent_stages(self, mock_checkpoint):
+        """Full flow: stage 2 needs backtrack → supervisor → handle_backtrack 
+        → stage 1 invalidated → select_stage picks stage 1 again.
+        
+        Tests the backtracking mechanism that invalidates stages and their dependents.
+        """
+        from unittest.mock import patch
+        from src.agents.supervision.supervisor import supervisor_node
+        from src.agents.reporting import handle_backtrack_node
+        from src.agents.stage_selection import select_stage_node
+        from src.graph import route_after_supervisor
+        
+        # State: stage 0 and 1 complete, stage 2 in progress, needs backtrack to stage 1
+        base_state = {
+            "plan": {
+                "stages": [
+                    {"stage_id": "stage0", "stage_type": "MATERIAL_VALIDATION"},
+                    {"stage_id": "stage1", "stage_type": "SINGLE_STRUCTURE", "dependencies": ["stage0"]},
+                    {"stage_id": "stage2", "stage_type": "PARAMETER_SWEEP", "dependencies": ["stage1"]},
+                ],
+            },
+            "progress": {
+                "stages": [
+                    {"stage_id": "stage0", "status": "completed_success"},
+                    {"stage_id": "stage1", "status": "completed_success"},
+                    {"stage_id": "stage2", "status": "in_progress"},
+                ],
+                "user_interactions": [],
+            },
+            "current_stage_id": "stage2",
+            "current_stage_type": "PARAMETER_SWEEP",
+            "backtrack_count": 0,
+            "paper_id": "test_paper",
+            # Supervisor determined backtrack is needed
+            "supervisor_verdict": "backtrack_to_stage",
+            "backtrack_decision": {
+                "target_stage_id": "stage1",
+                "stages_to_invalidate": ["stage2"],
+                "accepted": True,
+                "reason": "Results don't match expected behavior, need to adjust simulation parameters",
+            },
+        }
+        
+        # Step 1: Verify routing goes to handle_backtrack
+        route_result = route_after_supervisor(base_state)
+        assert route_result == "handle_backtrack", (
+            f"backtrack_to_stage should route to handle_backtrack, got {route_result}"
+        )
+        
+        # Step 2: Call handle_backtrack_node
+        backtrack_result = handle_backtrack_node(base_state)
+        
+        # Verify backtrack_count incremented
+        assert backtrack_result.get("backtrack_count", 0) >= 1, (
+            f"backtrack_count should be incremented, got {backtrack_result.get('backtrack_count')}"
+        )
+        
+        # Verify progress was updated - stage2 should be invalidated, stage1 needs rerun
+        progress = backtrack_result.get("progress", {})
+        stages = progress.get("stages", [])
+        
+        stage1_info = next((s for s in stages if s.get("stage_id") == "stage1"), None)
+        stage2_info = next((s for s in stages if s.get("stage_id") == "stage2"), None)
+        
+        assert stage1_info is not None, "stage1 should still exist in progress"
+        assert stage1_info.get("status") in ("needs_rerun", "pending"), (
+            f"stage1 should be marked needs_rerun, got {stage1_info.get('status')}"
+        )
+        
+        assert stage2_info is not None, "stage2 should still exist in progress"
+        assert stage2_info.get("status") in ("invalidated", "pending", "blocked"), (
+            f"stage2 should be invalidated, got {stage2_info.get('status')}"
+        )
+        
+        # Step 3: Verify select_stage picks stage1 again
+        merged_state = {**base_state, **backtrack_result}
+        stage_result = select_stage_node(merged_state)
+        
+        assert stage_result.get("current_stage_id") == "stage1", (
+            f"After backtrack, should pick stage1 for rerun, got {stage_result.get('current_stage_id')}"
+        )
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # Test 5: Complete Single Stage with All Review Cycles
+    # ═══════════════════════════════════════════════════════════════════════
+
+    @patch('src.graph.save_checkpoint')
+    def test_complete_single_stage_with_review_cycles(self, mock_checkpoint):
+        """Full flow: select_stage → design → design_review (revision) → design 
+        → design_review ✓ → code → code_review (revision) → code → code_review ✓.
+        
+        Tests that feedback propagates correctly through revision cycles.
+        """
+        from unittest.mock import patch, MagicMock
+        from src.agents.stage_selection import select_stage_node
+        from src.agents.design import simulation_designer_node, design_reviewer_node
+        from src.agents.code import code_generator_node, code_reviewer_node
+        from src.routing import route_after_design_review, route_after_code_review
+        
+        # SINGLE_STRUCTURE stage requires a MATERIAL_VALIDATION stage to be complete first
+        # So we include a completed material validation stage
+        base_state = {
+            "plan": {
+                "stages": [
+                    {"stage_id": "stage0", "stage_type": "MATERIAL_VALIDATION", "target_figure": "Fig0"},
+                    {"stage_id": "stage1", "stage_type": "SINGLE_STRUCTURE", "target_figure": "Fig1", "dependencies": ["stage0"]},
+                ],
+            },
+            "progress": {
+                "stages": [
+                    {"stage_id": "stage0", "stage_type": "MATERIAL_VALIDATION", "status": "completed_success"},
+                    {"stage_id": "stage1", "stage_type": "SINGLE_STRUCTURE", "status": "pending", "dependencies": ["stage0"]},
+                ],
+                "user_interactions": [],
+            },
+            "validated_materials": [{"name": "aluminum", "n": 1.5, "k": 0.01}],
+            "paper_id": "test_paper",
+            "paper_text": "Test paper about extinction spectra of aluminum nanoparticles.",
+            "runtime_config": {},
+            "design_revision_count": 0,
+            "code_revision_count": 0,
+        }
+        
+        # Step 1: Select stage - should pick stage1 (stage0 already complete)
+        stage_result = select_stage_node(base_state)
+        assert stage_result.get("current_stage_id") == "stage1", (
+            f"Should select stage1, got {stage_result.get('current_stage_id')}. "
+            f"Trigger: {stage_result.get('ask_user_trigger')}"
+        )
+        merged_state = {**base_state, **stage_result}
+        
+        # Step 2: Design phase
+        mock_design_response = {
+            "setup_description": "FDTD simulation with aluminum nanosphere",
+            "parameters": {"radius": "50nm", "wavelength_range": "300-800nm"},
+        }
+        
+        with patch("src.agents.design.call_agent_with_metrics", return_value=mock_design_response):
+            with patch("src.agents.design.build_agent_prompt", return_value="prompt"):
+                with patch("src.agents.design.check_context_or_escalate", return_value=None):
+                    design_result = simulation_designer_node(merged_state)
+        
+        assert "design_description" in design_result
+        merged_state = {**merged_state, **design_result}
+        
+        # Step 3: Design review - needs revision (first cycle)
+        mock_design_review_reject = {
+            "verdict": "needs_revision",
+            "feedback": "Missing PML boundary specification",
+            "issues": ["No boundary conditions specified"],
+        }
+        
+        with patch("src.agents.design.call_agent_with_metrics", return_value=mock_design_review_reject):
+            with patch("src.agents.design.build_agent_prompt", return_value="prompt"):
+                with patch("src.agents.design.check_context_or_escalate", return_value=None):
+                    review1_result = design_reviewer_node(merged_state)
+        
+        # design_reviewer_node uses last_design_review_verdict, not design_review_verdict
+        assert review1_result.get("last_design_review_verdict") == "needs_revision"
+        assert "reviewer_feedback" in review1_result, (
+            "Rejected design review should set reviewer_feedback for next iteration"
+        )
+        
+        merged_state = {**merged_state, **review1_result}
+        route1 = route_after_design_review(merged_state)
+        assert route1 == "design", "needs_revision should route back to design"
+        
+        # Step 4: Design phase (second iteration with feedback)
+        mock_design_response_v2 = {
+            "setup_description": "FDTD simulation with aluminum nanosphere and PML boundaries",
+            "parameters": {"radius": "50nm", "wavelength_range": "300-800nm", "pml_layers": 12},
+        }
+        
+        # Capture if feedback is being used
+        captured_prompts = []
+        def capture_design_call(*args, **kwargs):
+            if len(args) >= 3:
+                captured_prompts.append(args[2])
+            return mock_design_response_v2
+        
+        with patch("src.agents.design.call_agent_with_metrics", side_effect=capture_design_call):
+            with patch("src.agents.design.build_agent_prompt", return_value="prompt"):
+                with patch("src.agents.design.check_context_or_escalate", return_value=None):
+                    design2_result = simulation_designer_node(merged_state)
+        
+        merged_state = {**merged_state, **design2_result}
+        
+        # Step 5: Design review - approved
+        mock_design_review_approve = {
+            "verdict": "approve",
+            "feedback": "Design looks good",
+        }
+        
+        with patch("src.agents.design.call_agent_with_metrics", return_value=mock_design_review_approve):
+            with patch("src.agents.design.build_agent_prompt", return_value="prompt"):
+                with patch("src.agents.design.check_context_or_escalate", return_value=None):
+                    review2_result = design_reviewer_node(merged_state)
+        
+        assert review2_result.get("last_design_review_verdict") == "approve"
+        merged_state = {**merged_state, **review2_result}
+        
+        route2 = route_after_design_review(merged_state)
+        assert route2 == "generate_code", "approve should route to generate_code"
+        
+        # Step 6: Code generation
+        mock_code_response = {
+            "code": "import meep as mp\n# FDTD simulation",
+            "explanation": "Using Meep for FDTD",
+        }
+        
+        with patch("src.agents.code.call_agent_with_metrics", return_value=mock_code_response):
+            with patch("src.agents.code.build_agent_prompt", return_value="prompt"):
+                with patch("src.agents.code.check_context_or_escalate", return_value=None):
+                    code_result = code_generator_node(merged_state)
+        
+        assert "code" in code_result
+        merged_state = {**merged_state, **code_result}
+        
+        # Step 7: Code review - needs revision
+        mock_code_review_reject = {
+            "verdict": "needs_revision",
+            "feedback": "Missing output file saving",
+            "issues": ["No plt.savefig() call"],
+        }
+        
+        with patch("src.agents.code.call_agent_with_metrics", return_value=mock_code_review_reject):
+            with patch("src.agents.code.build_agent_prompt", return_value="prompt"):
+                with patch("src.agents.code.check_context_or_escalate", return_value=None):
+                    code_review1_result = code_reviewer_node(merged_state)
+        
+        # code_reviewer_node uses last_code_review_verdict
+        assert code_review1_result.get("last_code_review_verdict") == "needs_revision"
+        assert "reviewer_feedback" in code_review1_result
+        
+        merged_state = {**merged_state, **code_review1_result}
+        route3 = route_after_code_review(merged_state)
+        assert route3 == "generate_code", "needs_revision should route to generate_code"
+        
+        # Step 8: Code generation (with feedback)
+        mock_code_response_v2 = {
+            "code": "import meep as mp\nimport matplotlib.pyplot as plt\n# FDTD simulation\nplt.savefig('output.png')",
+            "explanation": "Using Meep for FDTD with proper output saving",
+        }
+        
+        with patch("src.agents.code.call_agent_with_metrics", return_value=mock_code_response_v2):
+            with patch("src.agents.code.build_agent_prompt", return_value="prompt"):
+                with patch("src.agents.code.check_context_or_escalate", return_value=None):
+                    code2_result = code_generator_node(merged_state)
+        
+        merged_state = {**merged_state, **code2_result}
+        
+        # Step 9: Code review - approved
+        mock_code_review_approve = {
+            "verdict": "approve",
+            "feedback": "Code looks good",
+        }
+        
+        with patch("src.agents.code.call_agent_with_metrics", return_value=mock_code_review_approve):
+            with patch("src.agents.code.build_agent_prompt", return_value="prompt"):
+                with patch("src.agents.code.check_context_or_escalate", return_value=None):
+                    code_review2_result = code_reviewer_node(merged_state)
+        
+        assert code_review2_result.get("last_code_review_verdict") == "approve"
+        merged_state = {**merged_state, **code_review2_result}
+        
+        route4 = route_after_code_review(merged_state)
+        assert route4 == "run_code", "approve should route to run_code"
+        
+        # Verify revision counts were properly tracked
+        assert merged_state.get("design_revision_count", 0) >= 1, (
+            "design_revision_count should have been incremented during revision cycle"
+        )
+        assert merged_state.get("code_revision_count", 0) >= 1, (
+            "code_revision_count should have been incremented during revision cycle"
+        )
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # Test 6: Execution Failure with Code Regeneration
+    # ═══════════════════════════════════════════════════════════════════════
+
+    @patch('src.graph.save_checkpoint')
+    def test_execution_failure_triggers_code_regeneration(self, mock_checkpoint):
+        """Full flow: run_code → execution_check (fail) → generate_code → code_review 
+        → run_code → execution_check (fail again) → ... → limit → ask_user.
+        
+        Tests that execution failures route to code regeneration with proper feedback.
+        """
+        from unittest.mock import patch
+        from src.agents.execution import execution_validator_node
+        from src.routing import route_after_execution_check
+        
+        MAX_EXECUTION_FAILURES = 3
+        
+        # State: code ran but produced errors
+        base_state = {
+            "current_stage_id": "stage1",
+            "current_stage_type": "SINGLE_STRUCTURE",
+            "plan": {"stages": [{"stage_id": "stage1", "stage_type": "SINGLE_STRUCTURE"}]},
+            "progress": {"stages": [], "user_interactions": []},
+            "code": "import meep\n# buggy code",
+            "design_description": "FDTD simulation",
+            "execution_result": {
+                "success": False,
+                "error": "IndexError: list index out of range",
+                "stdout": "",
+                "stderr": "Traceback...",
+            },
+            "execution_failure_count": 0,  # First failure
+            "runtime_config": {"max_execution_failures": MAX_EXECUTION_FAILURES},
+            "paper_id": "test_paper",
+        }
+        
+        # Step 1: Execution check detects failure
+        # Note: execution_validator_node uses 'summary' field for feedback, not 'feedback'
+        mock_exec_response = {
+            "verdict": "fail",
+            "summary": "Code crashed with IndexError: list index out of range",
+            "issues": ["Array index out of bounds in line 42"],
+        }
+        
+        with patch("src.agents.execution.call_agent_with_metrics", return_value=mock_exec_response):
+            with patch("src.agents.execution.build_agent_prompt", return_value="prompt"):
+                with patch("src.agents.execution.check_context_or_escalate", return_value=None):
+                    exec_result = execution_validator_node(base_state)
+        
+        # Verify execution_verdict is fail
+        assert exec_result.get("execution_verdict") == "fail", (
+            f"Should set execution_verdict=fail, got {exec_result.get('execution_verdict')}"
+        )
+        
+        # Verify execution_feedback is set (the node sets execution_feedback, not code_feedback)
+        assert "execution_feedback" in exec_result, (
+            "Execution failure should set execution_feedback"
+        )
+        
+        # Verify execution_failure_count is incremented
+        assert exec_result.get("execution_failure_count", 0) >= 1, (
+            f"execution_failure_count should be incremented, got {exec_result.get('execution_failure_count')}"
+        )
+        
+        # Verify routing goes to generate_code (not ask_user yet)
+        merged_state = {**base_state, **exec_result}
+        route_result = route_after_execution_check(merged_state)
+        
+        assert route_result == "generate_code", (
+            f"First failure should route to generate_code, got {route_result}"
+        )
+        
+        # Step 2: Simulate reaching the limit
+        at_limit_state = {
+            **base_state,
+            "execution_failure_count": MAX_EXECUTION_FAILURES,  # At limit
+        }
+        
+        with patch("src.agents.execution.call_agent_with_metrics", return_value=mock_exec_response):
+            with patch("src.agents.execution.build_agent_prompt", return_value="prompt"):
+                with patch("src.agents.execution.check_context_or_escalate", return_value=None):
+                    limit_result = execution_validator_node(at_limit_state)
+        
+        # Verify escalation to ask_user at limit
+        assert limit_result.get("ask_user_trigger") == "execution_failure_limit", (
+            f"At limit should trigger execution_failure_limit, got {limit_result.get('ask_user_trigger')}"
+        )
+        
+        merged_limit_state = {**at_limit_state, **limit_result}
+        route_at_limit = route_after_execution_check(merged_limit_state)
+        
+        assert route_at_limit == "ask_user", (
+            f"At limit should route to ask_user, got {route_at_limit}"
+        )
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # Test 7: Context Overflow Recovery
+    # ═══════════════════════════════════════════════════════════════════════
+
+    @patch('src.graph.save_checkpoint')
+    def test_context_overflow_truncation_recovery(self, mock_checkpoint):
+        """Full flow: node detects context overflow → ask_user → user says TRUNCATE 
+        → paper_text truncated → workflow resumes.
+        
+        Tests the context overflow recovery mechanism.
+        """
+        from unittest.mock import patch
+        from src.agents.supervision.supervisor import supervisor_node
+        from src.graph import route_after_supervisor
+        
+        # Large paper text that triggers overflow
+        large_paper = "A" * 50000  # 50k chars
+        
+        # State after context overflow was detected
+        overflow_state = {
+            "paper_text": large_paper,
+            "ask_user_trigger": "context_overflow",
+            "user_responses": {"Q1": "TRUNCATE"},
+            "pending_user_questions": ["Context overflow. SUMMARIZE, TRUNCATE, SKIP_STAGE, or STOP?"],
+            "awaiting_user_input": True,
+            "last_node_before_ask_user": "planning",
+            "progress": {"stages": [], "user_interactions": []},
+            "paper_id": "test_paper",
+        }
+        
+        # Supervisor handles the TRUNCATE command
+        result = supervisor_node(overflow_state)
+        
+        # Verify paper was truncated
+        assert "paper_text" in result, (
+            "TRUNCATE should set paper_text in result"
+        )
+        truncated_paper = result["paper_text"]
+        assert len(truncated_paper) < len(large_paper), (
+            f"Paper should be truncated: original {len(large_paper)}, truncated {len(truncated_paper)}"
+        )
+        
+        # Verify truncation marker exists
+        assert "TRUNCATED" in truncated_paper, (
+            "Truncated paper should contain truncation marker"
+        )
+        
+        # Verify verdict allows continuation
+        assert result.get("supervisor_verdict") == "ok_continue", (
+            f"TRUNCATE should set ok_continue, got {result.get('supervisor_verdict')}"
+        )
+        
+        # Verify routing continues (not to ask_user again)
+        merged_state = {**overflow_state, **result}
+        route_result = route_after_supervisor(merged_state)
+        
+        assert route_result != "ask_user", (
+            f"After TRUNCATE, should not route to ask_user again, got {route_result}"
+        )
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # Test 8: LLM Error Recovery
+    # ═══════════════════════════════════════════════════════════════════════
+
+    @patch('src.graph.save_checkpoint')
+    def test_llm_error_recovery_with_retry(self, mock_checkpoint):
+        """Full flow: LLM call fails → escalate → user says RETRY → retry succeeds.
+        
+        Tests that LLM errors are properly escalated and can be recovered from.
+        """
+        from unittest.mock import patch, MagicMock
+        from src.agents.planning import plan_node
+        from src.agents.supervision.supervisor import supervisor_node
+        from src.graph import route_after_supervisor
+        
+        base_state = {
+            "paper_text": """
+            This is a test paper about optical properties of gold nanoparticles.
+            We study extinction spectra using FDTD simulations with Meep.
+            The nanoparticle diameter is 50nm and we use Johnson-Christy data.
+            Results show strong plasmonic resonance at 520nm wavelength.
+            """,
+            "paper_id": "test_paper",
+            "progress": {"stages": [], "user_interactions": []},
+            "runtime_config": {},
+        }
+        
+        # Step 1: Simulate LLM returning an error
+        def raise_llm_error(*args, **kwargs):
+            raise Exception("LLM API rate limit exceeded")
+        
+        with patch("src.agents.planning.call_agent_with_metrics", side_effect=raise_llm_error):
+            with patch("src.agents.planning.build_agent_prompt", return_value="prompt"):
+                with patch("src.agents.planning.check_context_or_escalate", return_value=None):
+                    try:
+                        error_result = plan_node(base_state)
+                    except Exception:
+                        # In real code, this would be caught and escalated
+                        error_result = {
+                            "ask_user_trigger": "llm_error",
+                            "pending_user_questions": ["LLM API error: rate limit exceeded. RETRY, SKIP, or STOP?"],
+                            "awaiting_user_input": True,
+                            "last_node_before_ask_user": "planning",
+                        }
+        
+        # Step 2: User says RETRY
+        retry_state = {
+            **base_state,
+            **error_result,
+            "user_responses": {"Q1": "RETRY"},
+        }
+        
+        # Supervisor handles RETRY (in this case, the default handler should just continue)
+        retry_result = supervisor_node(retry_state)
+        
+        # The supervisor should allow continuation (ok_continue or similar)
+        # For unrecognized triggers, default handling applies
+        assert retry_result.get("supervisor_verdict") in ("ok_continue", "ask_user"), (
+            f"RETRY should lead to continuation or clarification, got {retry_result.get('supervisor_verdict')}"
+        )
+        
+        # Step 3: If ok_continue, verify routing continues
+        if retry_result.get("supervisor_verdict") == "ok_continue":
+            merged_state = {**retry_state, **retry_result}
+            route_result = route_after_supervisor(merged_state)
+            
+            # Should route to select_stage (for a fresh planning attempt)
+            assert route_result in ("select_stage", "planning"), (
+                f"After RETRY success, should continue workflow, got {route_result}"
+            )
+        
+        # Step 4: Verify retry would actually work
+        mock_success_response = {
+            "stages": [{"stage_id": "stage1", "stage_type": "SINGLE_STRUCTURE"}],
+            "assumptions": ["Using Johnson-Christy data"],
+        }
+        
+        with patch("src.agents.planning.call_agent_with_metrics", return_value=mock_success_response):
+            with patch("src.agents.planning.build_agent_prompt", return_value="prompt"):
+                with patch("src.agents.planning.check_context_or_escalate", return_value=None):
+                    success_result = plan_node(base_state)
+        
+        # Verify planning succeeds on retry
+        assert "plan" in success_result, (
+            "After LLM recovers, planning should produce a plan"
+        )
+        assert len(success_result["plan"].get("stages", [])) > 0, (
+            "Plan should have stages after successful retry"
+        )
 

@@ -71,8 +71,18 @@ class TestLoadPaperFromMarkdown:
         # Verify supplementary section is not present when not provided
         assert "supplementary" not in paper
         
-        # Verify output directory was created
-        assert Path(output_dir).exists()
+        # Verify output directory structure was created: {output_dir}/{paper_id}/run_{timestamp}/figures/
+        # Since timestamp is dynamic, we check for the run_ prefix pattern
+        paper_dir = Path(output_dir) / "test"
+        assert paper_dir.exists()
+        run_dirs = list(paper_dir.glob("run_*"))
+        assert len(run_dirs) == 1
+        figures_dir = run_dirs[0] / "figures"
+        assert figures_dir.exists()
+        
+        # Verify run_output_dir is returned
+        assert "run_output_dir" in paper
+        assert paper["run_output_dir"] == str(run_dirs[0])
         
         # Verify extract_figures was called with correct text
         mock_extract_figures.assert_called_once_with(text)
@@ -110,13 +120,17 @@ class TestLoadPaperFromMarkdown:
         assert fig["description"] == "Fig 1"
         assert fig["id"] == "fig1"
         assert fig["source_url"] == "fig1.png"
-        assert fig["image_path"] == str(Path(output_dir) / "fig1.png")
+        # Figures are now saved under {output_dir}/{paper_id}/run_{timestamp}/figures/
+        # Get the run_output_dir from the paper and verify the image_path uses it
+        run_output_dir = paper["run_output_dir"]
+        expected_path = Path(run_output_dir) / "figures" / "fig1.png"
+        assert fig["image_path"] == str(expected_path)
         
         # Verify download was called with correct arguments
         mock_download.assert_called_once()
         call_args = mock_download.call_args
         assert call_args[0][0] == str(Path(md_path.parent) / "fig1.png")  # resolved URL
-        assert call_args[0][1] == Path(output_dir) / "fig1.png"  # output path
+        assert call_args[0][1] == expected_path  # output path
         assert call_args[1]["timeout"] == 30  # default timeout
 
     def test_generates_unique_ids_for_duplicates(
@@ -203,7 +217,10 @@ class TestLoadPaperFromMarkdown:
         args, kwargs = mock_download.call_args
         assert args[0] == "http://example.com/relative/fig.png"
         # Actual ID generation produces "Fig1" (capital F) from alt text "Fig"
-        assert args[1] == Path(tmp_path / "figs" / "Fig1.png")
+        # Figures are now saved under {output_dir}/{paper_id}/run_{timestamp}/figures/
+        run_output_dir = paper["run_output_dir"]
+        expected_path = Path(run_output_dir) / "figures" / "Fig1.png"
+        assert args[1] == expected_path
         assert kwargs["timeout"] == 30
         assert kwargs["base_path"] == md_path.parent
         
@@ -263,8 +280,11 @@ class TestLoadPaperFromMarkdown:
         assert supp_fig["source_url"] == "supp.png"
         
         # Verify supplementary figure has all required fields
+        # Figures are now saved under {output_dir}/{paper_id}/run_{timestamp}/figures/
         assert "image_path" in supp_fig
-        assert supp_fig["image_path"] == str(Path(tmp_path / "figs" / "Sfigure_supp.png"))
+        run_output_dir = paper["run_output_dir"]
+        expected_path = Path(run_output_dir) / "figures" / "Sfigure_supp.png"
+        assert supp_fig["image_path"] == str(expected_path)
 
     def test_supplementary_markdown_nonexistent_file(
         self, tmp_path, mock_extract_figures, mock_download, caplog
@@ -417,7 +437,7 @@ class TestLoadPaperFromMarkdown:
         assert len(paper["figures"]) == 0
 
     def test_output_dir_creation(self, tmp_path, mock_extract_figures):
-        """Creates output directory if it doesn't exist."""
+        """Creates output directory structure if it doesn't exist."""
         md_path = tmp_path / "paper.md"
         md_path.write_text(LONG_TEXT, encoding="utf-8")
         mock_extract_figures.return_value = []
@@ -431,11 +451,18 @@ class TestLoadPaperFromMarkdown:
             download_figures=False,
         )
 
-        assert out_dir.exists()
-        assert out_dir.is_dir()
+        # Output structure is now {output_dir}/{paper_id}/run_{timestamp}/figures/
+        paper_dir = out_dir / "paper"
+        assert paper_dir.exists()
+        run_dirs = list(paper_dir.glob("run_*"))
+        assert len(run_dirs) == 1
+        expected_figures_dir = run_dirs[0] / "figures"
+        assert expected_figures_dir.exists()
+        assert expected_figures_dir.is_dir()
         
         # Verify paper still loads correctly
         assert paper["paper_id"] == "paper"
+        assert paper["run_output_dir"] == str(run_dirs[0])
 
     def test_output_dir_already_exists(self, tmp_path, mock_extract_figures):
         """Handles existing output directory correctly."""
@@ -834,7 +861,10 @@ class TestLoadPaperFromMarkdown:
 
         assert len(paper["figures"]) == 1
         fig = paper["figures"][0]
-        assert fig["image_path"] == str(Path(tmp_path / "figs" / "fig1.jpg"))
+        # Figures are now saved under {output_dir}/{paper_id}/run_{timestamp}/figures/
+        run_output_dir = paper["run_output_dir"]
+        expected_path = Path(run_output_dir) / "figures" / "fig1.jpg"
+        assert fig["image_path"] == str(expected_path)
         assert fig["image_path"].endswith(".jpg")
 
     def test_download_figures_false_no_download(
@@ -982,6 +1012,93 @@ class TestLoadPaperFromMarkdown:
         assert fig["id"] == "test1"
         assert fig["description"] == "Test Fig"
         assert fig["source_url"] == "test.png"
-        assert fig["image_path"] == str(Path(tmp_path / "figs" / "test1.png"))
+        # Figures are now saved under {output_dir}/{paper_id}/run_{timestamp}/figures/
+        run_output_dir = paper["run_output_dir"]
+        expected_path = Path(run_output_dir) / "figures" / "test1.png"
+        assert fig["image_path"] == str(expected_path)
+
+    def test_figure_output_directory_structure(
+        self, tmp_path, mock_extract_figures, mock_download
+    ):
+        """
+        Validates that figures are saved with the correct directory structure:
+        {output_dir}/{paper_id}/run_{timestamp}/figures/
+        
+        This test ensures:
+        1. The paper-specific directory is created
+        2. The run-specific directory with timestamp is created
+        3. The figures subdirectory is created inside it
+        4. Figure image_path values reflect this structure
+        5. Different paper_ids create separate directories
+        6. run_output_dir is included in the returned paper
+        """
+        md_path = tmp_path / "paper.md"
+        md_path.write_text(LONG_TEXT, encoding="utf-8")
+        mock_extract_figures.return_value = [{"alt": "Fig", "url": "fig.png"}]
+        output_dir = tmp_path / "outputs"
+
+        # Test with explicit paper_id
+        with patch("src.paper_loader.loaders.generate_figure_id", return_value="fig1"):
+            paper = load_paper_from_markdown(
+                str(md_path),
+                str(output_dir),
+                paper_id="my_test_paper",
+                download_figures=False,
+            )
+
+        # Verify directory structure was created
+        paper_dir = output_dir / "my_test_paper"
+        assert paper_dir.exists(), "Paper directory should be created"
+        assert paper_dir.is_dir(), "Paper directory should be a directory"
+        
+        # Verify run directory was created
+        run_dirs = list(paper_dir.glob("run_*"))
+        assert len(run_dirs) == 1, "Exactly one run directory should be created"
+        run_dir = run_dirs[0]
+        assert run_dir.is_dir(), "Run directory should be a directory"
+        assert run_dir.name.startswith("run_"), "Run directory should have run_ prefix"
+        
+        # Verify figures directory inside run directory
+        figures_dir = run_dir / "figures"
+        assert figures_dir.exists(), "Figures directory should be created"
+        assert figures_dir.is_dir(), "Figures directory should be a directory"
+        
+        # Verify run_output_dir is returned
+        assert "run_output_dir" in paper, "run_output_dir should be returned"
+        assert paper["run_output_dir"] == str(run_dir)
+        
+        # Verify image_path reflects the correct structure
+        fig = paper["figures"][0]
+        expected_path = figures_dir / "fig1.png"
+        assert fig["image_path"] == str(expected_path)
+        assert "my_test_paper" in fig["image_path"]
+        assert "run_" in fig["image_path"]
+        assert "figures" in fig["image_path"]
+        
+        # Test that different paper_ids create separate directories
+        mock_extract_figures.return_value = [{"alt": "Fig", "url": "fig.png"}]
+        with patch("src.paper_loader.loaders.generate_figure_id", return_value="fig1"):
+            paper2 = load_paper_from_markdown(
+                str(md_path),
+                str(output_dir),
+                paper_id="another_paper",
+                download_figures=False,
+            )
+        
+        another_paper_dir = output_dir / "another_paper"
+        assert another_paper_dir.exists(), "Second paper directory should be created"
+        
+        another_run_dirs = list(another_paper_dir.glob("run_*"))
+        assert len(another_run_dirs) == 1, "Second paper should have one run directory"
+        another_figures_dir = another_run_dirs[0] / "figures"
+        assert another_figures_dir.exists(), "Second figures directory should be created"
+        
+        # Verify the two papers have different paths
+        assert paper["figures"][0]["image_path"] != paper2["figures"][0]["image_path"]
+        assert "my_test_paper" in paper["figures"][0]["image_path"]
+        assert "another_paper" in paper2["figures"][0]["image_path"]
+        
+        # Verify run_output_dir is different for each paper
+        assert paper["run_output_dir"] != paper2["run_output_dir"]
 
 

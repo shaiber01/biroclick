@@ -661,7 +661,7 @@ class TestSupervisorTriggerHandling:
 
         result = supervisor_node(base_state)
 
-        assert result["supervisor_verdict"] == "replan_needed"
+        assert result["supervisor_verdict"] == "replan_with_guidance"
         assert result.get("replan_count") == 0
         # Guidance should be stripped of "GUIDANCE:" prefix
         feedback = result.get("planner_feedback", "")
