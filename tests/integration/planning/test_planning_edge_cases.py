@@ -274,6 +274,7 @@ class TestPlannerErrorHandling:
 
         base_state["plan"] = valid_plan
         base_state["replan_count"] = 2
+        base_state["runtime_config"] = {"max_replans": 3}
 
         with patch(
             "src.agents.planning.call_agent_with_metrics",

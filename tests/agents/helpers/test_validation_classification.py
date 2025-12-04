@@ -56,11 +56,11 @@ class TestClassifyPercentError:
         assert classify_percent_error(1000.0) == AnalysisClassification.MISMATCH
 
     def test_negative_error_handling(self):
-        """Should handle negative error values (edge case - shouldn't happen but test robustness)."""
-        # Negative errors might indicate a bug, but function should still classify them
-        # Based on implementation, negative values will be <= excellent threshold, so MATCH
+        """Should handle negative error values by taking absolute value."""
+        # Implementation uses abs(), so -1.0 becomes 1.0 (within excellent threshold of 2%)
         assert classify_percent_error(-1.0) == AnalysisClassification.MATCH
-        assert classify_percent_error(-10.0) == AnalysisClassification.MATCH
+        # -10.0 becomes 10.0, which exceeds acceptable threshold (5%), so MISMATCH
+        assert classify_percent_error(-10.0) == AnalysisClassification.MISMATCH
 
     def test_very_small_positive_error(self):
         """Should classify very small positive errors as match."""
