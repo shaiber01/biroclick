@@ -1475,14 +1475,13 @@ class TestEdgeCases:
 
             print("\n✅ Empty stages rejection test passed!")
 
-    def test_comparison_revision_limit_proceeds_to_supervisor(self, initial_state):
+    def test_comparison_revision_limit_routes_to_ask_user(self, initial_state):
         """
-        When comparison revision limit is reached, should proceed to supervisor
-        (not ask_user) with a flag.
+        When comparison revision limit is reached, should route to ask_user
+        (consistent with other limit behaviors like code_review_limit).
         
-        Note: The comparison_check router has a special config: route_on_limit="supervisor"
-        instead of the default "ask_user". This allows the supervisor to decide
-        whether to proceed with partial results or escalate.
+        Note: The comparison_check router now uses route_on_limit="ask_user"
+        to be consistent with other routers.
         """
         # Configure low limit
         state = initial_state.copy()
@@ -1549,7 +1548,7 @@ class TestEdgeCases:
             "src.graph.ask_user_node", side_effect=mock_ask_user
         ):
             print("\n" + "=" * 60)
-            print("TEST: Comparison Revision Limit Proceeds to Supervisor")
+            print("TEST: Comparison Revision Limit Routes to Ask User")
             print("=" * 60)
 
             graph = create_repro_graph()
@@ -1560,9 +1559,7 @@ class TestEdgeCases:
                     visited_nodes.append(node_name)
                     print(f"  → {node_name}")
                     
-                    # Stop when we reach ask_user after comparison limit (now consistent with other limits)
-                    if node_name == "ask_user" or node_name == "supervisor":
-                        break
+                    # Stop when we reach interrupt (before ask_user)
                     if node_name == "__interrupt__":
                         break
                 else:
@@ -1570,23 +1567,16 @@ class TestEdgeCases:
                 break
 
             # Should go to ask_user when comparison limit hit (consistent with other limits)
-            # Note: comparison_validator might not be called if analysis fails,
-            # but the routing still works via the count check
             assert "comparison_check" in visited_nodes, \
                 f"comparison_check should be visited. Nodes: {visited_nodes}"
-            # Either ask_user (at limit) or supervisor (approved) should be visited
-            assert "ask_user" in visited_nodes or "supervisor" in visited_nodes, \
-                "ask_user or supervisor should be visited after comparison"
             
             # Verify comparison_check was reached and routing worked
             final_state = graph.get_state(config).values
             
-            # The trigger should NOT be from comparison limit (it routes to supervisor)
+            # The trigger should be analysis_limit (consistent with other limits)
             trigger = final_state.get("ask_user_trigger")
-            # Either no trigger yet, or trigger from material_checkpoint (normal flow)
-            if trigger:
-                assert trigger != "comparison_limit", \
-                    f"comparison limit should route to supervisor, not set ask_user_trigger. Got: {trigger}"
+            assert trigger == "analysis_limit", \
+                f"comparison limit should set ask_user_trigger='analysis_limit'. Got: {trigger}"
 
             print("\n✅ Comparison revision limit flow test passed!")
 

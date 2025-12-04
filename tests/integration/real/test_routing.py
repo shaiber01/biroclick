@@ -1452,7 +1452,7 @@ class TestComparisonCheckRouter:
         state["analysis_revision_count"] = 5
         state["runtime_config"] = {"max_analysis_revisions": 5}
         result = route_after_comparison_check(state)
-        assert result == "supervisor"  # Routes to supervisor, not ask_user
+        assert result == "ask_user"  # Now routes to ask_user (consistent with others)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

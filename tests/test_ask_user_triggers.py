@@ -33,6 +33,7 @@ class TestAskUserTriggersStructure:
         "design_review_limit",
         "execution_failure_limit",
         "physics_failure_limit",
+        "analysis_limit",
         "context_overflow",
         "replan_limit",
         "backtrack_approval",
@@ -49,6 +50,10 @@ class TestAskUserTriggersStructure:
         "no_stages_available",
         "progress_init_failed",
         "missing_paper_text",
+        # Error fallback triggers:
+        "supervisor_error",
+        "missing_design",
+        "unknown_escalation",
     }
 
     def test_ask_user_triggers_is_non_empty_dict(self):

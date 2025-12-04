@@ -167,8 +167,8 @@ class TestRouterIntegration:
                 "needs_revision",
                 "analysis_revision_count",
                 MAX_ANALYSIS_REVISIONS + 1,
-                "supervisor",
-            ),  # NOTE: Routes to supervisor on limit
+                "ask_user",
+            ),  # NOTE: Now routes to ask_user on limit (consistent with other routers)
         ],
     )
     def test_router_logic(

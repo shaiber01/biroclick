@@ -1121,10 +1121,10 @@ class TestRouteAfterComparisonCheck:
         )
 
     @patch("src.routing.save_checkpoint")
-    def test_runtime_config_lower_limit_routes_to_supervisor(
+    def test_runtime_config_lower_limit_routes_to_ask_user(
         self, mock_save_checkpoint, base_state
     ):
-        """runtime_config with lower limit should route to supervisor earlier."""
+        """runtime_config with lower limit should route to ask_user earlier."""
         from src.routing import route_after_comparison_check
 
         base_state["current_stage_id"] = "stage_0"
@@ -1134,8 +1134,8 @@ class TestRouteAfterComparisonCheck:
         
         result = route_after_comparison_check(base_state)
         
-        assert result == "supervisor", (
-            f"With runtime_config max_analysis_revisions=1 and count=1, should route to 'supervisor', got '{result}'"
+        assert result == "ask_user", (
+            f"With runtime_config max_analysis_revisions=1 and count=1, should route to 'ask_user', got '{result}'"
         )
 
 
@@ -1730,6 +1730,6 @@ class TestDefaultLimitBoundaries:
                 f"At count={count} (< limit {MAX_ANALYSIS_REVISIONS}), expected 'analyze', got '{result}'"
             )
         else:
-            assert result == "supervisor", (
-                f"At count={count} (>= limit {MAX_ANALYSIS_REVISIONS}), expected 'supervisor' (not ask_user), got '{result}'"
+            assert result == "ask_user", (
+                f"At count={count} (>= limit {MAX_ANALYSIS_REVISIONS}), expected 'ask_user', got '{result}'"
             )

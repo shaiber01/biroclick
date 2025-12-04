@@ -1,0 +1,22 @@
+2025-12-04 17:25:45,731 - __main__ - INFO - 📁 Run output directory: outputs/aluminum_nanoantenna_complexes/run_20251204_172526
+2025-12-04 17:25:45,792 - __main__ - INFO - 🔄 Entering node: adapt_prompts
+2025-12-04 17:27:00,963 - httpx - INFO - HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2025-12-04 17:27:01,130 - __main__ - INFO - 🔄 Entering node: planning
+2025-12-04 17:29:10,420 - httpx - INFO - HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2025-12-04 17:29:10,558 - __main__ - INFO - 🔄 Entering node: route_after_plan
+2025-12-04 17:29:10,560 - __main__ - INFO - 🔄 Entering node: plan_review
+2025-12-04 17:29:10,561 - src.agents.helpers.context - WARNING - State validation issue for plan_review: PLAN_ISSUE: Target Fig2a has precision_requirement='excellent' (<2%) but no digitized_data_path
+2025-12-04 17:29:10,562 - __main__ - INFO - 🔄 Entering node: router
+2025-12-04 17:29:10,563 - __main__ - INFO - 🔄 Entering node: planning
+2025-12-04 17:31:11,267 - httpx - INFO - HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2025-12-04 17:31:11,275 - __main__ - INFO - 🔄 Entering node: route_after_plan
+2025-12-04 17:31:11,281 - __main__ - INFO - 🔄 Entering node: plan_review
+2025-12-04 17:31:11,283 - __main__ - INFO - 🔄 Entering node: router
+2025-12-04 17:31:11,284 - src.routing - WARNING - plan_review: replan_count=2 >= max_replans=2, escalating to ask_user
+2025-12-04 17:32:07,909 - __main__ - INFO - 🔄 Entering node: adapt_prompts
+2025-12-04 17:32:07,910 - __main__ - INFO - 🔄 Entering node: planning
+2025-12-04 17:34:16,961 - httpx - INFO - HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2025-12-04 17:34:16,964 - __main__ - INFO - 🔄 Entering node: route_after_plan
+2025-12-04 17:34:16,967 - __main__ - INFO - 🔄 Entering node: plan_review
+2025-12-04 17:34:16,968 - __main__ - INFO - 🔄 Entering node: router
+2025-12-04 17:34:16,969 - src.routing - WARNING - plan_review: replan_count=2 >= max_replans=2, escalating to ask_user

@@ -87,6 +87,17 @@ ASK_USER_TRIGGERS: Dict[str, Dict[str, Any]] = {
             "STOP": "Route to generate_report",
         }
     },
+    "analysis_limit": {
+        "description": "Analysis revision limit (MAX_ANALYSIS_REVISIONS) exceeded",
+        "source_node": "comparison_check",
+        "expected_response_keys": ["action", "hint"],
+        "valid_verdicts": ["ACCEPT_PARTIAL", "PROVIDE_HINT", "STOP"],
+        "supervisor_action": {
+            "ACCEPT_PARTIAL": "Mark stage completed_partial, proceed to select_stage",
+            "PROVIDE_HINT": "Reset analysis_revision_count=0, add hint to analysis_feedback, route to analyze",
+            "STOP": "Route to generate_report",
+        }
+    },
     "context_overflow": {
         "description": "LLM context window would overflow, recovery options needed",
         "source_node": "any (detected by check_context_before_node)",
@@ -228,6 +239,38 @@ ASK_USER_TRIGGERS: Dict[str, Dict[str, Any]] = {
         "supervisor_action": {
             "STOP": "Stop workflow",
             "CONTINUE": "Route to select_stage (ignore invalid decision)",
+        }
+    },
+    "supervisor_error": {
+        "description": "Supervisor node failed to produce a valid verdict",
+        "source_node": "supervisor",
+        "expected_response_keys": ["action"],
+        "valid_verdicts": ["RETRY", "STOP"],
+        "supervisor_action": {
+            "RETRY": "Retry the supervisor operation",
+            "STOP": "Stop workflow",
+        }
+    },
+    "missing_design": {
+        "description": "Code generation attempted without required design description",
+        "source_node": "code_generator",
+        "expected_response_keys": ["action"],
+        "valid_verdicts": ["RETRY", "SKIP_STAGE", "STOP"],
+        "supervisor_action": {
+            "RETRY": "Route back to design phase",
+            "SKIP_STAGE": "Mark stage as blocked, route to select_stage",
+            "STOP": "Stop workflow",
+        }
+    },
+    "unknown_escalation": {
+        "description": "Generic fallback for unexpected workflow errors",
+        "source_node": "any (safety net)",
+        "expected_response_keys": ["action"],
+        "valid_verdicts": ["RETRY", "SKIP_STAGE", "STOP"],
+        "supervisor_action": {
+            "RETRY": "Attempt to continue the workflow",
+            "SKIP_STAGE": "Mark stage as blocked, route to select_stage",
+            "STOP": "Stop workflow",
         }
     },
     "unknown": {

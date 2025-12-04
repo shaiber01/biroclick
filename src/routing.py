@@ -35,6 +35,75 @@ logger = logging.getLogger(__name__)
 
 
 # ═══════════════════════════════════════════════════════════════════════
+# Routing Decision Logging
+# ═══════════════════════════════════════════════════════════════════════
+
+def _log_routing_decision(state: "ReproState", checkpoint_prefix: str, verdict: str, target_route: str) -> None:
+    """Log routing decision with relevant context at INFO level.
+    
+    Provides visibility into the workflow by logging each routing decision
+    along with the relevant feedback or issues that influenced it.
+    """
+    context_parts = []
+    
+    # Get feedback/issues based on review type
+    if checkpoint_prefix == "plan_review":
+        feedback = state.get("planner_feedback") or state.get("reviewer_feedback")
+        issues = state.get("reviewer_issues", [])
+        if feedback:
+            # Truncate long feedback
+            feedback_str = str(feedback)
+            context_parts.append(f"feedback: {feedback_str[:100]}{'...' if len(feedback_str) > 100 else ''}")
+        if issues:
+            context_parts.append(f"{len(issues)} issue(s)")
+            
+    elif checkpoint_prefix == "design_review":
+        issues = state.get("reviewer_issues", [])
+        if issues and verdict == "needs_revision":
+            issues_preview = issues[:2] if isinstance(issues, list) else [str(issues)[:80]]
+            context_parts.append(f"issues: {issues_preview}")
+            
+    elif checkpoint_prefix == "code_review":
+        issues = state.get("reviewer_issues", [])
+        if issues and verdict == "needs_revision":
+            issues_preview = issues[:2] if isinstance(issues, list) else [str(issues)[:80]]
+            context_parts.append(f"issues: {issues_preview}")
+            
+    elif checkpoint_prefix == "execution":
+        if verdict == "fail":
+            error = state.get("execution_error")
+            if error:
+                error_str = str(error)
+                context_parts.append(f"error: {error_str[:80]}{'...' if len(error_str) > 80 else ''}")
+        elif verdict == "warning":
+            warnings = state.get("execution_warnings", [])
+            if warnings:
+                context_parts.append(f"{len(warnings)} warning(s)")
+            
+    elif checkpoint_prefix == "physics":
+        issues = state.get("physics_issues", [])
+        if issues and verdict in ["fail", "warning", "design_flaw"]:
+            issues_preview = issues[:2] if isinstance(issues, list) else [str(issues)[:80]]
+            context_parts.append(f"issues: {issues_preview}")
+    
+    elif checkpoint_prefix == "comparison":
+        match_score = state.get("match_score")
+        if match_score is not None:
+            context_parts.append(f"match_score: {match_score}")
+        if verdict == "needs_revision":
+            feedback = state.get("comparison_feedback")
+            if feedback:
+                feedback_str = str(feedback)
+                context_parts.append(f"feedback: {feedback_str[:60]}{'...' if len(feedback_str) > 60 else ''}")
+    
+    # Format the log message with emoji for quick scanning
+    emoji = "✅" if verdict in ["approve", "pass"] else "🔄" if verdict == "needs_revision" else "⚠️" if verdict == "warning" else "❌"
+    context_str = f" ({', '.join(context_parts)})" if context_parts else ""
+    
+    logger.info(f"{emoji} {checkpoint_prefix}: verdict={verdict} → {target_route}{context_str}")
+
+
+# ═══════════════════════════════════════════════════════════════════════
 # Route Type Definitions
 # ═══════════════════════════════════════════════════════════════════════
 #
@@ -202,6 +271,9 @@ def create_verdict_router(
                     )
                     save_checkpoint(state, f"before_ask_user_{checkpoint_prefix}_limit")
                     return route_on_limit
+            
+            # Log the routing decision with context
+            _log_routing_decision(state, checkpoint_prefix, verdict, target_route)
             
             return target_route
         

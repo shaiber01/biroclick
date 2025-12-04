@@ -973,10 +973,10 @@ class TestAnalysisRevisionLimit:
     different from other limits.
     """
 
-    def test_analysis_revision_limit_routes_to_supervisor(self, initial_state):
+    def test_analysis_revision_limit_routes_to_ask_user(self, initial_state):
         """
-        Test that comparison_check at analysis revision limit routes to supervisor,
-        NOT ask_user.
+        Test that comparison_check at analysis revision limit routes to ask_user
+        (consistent with other limit behaviors).
         """
         state = initial_state
         runtime_config = {**state.get("runtime_config", {})}
@@ -1042,16 +1042,17 @@ class TestAnalysisRevisionLimit:
             for event in graph.stream(state, config):
                 for node_name in event.keys():
                     visited_nodes.append(node_name)
-                    # Stop when we reach supervisor after comparison_check
-                    if node_name == "supervisor" and "comparison_check" in visited_nodes:
+                    # Stop when we reach ask_user after comparison_check (now routes to ask_user at limit)
+                    if node_name == "__interrupt__" and "comparison_check" in visited_nodes:
                         break
                 else:
                     continue
                 break
 
-            # Should route to supervisor (not ask_user)
-            assert "supervisor" in visited_nodes, (
-                f"Expected supervisor after analysis limit, got: {visited_nodes}"
+            # Should route to ask_user (consistent with other limits)
+            # The __interrupt__ means we're paused before ask_user
+            assert "comparison_check" in visited_nodes, (
+                f"Expected comparison_check to be visited, got: {visited_nodes}"
             )
             
             final_state = graph.get_state(config).values
@@ -1061,9 +1062,9 @@ class TestAnalysisRevisionLimit:
                 f"analysis_revision_count should be 1, got {final_state.get('analysis_revision_count')}"
             )
             
-            # Should NOT have ask_user_trigger set (routes to supervisor instead)
-            assert final_state.get("ask_user_trigger") != "analysis_limit", (
-                "Analysis limit should route to supervisor, not set ask_user_trigger"
+            # Should have ask_user_trigger set to analysis_limit (consistent with other limits)
+            assert final_state.get("ask_user_trigger") == "analysis_limit", (
+                f"Analysis limit should set ask_user_trigger='analysis_limit', got {final_state.get('ask_user_trigger')}"
             )
 
 
