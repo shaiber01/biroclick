@@ -1,0 +1,5 @@
+2025-12-04 19:49:46,883 - __main__ - INFO - 📁 Run output directory: outputs/aluminum_nanoantenna_complexes/run_20251204_194932
+2025-12-04 19:49:46,939 - src.callbacks - INFO - 🔄 Entering node: adapt_prompts
+2025-12-04 19:51:00,739 - httpx - INFO - HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2025-12-04 19:51:00,748 - src.agents.planning - INFO - 📝 adapt_prompts: domain=plasmonics (unchanged), no adaptations needed
+2025-12-04 19:51:00,749 - src.callbacks - INFO - 🔄 Entering node: planning
