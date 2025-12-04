@@ -1,0 +1,6 @@
+{
+  "ask_user_trigger": "supervisor_error",
+  "pending_user_questions": [
+    "ERROR: physics_verdict is None - the physics node may not have run or failed unexpectedly.\nOptions: RETRY (try again), SKIP_STAGE (skip this stage), or STOP (end workflow)?"
+  ]
+}

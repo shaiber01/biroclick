@@ -54,6 +54,8 @@ class TestAskUserTriggersStructure:
         "supervisor_error",
         "missing_design",
         "unknown_escalation",
+        # Reviewer explicit escalation:
+        "reviewer_escalation",
     }
 
     def test_ask_user_triggers_is_non_empty_dict(self):

@@ -648,32 +648,35 @@ def classify_with_local_llm(trigger: str, response: str) -> Optional[UserOption]
         logger.debug("ollama not installed, skipping LLM classification")
         return None
     
-    # Build prompt
-    options_text = "\n".join(
-        f"- {opt.display}: {opt.description}" for opt in options
-    )
+    # Build a tight, directive prompt that minimizes rambling
+    option_names = ', '.join(opt.display for opt in options)
     
-    prompt = f"""Classify the user's response into one of these options.
+    prompt = f"""Task: Single-word classification.
 
-Available options:
-{options_text}
+Options: {option_names}
 
-User's response: "{response}"
+Input: "{response}"
 
-Reply with ONLY the option name (e.g., "{options[0].display}") or "UNKNOWN" if the response doesn't clearly match any option.
-Do not explain, just output the option name."""
+Output (ONE WORD ONLY):"""
 
     try:
-        # Use a small, fast model
-        model = os.environ.get("REPROLAB_LOCAL_LLM_MODEL", "phi3:mini")
+        # Use a small, fast model (llama3.2:3b is good at following instructions)
+        model = os.environ.get("REPROLAB_LOCAL_LLM_MODEL", "llama3.2:3b")
         result = ollama.chat(
             model=model,
             messages=[{"role": "user", "content": prompt}],
-            options={"temperature": 0}  # Deterministic
+            options={
+                "temperature": 0,    # Deterministic
+                "num_predict": 10,   # Hard cap - enough for "APPROVE_PLAN" but prevents rambling
+            }
         )
         
-        answer = result["message"]["content"].strip().upper()
-        logger.debug(f"Local LLM classified '{response}' as '{answer}'")
+        # Extract first word only (handles cases where model rambles despite constraints)
+        raw_answer = result["message"]["content"].strip()
+        words = raw_answer.split()
+        answer = words[0].upper() if words else ""
+        
+        logger.debug(f"Local LLM classified '{response}' as '{answer}' (raw: '{raw_answer[:50]}...')")
         
         # Find matching option
         for opt in options:
