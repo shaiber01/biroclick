@@ -1678,3 +1678,828 @@ class TestConcurrentKeywords:
         
         # Both matched, but only one call
         mock_update.assert_called_once()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CONTRACT TESTS: ask_user_trigger and pending_user_questions Contract
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# These tests verify that when any path leads to ask_user node, the required
+# state fields (ask_user_trigger and pending_user_questions) are properly set.
+#
+# The contract is:
+# 1. ask_user_trigger must be a non-empty string matching a valid trigger
+# 2. pending_user_questions must be a non-empty list of strings
+#
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+from src.agents.execution import execution_validator_node, physics_sanity_node
+from src.agents.analysis import comparison_validator_node
+from src.agents.code import code_reviewer_node
+from src.agents.design import design_reviewer_node
+from src.agents.planning import plan_reviewer_node
+from src.routing import (
+    route_after_execution_check,
+    route_after_physics_check,
+    route_after_comparison_check,
+    route_after_code_review,
+    route_after_design_review,
+    route_after_plan_review,
+)
+from schemas.state import (
+    MAX_EXECUTION_FAILURES,
+    MAX_PHYSICS_FAILURES,
+    MAX_ANALYSIS_REVISIONS,
+    MAX_CODE_REVISIONS,
+    MAX_DESIGN_REVISIONS,
+    MAX_REPLANS,
+)
+from src.agents.constants import AskUserTrigger
+
+
+# Get all valid trigger values for strict validation
+VALID_TRIGGERS = {t.value for t in AskUserTrigger}
+
+
+def assert_ask_user_contract(result: dict, expected_trigger: str, context: str) -> None:
+    """
+    Helper to assert the ask_user contract is satisfied.
+    
+    This enforces:
+    1. ask_user_trigger is a non-empty string matching a valid trigger
+    2. pending_user_questions is a non-empty list of non-empty strings
+    """
+    # Strict assertion for ask_user_trigger
+    trigger = result.get("ask_user_trigger")
+    assert trigger is not None, (
+        f"{context}: ask_user_trigger is None - CONTRACT VIOLATED. "
+        f"When routing to ask_user, trigger MUST be set."
+    )
+    assert isinstance(trigger, str), (
+        f"{context}: ask_user_trigger must be str, got {type(trigger).__name__}: {trigger}"
+    )
+    assert len(trigger) > 0, (
+        f"{context}: ask_user_trigger is empty string - CONTRACT VIOLATED"
+    )
+    assert trigger in VALID_TRIGGERS, (
+        f"{context}: ask_user_trigger='{trigger}' is not a valid trigger. "
+        f"Valid triggers: {sorted(VALID_TRIGGERS)}"
+    )
+    assert trigger == expected_trigger, (
+        f"{context}: Expected trigger '{expected_trigger}', got '{trigger}'"
+    )
+    
+    # Strict assertion for pending_user_questions
+    questions = result.get("pending_user_questions")
+    assert questions is not None, (
+        f"{context}: pending_user_questions is None - CONTRACT VIOLATED. "
+        f"When routing to ask_user, questions MUST be set."
+    )
+    assert isinstance(questions, list), (
+        f"{context}: pending_user_questions must be list, got {type(questions).__name__}"
+    )
+    assert len(questions) > 0, (
+        f"{context}: pending_user_questions is empty - CONTRACT VIOLATED. "
+        f"User must be given questions when asked for input."
+    )
+    for i, q in enumerate(questions):
+        assert isinstance(q, str), (
+            f"{context}: Question {i} must be str, got {type(q).__name__}: {q}"
+        )
+        assert len(q) > 0, (
+            f"{context}: Question {i} is empty string - CONTRACT VIOLATED"
+        )
+
+
+class TestLimitEscalationContract:
+    """
+    Contract tests: When limits are reached, ask_user_trigger and pending_user_questions MUST be set.
+    
+    These tests verify that each validator node properly sets the required state fields
+    when a limit is reached, BEFORE the router routes to ask_user.
+    """
+
+    @patch("src.agents.execution.call_agent_with_metrics")
+    @patch("src.agents.execution.build_agent_prompt")
+    @patch("src.agents.execution.check_context_or_escalate")
+    def test_execution_limit_sets_trigger_and_questions(
+        self, mock_context, mock_prompt, mock_call
+    ):
+        """
+        execution_validator_node MUST set ask_user_trigger and pending_user_questions
+        when execution_failure_count reaches limit.
+        """
+        mock_context.return_value = None
+        mock_prompt.return_value = "test prompt"
+        mock_call.return_value = {
+            "verdict": "fail",
+            "summary": "Execution failed",
+            "error_analysis": "Memory error"
+        }
+        
+        state = {
+            "paper_text": "test paper",
+            "current_stage_id": "stage_0",
+            "execution_failure_count": MAX_EXECUTION_FAILURES - 1,  # Will increment to limit
+            "execution_output": "Error: out of memory",
+            "execution_result": {"success": False, "error": "OOM"},
+            "current_simulation_code": "import meep",
+        }
+        
+        result = execution_validator_node(state)
+        
+        # Contract assertion
+        assert_ask_user_contract(
+            result,
+            expected_trigger="execution_failure_limit",
+            context="execution_validator_node at limit"
+        )
+
+    @patch("src.agents.execution.call_agent_with_metrics")
+    @patch("src.agents.execution.build_agent_prompt")
+    @patch("src.agents.execution.check_context_or_escalate")
+    def test_physics_limit_sets_trigger_and_questions(
+        self, mock_context, mock_prompt, mock_call
+    ):
+        """
+        physics_sanity_node MUST set ask_user_trigger and pending_user_questions
+        when physics_failure_count reaches limit.
+        """
+        mock_context.return_value = None
+        mock_prompt.return_value = "test prompt"
+        mock_call.return_value = {
+            "verdict": "fail",
+            "issues": ["Impossible resonance frequency"],
+            "summary": "Physics check failed"
+        }
+        
+        state = {
+            "paper_text": "test paper",
+            "current_stage_id": "stage_0",
+            "physics_failure_count": MAX_PHYSICS_FAILURES - 1,  # Will increment to limit
+            "analysis_summary": {"peak_wavelength": 500},
+            "design_description": "Test design",
+        }
+        
+        result = physics_sanity_node(state)
+        
+        # Contract assertion
+        assert_ask_user_contract(
+            result,
+            expected_trigger="physics_failure_limit",
+            context="physics_sanity_node at limit"
+        )
+
+    def test_analysis_limit_sets_trigger_and_questions(self):
+        """
+        comparison_validator_node MUST set ask_user_trigger and pending_user_questions
+        when analysis_revision_count reaches limit.
+        
+        NOTE: comparison_validator_node does NOT use LLM - it computes verdicts
+        programmatically based on state analysis. To trigger needs_revision,
+        we set up state where expected targets exist but comparisons are missing.
+        """
+        # Set up state that triggers needs_revision verdict:
+        # - has expected targets from plan
+        # - but no comparisons produced yet
+        state = {
+            "paper_text": "test paper",
+            "current_stage_id": "stage_0",
+            "analysis_revision_count": MAX_ANALYSIS_REVISIONS - 1,  # Will increment to limit
+            "plan": {
+                "stages": [{
+                    "stage_id": "stage_0",
+                    "targets": ["fig1"],  # Expected targets
+                    "target_details": [{"figure_id": "fig1"}],
+                }]
+            },
+            "progress": {
+                "stages": [{"stage_id": "stage_0", "status": "in_progress"}]
+            },
+            "stage_outputs": {},  # No outputs yet - this causes needs_revision
+        }
+        
+        result = comparison_validator_node(state)
+        
+        # Verify we got needs_revision verdict
+        assert result.get("comparison_verdict") == "needs_revision", (
+            f"Expected needs_revision verdict, got: {result.get('comparison_verdict')}"
+        )
+        
+        # Contract assertion
+        assert_ask_user_contract(
+            result,
+            expected_trigger="analysis_limit",
+            context="comparison_validator_node at limit"
+        )
+
+    @patch("src.agents.code.call_agent_with_metrics")
+    @patch("src.agents.code.build_agent_prompt")
+    @patch("src.agents.code.check_context_or_escalate")
+    def test_code_review_limit_sets_trigger_and_questions(
+        self, mock_context, mock_prompt, mock_call
+    ):
+        """
+        code_reviewer_node MUST set ask_user_trigger and pending_user_questions
+        when code_revision_count reaches limit.
+        """
+        mock_context.return_value = None
+        mock_prompt.return_value = "test prompt"
+        mock_call.return_value = {
+            "verdict": "needs_revision",
+            "issues": ["Missing imports"],
+            "feedback": "Add numpy import"
+        }
+        
+        state = {
+            "paper_text": "test paper",
+            "current_stage_id": "stage_0",
+            "code_revision_count": MAX_CODE_REVISIONS - 1,  # Will increment to limit
+            "current_simulation_code": "print('hello')",
+            "design_description": "Test design",
+        }
+        
+        result = code_reviewer_node(state)
+        
+        # Contract assertion
+        assert_ask_user_contract(
+            result,
+            expected_trigger="code_review_limit",
+            context="code_reviewer_node at limit"
+        )
+
+    @patch("src.agents.design.call_agent_with_metrics")
+    @patch("src.agents.design.build_agent_prompt")
+    @patch("src.agents.design.check_context_or_escalate")
+    def test_design_review_limit_sets_trigger_and_questions(
+        self, mock_context, mock_prompt, mock_call
+    ):
+        """
+        design_reviewer_node MUST set ask_user_trigger and pending_user_questions
+        when design_revision_count reaches limit.
+        """
+        mock_context.return_value = None
+        mock_prompt.return_value = "test prompt"
+        mock_call.return_value = {
+            "verdict": "needs_revision",
+            "issues": ["Missing boundary conditions"],
+            "feedback": "Add PML boundaries"
+        }
+        
+        state = {
+            "paper_text": "test paper",
+            "current_stage_id": "stage_0",
+            "design_revision_count": MAX_DESIGN_REVISIONS - 1,  # Will increment to limit
+            "design_description": "Basic design",
+        }
+        
+        result = design_reviewer_node(state)
+        
+        # Contract assertion
+        assert_ask_user_contract(
+            result,
+            expected_trigger="design_review_limit",
+            context="design_reviewer_node at limit"
+        )
+
+    @patch("src.agents.planning.call_agent_with_metrics")
+    @patch("src.agents.planning.build_agent_prompt")
+    @patch("src.agents.planning.check_context_or_escalate")
+    def test_replan_limit_sets_trigger_and_questions(
+        self, mock_context, mock_prompt, mock_call
+    ):
+        """
+        plan_reviewer_node MUST set ask_user_trigger and pending_user_questions
+        when replan_count reaches limit.
+        """
+        mock_context.return_value = None
+        mock_prompt.return_value = "test prompt"
+        mock_call.return_value = {
+            "verdict": "needs_revision",
+            "issues": ["Missing validation stage"],
+            "feedback": "Add material validation"
+        }
+        
+        state = {
+            "paper_text": "test paper",
+            "replan_count": MAX_REPLANS - 1,  # Will increment to limit
+            "plan": {"stages": []},
+        }
+        
+        result = plan_reviewer_node(state)
+        
+        # Contract assertion
+        assert_ask_user_contract(
+            result,
+            expected_trigger="replan_limit",
+            context="plan_reviewer_node at limit"
+        )
+
+
+class TestErrorEscalationContract:
+    """
+    Contract tests: Error paths to ask_user MUST have trigger and questions set.
+    
+    When routers return ask_user due to errors (None verdict, invalid type, unknown verdict),
+    the state MUST contain ask_user_trigger and pending_user_questions.
+    
+    NOTE: These tests verify the contract is met AFTER the node runs. If the node
+    doesn't set these fields, the safety net in ask_user_node will catch it, but
+    that's a fallback - the contract should be satisfied BEFORE reaching ask_user_node.
+    """
+
+    @patch("src.routing.save_checkpoint")
+    def test_none_execution_verdict_state_has_context(self, mock_checkpoint):
+        """
+        When execution_verdict is None and routes to ask_user, state should have
+        ask_user_trigger and pending_user_questions set.
+        
+        This test exposes a CONTRACT VIOLATION if the node didn't set these fields.
+        """
+        # This is the state that would exist after execution_validator_node
+        # returns None verdict (a bug or failure case)
+        state = {
+            "execution_verdict": None,  # None verdict
+            "execution_failure_count": 0,
+            "current_stage_id": "stage_0",
+        }
+        
+        route = route_after_execution_check(state)
+        
+        # Router correctly routes to ask_user
+        assert route == "ask_user", "None verdict should route to ask_user"
+        
+        # CONTRACT CHECK: At this point, BEFORE reaching ask_user_node,
+        # the state should have trigger and questions set.
+        # If this assertion fails, it reveals a bug where the node
+        # that produced None verdict didn't set the escalation context.
+        #
+        # Current behavior: This will FAIL because no node sets these fields
+        # when verdict is None. The safety net in ask_user_node catches this.
+        trigger = state.get("ask_user_trigger")
+        questions = state.get("pending_user_questions")
+        
+        # This is a strict contract check - it SHOULD fail to reveal the bug
+        assert trigger is not None, (
+            "CONTRACT VIOLATION: When routing to ask_user due to None verdict, "
+            "ask_user_trigger should be set. Currently the safety net catches this, "
+            "but the contract requires it to be set by the producing node."
+        )
+        assert questions is not None and len(questions) > 0, (
+            "CONTRACT VIOLATION: When routing to ask_user due to None verdict, "
+            "pending_user_questions should be set with meaningful questions."
+        )
+
+    @patch("src.routing.save_checkpoint")
+    def test_invalid_type_verdict_state_has_context(self, mock_checkpoint):
+        """
+        When execution_verdict is invalid type (e.g., int) and routes to ask_user,
+        state should have ask_user_trigger and pending_user_questions set.
+        """
+        state = {
+            "execution_verdict": 123,  # Invalid type - should be string
+            "execution_failure_count": 0,
+            "current_stage_id": "stage_0",
+        }
+        
+        route = route_after_execution_check(state)
+        
+        assert route == "ask_user", "Invalid verdict type should route to ask_user"
+        
+        # CONTRACT CHECK
+        trigger = state.get("ask_user_trigger")
+        questions = state.get("pending_user_questions")
+        
+        assert trigger is not None, (
+            "CONTRACT VIOLATION: When routing to ask_user due to invalid verdict type, "
+            "ask_user_trigger should be set."
+        )
+        assert questions is not None and len(questions) > 0, (
+            "CONTRACT VIOLATION: When routing to ask_user due to invalid verdict type, "
+            "pending_user_questions should be set."
+        )
+
+    @patch("src.routing.save_checkpoint")
+    def test_unknown_verdict_state_has_context(self, mock_checkpoint):
+        """
+        When verdict is unknown string and routes to ask_user,
+        state should have ask_user_trigger and pending_user_questions set.
+        """
+        state = {
+            "execution_verdict": "garbage_verdict_that_doesnt_exist",
+            "execution_failure_count": 0,
+            "current_stage_id": "stage_0",
+        }
+        
+        route = route_after_execution_check(state)
+        
+        assert route == "ask_user", "Unknown verdict should route to ask_user"
+        
+        # CONTRACT CHECK
+        trigger = state.get("ask_user_trigger")
+        questions = state.get("pending_user_questions")
+        
+        assert trigger is not None, (
+            "CONTRACT VIOLATION: When routing to ask_user due to unknown verdict, "
+            "ask_user_trigger should be set."
+        )
+        assert questions is not None and len(questions) > 0, (
+            "CONTRACT VIOLATION: When routing to ask_user due to unknown verdict, "
+            "pending_user_questions should be set."
+        )
+
+    @patch("src.routing.save_checkpoint")
+    def test_none_comparison_verdict_state_has_context(self, mock_checkpoint):
+        """
+        When comparison_verdict is None and routes to ask_user,
+        state should have ask_user_trigger and pending_user_questions set.
+        """
+        state = {
+            "comparison_verdict": None,
+            "analysis_revision_count": 0,
+            "current_stage_id": "stage_0",
+        }
+        
+        route = route_after_comparison_check(state)
+        
+        assert route == "ask_user", "None comparison_verdict should route to ask_user"
+        
+        # CONTRACT CHECK
+        trigger = state.get("ask_user_trigger")
+        questions = state.get("pending_user_questions")
+        
+        assert trigger is not None, (
+            "CONTRACT VIOLATION: comparison_check with None verdict routes to ask_user "
+            "but ask_user_trigger is not set."
+        )
+        assert questions is not None and len(questions) > 0, (
+            "CONTRACT VIOLATION: comparison_check with None verdict routes to ask_user "
+            "but pending_user_questions is not set."
+        )
+
+    @patch("src.routing.save_checkpoint")
+    def test_none_physics_verdict_state_has_context(self, mock_checkpoint):
+        """
+        When physics_verdict is None and routes to ask_user,
+        state should have ask_user_trigger and pending_user_questions set.
+        """
+        state = {
+            "physics_verdict": None,
+            "physics_failure_count": 0,
+            "current_stage_id": "stage_0",
+        }
+        
+        route = route_after_physics_check(state)
+        
+        assert route == "ask_user", "None physics_verdict should route to ask_user"
+        
+        # CONTRACT CHECK
+        trigger = state.get("ask_user_trigger")
+        questions = state.get("pending_user_questions")
+        
+        assert trigger is not None, (
+            "CONTRACT VIOLATION: physics_check with None verdict routes to ask_user "
+            "but ask_user_trigger is not set."
+        )
+        assert questions is not None and len(questions) > 0, (
+            "CONTRACT VIOLATION: physics_check with None verdict routes to ask_user "
+            "but pending_user_questions is not set."
+        )
+
+
+class TestSupervisorAskUserContract:
+    """
+    Contract tests: When supervisor verdict is ask_user, questions MUST be set.
+    
+    When the supervisor decides to ask the user (either via LLM returning ask_user
+    verdict, or via a trigger handler asking for clarification), the result MUST
+    contain pending_user_questions.
+    """
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_supervisor_clarification_has_questions(self, mock_context):
+        """
+        When a trigger handler asks for clarification (verdict=ask_user),
+        pending_user_questions MUST be set with meaningful questions.
+        """
+        mock_context.return_value = None
+        
+        # Simulate unclear user response that triggers clarification
+        state = {
+            "ask_user_trigger": "execution_failure_limit",
+            "user_responses": {"Question": "I'm not sure what to do"},
+        }
+        
+        result = supervisor_node(state)
+        
+        # If supervisor asks for clarification, questions must be set
+        if result.get("supervisor_verdict") == "ask_user":
+            questions = result.get("pending_user_questions")
+            assert questions is not None, (
+                "CONTRACT VIOLATION: supervisor_verdict is 'ask_user' but "
+                "pending_user_questions is None"
+            )
+            assert isinstance(questions, list), (
+                f"pending_user_questions must be list, got {type(questions).__name__}"
+            )
+            assert len(questions) > 0, (
+                "CONTRACT VIOLATION: supervisor_verdict is 'ask_user' but "
+                "pending_user_questions is empty"
+            )
+            for i, q in enumerate(questions):
+                assert isinstance(q, str) and len(q) > 0, (
+                    f"Question {i} must be non-empty string, got: {q!r}"
+                )
+
+    @patch("src.agents.supervision.supervisor.check_context_or_escalate")
+    def test_all_trigger_handlers_set_questions_on_clarification(self, mock_context):
+        """
+        For all registered trigger handlers, when they request clarification,
+        they MUST set pending_user_questions.
+        """
+        mock_context.return_value = None
+        
+        # Test triggers that might ask for clarification
+        test_cases = [
+            ("execution_failure_limit", {"Q": "maybe"}),
+            ("physics_failure_limit", {"Q": "hmm"}),
+            ("code_review_limit", {"Q": "not sure"}),
+            ("design_review_limit", {"Q": "dunno"}),
+            ("replan_limit", {"Q": "confused"}),
+            ("analysis_limit", {"Q": "unclear"}),
+        ]
+        
+        for trigger, response in test_cases:
+            state = {
+                "ask_user_trigger": trigger,
+                "user_responses": response,
+                "current_stage_id": "stage_0",
+            }
+            
+            result = supervisor_node(state)
+            
+            # If this trigger handler asks for clarification, verify contract
+            if result.get("supervisor_verdict") == "ask_user":
+                questions = result.get("pending_user_questions")
+                assert questions is not None and len(questions) > 0, (
+                    f"CONTRACT VIOLATION: Handler for '{trigger}' returned verdict='ask_user' "
+                    f"but pending_user_questions is not set. Result: {result}"
+                )
+
+
+class TestAskUserPathIntegrationContract:
+    """
+    Integration contract: For any path to ask_user, merged state must have required fields.
+    
+    These tests simulate the full flow:
+    1. Create state with conditions that will trigger ask_user routing
+    2. Call the node that produces the verdict
+    3. Merge result into state (as LangGraph would)
+    4. Call the router
+    5. If router returns "ask_user", verify the merged state has trigger and questions
+    """
+
+    @patch("src.agents.execution.call_agent_with_metrics")
+    @patch("src.agents.execution.build_agent_prompt")
+    @patch("src.agents.execution.check_context_or_escalate")
+    @patch("src.routing.save_checkpoint")
+    def test_execution_limit_to_ask_user_full_path(
+        self, mock_checkpoint, mock_context, mock_prompt, mock_call
+    ):
+        """
+        Full integration: execution_validator_node at limit -> router -> verify contract.
+        """
+        mock_context.return_value = None
+        mock_prompt.return_value = "test prompt"
+        mock_call.return_value = {
+            "verdict": "fail",
+            "summary": "Execution failed",
+            "error_analysis": "Memory error"
+        }
+        
+        # Initial state at limit
+        state = {
+            "paper_text": "test paper",
+            "current_stage_id": "stage_0",
+            "execution_failure_count": MAX_EXECUTION_FAILURES - 1,
+            "execution_output": "Error: out of memory",
+            "execution_result": {"success": False, "error": "OOM"},
+            "current_simulation_code": "import meep",
+        }
+        
+        # Step 1: Call the node
+        result = execution_validator_node(state)
+        
+        # Step 2: Merge result into state (as LangGraph would)
+        merged_state = {**state, **result}
+        
+        # Step 3: Call router
+        route = route_after_execution_check(merged_state)
+        
+        # Step 4: Verify contract if routing to ask_user
+        assert route == "ask_user", (
+            f"Expected ask_user at limit, got {route}. "
+            f"Count after node: {merged_state.get('execution_failure_count')}"
+        )
+        
+        # Step 5: Full contract assertion on merged state
+        assert_ask_user_contract(
+            merged_state,
+            expected_trigger="execution_failure_limit",
+            context="INTEGRATION: execution_validator -> route_after_execution_check"
+        )
+
+    @patch("src.agents.execution.call_agent_with_metrics")
+    @patch("src.agents.execution.build_agent_prompt")
+    @patch("src.agents.execution.check_context_or_escalate")
+    @patch("src.routing.save_checkpoint")
+    def test_physics_limit_to_ask_user_full_path(
+        self, mock_checkpoint, mock_context, mock_prompt, mock_call
+    ):
+        """
+        Full integration: physics_sanity_node at limit -> router -> verify contract.
+        """
+        mock_context.return_value = None
+        mock_prompt.return_value = "test prompt"
+        mock_call.return_value = {
+            "verdict": "fail",
+            "issues": ["Impossible value"],
+            "summary": "Physics check failed"
+        }
+        
+        state = {
+            "paper_text": "test paper",
+            "current_stage_id": "stage_0",
+            "physics_failure_count": MAX_PHYSICS_FAILURES - 1,
+            "analysis_summary": {"peak_wavelength": 500},
+            "design_description": "Test design",
+        }
+        
+        result = physics_sanity_node(state)
+        merged_state = {**state, **result}
+        route = route_after_physics_check(merged_state)
+        
+        assert route == "ask_user", f"Expected ask_user at limit, got {route}"
+        
+        assert_ask_user_contract(
+            merged_state,
+            expected_trigger="physics_failure_limit",
+            context="INTEGRATION: physics_sanity -> route_after_physics_check"
+        )
+
+    @patch("src.routing.save_checkpoint")
+    def test_analysis_limit_to_ask_user_full_path(self, mock_checkpoint):
+        """
+        Full integration: comparison_validator_node at limit -> router -> verify contract.
+        
+        NOTE: comparison_validator_node computes verdicts programmatically (no LLM).
+        We set up state that triggers needs_revision by having expected targets
+        but no comparisons produced.
+        """
+        # Set up state that triggers needs_revision verdict
+        state = {
+            "paper_text": "test paper",
+            "current_stage_id": "stage_0",
+            "analysis_revision_count": MAX_ANALYSIS_REVISIONS - 1,
+            "plan": {
+                "stages": [{
+                    "stage_id": "stage_0",
+                    "targets": ["fig1"],
+                    "target_details": [{"figure_id": "fig1"}],
+                }]
+            },
+            "progress": {
+                "stages": [{"stage_id": "stage_0", "status": "in_progress"}]
+            },
+            "stage_outputs": {},  # No outputs triggers needs_revision
+        }
+        
+        result = comparison_validator_node(state)
+        merged_state = {**state, **result}
+        
+        # Verify we got needs_revision
+        assert merged_state.get("comparison_verdict") == "needs_revision", (
+            f"Expected needs_revision, got: {merged_state.get('comparison_verdict')}"
+        )
+        
+        route = route_after_comparison_check(merged_state)
+        
+        assert route == "ask_user", f"Expected ask_user at limit, got {route}"
+        
+        assert_ask_user_contract(
+            merged_state,
+            expected_trigger="analysis_limit",
+            context="INTEGRATION: comparison_validator -> route_after_comparison_check"
+        )
+
+    @patch("src.agents.code.call_agent_with_metrics")
+    @patch("src.agents.code.build_agent_prompt")
+    @patch("src.agents.code.check_context_or_escalate")
+    @patch("src.routing.save_checkpoint")
+    def test_code_review_limit_to_ask_user_full_path(
+        self, mock_checkpoint, mock_context, mock_prompt, mock_call
+    ):
+        """
+        Full integration: code_reviewer_node at limit -> router -> verify contract.
+        """
+        mock_context.return_value = None
+        mock_prompt.return_value = "test prompt"
+        mock_call.return_value = {
+            "verdict": "needs_revision",
+            "issues": ["Bug found"],
+            "feedback": "Fix bug"
+        }
+        
+        state = {
+            "paper_text": "test paper",
+            "current_stage_id": "stage_0",
+            "code_revision_count": MAX_CODE_REVISIONS - 1,
+            "current_simulation_code": "print('hello')",
+            "design_description": "Test design",
+        }
+        
+        result = code_reviewer_node(state)
+        merged_state = {**state, **result}
+        route = route_after_code_review(merged_state)
+        
+        assert route == "ask_user", f"Expected ask_user at limit, got {route}"
+        
+        assert_ask_user_contract(
+            merged_state,
+            expected_trigger="code_review_limit",
+            context="INTEGRATION: code_reviewer -> route_after_code_review"
+        )
+
+    @patch("src.agents.design.call_agent_with_metrics")
+    @patch("src.agents.design.build_agent_prompt")
+    @patch("src.agents.design.check_context_or_escalate")
+    @patch("src.routing.save_checkpoint")
+    def test_design_review_limit_to_ask_user_full_path(
+        self, mock_checkpoint, mock_context, mock_prompt, mock_call
+    ):
+        """
+        Full integration: design_reviewer_node at limit -> router -> verify contract.
+        """
+        mock_context.return_value = None
+        mock_prompt.return_value = "test prompt"
+        mock_call.return_value = {
+            "verdict": "needs_revision",
+            "issues": ["Missing PML"],
+            "feedback": "Add boundaries"
+        }
+        
+        state = {
+            "paper_text": "test paper",
+            "current_stage_id": "stage_0",
+            "design_revision_count": MAX_DESIGN_REVISIONS - 1,
+            "design_description": "Basic design",
+        }
+        
+        result = design_reviewer_node(state)
+        merged_state = {**state, **result}
+        route = route_after_design_review(merged_state)
+        
+        assert route == "ask_user", f"Expected ask_user at limit, got {route}"
+        
+        assert_ask_user_contract(
+            merged_state,
+            expected_trigger="design_review_limit",
+            context="INTEGRATION: design_reviewer -> route_after_design_review"
+        )
+
+    @patch("src.agents.planning.call_agent_with_metrics")
+    @patch("src.agents.planning.build_agent_prompt")
+    @patch("src.agents.planning.check_context_or_escalate")
+    @patch("src.routing.save_checkpoint")
+    def test_replan_limit_to_ask_user_full_path(
+        self, mock_checkpoint, mock_context, mock_prompt, mock_call
+    ):
+        """
+        Full integration: plan_reviewer_node at limit -> router -> verify contract.
+        """
+        mock_context.return_value = None
+        mock_prompt.return_value = "test prompt"
+        mock_call.return_value = {
+            "verdict": "needs_revision",
+            "issues": ["Missing stage"],
+            "feedback": "Add validation"
+        }
+        
+        state = {
+            "paper_text": "test paper",
+            "replan_count": MAX_REPLANS - 1,
+            "plan": {"stages": []},
+        }
+        
+        result = plan_reviewer_node(state)
+        merged_state = {**state, **result}
+        route = route_after_plan_review(merged_state)
+        
+        assert route == "ask_user", f"Expected ask_user at limit, got {route}"
+        
+        assert_ask_user_contract(
+            merged_state,
+            expected_trigger="replan_limit",
+            context="INTEGRATION: plan_reviewer -> route_after_plan_review"
+        )

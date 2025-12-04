@@ -48,14 +48,28 @@ def _log_routing_decision(state: "ReproState", checkpoint_prefix: str, verdict: 
     
     # Get feedback/issues based on review type
     if checkpoint_prefix == "plan_review":
-        feedback = state.get("planner_feedback") or state.get("reviewer_feedback")
         issues = state.get("reviewer_issues", [])
-        if feedback:
-            # Truncate long feedback
-            feedback_str = str(feedback)
-            context_parts.append(f"feedback: {feedback_str[:100]}{'...' if len(feedback_str) > 100 else ''}")
-        if issues:
-            context_parts.append(f"{len(issues)} issue(s)")
+        feedback = state.get("planner_feedback") or state.get("reviewer_feedback") or ""
+        feedback_str = str(feedback)
+        
+        if issues and verdict == "needs_revision":
+            # Show actual issues if available
+            issues_str = "; ".join(str(i)[:60] for i in issues[:2])
+            context_parts.append(f"issues: [{issues_str}]")
+        elif feedback_str and verdict == "needs_revision":
+            # Extract the actual problem from feedback (skip praise)
+            issue_excerpt = None
+            for marker in ["PLAN_ISSUE:", "Issue:", "Problem:", "Missing:", "Error:", "must ", "should ", "needs "]:
+                idx = feedback_str.lower().find(marker.lower())
+                if idx >= 0:
+                    # Show from the issue marker
+                    issue_excerpt = feedback_str[idx:idx+120].replace('\n', ' ')
+                    break
+            if issue_excerpt:
+                context_parts.append(f"{issue_excerpt}...")
+            elif len(feedback_str) > 100:
+                # No marker found - show end of feedback (usually where issues are)
+                context_parts.append(f"...{feedback_str[-100:].replace(chr(10), ' ')}")
             
     elif checkpoint_prefix == "design_review":
         issues = state.get("reviewer_issues", [])

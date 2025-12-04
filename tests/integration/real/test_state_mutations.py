@@ -962,7 +962,7 @@ class TestStateMutations:
 
         state = create_initial_state("test", "paper text", "plasmonics")
         state["current_stage_id"] = "stage_0"
-        state["design_description"] = {"stage_id": "stage_0", "geometry": "nanorod"}
+        state["design_description"] = {"stage_id": "stage_0", "design_description": "A valid FDTD simulation design for aluminum nanorods", "geometry": "nanorod"}
         state["design_revision_count"] = 0
         mock_response = {
             "verdict": "needs_revision",
@@ -992,7 +992,7 @@ class TestStateMutations:
 
         state = create_initial_state("test", "paper text", "plasmonics")
         state["current_stage_id"] = "stage_0"
-        state["design_description"] = {"stage_id": "stage_0", "geometry": "nanorod"}
+        state["design_description"] = {"stage_id": "stage_0", "design_description": "A valid FDTD simulation design for aluminum nanorods", "geometry": "nanorod"}
         state["design_revision_count"] = 5
         mock_response = {
             "verdict": "approve",
@@ -1016,7 +1016,7 @@ class TestStateMutations:
 
         state = create_initial_state("test", "paper text", "plasmonics")
         state["current_stage_id"] = "stage_0"
-        state["design_description"] = {"stage_id": "stage_0", "geometry": "nanorod"}
+        state["design_description"] = {"stage_id": "stage_0", "design_description": "A valid FDTD simulation design for aluminum nanorods", "geometry": "nanorod"}
         state["design_revision_count"] = MAX_DESIGN_REVISIONS
         mock_response = {
             "verdict": "needs_revision",
@@ -1039,7 +1039,7 @@ class TestStateMutations:
 
         state = create_initial_state("test", "paper text", "plasmonics")
         state["current_stage_id"] = "stage_0"
-        state["design_description"] = {"stage_id": "stage_0", "geometry": "nanorod"}
+        state["design_description"] = {"stage_id": "stage_0", "design_description": "A valid FDTD simulation design for aluminum nanorods", "geometry": "nanorod"}
         state["design_revision_count"] = MAX_DESIGN_REVISIONS - 1  # One below max
         state["runtime_config"] = {"max_design_revisions": MAX_DESIGN_REVISIONS}
         mock_response = {
@@ -1072,7 +1072,7 @@ class TestStateMutations:
 
         state = create_initial_state("test", "paper text", "plasmonics")
         state["current_stage_id"] = "stage_0"
-        state["design_description"] = {"stage_id": "stage_0", "geometry": "nanorod"}
+        state["design_description"] = {"stage_id": "stage_0", "design_description": "A valid FDTD simulation design for aluminum nanorods", "geometry": "nanorod"}
         state["runtime_config"] = {"max_design_revisions": 5}
         mock_response = {
             "issues": [],
@@ -1094,7 +1094,7 @@ class TestStateMutations:
 
         state = create_initial_state("test", "paper text", "plasmonics")
         state["current_stage_id"] = "stage_0"
-        state["design_description"] = {"stage_id": "stage_0", "geometry": "nanorod"}
+        state["design_description"] = {"stage_id": "stage_0", "design_description": "A valid FDTD simulation design for aluminum nanorods", "geometry": "nanorod"}
         mock_response = {
             "verdict": "approve",
             "issues": [{"severity": "minor", "description": "Minor issue"}],
@@ -1118,7 +1118,7 @@ class TestStateMutations:
 
         state = create_initial_state("test", "paper text", "plasmonics")
         state["current_stage_id"] = "stage_0"
-        state["design_description"] = {"stage_id": "stage_0", "geometry": "nanorod"}
+        state["design_description"] = {"stage_id": "stage_0", "design_description": "A valid FDTD simulation design for aluminum nanorods", "geometry": "nanorod"}
         mock_response = {"verdict": "pass", "issues": [], "summary": "Good"}
 
         with patch(
@@ -1135,7 +1135,7 @@ class TestStateMutations:
 
         state = create_initial_state("test", "paper text", "plasmonics")
         state["current_stage_id"] = "stage_0"
-        state["design_description"] = {"stage_id": "stage_0", "geometry": "nanorod"}
+        state["design_description"] = {"stage_id": "stage_0", "design_description": "A valid FDTD simulation design for aluminum nanorods", "geometry": "nanorod"}
         state["runtime_config"] = {"max_design_revisions": 5}
         mock_response = {"verdict": "reject", "issues": [], "summary": "Bad", "feedback": "Fix it"}
 
@@ -1154,7 +1154,7 @@ class TestStateMutations:
 
         state = create_initial_state("test", "paper text", "plasmonics")
         state["current_stage_id"] = "stage_0"
-        state["design_description"] = {"stage_id": "stage_0", "geometry": "nanorod"}
+        state["design_description"] = {"stage_id": "stage_0", "design_description": "A valid FDTD simulation design for aluminum nanorods", "geometry": "nanorod"}
         state["runtime_config"] = {"max_design_revisions": 5}
         mock_response = {"verdict": "maybe_okay", "issues": [], "summary": "Uncertain"}
 
@@ -1173,7 +1173,7 @@ class TestStateMutations:
 
         state = create_initial_state("test", "paper text", "plasmonics")
         state["current_stage_id"] = "stage_0"
-        state["design_description"] = {"stage_id": "stage_0", "geometry": "nanorod"}
+        state["design_description"] = {"stage_id": "stage_0", "design_description": "A valid FDTD simulation design for aluminum nanorods", "geometry": "nanorod"}
         state["runtime_config"] = {"max_design_revisions": 5}
 
         with patch(
@@ -1208,7 +1208,7 @@ class TestStateMutations:
 
         state = create_initial_state("test", "paper text", "plasmonics")
         state["current_stage_id"] = "stage_0"
-        state["design_description"] = {"geometry": "nanorod"}
+        state["design_description"] = {"design_description": "A valid FDTD simulation design for aluminum nanorods", "geometry": "nanorod"}
         state["plan"] = {
             "stages": [{"stage_id": "stage_0", "stage_type": "MATERIAL_VALIDATION", "targets": ["Fig1"]}]
         }
@@ -1234,7 +1234,7 @@ class TestStateMutations:
 
         state = create_initial_state("test", "paper text", "plasmonics")
         state["current_stage_id"] = "stage_0"
-        state["design_description"] = {"geometry": "nanorod"}
+        state["design_description"] = {"design_description": "A valid FDTD simulation design for aluminum nanorods", "geometry": "nanorod"}
         state["runtime_config"] = {"max_design_revisions": 5}
         mock_response = {
             "verdict": "needs_revision",
@@ -1257,7 +1257,7 @@ class TestStateMutations:
 
         state = create_initial_state("test", "paper text", "plasmonics")
         state["current_stage_id"] = "stage_0"
-        state["design_description"] = {"geometry": "nanorod"}
+        state["design_description"] = {"design_description": "A valid FDTD simulation design for aluminum nanorods", "geometry": "nanorod"}
         mock_response = {"verdict": "approve", "issues": None, "summary": "Good"}
 
         with patch(
@@ -1288,7 +1288,7 @@ class TestStateMutations:
             ]
         }
         mock_response = {
-            "geometry": "nanorod",
+            "design_description": "A valid FDTD simulation design for aluminum nanorods", "geometry": "nanorod",
             "parameters": {"length": 100, "diameter": 40},
             "materials": ["gold"],
         }
@@ -1355,7 +1355,7 @@ class TestStateMutations:
             ]
         }
         mock_response = {
-            "geometry": "nanorod",
+            "design_description": "A valid FDTD simulation design for aluminum nanorods", "geometry": "nanorod",
             "new_assumptions": ["New assumption 1", "New assumption 2"],
         }
 
@@ -1384,7 +1384,7 @@ class TestStateMutations:
             "stages": [{"stage_id": "stage_0", "stage_type": "MATERIAL_VALIDATION", "targets": ["Fig1"]}]
         }
         mock_response = {
-            "geometry": "nanorod",
+            "design_description": "A valid FDTD simulation design for aluminum nanorods", "geometry": "nanorod",
             "new_assumptions": ["New assumption"],
         }
 
@@ -1409,7 +1409,7 @@ class TestStateMutations:
             "stages": [{"stage_id": "stage_0", "stage_type": "MATERIAL_VALIDATION", "targets": ["Fig1"]}]
         }
         mock_response = {
-            "geometry": "nanorod",
+            "design_description": "A valid FDTD simulation design for aluminum nanorods", "geometry": "nanorod",
             "new_assumptions": ["New assumption"],
         }
 
@@ -1434,7 +1434,7 @@ class TestStateMutations:
             "stages": [{"stage_id": "stage_0", "stage_type": "MATERIAL_VALIDATION", "targets": ["Fig1"]}]
         }
         mock_response = {
-            "geometry": "nanorod",
+            "design_description": "A valid FDTD simulation design for aluminum nanorods", "geometry": "nanorod",
             "new_assumptions": "This is not a list",  # Invalid: string instead of list
         }
 
@@ -1534,7 +1534,7 @@ class TestStateMutations:
         
         def capture_call(*args, **kwargs):
             captured_prompt["system_prompt"] = kwargs.get("system_prompt", "")
-            return {"geometry": "nanorod"}
+            return {"design_description": "A valid FDTD simulation design for aluminum nanorods", "geometry": "nanorod"}
 
         with patch(
             "src.agents.design.call_agent_with_metrics",
@@ -1557,7 +1557,7 @@ class TestStateMutations:
             "stages": [{"stage_id": "stage_0", "stage_type": "MATERIAL_VALIDATION", "targets": ["Fig1"]}]
         }
         mock_response = {
-            "geometry": "nanorod",
+            "design_description": "A valid FDTD simulation design for aluminum nanorods", "geometry": "nanorod",
             "new_assumptions": [],  # Empty list
         }
 
@@ -1583,7 +1583,7 @@ class TestStateMutations:
         state["current_stage_id"] = "stage_0"
         state["current_stage_type"] = "MATERIAL_VALIDATION"
         state["design_description"] = {
-            "geometry": "nanorod",
+            "design_description": "A valid FDTD simulation design for aluminum nanorods", "geometry": "nanorod",
             "parameters": {"length": 100},
         }
         mock_code = "import meep as mp\nimport numpy as np\n\n# Simulation setup\nresolution = 10\nsize = mp.Vector3(1, 1, 0)\n# ... more code"
@@ -1697,7 +1697,7 @@ class TestStateMutations:
         state["current_stage_id"] = "stage_1"
         state["current_stage_type"] = "SINGLE_STRUCTURE"
         state["design_description"] = {
-            "geometry": "nanorod",
+            "design_description": "A valid FDTD simulation design for aluminum nanorods", "geometry": "nanorod",
             "parameters": {"length": 100, "diameter": 40, "mesh_resolution": 10},
         }
         state["validated_materials"] = []  # Empty
@@ -1716,7 +1716,7 @@ class TestStateMutations:
         state["current_stage_id"] = "stage_1"
         state["current_stage_type"] = "SINGLE_STRUCTURE"
         state["design_description"] = {
-            "geometry": "nanorod",
+            "design_description": "A valid FDTD simulation design for aluminum nanorods", "geometry": "nanorod",
             "parameters": {"length": 100, "diameter": 40, "mesh_resolution": 10},
         }
         state["validated_materials"] = None  # None
@@ -1734,7 +1734,7 @@ class TestStateMutations:
         state["current_stage_id"] = "stage_0"
         state["current_stage_type"] = "MATERIAL_VALIDATION"  # Stage 0 doesn't need validated_materials
         state["design_description"] = {
-            "geometry": "nanorod",
+            "design_description": "A valid FDTD simulation design for aluminum nanorods", "geometry": "nanorod",
             "parameters": {"length": 100, "diameter": 40, "mesh_resolution": 10},
         }
         state["validated_materials"] = []  # Empty but allowed for Stage 0
@@ -1758,7 +1758,7 @@ class TestStateMutations:
         state["current_stage_id"] = "stage_0"
         state["current_stage_type"] = "MATERIAL_VALIDATION"
         state["design_description"] = {
-            "geometry": "nanorod",
+            "design_description": "A valid FDTD simulation design for aluminum nanorods", "geometry": "nanorod",
             "parameters": {"length": 100, "diameter": 40, "mesh_resolution": 10},
         }
         stub_code = "STUB: Code would be generated here"
@@ -1783,7 +1783,7 @@ class TestStateMutations:
         state["current_stage_id"] = "stage_0"
         state["current_stage_type"] = "MATERIAL_VALIDATION"
         state["design_description"] = {
-            "geometry": "nanorod",
+            "design_description": "A valid FDTD simulation design for aluminum nanorods", "geometry": "nanorod",
             "parameters": {"length": 100, "diameter": 40, "mesh_resolution": 10},
         }
         stub_code = "# TODO: Implement this simulation"
@@ -1806,7 +1806,7 @@ class TestStateMutations:
         state["current_stage_id"] = "stage_0"
         state["current_stage_type"] = "MATERIAL_VALIDATION"
         state["design_description"] = {
-            "geometry": "nanorod",
+            "design_description": "A valid FDTD simulation design for aluminum nanorods", "geometry": "nanorod",
             "parameters": {"length": 100, "diameter": 40, "mesh_resolution": 10},
         }
         # Valid code with TODO in a comment (not at the start, code is long enough)
@@ -1845,7 +1845,7 @@ def run_simulation():
         state["current_stage_id"] = "stage_0"
         state["current_stage_type"] = "MATERIAL_VALIDATION"
         state["design_description"] = {
-            "geometry": "nanorod",
+            "design_description": "A valid FDTD simulation design for aluminum nanorods", "geometry": "nanorod",
             "parameters": {"length": 100, "diameter": 40, "mesh_resolution": 10},
         }
         short_code = "import meep"  # Too short
@@ -1869,7 +1869,7 @@ def run_simulation():
         state["current_stage_id"] = "stage_0"
         state["current_stage_type"] = "MATERIAL_VALIDATION"
         state["design_description"] = {
-            "geometry": "nanorod",
+            "design_description": "A valid FDTD simulation design for aluminum nanorods", "geometry": "nanorod",
             "parameters": {"length": 100, "diameter": 40, "mesh_resolution": 10},
         }
 
@@ -1914,7 +1914,7 @@ def run_simulation():
         state["current_stage_id"] = "stage_0"
         state["current_stage_type"] = "MATERIAL_VALIDATION"
         state["design_description"] = {
-            "geometry": "nanorod",
+            "design_description": "A valid FDTD simulation design for aluminum nanorods", "geometry": "nanorod",
             "parameters": {"length": 100, "diameter": 40, "mesh_resolution": 10},
         }
         mock_code = "import meep as mp\nimport numpy as np\n\n# Full simulation code with sufficient length for validation"
@@ -1937,7 +1937,7 @@ def run_simulation():
         state["current_stage_id"] = "stage_0"
         state["current_stage_type"] = "MATERIAL_VALIDATION"
         state["design_description"] = {
-            "geometry": "nanorod",
+            "design_description": "A valid FDTD simulation design for aluminum nanorods", "geometry": "nanorod",
             "parameters": {"length": 100, "diameter": 40, "mesh_resolution": 10},
         }
         # LLM returns string directly
@@ -1961,7 +1961,7 @@ def run_simulation():
         state["current_stage_id"] = "stage_0"
         state["current_stage_type"] = "MATERIAL_VALIDATION"
         state["design_description"] = {
-            "geometry": "nanorod",
+            "design_description": "A valid FDTD simulation design for aluminum nanorods", "geometry": "nanorod",
             "parameters": {"length": 100, "diameter": 40, "mesh_resolution": 10},
         }
         state["reviewer_feedback"] = "Previous code had import errors"
@@ -1991,7 +1991,7 @@ def run_simulation():
         state["current_stage_id"] = "stage_0"
         state["current_stage_type"] = "MATERIAL_VALIDATION"
         state["design_description"] = {
-            "geometry": "nanorod",
+            "design_description": "A valid FDTD simulation design for aluminum nanorods", "geometry": "nanorod",
             "parameters": {"length": 100, "diameter": 40, "mesh_resolution": 10},
         }
         state["code_revision_count"] = MAX_CODE_REVISIONS  # Already at max
@@ -2018,7 +2018,7 @@ def run_simulation():
         state = create_initial_state("test", "paper text " * 20, "plasmonics")
         state["current_stage_id"] = "stage_0"
         state["code"] = "import meep as mp\n# Code here"
-        state["design_description"] = {"geometry": "nanorod"}
+        state["design_description"] = {"design_description": "A valid FDTD simulation design for aluminum nanorods", "geometry": "nanorod"}
         mock_response = {
             "verdict": "approve",
             "issues": [],
@@ -2048,7 +2048,7 @@ def run_simulation():
         state = create_initial_state("test", "paper text " * 20, "plasmonics")
         state["current_stage_id"] = "stage_0"
         state["code"] = "import meep as mp\n# Code here"
-        state["design_description"] = {"geometry": "nanorod"}
+        state["design_description"] = {"design_description": "A valid FDTD simulation design for aluminum nanorods", "geometry": "nanorod"}
         state["code_revision_count"] = 1
         state["runtime_config"] = {"max_code_revisions": 5}
         mock_response = {
@@ -2076,7 +2076,7 @@ def run_simulation():
         state = create_initial_state("test", "paper text " * 20, "plasmonics")
         state["current_stage_id"] = "stage_0"
         state["code"] = "import meep as mp\n# Code here"
-        state["design_description"] = {"geometry": "nanorod"}
+        state["design_description"] = {"design_description": "A valid FDTD simulation design for aluminum nanorods", "geometry": "nanorod"}
         state["code_revision_count"] = MAX_CODE_REVISIONS
         mock_response = {
             "verdict": "needs_revision",
@@ -2103,7 +2103,7 @@ def run_simulation():
         state = create_initial_state("test", "paper text " * 20, "plasmonics")
         state["current_stage_id"] = "stage_0"
         state["code"] = "import meep as mp\n# Code here"
-        state["design_description"] = {"geometry": "nanorod"}
+        state["design_description"] = {"design_description": "A valid FDTD simulation design for aluminum nanorods", "geometry": "nanorod"}
         state["code_revision_count"] = MAX_CODE_REVISIONS - 1  # One below max
         state["runtime_config"] = {"max_code_revisions": MAX_CODE_REVISIONS}
         mock_response = {
@@ -2136,7 +2136,7 @@ def run_simulation():
         state = create_initial_state("test", "paper text " * 20, "plasmonics")
         state["current_stage_id"] = "stage_0"
         state["code"] = "import meep as mp\n# Code here"
-        state["design_description"] = {"geometry": "nanorod"}
+        state["design_description"] = {"design_description": "A valid FDTD simulation design for aluminum nanorods", "geometry": "nanorod"}
         state["runtime_config"] = {"max_code_revisions": 5}
         mock_response = {
             "issues": [],
@@ -2158,7 +2158,7 @@ def run_simulation():
         state = create_initial_state("test", "paper text " * 20, "plasmonics")
         state["current_stage_id"] = "stage_0"
         state["code"] = "import meep as mp\n# Code here"
-        state["design_description"] = {"geometry": "nanorod"}
+        state["design_description"] = {"design_description": "A valid FDTD simulation design for aluminum nanorods", "geometry": "nanorod"}
         mock_response = {"verdict": "pass", "issues": [], "summary": "Good"}
 
         with patch(
@@ -2176,7 +2176,7 @@ def run_simulation():
         state = create_initial_state("test", "paper text " * 20, "plasmonics")
         state["current_stage_id"] = "stage_0"
         state["code"] = "import meep as mp\n# Code here"
-        state["design_description"] = {"geometry": "nanorod"}
+        state["design_description"] = {"design_description": "A valid FDTD simulation design for aluminum nanorods", "geometry": "nanorod"}
         state["runtime_config"] = {"max_code_revisions": 5}
         mock_response = {"verdict": "reject", "issues": [], "summary": "Bad", "feedback": "Fix it"}
 
@@ -2196,7 +2196,7 @@ def run_simulation():
         state = create_initial_state("test", "paper text " * 20, "plasmonics")
         state["current_stage_id"] = "stage_0"
         state["code"] = "import meep as mp\n# Code here"
-        state["design_description"] = {"geometry": "nanorod"}
+        state["design_description"] = {"design_description": "A valid FDTD simulation design for aluminum nanorods", "geometry": "nanorod"}
         state["runtime_config"] = {"max_code_revisions": 5}
         mock_response = {"verdict": "maybe_okay", "issues": [], "summary": "Uncertain"}
 
@@ -2216,7 +2216,7 @@ def run_simulation():
         state = create_initial_state("test", "paper text " * 20, "plasmonics")
         state["current_stage_id"] = "stage_0"
         state["code"] = "import meep as mp\n# Code here"
-        state["design_description"] = {"geometry": "nanorod"}
+        state["design_description"] = {"design_description": "A valid FDTD simulation design for aluminum nanorods", "geometry": "nanorod"}
         state["runtime_config"] = {"max_code_revisions": 5}
 
         with patch(
@@ -2235,7 +2235,7 @@ def run_simulation():
         state = create_initial_state("test", "paper text " * 20, "plasmonics")
         state["current_stage_id"] = "stage_0"
         state["code"] = "import meep as mp\n# Code here"
-        state["design_description"] = {"geometry": "nanorod", "parameters": {"length": 100}}
+        state["design_description"] = {"design_description": "A valid FDTD simulation design for aluminum nanorods", "geometry": "nanorod", "parameters": {"length": 100}}
         
         captured_content = {}
         
@@ -2259,7 +2259,7 @@ def run_simulation():
         state = create_initial_state("test", "paper text " * 20, "plasmonics")
         state["current_stage_id"] = "stage_0"
         state["code"] = "import meep as mp\n# Code here"
-        state["design_description"] = {"geometry": "nanorod"}
+        state["design_description"] = {"design_description": "A valid FDTD simulation design for aluminum nanorods", "geometry": "nanorod"}
         state["runtime_config"] = {"max_code_revisions": 5}
         mock_response = {
             "verdict": "needs_revision",
@@ -2301,7 +2301,7 @@ def run_simulation():
         state = create_initial_state("test", "paper text " * 20, "plasmonics")
         state["current_stage_id"] = "stage_0"
         state["code"] = "import meep as mp\n# Code here"
-        state["design_description"] = {"geometry": "nanorod"}
+        state["design_description"] = {"design_description": "A valid FDTD simulation design for aluminum nanorods", "geometry": "nanorod"}
         state["code_revision_count"] = 2
         mock_response = {"verdict": "approve", "issues": [], "summary": "Good"}
 
@@ -2321,7 +2321,7 @@ def run_simulation():
         state = create_initial_state("test", "paper text " * 20, "plasmonics")
         state["current_stage_id"] = "stage_0"
         state["code"] = "import meep as mp\n# Code here"
-        state["design_description"] = {"geometry": "nanorod"}
+        state["design_description"] = {"design_description": "A valid FDTD simulation design for aluminum nanorods", "geometry": "nanorod"}
         mock_response = {
             "verdict": "approve",
             "issues": [{"severity": "minor", "description": "Minor style issue"}],
@@ -2901,7 +2901,7 @@ def run_simulation():
         state = create_initial_state("test", "paper text " * 20, "plasmonics")
         state["current_stage_id"] = "stage_0"
         state["stage_outputs"] = {"files": ["output.csv"]}
-        state["design_description"] = {"geometry": "nanorod", "parameters": {"length": 100}}
+        state["design_description"] = {"design_description": "A valid FDTD simulation design for aluminum nanorods", "geometry": "nanorod", "parameters": {"length": 100}}
         
         captured_content = {}
         

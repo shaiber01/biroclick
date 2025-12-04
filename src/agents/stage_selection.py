@@ -203,6 +203,9 @@ def select_stage_node(state: ReproState) -> dict:
                     "analysis_revision_count": 0,
                 })
             
+            # Log stage selection
+            logger.info(f"🎯 select_stage: {selected_stage_id} ({stage.get('stage_type')}, needs_rerun)")
+            
             return result_updates
     
     # Priority 2: Find not_started stages with satisfied dependencies
@@ -504,6 +507,9 @@ def select_stage_node(state: ReproState) -> dict:
                 "analysis_revision_count": 0,
             })
         
+        # Log stage selection
+        logger.info(f"🎯 select_stage: {selected_stage_id} ({stage_type}, ready)")
+        
         return result_updates
     
     # Deadlock detection - comprehensive check including transitive dependencies and hierarchy
@@ -630,6 +636,7 @@ def select_stage_node(state: ReproState) -> dict:
             }
     
     # No more stages to run - normal completion
+    logger.info("🎯 select_stage: all stages complete → generate_report")
     return {
         "workflow_phase": "stage_selection",
         "current_stage_id": None,

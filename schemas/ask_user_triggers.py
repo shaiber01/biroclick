@@ -91,10 +91,11 @@ ASK_USER_TRIGGERS: Dict[str, Dict[str, Any]] = {
         "description": "Analysis revision limit (MAX_ANALYSIS_REVISIONS) exceeded",
         "source_node": "comparison_check",
         "expected_response_keys": ["action", "hint"],
-        "valid_verdicts": ["ACCEPT_PARTIAL", "PROVIDE_HINT", "STOP"],
+        "valid_verdicts": ["ACCEPT_PARTIAL", "PROVIDE_HINT", "SKIP_STAGE", "STOP"],
         "supervisor_action": {
             "ACCEPT_PARTIAL": "Mark stage completed_partial, proceed to select_stage",
             "PROVIDE_HINT": "Reset analysis_revision_count=0, add hint to analysis_feedback, route to analyze",
+            "SKIP_STAGE": "Mark stage as blocked, route to select_stage",
             "STOP": "Route to generate_report",
         }
     },

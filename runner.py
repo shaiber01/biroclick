@@ -1,67 +1,7 @@
 import logging
-from pathlib import Path
-from langchain_core.callbacks import BaseCallbackHandler
 
-# Add custom VERBOSE level (between DEBUG=10 and INFO=20)
-VERBOSE = 15
-logging.addLevelName(VERBOSE, "VERBOSE")
-
-def verbose(self, message, *args, **kwargs):
-    if self.isEnabledFor(VERBOSE):
-        self._log(VERBOSE, message, args, **kwargs)
-
-logging.Logger.verbose = verbose
-
-
-def setup_console_logging():
-    """Set up console-only logging (before we know the run folder)."""
-    root_logger = logging.getLogger()
-    root_logger.setLevel(logging.DEBUG)  # Capture everything at root level
-    
-    # Console handler - INFO level (user sees INFO and above)
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.INFO)
-    console_format = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-    console_handler.setFormatter(console_format)
-    root_logger.addHandler(console_handler)
-    
-    # Enable LangChain/LangGraph debug logging (will go to file once file handlers are added)
-    for name in ["langchain", "langchain_core", "langchain_anthropic", "langgraph"]:
-        logging.getLogger(name).setLevel(logging.DEBUG)
-
-
-def setup_file_logging(run_output_dir: str):
-    """Add file handlers once we know the run folder.
-    
-    Creates three log files:
-    - debug.log: Everything (DEBUG and above)
-    - verbose.log: VERBOSE and above (no DEBUG)
-    - info.log: INFO and above only
-    """
-    root_logger = logging.getLogger()
-    log_dir = Path(run_output_dir)
-    log_dir.mkdir(parents=True, exist_ok=True)
-    
-    file_format = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-    
-    # DEBUG level log (everything)
-    debug_handler = logging.FileHandler(log_dir / "debug.log", mode="w")
-    debug_handler.setLevel(logging.DEBUG)
-    debug_handler.setFormatter(file_format)
-    root_logger.addHandler(debug_handler)
-    
-    # VERBOSE level log (VERBOSE and above, no DEBUG)
-    verbose_handler = logging.FileHandler(log_dir / "verbose.log", mode="w")
-    verbose_handler.setLevel(VERBOSE)
-    verbose_handler.setFormatter(file_format)
-    root_logger.addHandler(verbose_handler)
-    
-    # INFO level log (INFO and above)
-    info_handler = logging.FileHandler(log_dir / "info.log", mode="w")
-    info_handler.setLevel(logging.INFO)
-    info_handler.setFormatter(file_format)
-    root_logger.addHandler(info_handler)
-
+# Import and initialize logging utilities (must be first to register VERBOSE level)
+from src.logging_utils import setup_console_logging, setup_file_logging
 
 # Phase 1: Console logging only (before we know the run folder)
 setup_console_logging()
@@ -69,62 +9,12 @@ setup_console_logging()
 # Get a logger for this module
 logger = logging.getLogger(__name__)
 
-
-class GraphProgressCallback(BaseCallbackHandler):
-    """Log graph node transitions for visibility into execution progress."""
-    
-    def on_chain_start(self, serialized, inputs, **kwargs):
-        """Called when a chain/node starts executing."""
-        # LangGraph passes node info in different locations depending on version:
-        # 1. kwargs["name"] - direct node name
-        # 2. kwargs["metadata"]["langgraph_node"] - LangGraph 0.2+ node name
-        # 3. kwargs["tags"] - node name may be in tags list
-        # 4. serialized["name"] - fallback for LangChain chains
-        
-        name = kwargs.get("name")
-        
-        # Check metadata for langgraph_node (LangGraph 0.2+)
-        if not name:
-            metadata = kwargs.get("metadata", {})
-            name = metadata.get("langgraph_node")
-        
-        # Check tags for node name
-        if not name:
-            tags = kwargs.get("tags", [])
-            # LangGraph node names are often in tags, filter out internal ones
-            internal_tags = {"seq:step", "langsmith:hidden", "__start__", "__end__"}
-            for tag in tags:
-                if tag not in internal_tags and not tag.startswith("seq:step:") and not tag.startswith("graph:step:"):
-                    name = tag
-                    break
-        
-        # Fallback to serialized dict
-        if not name and serialized:
-            name = serialized.get("name")
-        
-        if not name:
-            return  # Skip logging if we can't determine the name
-            
-        # Filter out internal LangGraph wrappers to show only meaningful nodes
-        internal_names = {"RunnableSequence", "StateGraph", "CompiledStateGraph", 
-                         "ChannelWrite", "ChannelRead", "RunnableLambda", "LangGraph"}
-        if name not in internal_names and not name.startswith("Runnable"):
-            logger.info(f"🔄 Entering node: {name}")
-    
-    def on_chain_end(self, outputs, **kwargs):
-        """Called when a chain/node finishes executing."""
-        pass  # Could add logging here if you want exit messages
-    
-    def on_chain_error(self, error, **kwargs):
-        """Called when a chain/node errors."""
-        logger.error(f"❌ Node error: {error}")
-
+from src.callbacks import GraphProgressCallback
+from src.graph import create_repro_graph
+from src.paper_loader import load_paper_from_markdown, create_state_from_paper_input
 
 # Create callback instance for reuse
 progress_callback = GraphProgressCallback()
-
-from src.graph import create_repro_graph
-from src.paper_loader import load_paper_from_markdown, create_state_from_paper_input
 
 # Initialize the graph
 app = create_repro_graph()
@@ -177,10 +67,13 @@ while True:
             break
         
         # Resume with user response
-        result = app.invoke(
+        # IMPORTANT: Use update_state() then invoke(None) to properly resume from interrupt.
+        # Calling invoke(input, config) would start a NEW run from START, not resume!
+        app.update_state(
+            config,
             {"user_responses": {trigger: user_input}},
-            config  # callbacks already in config
         )
+        result = app.invoke(None, config)
     else:
         print(f"Unexpected pause at: {snapshot.next}")
         break

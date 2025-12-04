@@ -10,6 +10,7 @@ from schemas.state import (
     check_context_before_node,
     validate_state_for_node,
 )
+from src.agents.user_options import get_options_for_trigger, get_clarification_message
 
 
 def check_context_or_escalate(state: ReproState, node_name: str) -> Optional[Dict[str, Any]]:
@@ -71,6 +72,8 @@ def validate_user_responses(trigger: str, responses: Dict[str, str], questions: 
     """
     Validate user responses against expected format for the trigger type.
     
+    Uses the centralized USER_OPTIONS from user_options.py as the single source of truth.
+    
     Args:
         trigger: The ask_user_trigger value (e.g., "material_checkpoint")
         responses: Dict mapping question -> response
@@ -91,78 +94,35 @@ def validate_user_responses(trigger: str, responses: Dict[str, str], questions: 
     # Replace underscores with spaces for matching (user might type "change material" instead of "CHANGE_MATERIAL")
     all_responses_normalized = all_responses.replace("_", " ")
     
-    if trigger == "material_checkpoint":
-        # Must contain one of: APPROVE, CHANGE_MATERIAL, CHANGE_DATABASE, NEED_HELP, STOP
-        # Normalize keywords by replacing underscores with spaces for matching
-        valid_keywords = ["APPROVE", "CHANGE MATERIAL", "CHANGE DATABASE", "NEED HELP", "HELP", 
-                         "YES", "NO", "REJECT", "CORRECT", "WRONG", "STOP"]
-        # Use helper function to avoid false positives (e.g., "NO" matching "NOT")
-        if not any(_contains_keyword(all_responses_normalized, kw) for kw in valid_keywords):
-            errors.append(
-                "Response must contain one of: APPROVE, CHANGE_MATERIAL, CHANGE_DATABASE, NEED_HELP, or STOP"
-            )
+    # Get options from centralized configuration
+    options = get_options_for_trigger(trigger)
     
-    elif trigger == "code_review_limit":
-        valid_keywords = ["PROVIDE HINT", "HINT", "SKIP", "STOP", "RETRY"]
-        if not any(kw in all_responses_normalized for kw in valid_keywords):
-            errors.append(
-                "Response must contain one of: PROVIDE_HINT, SKIP_STAGE, or STOP"
-            )
-    
-    elif trigger == "design_review_limit":
-        valid_keywords = ["PROVIDE HINT", "HINT", "SKIP", "STOP", "RETRY"]
-        if not any(kw in all_responses_normalized for kw in valid_keywords):
-            errors.append(
-                "Response must contain one of: PROVIDE_HINT, SKIP_STAGE, or STOP"
-            )
-    
-    elif trigger == "execution_failure_limit":
-        valid_keywords = ["RETRY", "GUIDANCE", "SKIP", "STOP"]
-        if not any(kw in all_responses_normalized for kw in valid_keywords):
-            errors.append(
-                "Response must contain one of: RETRY_WITH_GUIDANCE, SKIP_STAGE, or STOP"
-            )
-    
-    elif trigger == "physics_failure_limit":
-        valid_keywords = ["RETRY", "ACCEPT", "PARTIAL", "SKIP", "STOP"]
-        if not any(kw in all_responses_normalized for kw in valid_keywords):
-            errors.append(
-                "Response must contain one of: RETRY_WITH_GUIDANCE, ACCEPT_PARTIAL, SKIP_STAGE, or STOP"
-            )
-    
-    elif trigger == "backtrack_approval":
-        valid_keywords = ["APPROVE", "REJECT", "YES", "NO"]
-        if not any(_contains_keyword(all_responses_normalized, kw) for kw in valid_keywords):
-            errors.append(
-                "Response must contain one of: APPROVE or REJECT"
-            )
-    
-    elif trigger == "replan_limit":
-        valid_keywords = ["FORCE", "ACCEPT", "GUIDANCE", "STOP"]
-        if not any(kw in all_responses_normalized for kw in valid_keywords):
-            errors.append(
-                "Response must contain one of: FORCE_ACCEPT, PROVIDE_GUIDANCE, or STOP"
-            )
-    
-    elif trigger == "analysis_limit":
-        valid_keywords = ["ACCEPT", "PARTIAL", "PROVIDE HINT", "HINT", "STOP"]
-        if not any(kw in all_responses_normalized for kw in valid_keywords):
-            errors.append(
-                "Response must contain one of: ACCEPT_PARTIAL, PROVIDE_HINT (with hint text), or STOP"
-            )
-    
-    elif trigger in ["supervisor_error", "missing_design", "unknown_escalation"]:
-        # Generic error handlers - accept RETRY, SKIP, or STOP
-        valid_keywords = ["RETRY", "SKIP", "STOP"]
-        if not any(kw in all_responses_normalized for kw in valid_keywords):
-            errors.append(
-                "Response must contain one of: RETRY, SKIP_STAGE, or STOP"
-            )
-    
-    # For unknown triggers, just check that response is not empty
-    elif trigger not in ["context_overflow", "backtrack_limit"]:
+    if not options:
+        # Unknown trigger - just check that response is not empty
         if not all_responses.strip():
             errors.append("Response cannot be empty")
+        return errors
+    
+    # Build keyword list from all options (display + aliases)
+    valid_keywords = []
+    for opt in options:
+        # Add display keyword (normalized - underscore to space)
+        valid_keywords.append(opt.display.replace("_", " "))
+        # Add all aliases (normalized)
+        for alias in opt.aliases:
+            valid_keywords.append(alias.replace("_", " "))
+    
+    # Check if any keyword matches (accounting for short keywords)
+    matched = False
+    for kw in valid_keywords:
+        if _contains_keyword(all_responses_normalized, kw):
+            matched = True
+            break
+    
+    if not matched:
+        # Use the centralized clarification message
+        clarification = get_clarification_message(trigger)
+        errors.append(clarification)
     
     return errors
 

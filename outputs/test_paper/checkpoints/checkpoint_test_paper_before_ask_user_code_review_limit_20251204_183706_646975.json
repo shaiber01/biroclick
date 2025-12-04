@@ -1,0 +1,40 @@
+{
+  "current_stage_id": "stage1",
+  "current_stage_type": "SINGLE_STRUCTURE",
+  "plan": {
+    "stages": [
+      {
+        "stage_id": "stage1",
+        "stage_type": "SINGLE_STRUCTURE"
+      }
+    ]
+  },
+  "progress": {
+    "stages": [
+      {
+        "stage_id": "stage1",
+        "status": "in_progress"
+      }
+    ],
+    "user_interactions": []
+  },
+  "code": "# Broken simulation code",
+  "design_description": "Simulate extinction",
+  "code_revision_count": 3,
+  "runtime_config": {
+    "max_code_revisions": 3
+  },
+  "paper_id": "test_paper",
+  "workflow_phase": "code_review",
+  "last_code_review_verdict": "needs_revision",
+  "reviewer_issues": [
+    "Missing numpy import"
+  ],
+  "reviewer_feedback": "Missing imports",
+  "ask_user_trigger": "code_review_limit",
+  "pending_user_questions": [
+    "Code review limit reached.\n\n- Stage: stage1\n- Attempts: 3/3\n- Latest reviewer feedback:\n  Missing imports\n\nPlease respond with PROVIDE_HINT (include guidance for next attempt), SKIP to bypass this stage, or STOP to end the workflow."
+  ],
+  "awaiting_user_input": true,
+  "last_node_before_ask_user": "code_review"
+}

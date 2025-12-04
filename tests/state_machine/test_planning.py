@@ -359,6 +359,138 @@ class TestPlanningPhase:
 
             print("\n✅ Max replan limit test passed!")
 
+    def test_interrupt_resume_routes_through_supervisor(self, initial_state):
+        """Test: Resuming from interrupt properly routes through ask_user → supervisor.
+        
+        This is a CRITICAL test that verifies the interrupt-resume flow works correctly.
+        
+        The bug this catches:
+        - If you call graph.invoke({"user_responses": ...}, config) instead of
+          graph.update_state() + graph.invoke(None, config), the graph RESTARTS
+          from START instead of resuming from the interrupt point.
+        
+        Verifies:
+        - After interrupt at ask_user, resume with update_state + invoke(None)
+        - Flow continues: ask_user → supervisor (NOT adapt_prompts → planning)
+        - Supervisor processes the user response correctly
+        - APPROVE_PLAN response sets supervisor_verdict to ok_continue
+        """
+        visited = []
+
+        def mock_llm(*args, **kwargs):
+            agent = kwargs.get("agent_name", "unknown")
+            visited.append(agent)
+            print(f"    [LLM] {agent}")
+
+            if agent == "plan_reviewer":
+                # Always reject to trigger max replan limit
+                return MockLLMResponses.plan_reviewer_reject()
+
+            responses = {
+                "prompt_adaptor": MockLLMResponses.prompt_adaptor(),
+                "planner": MockLLMResponses.planner(),
+            }
+            return responses.get(agent, {})
+
+        def mock_ask_user_node(state):
+            """Mock ask_user_node that uses pre-existing user_responses instead of CLI input.
+            
+            This simulates what happens when user input is collected externally (via runner.py)
+            and injected via update_state before resuming the graph.
+            """
+            trigger = state.get("ask_user_trigger")
+            user_responses = state.get("user_responses", {})
+            
+            print(f"    [ask_user_node] trigger={trigger}, has_response={trigger in user_responses}")
+            
+            # Return state that clears pending questions and marks not awaiting
+            return {
+                "pending_user_questions": [],
+                "awaiting_user_input": False,
+                "workflow_phase": "awaiting_user",
+            }
+
+        with MultiPatch(LLM_PATCH_LOCATIONS, side_effect=mock_llm), \
+             MultiPatch(CHECKPOINT_PATCH_LOCATIONS, return_value="/tmp/cp.json"), \
+             patch("src.graph.ask_user_node", mock_ask_user_node):
+            
+            print("\n" + "=" * 60)
+            print("TEST: Interrupt resume routes through supervisor")
+            print("=" * 60)
+
+            graph = create_repro_graph()
+            config = {"configurable": {"thread_id": unique_thread_id("interrupt_resume")}}
+
+            print("\n--- Phase 1: Run until interrupt ---")
+            nodes_before_interrupt = []
+
+            # Stream until interrupt (ask_user is interrupt_before)
+            for event in graph.stream(initial_state, config):
+                for node_name, _ in event.items():
+                    nodes_before_interrupt.append(node_name)
+                    print(f"  → {node_name}")
+
+            # Verify we're paused at ask_user
+            state = graph.get_state(config)
+            assert "ask_user" in state.next, \
+                f"Should be paused at ask_user, got {state.next}"
+            
+            print(f"\n  Paused at: {state.next}")
+            print(f"  ask_user_trigger: {state.values.get('ask_user_trigger')}")
+
+            print("\n--- Phase 2: Resume with user response ---")
+            
+            # CORRECT WAY: update_state then invoke(None)
+            # This is what runner.py should do (and what we're testing)
+            graph.update_state(
+                config,
+                {"user_responses": {"replan_limit": "APPROVE_PLAN"}},
+            )
+            
+            nodes_after_resume = []
+            for event in graph.stream(None, config):
+                for node_name, _ in event.items():
+                    nodes_after_resume.append(node_name)
+                    print(f"  → {node_name}")
+                    
+                    # Stop after supervisor to avoid running the whole graph
+                    if node_name == "supervisor":
+                        break
+                # Break outer loop too
+                if "supervisor" in nodes_after_resume:
+                    break
+
+            print(f"\n  Nodes after resume: {nodes_after_resume}")
+            
+            # CRITICAL ASSERTIONS:
+            # 1. ask_user should run (it's the interrupted node)
+            assert "ask_user" in nodes_after_resume, \
+                f"ask_user should run after resume, got {nodes_after_resume}"
+            
+            # 2. supervisor should run (ask_user routes to supervisor)
+            assert "supervisor" in nodes_after_resume, \
+                f"supervisor should run after ask_user, got {nodes_after_resume}"
+            
+            # 3. adapt_prompts should NOT run (that would mean restart from START)
+            assert "adapt_prompts" not in nodes_after_resume, \
+                f"adapt_prompts should NOT run - graph should NOT restart! Got {nodes_after_resume}"
+            
+            # 4. planning should NOT run (supervisor should handle APPROVE_PLAN)
+            assert "planning" not in nodes_after_resume, \
+                f"planning should NOT run after APPROVE_PLAN, got {nodes_after_resume}"
+            
+            # Get final state and verify supervisor processed the response
+            final_state = graph.get_state(config)
+            
+            # Supervisor should set verdict to ok_continue for APPROVE_PLAN
+            supervisor_verdict = final_state.values.get("supervisor_verdict")
+            print(f"  supervisor_verdict: {supervisor_verdict}")
+            
+            assert supervisor_verdict == "ok_continue", \
+                f"APPROVE_PLAN should set supervisor_verdict='ok_continue', got '{supervisor_verdict}'"
+
+            print("\n✅ Interrupt resume test passed!")
+
     def test_planning_with_empty_paper_text_escalates(self, initial_state):
         """Test: Missing/empty paper_text triggers user escalation.
         

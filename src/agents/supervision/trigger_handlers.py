@@ -8,6 +8,9 @@ All handlers follow the signature:
     handler(state, result, user_responses, current_stage_id, **kwargs) -> None
 
 They mutate the result dict in place and return None.
+
+NOTE: User options are defined in src/agents/user_options.py as the single
+source of truth for what options are shown to users and how they are matched.
 """
 
 import logging
@@ -20,11 +23,16 @@ from schemas.state import (
     archive_stage_outputs_to_progress,
 )
 from src.agents.base import parse_user_response, check_keywords
+from src.agents.user_options import (
+    match_user_response,
+    get_clarification_message,
+    extract_guidance_text,
+)
 
 logger = logging.getLogger(__name__)
 
 
-# Common keyword sets for response parsing
+# Common keyword sets for response parsing (kept for material_checkpoint and backtrack_approval)
 APPROVAL_KEYWORDS = ["APPROVE", "YES", "CORRECT", "OK", "ACCEPT", "VALID", "PROCEED"]
 REJECTION_KEYWORDS = ["REJECT", "NO", "WRONG", "INCORRECT", "CHANGE", "FIX"]
 
@@ -79,21 +87,66 @@ def handle_material_checkpoint(
     """
     Handle material_checkpoint trigger response.
     
-    User can:
-    - APPROVE: Accept pending materials and continue
-    - REJECT + DATABASE: Request database change
-    - REJECT + MATERIAL: Request material change
-    - NEED_HELP: Get more guidance
+    Options defined in user_options.py: APPROVE, CHANGE_DATABASE, CHANGE_MATERIAL, NEED_HELP, STOP
+    
+    Note: This handler has special logic for combined rejection+keyword patterns
+    (e.g., "REJECT DATABASE" -> CHANGE_DATABASE).
     """
     response_text = parse_user_response(user_responses)
     
-    is_approval = check_keywords(response_text, APPROVAL_KEYWORDS)
+    # First, try the standard matching
+    matched = match_user_response("material_checkpoint", response_text)
+    
+    # Special case: check for rejection patterns (REJECT + DATABASE/MATERIAL)
+    # These take precedence over simple approval/rejection
     is_rejection = check_keywords(response_text, REJECTION_KEYWORDS)
     
-    # Check for CHANGE_DATABASE/CHANGE_MATERIAL FIRST (before approval)
-    # These take precedence even if approval keywords are present
-    # Use word boundary matching to avoid false positives
-    if check_keywords(response_text, ["CHANGE_DATABASE"]) or (is_rejection and check_keywords(response_text, ["DATABASE"])):
+    if is_rejection and check_keywords(response_text, ["DATABASE"]):
+        # Treat as CHANGE_DATABASE
+        matched = None  # Clear any match
+        result["supervisor_verdict"] = "replan_needed"
+        result["planner_feedback"] = f"User rejected material validation and requested database change: {response_text}."
+        if current_stage_id:
+            _update_progress_with_error_handling(
+                state, result, current_stage_id, "needs_rerun",
+                invalidation_reason="User requested material change"
+            )
+        result["pending_validated_materials"] = []
+        result["validated_materials"] = []
+        return
+    
+    if is_rejection and check_keywords(response_text, ["MATERIAL"]):
+        # Treat as CHANGE_MATERIAL
+        matched = None  # Clear any match
+        result["supervisor_verdict"] = "replan_needed"
+        result["planner_feedback"] = f"User indicated wrong material: {response_text}. Please update plan."
+        if current_stage_id:
+            _update_progress_with_error_handling(
+                state, result, current_stage_id, "needs_rerun",
+                invalidation_reason="User rejected material"
+            )
+        result["pending_validated_materials"] = []
+        result["validated_materials"] = []
+        return
+    
+    # If rejection without specific target, ask for clarification
+    if is_rejection and matched is None:
+        result["supervisor_verdict"] = "ask_user"
+        result["pending_user_questions"] = [
+            "You indicated rejection but didn't specify what to change. "
+            f"{get_clarification_message('material_checkpoint')}"
+        ]
+        return
+    
+    if matched is None:
+        result["supervisor_verdict"] = "ask_user"
+        result["pending_user_questions"] = [
+            f"Your response '{response_text[:100]}' is unclear. "
+            f"{get_clarification_message('material_checkpoint')}"
+        ]
+        return
+    
+    if matched.action == "change_database":
         result["supervisor_verdict"] = "replan_needed"
         result["planner_feedback"] = f"User rejected material validation and requested database change: {response_text}."
         if current_stage_id:
@@ -104,7 +157,7 @@ def handle_material_checkpoint(
         result["pending_validated_materials"] = []
         result["validated_materials"] = []
     
-    elif check_keywords(response_text, ["CHANGE_MATERIAL"]) or (is_rejection and check_keywords(response_text, ["MATERIAL"])):
+    elif matched.action == "change_material":
         result["supervisor_verdict"] = "replan_needed"
         result["planner_feedback"] = f"User indicated wrong material: {response_text}. Please update plan."
         if current_stage_id:
@@ -115,7 +168,7 @@ def handle_material_checkpoint(
         result["pending_validated_materials"] = []
         result["validated_materials"] = []
     
-    elif is_approval and not is_rejection:
+    elif matched.action == "approve":
         result["supervisor_verdict"] = "ok_continue"
         result["supervisor_feedback"] = "Material validation approved by user."
         pending_materials = state.get("pending_validated_materials", [])
@@ -129,7 +182,6 @@ def handle_material_checkpoint(
                 "ERROR: No materials were extracted for validation. "
                 "Please specify materials manually using CHANGE_MATERIAL or CHANGE_DATABASE."
             ]
-            # Set both material lists to empty even when error
             result["validated_materials"] = []
             result["pending_validated_materials"] = []
             return
@@ -138,27 +190,15 @@ def handle_material_checkpoint(
             _archive_with_error_handling(state, result, current_stage_id)
             _update_progress_with_error_handling(state, result, current_stage_id, "completed_success")
     
-    elif check_keywords(response_text, ["NEED_HELP", "HELP"]):
+    elif matched.action == "need_help":
         result["supervisor_verdict"] = "ask_user"
         result["pending_user_questions"] = [
             "Please provide more details about the material issue."
         ]
     
-    elif check_keywords(response_text, ["STOP"]):
+    elif matched.action == "stop":
         result["supervisor_verdict"] = "all_complete"
         result["should_stop"] = True
-    
-    elif is_rejection:
-        result["supervisor_verdict"] = "ask_user"
-        result["pending_user_questions"] = [
-            "You indicated rejection but didn't specify what to change."
-        ]
-    
-    else:
-        result["supervisor_verdict"] = "ask_user"
-        result["pending_user_questions"] = [
-            f"Your response '{response_text[:100]}' is unclear."
-        ]
 
 
 def handle_code_review_limit(
@@ -170,22 +210,24 @@ def handle_code_review_limit(
     """
     Handle code_review_limit trigger response.
     
-    User can:
-    - PROVIDE_HINT: Reset counter and retry with user guidance
-    - SKIP: Skip this stage
-    - STOP: Stop workflow
+    Options defined in user_options.py: PROVIDE_HINT, SKIP_STAGE, STOP
     """
     response_text = parse_user_response(user_responses)
+    matched = match_user_response("code_review_limit", response_text)
     
-    # Use word boundary matching to avoid false positives
-    if check_keywords(response_text, ["PROVIDE_HINT", "HINT"]):
+    if matched is None:
+        result["supervisor_verdict"] = "ask_user"
+        result["pending_user_questions"] = [get_clarification_message("code_review_limit")]
+        return
+    
+    if matched.action == "provide_hint":
         result["code_revision_count"] = 0
         raw_response = list(user_responses.values())[-1] if user_responses else ""
-        result["reviewer_feedback"] = f"User hint: {raw_response}"
+        result["reviewer_feedback"] = f"User hint: {extract_guidance_text(raw_response)}"
         result["supervisor_verdict"] = "ok_continue"
         result["supervisor_feedback"] = "Retrying code generation with user hint."
     
-    elif check_keywords(response_text, ["SKIP", "SKIP_STAGE"]):
+    elif matched.action == "skip":
         result["supervisor_verdict"] = "ok_continue"
         if current_stage_id:
             _update_progress_with_error_handling(
@@ -193,15 +235,9 @@ def handle_code_review_limit(
                 summary="Skipped by user due to code review issues"
             )
     
-    elif check_keywords(response_text, ["STOP"]):
+    elif matched.action == "stop":
         result["supervisor_verdict"] = "all_complete"
         result["should_stop"] = True
-    
-    else:
-        result["supervisor_verdict"] = "ask_user"
-        result["pending_user_questions"] = [
-            "Please clarify: PROVIDE_HINT (with hint text), SKIP_STAGE, or STOP?"
-        ]
 
 
 def handle_design_review_limit(
@@ -213,21 +249,23 @@ def handle_design_review_limit(
     """
     Handle design_review_limit trigger response.
     
-    User can:
-    - PROVIDE_HINT: Reset counter and retry with user guidance
-    - SKIP: Skip this stage
-    - STOP: Stop workflow
+    Options defined in user_options.py: PROVIDE_HINT, SKIP_STAGE, STOP
     """
     response_text = parse_user_response(user_responses)
+    matched = match_user_response("design_review_limit", response_text)
     
-    # Use word boundary matching to avoid false positives
-    if check_keywords(response_text, ["PROVIDE_HINT", "HINT"]):
+    if matched is None:
+        result["supervisor_verdict"] = "ask_user"
+        result["pending_user_questions"] = [get_clarification_message("design_review_limit")]
+        return
+    
+    if matched.action == "provide_hint":
         result["design_revision_count"] = 0
         raw_response = list(user_responses.values())[-1] if user_responses else ""
-        result["reviewer_feedback"] = f"User hint: {raw_response}"
+        result["reviewer_feedback"] = f"User hint: {extract_guidance_text(raw_response)}"
         result["supervisor_verdict"] = "ok_continue"
     
-    elif check_keywords(response_text, ["SKIP", "SKIP_STAGE"]):
+    elif matched.action == "skip":
         result["supervisor_verdict"] = "ok_continue"
         if current_stage_id:
             _update_progress_with_error_handling(
@@ -235,15 +273,9 @@ def handle_design_review_limit(
                 summary="Skipped by user due to design review issues"
             )
     
-    elif check_keywords(response_text, ["STOP"]):
+    elif matched.action == "stop":
         result["supervisor_verdict"] = "all_complete"
         result["should_stop"] = True
-    
-    else:
-        result["supervisor_verdict"] = "ask_user"
-        result["pending_user_questions"] = [
-            "Please clarify: PROVIDE_HINT (with hint text), SKIP_STAGE, or STOP?"
-        ]
 
 
 def handle_execution_failure_limit(
@@ -255,22 +287,23 @@ def handle_execution_failure_limit(
     """
     Handle execution_failure_limit trigger response.
     
-    User can:
-    - RETRY_WITH_GUIDANCE: Reset counter and retry with guidance
-    - SKIP: Skip this stage
-    - STOP: Stop workflow
+    Options defined in user_options.py: RETRY_WITH_GUIDANCE, SKIP_STAGE, STOP
     """
     response_text = parse_user_response(user_responses)
+    matched = match_user_response("execution_failure_limit", response_text)
     
-    # Use word boundary matching to avoid false positives (e.g., "RETRYING" matching "RETRY")
-    # Include compound keywords like RETRY_WITH_GUIDANCE that users are prompted to use
-    if check_keywords(response_text, ["RETRY", "GUIDANCE", "RETRY_WITH_GUIDANCE"]):
+    if matched is None:
+        result["supervisor_verdict"] = "ask_user"
+        result["pending_user_questions"] = [get_clarification_message("execution_failure_limit")]
+        return
+    
+    if matched.action == "retry_with_guidance":
         result["execution_failure_count"] = 0
         raw_response = list(user_responses.values())[-1] if user_responses else ""
-        result["supervisor_feedback"] = f"User guidance: {raw_response}"
+        result["supervisor_feedback"] = f"User guidance: {extract_guidance_text(raw_response)}"
         result["supervisor_verdict"] = "ok_continue"
     
-    elif check_keywords(response_text, ["SKIP", "SKIP_STAGE"]):
+    elif matched.action == "skip":
         result["supervisor_verdict"] = "ok_continue"
         if current_stage_id:
             _update_progress_with_error_handling(
@@ -278,15 +311,9 @@ def handle_execution_failure_limit(
                 summary="Skipped by user due to execution failures"
             )
     
-    elif check_keywords(response_text, ["STOP"]):
+    elif matched.action == "stop":
         result["supervisor_verdict"] = "all_complete"
         result["should_stop"] = True
-    
-    else:
-        result["supervisor_verdict"] = "ask_user"
-        result["pending_user_questions"] = [
-            "Please clarify: RETRY_WITH_GUIDANCE, SKIP_STAGE, or STOP?"
-        ]
 
 
 def handle_physics_failure_limit(
@@ -298,23 +325,23 @@ def handle_physics_failure_limit(
     """
     Handle physics_failure_limit trigger response.
     
-    User can:
-    - RETRY: Reset counter and retry
-    - ACCEPT_PARTIAL: Mark stage as partial success
-    - SKIP: Skip this stage
-    - STOP: Stop workflow
+    Options defined in user_options.py: RETRY_WITH_GUIDANCE, ACCEPT_PARTIAL, SKIP_STAGE, STOP
     """
     response_text = parse_user_response(user_responses)
+    matched = match_user_response("physics_failure_limit", response_text)
     
-    # Use word boundary matching to avoid false positives (e.g., "ACCEPTABLE" matching "ACCEPT")
-    # Include compound keywords like RETRY_WITH_GUIDANCE that users are prompted to use
-    if check_keywords(response_text, ["RETRY", "RETRY_WITH_GUIDANCE"]):
+    if matched is None:
+        result["supervisor_verdict"] = "ask_user"
+        result["pending_user_questions"] = [get_clarification_message("physics_failure_limit")]
+        return
+    
+    if matched.action == "retry_with_guidance":
         result["physics_failure_count"] = 0
         raw_response = list(user_responses.values())[-1] if user_responses else ""
-        result["supervisor_feedback"] = f"User guidance: {raw_response}"
+        result["supervisor_feedback"] = f"User guidance: {extract_guidance_text(raw_response)}"
         result["supervisor_verdict"] = "ok_continue"
     
-    elif check_keywords(response_text, ["ACCEPT", "PARTIAL", "ACCEPT_PARTIAL"]):
+    elif matched.action == "accept_partial":
         result["supervisor_verdict"] = "ok_continue"
         if current_stage_id:
             _update_progress_with_error_handling(
@@ -322,7 +349,7 @@ def handle_physics_failure_limit(
                 summary="Accepted as partial by user despite physics issues"
             )
     
-    elif check_keywords(response_text, ["SKIP", "SKIP_STAGE"]):
+    elif matched.action == "skip":
         result["supervisor_verdict"] = "ok_continue"
         if current_stage_id:
             _update_progress_with_error_handling(
@@ -330,15 +357,9 @@ def handle_physics_failure_limit(
                 summary="Skipped by user due to physics check failures"
             )
     
-    elif check_keywords(response_text, ["STOP"]):
+    elif matched.action == "stop":
         result["supervisor_verdict"] = "all_complete"
         result["should_stop"] = True
-    
-    else:
-        result["supervisor_verdict"] = "ask_user"
-        result["pending_user_questions"] = [
-            "Please clarify: RETRY_WITH_GUIDANCE, ACCEPT_PARTIAL, SKIP_STAGE, or STOP?"
-        ]
 
 
 def handle_context_overflow(
@@ -350,20 +371,21 @@ def handle_context_overflow(
     """
     Handle context_overflow trigger response.
     
-    User can:
-    - SUMMARIZE: Apply feedback summarization
-    - TRUNCATE: Truncate paper text
-    - SKIP: Skip this stage
-    - STOP: Stop workflow
+    Options defined in user_options.py: SUMMARIZE, TRUNCATE, SKIP_STAGE, STOP
     """
     response_text = parse_user_response(user_responses)
+    matched = match_user_response("context_overflow", response_text)
     
-    # Use word boundary matching to avoid false positives
-    if check_keywords(response_text, ["SUMMARIZE"]):
+    if matched is None:
+        result["supervisor_verdict"] = "ask_user"
+        result["pending_user_questions"] = [get_clarification_message("context_overflow")]
+        return
+    
+    if matched.action == "summarize":
         result["supervisor_verdict"] = "ok_continue"
         result["supervisor_feedback"] = "Applying feedback summarization for context management."
     
-    elif check_keywords(response_text, ["TRUNCATE"]):
+    elif matched.action == "truncate":
         current_text = state.get("paper_text", "")
         # Truncation marker adds 39 chars, so truncated length = 15000 + 39 + 5000 = 20039
         # Only truncate if original is longer than truncated result would be
@@ -383,7 +405,7 @@ def handle_context_overflow(
             result["supervisor_feedback"] = "Paper already short enough, proceeding."
         result["supervisor_verdict"] = "ok_continue"
     
-    elif check_keywords(response_text, ["SKIP", "SKIP_STAGE"]):
+    elif matched.action == "skip":
         result["supervisor_verdict"] = "ok_continue"
         if current_stage_id:
             _update_progress_with_error_handling(
@@ -391,15 +413,9 @@ def handle_context_overflow(
                 summary="Skipped due to context overflow"
             )
     
-    elif check_keywords(response_text, ["STOP"]):
+    elif matched.action == "stop":
         result["supervisor_verdict"] = "all_complete"
         result["should_stop"] = True
-    
-    else:
-        result["supervisor_verdict"] = "ask_user"
-        result["pending_user_questions"] = [
-            "Please clarify: SUMMARIZE, TRUNCATE, SKIP_STAGE, or STOP?"
-        ]
 
 
 def handle_replan_limit(
@@ -411,47 +427,30 @@ def handle_replan_limit(
     """
     Handle replan_limit trigger response.
     
-    User can:
-    - FORCE/ACCEPT: Force-accept current plan
-    - GUIDANCE: Reset counter and retry with guidance
-    - STOP: Stop workflow
+    Options defined in user_options.py: APPROVE_PLAN, GUIDANCE, STOP
     """
     response_text = parse_user_response(user_responses)
+    matched = match_user_response("replan_limit", response_text)
     
-    # Use word boundary matching to avoid false positives
-    # Include compound keyword FORCE_ACCEPT that users are prompted to use
-    if check_keywords(response_text, ["FORCE", "ACCEPT", "FORCE_ACCEPT"]):
+    if matched is None:
+        result["supervisor_verdict"] = "ask_user"
+        result["pending_user_questions"] = [get_clarification_message("replan_limit")]
+        return
+    
+    if matched.action == "force_accept":
         result["supervisor_verdict"] = "ok_continue"
         result["supervisor_feedback"] = "Plan force-accepted by user."
     
-    elif check_keywords(response_text, ["GUIDANCE"]):
+    elif matched.action == "replan_with_guidance":
         result["replan_count"] = 0
         raw_response = list(user_responses.values())[-1] if user_responses else ""
-        # Strip "GUIDANCE:" prefix (case-insensitive) from the raw response
-        guidance_text = raw_response
-        if guidance_text:
-            # Remove "GUIDANCE:" prefix if present (case-insensitive)
-            guidance_upper = guidance_text.upper().strip()
-            if guidance_upper.startswith("GUIDANCE"):
-                # Find the colon after GUIDANCE and strip everything before it (including colon and whitespace)
-                colon_idx = guidance_text.find(":")
-                if colon_idx != -1:
-                    guidance_text = guidance_text[colon_idx + 1:].strip()
-                else:
-                    # No colon, just remove "GUIDANCE" keyword
-                    guidance_text = guidance_text[len("GUIDANCE"):].strip()
+        guidance_text = extract_guidance_text(raw_response)
         result["planner_feedback"] = f"User guidance: {guidance_text}"
         result["supervisor_verdict"] = "replan_with_guidance"
     
-    elif check_keywords(response_text, ["STOP"]):
+    elif matched.action == "stop":
         result["supervisor_verdict"] = "all_complete"
         result["should_stop"] = True
-    
-    else:
-        result["supervisor_verdict"] = "ask_user"
-        result["pending_user_questions"] = [
-            "Please clarify: FORCE_ACCEPT, GUIDANCE, or STOP?"
-        ]
 
 
 def handle_backtrack_approval(
@@ -505,32 +504,28 @@ def handle_deadlock_detected(
     """
     Handle deadlock_detected trigger response.
     
-    User can:
-    - GENERATE_REPORT: Generate report with current progress
-    - REPLAN: Request replanning
-    - STOP: Stop workflow
+    Options defined in user_options.py: GENERATE_REPORT, REPLAN, STOP
     """
     response_text = parse_user_response(user_responses)
+    matched = match_user_response("deadlock_detected", response_text)
     
-    # Use word boundary matching to avoid false positives
-    if check_keywords(response_text, ["GENERATE_REPORT", "REPORT"]):
+    if matched is None:
+        result["supervisor_verdict"] = "ask_user"
+        result["pending_user_questions"] = [get_clarification_message("deadlock_detected")]
+        return
+    
+    if matched.action == "generate_report":
         result["supervisor_verdict"] = "all_complete"
         result["should_stop"] = True
     
-    elif check_keywords(response_text, ["REPLAN"]):
+    elif matched.action == "replan":
         result["supervisor_verdict"] = "replan_needed"
         raw_response = list(user_responses.values())[-1] if user_responses else ""
         result["planner_feedback"] = f"User requested replan due to deadlock: {raw_response}."
     
-    elif check_keywords(response_text, ["STOP"]):
+    elif matched.action == "stop":
         result["supervisor_verdict"] = "all_complete"
         result["should_stop"] = True
-    
-    else:
-        result["supervisor_verdict"] = "ask_user"
-        result["pending_user_questions"] = [
-            "Please clarify: GENERATE_REPORT, REPLAN, or STOP?"
-        ]
 
 
 def handle_llm_error(
@@ -542,19 +537,21 @@ def handle_llm_error(
     """
     Handle llm_error trigger response.
     
-    User can:
-    - RETRY: Retry the LLM call
-    - SKIP: Skip this stage
-    - STOP: Stop workflow
+    Options defined in user_options.py: RETRY, SKIP_STAGE, STOP
     """
     response_text = parse_user_response(user_responses)
+    matched = match_user_response("llm_error", response_text)
     
-    # Use word boundary matching to avoid false positives
-    if check_keywords(response_text, ["RETRY"]):
+    if matched is None:
+        result["supervisor_verdict"] = "ask_user"
+        result["pending_user_questions"] = [get_clarification_message("llm_error")]
+        return
+    
+    if matched.action == "retry":
         result["supervisor_verdict"] = "ok_continue"
         result["supervisor_feedback"] = "Retrying after user acknowledged LLM error."
     
-    elif check_keywords(response_text, ["SKIP", "SKIP_STAGE"]):
+    elif matched.action == "skip":
         result["supervisor_verdict"] = "ok_continue"
         if current_stage_id:
             _update_progress_with_error_handling(
@@ -562,15 +559,9 @@ def handle_llm_error(
                 summary="Skipped by user after LLM error"
             )
     
-    elif check_keywords(response_text, ["STOP"]):
+    elif matched.action == "stop":
         result["supervisor_verdict"] = "all_complete"
         result["should_stop"] = True
-    
-    else:
-        result["supervisor_verdict"] = "ask_user"
-        result["pending_user_questions"] = [
-            "Please clarify: RETRY, SKIP_STAGE, or STOP?"
-        ]
 
 
 def handle_clarification(
@@ -608,27 +599,25 @@ def handle_critical_error_retry(
     """
     Generic handler for critical errors where user can RETRY or STOP.
     
-    Used for:
-    - missing_paper_text
-    - missing_stage_id
-    - progress_init_failed
+    Used for: missing_paper_text, missing_stage_id, progress_init_failed
+    Options defined in user_options.py (via "critical_error" alias): RETRY, STOP
     """
     response_text = parse_user_response(user_responses)
+    # Use "critical_error" as the trigger - aliases resolve this in user_options
+    matched = match_user_response("critical_error", response_text)
     
-    # Use word boundary matching to avoid false positives
-    if check_keywords(response_text, ["RETRY"]):
+    if matched is None:
+        result["supervisor_verdict"] = "ask_user"
+        result["pending_user_questions"] = [get_clarification_message("critical_error")]
+        return
+    
+    if matched.action == "retry":
         result["supervisor_verdict"] = "ok_continue"
         result["supervisor_feedback"] = "Retrying after critical error acknowledged by user."
         
-    elif check_keywords(response_text, ["STOP"]):
+    elif matched.action == "stop":
         result["supervisor_verdict"] = "all_complete"
         result["should_stop"] = True
-        
-    else:
-        result["supervisor_verdict"] = "ask_user"
-        result["pending_user_questions"] = [
-            "Please clarify: RETRY or STOP?"
-        ]
 
 
 def handle_planning_error_retry(
@@ -640,27 +629,25 @@ def handle_planning_error_retry(
     """
     Generic handler for planning errors where user can REPLAN or STOP.
     
-    Used for:
-    - no_stages_available
-    - invalid_backtrack_target
-    - backtrack_target_not_found
+    Used for: no_stages_available, invalid_backtrack_target, backtrack_target_not_found
+    Options defined in user_options.py (via "planning_error" alias): REPLAN, STOP
     """
     response_text = parse_user_response(user_responses)
+    # Use "planning_error" as the trigger - aliases resolve this in user_options
+    matched = match_user_response("planning_error", response_text)
     
-    # Use word boundary matching to avoid false positives
-    if check_keywords(response_text, ["REPLAN"]):
+    if matched is None:
+        result["supervisor_verdict"] = "ask_user"
+        result["pending_user_questions"] = [get_clarification_message("planning_error")]
+        return
+    
+    if matched.action == "replan":
         result["supervisor_verdict"] = "replan_needed"
         result["planner_feedback"] = f"User requested replan after error: {response_text}"
         
-    elif check_keywords(response_text, ["STOP"]):
+    elif matched.action == "stop":
         result["supervisor_verdict"] = "all_complete"
         result["should_stop"] = True
-        
-    else:
-        result["supervisor_verdict"] = "ask_user"
-        result["pending_user_questions"] = [
-            "Please clarify: REPLAN or STOP?"
-        ]
 
 
 def handle_backtrack_limit(
@@ -672,28 +659,23 @@ def handle_backtrack_limit(
     """
     Handle backtrack_limit trigger response.
     
-    User can:
-    - STOP: Stop workflow
-    - FORCE_CONTINUE: Ignore limit and continue
+    Options defined in user_options.py: FORCE_CONTINUE, STOP
     """
     response_text = parse_user_response(user_responses)
+    matched = match_user_response("backtrack_limit", response_text)
     
-    # Use word boundary matching to avoid false positives
-    # Include compound keyword FORCE_CONTINUE that users are prompted to use
-    if check_keywords(response_text, ["FORCE", "CONTINUE", "FORCE_CONTINUE"]):
+    if matched is None:
+        result["supervisor_verdict"] = "ask_user"
+        result["pending_user_questions"] = [get_clarification_message("backtrack_limit")]
+        return
+    
+    if matched.action == "force_continue":
         result["supervisor_verdict"] = "ok_continue"
         result["supervisor_feedback"] = "Continuing despite backtrack limit as per user request."
-        # Reset or increment limit? Logic usually handles count, we just unblock verdict.
         
-    elif check_keywords(response_text, ["STOP"]):
+    elif matched.action == "stop":
         result["supervisor_verdict"] = "all_complete"
         result["should_stop"] = True
-        
-    else:
-        result["supervisor_verdict"] = "ask_user"
-        result["pending_user_questions"] = [
-            "Please clarify: FORCE_CONTINUE or STOP?"
-        ]
 
 
 def handle_invalid_backtrack_decision(
@@ -705,26 +687,23 @@ def handle_invalid_backtrack_decision(
     """
     Handle invalid_backtrack_decision trigger response.
     
-    User can:
-    - STOP: Stop workflow
-    - CONTINUE: Continue normally (ignoring invalid backtrack)
+    Options defined in user_options.py: CONTINUE, STOP
     """
     response_text = parse_user_response(user_responses)
+    matched = match_user_response("invalid_backtrack_decision", response_text)
     
-    # Use word boundary matching to avoid false positives
-    if check_keywords(response_text, ["CONTINUE"]):
+    if matched is None:
+        result["supervisor_verdict"] = "ask_user"
+        result["pending_user_questions"] = [get_clarification_message("invalid_backtrack_decision")]
+        return
+    
+    if matched.action == "continue":
         result["supervisor_verdict"] = "ok_continue"
         result["backtrack_decision"] = None  # Clear invalid decision
         
-    elif check_keywords(response_text, ["STOP"]):
+    elif matched.action == "stop":
         result["supervisor_verdict"] = "all_complete"
         result["should_stop"] = True
-        
-    else:
-        result["supervisor_verdict"] = "ask_user"
-        result["pending_user_questions"] = [
-            "Please clarify: CONTINUE or STOP?"
-        ]
 
 
 def handle_analysis_limit(
@@ -736,15 +715,17 @@ def handle_analysis_limit(
     """
     Handle analysis_limit trigger response.
     
-    User can:
-    - ACCEPT_PARTIAL: Mark stage as partial success and continue
-    - PROVIDE_HINT: Reset counter and retry with guidance
-    - STOP: Stop workflow
+    Options defined in user_options.py: ACCEPT_PARTIAL, PROVIDE_HINT, STOP
     """
     response_text = parse_user_response(user_responses)
+    matched = match_user_response("analysis_limit", response_text)
     
-    # Use word boundary matching to avoid false positives
-    if check_keywords(response_text, ["ACCEPT", "PARTIAL", "ACCEPT_PARTIAL"]):
+    if matched is None:
+        result["supervisor_verdict"] = "ask_user"
+        result["pending_user_questions"] = [get_clarification_message("analysis_limit")]
+        return
+    
+    if matched.action == "accept_partial":
         result["supervisor_verdict"] = "ok_continue"
         if current_stage_id:
             _update_progress_with_error_handling(
@@ -752,21 +733,15 @@ def handle_analysis_limit(
                 summary="Accepted as partial match by user"
             )
     
-    elif check_keywords(response_text, ["PROVIDE_HINT", "HINT"]):
+    elif matched.action == "provide_hint":
         result["analysis_revision_count"] = 0
         raw_response = list(user_responses.values())[-1] if user_responses else ""
-        result["analysis_feedback"] = f"User hint: {raw_response}"
+        result["analysis_feedback"] = f"User hint: {extract_guidance_text(raw_response)}"
         result["supervisor_verdict"] = "ok_continue"
     
-    elif check_keywords(response_text, ["STOP"]):
+    elif matched.action == "stop":
         result["supervisor_verdict"] = "all_complete"
         result["should_stop"] = True
-    
-    else:
-        result["supervisor_verdict"] = "ask_user"
-        result["pending_user_questions"] = [
-            "Please clarify: ACCEPT_PARTIAL, PROVIDE_HINT (with hint text), or STOP?"
-        ]
 
 
 def handle_supervisor_error(
@@ -778,26 +753,23 @@ def handle_supervisor_error(
     """
     Handle supervisor_error trigger response.
     
-    This is triggered when the supervisor node fails to produce a valid verdict.
-    User can:
-    - RETRY: Attempt to continue the workflow
-    - STOP: Stop workflow
+    Options defined in user_options.py: RETRY, STOP
     """
     response_text = parse_user_response(user_responses)
+    matched = match_user_response("supervisor_error", response_text)
     
-    if check_keywords(response_text, ["RETRY"]):
+    if matched is None:
+        result["supervisor_verdict"] = "ask_user"
+        result["pending_user_questions"] = [get_clarification_message("supervisor_error")]
+        return
+    
+    if matched.action == "retry":
         result["supervisor_verdict"] = "ok_continue"
         result["supervisor_feedback"] = "Retrying after supervisor error acknowledged by user."
     
-    elif check_keywords(response_text, ["STOP"]):
+    elif matched.action == "stop":
         result["supervisor_verdict"] = "all_complete"
         result["should_stop"] = True
-    
-    else:
-        result["supervisor_verdict"] = "ask_user"
-        result["pending_user_questions"] = [
-            "Please clarify: RETRY or STOP?"
-        ]
 
 
 def handle_missing_design(
@@ -809,21 +781,23 @@ def handle_missing_design(
     """
     Handle missing_design trigger response.
     
-    This is triggered when code generation is attempted without a design.
-    User can:
-    - RETRY: Go back to design phase
-    - SKIP_STAGE: Skip this stage
-    - STOP: Stop workflow
+    Options defined in user_options.py: RETRY, SKIP_STAGE, STOP
     """
     response_text = parse_user_response(user_responses)
+    matched = match_user_response("missing_design", response_text)
     
-    if check_keywords(response_text, ["RETRY"]):
+    if matched is None:
+        result["supervisor_verdict"] = "ask_user"
+        result["pending_user_questions"] = [get_clarification_message("missing_design")]
+        return
+    
+    if matched.action == "retry":
         # Reset to design phase
         result["supervisor_verdict"] = "ok_continue"
         result["supervisor_feedback"] = "Returning to design phase as requested."
         result["design_revision_count"] = 0
     
-    elif check_keywords(response_text, ["SKIP", "SKIP_STAGE"]):
+    elif matched.action == "skip":
         result["supervisor_verdict"] = "ok_continue"
         if current_stage_id:
             _update_progress_with_error_handling(
@@ -831,15 +805,9 @@ def handle_missing_design(
                 summary="Skipped by user due to missing design"
             )
     
-    elif check_keywords(response_text, ["STOP"]):
+    elif matched.action == "stop":
         result["supervisor_verdict"] = "all_complete"
         result["should_stop"] = True
-    
-    else:
-        result["supervisor_verdict"] = "ask_user"
-        result["pending_user_questions"] = [
-            "Please clarify: RETRY (go back to design), SKIP_STAGE, or STOP?"
-        ]
 
 
 def handle_unknown_escalation(
@@ -851,21 +819,22 @@ def handle_unknown_escalation(
     """
     Handle unknown_escalation trigger response.
     
-    This is a generic fallback for unexpected workflow errors where no specific
-    trigger was set. This usually indicates a bug in the workflow.
-    
-    User can:
-    - RETRY: Attempt to continue the workflow
-    - SKIP_STAGE: Skip the current stage
-    - STOP: Stop workflow
+    This is a generic fallback for unexpected workflow errors.
+    Options defined in user_options.py: RETRY, SKIP_STAGE, STOP
     """
     response_text = parse_user_response(user_responses)
+    matched = match_user_response("unknown_escalation", response_text)
     
-    if check_keywords(response_text, ["RETRY"]):
+    if matched is None:
+        result["supervisor_verdict"] = "ask_user"
+        result["pending_user_questions"] = [get_clarification_message("unknown_escalation")]
+        return
+    
+    if matched.action == "retry":
         result["supervisor_verdict"] = "ok_continue"
         result["supervisor_feedback"] = "Retrying after unknown error acknowledged by user."
     
-    elif check_keywords(response_text, ["SKIP", "SKIP_STAGE"]):
+    elif matched.action == "skip":
         result["supervisor_verdict"] = "ok_continue"
         if current_stage_id:
             _update_progress_with_error_handling(
@@ -873,15 +842,9 @@ def handle_unknown_escalation(
                 summary="Skipped by user due to unexpected error"
             )
     
-    elif check_keywords(response_text, ["STOP"]):
+    elif matched.action == "stop":
         result["supervisor_verdict"] = "all_complete"
         result["should_stop"] = True
-    
-    else:
-        result["supervisor_verdict"] = "ask_user"
-        result["pending_user_questions"] = [
-            "Please clarify: RETRY, SKIP_STAGE, or STOP?"
-        ]
 
 
 # Registry of trigger handlers

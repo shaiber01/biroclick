@@ -726,6 +726,12 @@ class TestMaterialCheckpointFlow:
         """
         After MATERIAL_VALIDATION stage completes, should trigger material_checkpoint → ask_user.
         """
+        # Set higher analysis limit to prevent analysis_limit from being hit before material_checkpoint
+        initial_state["runtime_config"] = {
+            **(initial_state.get("runtime_config") or {}),
+            "max_analysis_revisions": 10,
+        }
+        
         visited_nodes = []
         supervisor_count = 0
 
@@ -1602,6 +1608,11 @@ class TestShouldStopFlag:
         state["current_stage_id"] = "stage_1_single"
         # Pre-set user_responses to indicate material checkpoint was done
         state["user_responses"] = {"material_checkpoint": "approved"}
+        # Set higher analysis limit to prevent analysis_limit from being hit before supervisor
+        state["runtime_config"] = {
+            **(state.get("runtime_config") or {}),
+            "max_analysis_revisions": 10,
+        }
         
         visited_nodes = []
 
@@ -1696,6 +1707,11 @@ class TestReplanLimitEscalation:
         # Pre-set replan count at the default limit (MAX_REPLANS=2)
         state = initial_state.copy()
         state["replan_count"] = 2
+        # Set higher analysis limit to prevent analysis_limit from being hit before supervisor
+        state["runtime_config"] = {
+            **(state.get("runtime_config") or {}),
+            "max_analysis_revisions": 10,
+        }
 
         visited_nodes = []
         supervisor_count = 0

@@ -49,6 +49,10 @@ from .base import (
     create_llm_error_escalation,
     increment_counter_with_max,
 )
+from .user_options import get_options_prompt
+
+# Module-level logger
+logger = logging.getLogger(__name__)
 
 
 @with_context_check("adapt_prompts")
@@ -93,17 +97,30 @@ def adapt_prompts_node(state: ReproState) -> Dict[str, Any]:
             adaptations = []
         elif not isinstance(adaptations, list):
             # If adaptations is not a list, treat as empty list
-            logger = logging.getLogger(__name__)
             logger.warning(f"Prompt adaptor returned non-list adaptations: {type(adaptations)}. Using empty list.")
             adaptations = []
         result["prompt_adaptations"] = adaptations
         
         # Store detected paper domain if provided
-        if agent_output.get("paper_domain"):
-            result["paper_domain"] = agent_output["paper_domain"]
+        detected_domain = agent_output.get("paper_domain")
+        if detected_domain:
+            result["paper_domain"] = detected_domain
+        
+        # Log what adapt_prompts found
+        num_adaptations = len(adaptations)
+        domain_info = f"domain={detected_domain}" if detected_domain else f"domain={paper_domain} (unchanged)"
+        if num_adaptations > 0:
+            # Show first adaptation as example
+            first_adaptation = adaptations[0]
+            if isinstance(first_adaptation, dict):
+                adapt_preview = first_adaptation.get("description", first_adaptation.get("type", str(first_adaptation)))[:60]
+            else:
+                adapt_preview = str(first_adaptation)[:60]
+            logger.info(f"📝 adapt_prompts: {domain_info}, {num_adaptations} adaptation(s) (e.g., {adapt_preview}...)")
+        else:
+            logger.info(f"📝 adapt_prompts: {domain_info}, no adaptations needed")
             
     except Exception as e:
-        logger = logging.getLogger(__name__)
         logger.warning(f"Prompt adaptor LLM call failed: {e}. Using default prompts.")
         result["prompt_adaptations"] = []
     
@@ -236,6 +253,17 @@ def plan_node(state: ReproState) -> dict:
     # Log metrics
     log_agent_call("PlannerAgent", "plan", start_time)(state, result)
     
+    # Log planning summary
+    stages = plan_data.get("stages", [])
+    num_stages = len(stages)
+    stage_ids = [s.get("id", "?") for s in stages[:4]] if stages else []
+    stages_preview = ", ".join(stage_ids)
+    if num_stages > 4:
+        stages_preview += f", ... (+{num_stages - 4} more)"
+    num_targets = len(plan_data.get("targets", []))
+    replan_info = f" (replan #{replan_count})" if replan_count > 0 else ""
+    logger.info(f"📋 planning: {num_stages} stage(s) [{stages_preview}], {num_targets} target(s){replan_info}")
+    
     return result
 
 
@@ -252,7 +280,6 @@ def plan_reviewer_node(state: ReproState) -> dict:
     
     Note: Context check is handled by @with_context_check decorator.
     """
-    logger = logging.getLogger(__name__)
 
     # State validation
     validation_issues = validate_state_or_warn(state, "plan_review")
@@ -494,10 +521,7 @@ def plan_reviewer_node(state: ReproState) -> dict:
                 result["pending_user_questions"] = [
                     f"Plan review rejected {new_count}/{max_replans} times.\n\n"
                     f"- Latest feedback: {feedback_text}\n\n"
-                    "Options:\n"
-                    "- APPROVE_PLAN: Force-accept the current plan despite issues\n"
-                    "- GUIDANCE: Provide specific guidance for replanning (include your guidance after the keyword)\n"
-                    "- STOP: End the workflow"
+                    f"{get_options_prompt('replan_limit')}"
                 ]
                 result["awaiting_user_input"] = True
                 result["last_node_before_ask_user"] = "plan_review"

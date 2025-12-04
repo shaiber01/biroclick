@@ -200,6 +200,14 @@ def generate_report_node(state: ReproState) -> Dict[str, Any]:
     
     result["workflow_complete"] = True
     
+    # Log report generation
+    paper_id = state.get("paper_id", "unknown")
+    num_stages = len(stages)
+    completed_stages = sum(1 for s in stages if s.get("status") in ["completed_success", "completed_partial"])
+    token_summary = result.get("metrics", {}).get("token_summary", {})
+    estimated_cost = token_summary.get("estimated_cost", 0)
+    logger.info(f"📄 generate_report: paper={paper_id}, {completed_stages}/{num_stages} stages completed, est. cost=${estimated_cost:.2f}")
+    
     return result
 
 
@@ -322,6 +330,7 @@ def handle_backtrack_node(state: ReproState) -> dict:
     # Guard clause: max backtracks exceeded (use >= to trigger at exact boundary)
     max_backtracks = state.get("runtime_config", {}).get("max_backtracks", 2)
     if new_backtrack_count >= max_backtracks:
+        logger.warning(f"⏪ backtrack: limit exceeded ({new_backtrack_count}/{max_backtracks}), escalating to user")
         return {
             "workflow_phase": "backtracking_limit",
             "backtrack_count": new_backtrack_count,
@@ -332,6 +341,11 @@ def handle_backtrack_node(state: ReproState) -> dict:
             "awaiting_user_input": True,
             "last_node_before_ask_user": "handle_backtrack"
         }
+    
+    # Log backtrack action
+    current_stage = state.get("current_stage_id", "unknown")
+    num_invalidated = len(stages_to_invalidate)
+    logger.info(f"⏪ backtrack: {current_stage} → {target_id}, {num_invalidated} stage(s) invalidated (backtrack #{new_backtrack_count})")
         
     return result
 

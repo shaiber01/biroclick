@@ -43,6 +43,7 @@ from .base import (
     create_llm_error_auto_approve,
     create_llm_error_escalation,
 )
+from .user_options import get_options_prompt
 
 
 @with_context_check("code_review")
@@ -139,8 +140,7 @@ def code_reviewer_node(state: ReproState) -> dict:
                 f"- Attempts: {new_count}/{max_revs}\n"
                 "- Latest reviewer feedback:\n"
                 f"  {result.get('reviewer_feedback', 'No feedback available')}\n\n"
-                "Please respond with PROVIDE_HINT (include guidance for next attempt), "
-                "SKIP to bypass this stage, or STOP to end the workflow."
+                f"{get_options_prompt('code_review_limit')}"
             )
             result.update({
                 "ask_user_trigger": "code_review_limit",
@@ -195,9 +195,31 @@ def code_generator_node(state: ReproState) -> dict:
     design_description = state.get("design_description", "")
     stub_markers = ["STUB", "TODO", "PLACEHOLDER", "would be generated"]
     
-    design_str = str(design_description)
-    is_stub = any(marker in design_str.upper() for marker in stub_markers) if design_description else True
-    is_empty = not design_description or not design_str.strip() or len(design_str.strip()) < 50
+    # Extract text for stub checking. If design_description is a dict:
+    # 1. Check specific "design_description" text field if present
+    # 2. Fall back to checking key fields like setup_description/geometry_type
+    # 3. Only consider it a stub if it looks like stub content or is nearly empty
+    if isinstance(design_description, dict):
+        # Check the main description text field, or fall back to setup_description
+        desc_text = (
+            design_description.get("design_description", "") or 
+            design_description.get("setup_description", "") or
+            design_description.get("geometry_type", "") or
+            design_description.get("simulation_type", "")
+        )
+        # Only flag as stub if we have text and it contains stub markers
+        # An empty desc_text but with valid dict content is OK
+        if desc_text:
+            is_stub = any(marker in str(desc_text).upper() for marker in stub_markers)
+        else:
+            is_stub = False  # Empty text but dict has content is not automatically a stub
+        # Check if the design is essentially empty/minimal
+        is_empty = not design_description or len(design_description) < 2  # Need at least a couple fields
+    else:
+        # Fallback for string design descriptions
+        design_str = str(design_description)
+        is_stub = any(marker in design_str.upper() for marker in stub_markers) if design_description else True
+        is_empty = not design_description or not design_str.strip() or len(design_str.strip()) < 50
     
     if is_stub or is_empty:
         logger.error(
@@ -332,5 +354,12 @@ def code_generator_node(state: ReproState) -> dict:
     }
     
     log_agent_call("CodeGeneratorAgent", "generate_code", start_time)(state, result)
+    
+    # Log code generation summary
+    line_count = len(generated_code.strip().split('\n')) if generated_code else 0
+    expected_outputs = result.get("expected_outputs", [])
+    outputs_info = f", {len(expected_outputs)} expected outputs" if expected_outputs else ""
+    logger.info(f"💻 generate_code: stage={current_stage_id}, {line_count} lines{outputs_info}")
+    
     return result
 

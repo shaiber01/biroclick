@@ -187,7 +187,9 @@ class TestNodeFunctionsCallable:
 
         minimal_state["current_stage_id"] = "stage_0"
         minimal_state["current_stage_type"] = "MATERIAL_VALIDATION"
+        # design_description must have a 'design_description' key with the main description text
         minimal_state["design_description"] = {
+            "design_description": "A valid FDTD simulation design for aluminum nanoantenna arrays",
             "design": {"geometry": [], "simulation_parameters": {}},
             "explanation": "Valid design",
         }
@@ -502,7 +504,9 @@ class TestNodeEdgeCases:
         
         minimal_state["current_stage_id"] = "stage_1"
         minimal_state["current_stage_type"] = "SINGLE_STRUCTURE"  # Not MATERIAL_VALIDATION
+        # design_description must have a 'design_description' key with the main description text
         minimal_state["design_description"] = {
+            "design_description": "A valid FDTD simulation design for aluminum nanoantenna arrays",
             "design": {"geometry": [], "simulation_parameters": {}},
             "explanation": "Valid design",
         }

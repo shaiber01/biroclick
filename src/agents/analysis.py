@@ -38,6 +38,7 @@ from src.llm_client import (
 
 from .helpers.context import check_context_or_escalate
 from .base import with_context_check, increment_counter_with_max
+from .user_options import get_options_prompt
 from .helpers.stubs import ensure_stub_figures
 from .helpers.numeric import load_numeric_series, quantitative_curve_metrics
 from .helpers.validation import (
@@ -586,6 +587,14 @@ def results_analyzer_node(state: ReproState) -> dict:
         except Exception as e:
             logger.warning(f"Visual analysis LLM call failed: {e}. Using quantitative results only.")
     
+    # Log analysis result
+    totals = summary.get("totals", {}) if isinstance(summary, dict) else {}
+    matches = totals.get("matches", 0)
+    total_targets = totals.get("targets", 0)
+    classification_str = overall_classification.value if hasattr(overall_classification, 'value') else str(overall_classification)
+    emoji = "✅" if classification_str in ["good_match", "acceptable"] else "⚠️" if classification_str in ["partial", "pending"] else "❌"
+    logger.info(f"{emoji} analyze: stage={current_stage_id}, classification={classification_str}, {matches}/{total_targets} targets matched")
+    
     return {
         "workflow_phase": "analysis",
         "analysis_summary": summary,
@@ -677,20 +686,25 @@ def comparison_validator_node(state: ReproState) -> dict:
     }
     
     if verdict == "needs_revision":
-        new_count, at_limit = increment_counter_with_max(
+        new_count, _ = increment_counter_with_max(
             state, "analysis_revision_count", "max_analysis_revisions", MAX_ANALYSIS_REVISIONS
         )
         result["analysis_revision_count"] = new_count
         result["analysis_feedback"] = feedback
         
         # Set trigger when at limit so user knows why they're being asked
-        if at_limit:
+        # Check new_count >= max (same pattern as execution_validator)
+        runtime_config = state.get("runtime_config", {}) or {}
+        max_revisions = runtime_config.get("max_analysis_revisions", MAX_ANALYSIS_REVISIONS)
+        
+        if new_count >= max_revisions:
             result["ask_user_trigger"] = "analysis_limit"
             result["pending_user_questions"] = [
-                f"Analysis revision limit ({MAX_ANALYSIS_REVISIONS}) reached but results don't match paper. "
-                "Options: ACCEPT_PARTIAL (proceed with current results), "
-                "PROVIDE_HINT (retry analysis with guidance), or STOP?"
+                f"Analysis revision limit ({max_revisions}) reached but results don't match paper.\n\n"
+                f"{get_options_prompt('analysis_limit')}"
             ]
+            result["awaiting_user_input"] = True
+            result["last_node_before_ask_user"] = "comparison_check"
     else:
         result["analysis_feedback"] = None
     

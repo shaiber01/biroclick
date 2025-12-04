@@ -40,6 +40,7 @@ from .base import (
     increment_counter_with_max,
     create_llm_error_auto_approve,
 )
+from .user_options import get_options_prompt
 
 
 @with_context_check("execution_check")
@@ -152,11 +153,18 @@ def execution_validator_node(state: ReproState) -> dict:
         if new_count >= max_failures:
             result["ask_user_trigger"] = "execution_failure_limit"
             result["pending_user_questions"] = [
-                f"Execution failed {new_count}/{max_failures} times. Last error: {run_error or 'Unknown'}. "
-                "Options: RETRY_WITH_GUIDANCE (provide hint), SKIP_STAGE, or STOP?"
+                f"Execution failed {new_count}/{max_failures} times. Last error: {run_error or 'Unknown'}.\n\n"
+                f"{get_options_prompt('execution_failure_limit')}"
             ]
             result["awaiting_user_input"] = True
             result["last_node_before_ask_user"] = "execution_check"
+    
+    # Log execution validation result
+    verdict = agent_output["verdict"]
+    stage_id = state.get("current_stage_id", "unknown")
+    summary = agent_output.get("summary", "")[:60]
+    emoji = "✅" if verdict == "pass" else "⚠️" if verdict == "warning" else "❌"
+    logger.info(f"{emoji} execution_check: stage={stage_id}, verdict={verdict} ({summary}...)")
     
     return result
 
@@ -255,8 +263,7 @@ def physics_sanity_node(state: ReproState) -> dict:
                 f"Physics sanity check failed {new_count}/{max_failures} times.\n\n"
                 f"- Stage: {stage_id}\n"
                 f"- Latest feedback: {result.get('physics_feedback', 'No feedback available')}\n\n"
-                "Options: RETRY (provide guidance), ACCEPT (proceed with issues), "
-                "SKIP_STAGE, or STOP?"
+                f"{get_options_prompt('physics_failure_limit')}"
             ]
             result["awaiting_user_input"] = True
             result["last_node_before_ask_user"] = "physics_check"
@@ -271,6 +278,12 @@ def physics_sanity_node(state: ReproState) -> dict:
     backtrack = agent_output.get("backtrack_suggestion", {})
     if isinstance(backtrack, dict) and backtrack.get("suggest_backtrack"):
         result["backtrack_suggestion"] = backtrack
+    
+    # Log physics sanity result
+    verdict = agent_output["verdict"]
+    summary = agent_output.get("summary", "")[:60]
+    emoji = "✅" if verdict == "pass" else "⚠️" if verdict == "warning" else "🔧" if verdict == "design_flaw" else "❌"
+    logger.info(f"{emoji} physics_check: stage={stage_id}, verdict={verdict} ({summary}...)")
     
     return result
 

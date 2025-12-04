@@ -367,26 +367,29 @@ class TestAdaptPromptsNode:
 
     @patch("src.agents.planning.call_agent_with_metrics")
     @patch("src.agents.planning.build_agent_prompt")
-    def test_adapt_prompts_logs_warning_on_exception(self, mock_build_prompt, mock_llm):
+    def test_adapt_prompts_logs_warning_on_exception(self, mock_build_prompt, mock_llm, caplog):
         """Test that exceptions are logged with warning."""
+        import logging
         mock_build_prompt.return_value = "system prompt"
         mock_llm.side_effect = Exception("Test exception")
         
-        with patch("src.agents.planning.logging.getLogger") as mock_get_logger:
-            mock_logger = MagicMock()
-            mock_get_logger.return_value = mock_logger
-            
+        # Use caplog to capture log output instead of mocking the module-level logger
+        with caplog.at_level(logging.WARNING, logger="src.agents.planning"):
             state = {"paper_text": "some text"}
             result = adapt_prompts_node(state)
-            
-            # Verify warning was logged
-            mock_logger.warning.assert_called_once()
-            warning_call = mock_logger.warning.call_args[0][0]
-            assert "Prompt adaptor LLM call failed" in warning_call
-            assert "Test exception" in warning_call
-            
-            # Verify result still works
-            assert result["prompt_adaptations"] == []
+        
+        # Verify warning was logged
+        assert len(caplog.records) >= 1, "Expected at least one log record"
+        warning_messages = [r.message for r in caplog.records if r.levelno == logging.WARNING]
+        assert any("Prompt adaptor LLM call failed" in msg for msg in warning_messages), (
+            f"Expected warning about LLM failure. Got: {warning_messages}"
+        )
+        assert any("Test exception" in msg for msg in warning_messages), (
+            f"Expected exception message in warning. Got: {warning_messages}"
+        )
+        
+        # Verify result still works
+        assert result["prompt_adaptations"] == []
 
     @patch("src.agents.planning.call_agent_with_metrics")
     @patch("src.agents.planning.build_agent_prompt")

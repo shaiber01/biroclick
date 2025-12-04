@@ -387,6 +387,13 @@ def supervisor_node(state: ReproState) -> dict:
             state, result, ask_user_trigger, user_responses, current_stage_id
         )
     
+    # Log supervisor decision
+    verdict = result.get("supervisor_verdict", "unknown")
+    feedback = result.get("supervisor_feedback", "")[:50] if result.get("supervisor_feedback") else ""
+    stage_info = f"stage={current_stage_id}" if current_stage_id else "no stage"
+    emoji = "✅" if verdict in ["ok_continue", "all_complete"] else "🔄" if verdict in ["replan_needed", "change_priority"] else "⏪" if verdict == "backtrack_to_stage" else "❓" if verdict == "ask_user" else "🔍"
+    logger.info(f"{emoji} supervisor: {stage_info}, verdict={verdict}" + (f" ({feedback}...)" if feedback else ""))
+    
     return result
 
 

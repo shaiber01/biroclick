@@ -20,3 +20,10 @@
 2025-12-04 17:34:16,967 - __main__ - INFO - 🔄 Entering node: plan_review
 2025-12-04 17:34:16,968 - __main__ - INFO - 🔄 Entering node: router
 2025-12-04 17:34:16,969 - src.routing - WARNING - plan_review: replan_count=2 >= max_replans=2, escalating to ask_user
+2025-12-04 17:55:23,199 - __main__ - INFO - 🔄 Entering node: adapt_prompts
+2025-12-04 17:55:23,200 - __main__ - INFO - 🔄 Entering node: planning
+2025-12-04 17:57:28,662 - httpx - INFO - HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2025-12-04 17:57:28,735 - __main__ - INFO - 🔄 Entering node: route_after_plan
+2025-12-04 17:57:28,739 - __main__ - INFO - 🔄 Entering node: plan_review
+2025-12-04 17:57:28,740 - __main__ - INFO - 🔄 Entering node: router
+2025-12-04 17:57:28,741 - src.routing - WARNING - plan_review: replan_count=2 >= max_replans=2, escalating to ask_user

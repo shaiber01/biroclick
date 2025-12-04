@@ -44,6 +44,7 @@ from .base import (
     create_llm_error_auto_approve,
     create_llm_error_escalation,
 )
+from .user_options import get_options_prompt
 
 
 def simulation_designer_node(state: ReproState) -> dict:
@@ -135,6 +136,19 @@ def simulation_designer_node(state: ReproState) -> dict:
             )
     
     log_agent_call("SimulationDesignerAgent", "design", start_time)(state, result)
+    
+    # Log design summary
+    if isinstance(agent_output, dict):
+        geometry = agent_output.get("geometry_type") or agent_output.get("simulation_type", "unknown")
+        domain_size = agent_output.get("domain_size", {})
+        if isinstance(domain_size, dict):
+            size_info = f"{domain_size.get('x', '?')}x{domain_size.get('y', '?')}"
+        else:
+            size_info = str(domain_size)[:20] if domain_size else "unspecified"
+        logger.info(f"🔧 design: stage={current_stage_id}, geometry={geometry}, domain={size_info}")
+    else:
+        logger.info(f"🔧 design: stage={current_stage_id}, design created")
+    
     return result
 
 
@@ -236,8 +250,7 @@ def design_reviewer_node(state: ReproState) -> dict:
                 f"- Attempts: {new_count}/{max_revs}\n"
                 "- Latest reviewer feedback:\n"
                 f"  {result.get('reviewer_feedback', 'No feedback available')}\n\n"
-                "Please respond with PROVIDE_HINT (include guidance for next attempt), "
-                "SKIP to bypass this stage, or STOP to end the workflow."
+                f"{get_options_prompt('design_review_limit')}"
             )
             result.update({
                 "ask_user_trigger": "design_review_limit",

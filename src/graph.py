@@ -55,6 +55,11 @@ from src.agents import (
     material_checkpoint_node,
 )
 from src.code_runner import run_code_node
+from src.agents.user_options import validate_no_collisions
+
+# Validate user options configuration at module load time
+# This ensures we catch any keyword collisions early
+validate_no_collisions()
 
 # Import factory-generated routing functions
 from src.routing import (
