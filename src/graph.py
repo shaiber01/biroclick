@@ -119,7 +119,7 @@ def route_after_select_stage(state: ReproState) -> Literal["design", "generate_r
 # Complex Routing Function (too many special cases for factory)
 # ═══════════════════════════════════════════════════════════════════════
 
-def route_after_supervisor(state: ReproState) -> Literal["select_stage", "plan", "ask_user", "handle_backtrack", "generate_report", "material_checkpoint"]:
+def route_after_supervisor(state: ReproState) -> Literal["select_stage", "planning", "ask_user", "handle_backtrack", "generate_report", "material_checkpoint"]:
     """
     Route after supervisor decision.
     
@@ -172,7 +172,7 @@ def route_after_supervisor(state: ReproState) -> Literal["select_stage", "plan",
         runtime_config = state.get("runtime_config") or {}
         max_replans = runtime_config.get("max_replans", MAX_REPLANS)
         if state.get("replan_count", 0) < max_replans:
-            return "plan"
+            return "planning"
         else:
             save_checkpoint(state, "before_ask_user_replan_limit")
             return "ask_user"
@@ -206,7 +206,7 @@ def create_repro_graph():
 
     # Add Nodes
     workflow.add_node("adapt_prompts", adapt_prompts_node)
-    workflow.add_node("plan", plan_node)
+    workflow.add_node("planning", plan_node)
     workflow.add_node("plan_review", plan_reviewer_node)
     workflow.add_node("select_stage", select_stage_node)
     workflow.add_node("design", simulation_designer_node)
@@ -226,11 +226,11 @@ def create_repro_graph():
 
     # Define Edges
     workflow.add_edge(START, "adapt_prompts")
-    workflow.add_edge("adapt_prompts", "plan")
+    workflow.add_edge("adapt_prompts", "planning")
     
     # Plan → Plan Review → Select Stage (or back to Plan)
     workflow.add_conditional_edges(
-        "plan",
+        "planning",
         route_after_plan,
         {"plan_review": "plan_review"}
     )
@@ -240,7 +240,7 @@ def create_repro_graph():
         route_after_plan_review,
         {
             "select_stage": "select_stage",
-            "plan": "plan",
+            "planning": "planning",
             "ask_user": "ask_user"
         }
     )
@@ -319,7 +319,7 @@ def create_repro_graph():
         route_after_supervisor,
         {
             "select_stage": "select_stage",
-            "plan": "plan",
+            "planning": "planning",
             "ask_user": "ask_user",
             "handle_backtrack": "handle_backtrack",
             "generate_report": "generate_report",

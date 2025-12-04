@@ -10,11 +10,11 @@
 # ═══════════════════════════════════════════════════════════════════════
 # LangGraph and LangChain versions are tightly coupled
 # Tested with these specific versions - update together
-langgraph==0.2.55
-langchain==0.3.12
-langchain-core==0.3.25
-langchain-anthropic==0.3.0    # Primary: Claude Opus 4.5 for all agents (v1)
-langchain-openai==0.2.14      # Optional: for future multi-model support
+langgraph>=1.0.0
+langchain>=1.1.0
+langchain-core>=1.1.0
+langchain-anthropic>=1.2.0    # Primary: Claude Opus 4.5 for all agents (supports extended thinking)
+# langchain-openai>=0.3.0     # Optional: for future multi-model support (commented to avoid conflicts)
 
 # ═══════════════════════════════════════════════════════════════════════
 # FDTD Simulation - Meep
@@ -42,9 +42,9 @@ langchain-openai==0.2.14      # Optional: for future multi-model support
 # ═══════════════════════════════════════════════════════════════════════
 # Scientific Computing (pinned for numerical consistency)
 # ═══════════════════════════════════════════════════════════════════════
-numpy==1.26.4              # Meep requires numpy; pinned for compatibility
-scipy==1.14.1              # Optimization, interpolation
-pandas==2.2.3              # Data manipulation
+numpy>=1.26.0              # Meep requires numpy; use conda-installed version
+scipy>=1.14.0              # Optimization, interpolation
+pandas>=2.2.0              # Data manipulation
 
 # ═══════════════════════════════════════════════════════════════════════
 # Visualization

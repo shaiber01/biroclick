@@ -48,7 +48,7 @@ logger = logging.getLogger(__name__)
 # All possible node/route names in the LangGraph state machine
 RouteType = Literal[
     "adapt_prompts",
-    "plan",
+    "planning",
     "plan_review",
     "select_stage",
     "design",
@@ -238,15 +238,15 @@ from schemas.state import (
 
 # ───────────────────────────────────────────────────────────────────────
 # Plan Review Router
-# Routes: select_stage (approve) | plan (revision) | ask_user (limit/error)
+# Routes: select_stage (approve) | planning (revision) | ask_user (limit/error)
 # ───────────────────────────────────────────────────────────────────────
-route_after_plan_review: Callable[[ReproState], Literal["select_stage", "plan", "ask_user"]]
+route_after_plan_review: Callable[[ReproState], Literal["select_stage", "planning", "ask_user"]]
 route_after_plan_review = create_verdict_router(
     verdict_field="last_plan_review_verdict",
     routes={
         "approve": {"route": "select_stage"},
         "needs_revision": {
-            "route": "plan",
+            "route": "planning",
             "count_limit": {
                 "count_field": "replan_count",
                 "max_count_key": "max_replans",
