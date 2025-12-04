@@ -1019,13 +1019,13 @@ class TestRouteAfterComparisonCheck:
         )
 
     @patch("src.routing.save_checkpoint")
-    def test_needs_revision_routes_to_supervisor_at_limit(
+    def test_needs_revision_routes_to_ask_user_at_limit(
         self, mock_save_checkpoint, base_state
     ):
-        """needs_revision should route to supervisor (NOT ask_user) when at analysis limit.
+        """needs_revision should route to ask_user when at analysis limit.
         
-        This is a key difference from other routers - comparison_check escalates to
-        supervisor instead of ask_user to proceed with a flag indicating analysis limit reached.
+        This is now consistent with other routers - comparison_check escalates to
+        ask_user like code_review_limit, design_review_limit, etc.
         """
         from src.routing import route_after_comparison_check
         from schemas.state import MAX_ANALYSIS_REVISIONS
@@ -1036,17 +1036,17 @@ class TestRouteAfterComparisonCheck:
         
         result = route_after_comparison_check(base_state)
         
-        assert result == "supervisor", (
-            f"At count={MAX_ANALYSIS_REVISIONS} (at limit), should route to 'supervisor' (not ask_user), got '{result}'"
+        assert result == "ask_user", (
+            f"At count={MAX_ANALYSIS_REVISIONS} (at limit), should route to 'ask_user', got '{result}'"
         )
-        # Verify checkpoint is saved before proceeding to supervisor
+        # Verify checkpoint is saved before proceeding to ask_user
         mock_save_checkpoint.assert_called_once()
 
     @patch("src.routing.save_checkpoint")
-    def test_needs_revision_routes_to_supervisor_above_limit(
+    def test_needs_revision_routes_to_ask_user_above_limit(
         self, mock_save_checkpoint, base_state
     ):
-        """needs_revision should route to supervisor when above analysis limit."""
+        """needs_revision should route to ask_user when above analysis limit."""
         from src.routing import route_after_comparison_check
         from schemas.state import MAX_ANALYSIS_REVISIONS
 
@@ -1056,8 +1056,8 @@ class TestRouteAfterComparisonCheck:
         
         result = route_after_comparison_check(base_state)
         
-        assert result == "supervisor", (
-            f"At count={MAX_ANALYSIS_REVISIONS+5} (above limit), should route to 'supervisor', got '{result}'"
+        assert result == "ask_user", (
+            f"At count={MAX_ANALYSIS_REVISIONS+5} (above limit), should route to 'ask_user', got '{result}'"
         )
 
     @patch("src.routing.save_checkpoint")

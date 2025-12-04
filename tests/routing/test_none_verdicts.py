@@ -644,10 +644,10 @@ class TestSpecificRouterNoneHandling:
         base_state,
         mock_save_checkpoint,
     ):
-        """Test comparison_check router uses ask_user for None, not supervisor.
+        """Test comparison_check router uses ask_user for None verdict.
         
-        The comparison_check router has route_on_limit="supervisor" for count limits.
-        But None should still route to ask_user, not supervisor.
+        The comparison_check router routes to ask_user for both count limits
+        and None verdict (consistent with other routers).
         """
         base_state["comparison_verdict"] = None
         # Set revision count very high - shouldn't matter for None

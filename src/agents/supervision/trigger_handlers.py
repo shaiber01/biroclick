@@ -769,6 +769,121 @@ def handle_analysis_limit(
         ]
 
 
+def handle_supervisor_error(
+    state: ReproState,
+    result: Dict[str, Any],
+    user_responses: Dict[str, str],
+    current_stage_id: Optional[str] = None,
+) -> None:
+    """
+    Handle supervisor_error trigger response.
+    
+    This is triggered when the supervisor node fails to produce a valid verdict.
+    User can:
+    - RETRY: Attempt to continue the workflow
+    - STOP: Stop workflow
+    """
+    response_text = parse_user_response(user_responses)
+    
+    if check_keywords(response_text, ["RETRY"]):
+        result["supervisor_verdict"] = "ok_continue"
+        result["supervisor_feedback"] = "Retrying after supervisor error acknowledged by user."
+    
+    elif check_keywords(response_text, ["STOP"]):
+        result["supervisor_verdict"] = "all_complete"
+        result["should_stop"] = True
+    
+    else:
+        result["supervisor_verdict"] = "ask_user"
+        result["pending_user_questions"] = [
+            "Please clarify: RETRY or STOP?"
+        ]
+
+
+def handle_missing_design(
+    state: ReproState,
+    result: Dict[str, Any],
+    user_responses: Dict[str, str],
+    current_stage_id: Optional[str] = None,
+) -> None:
+    """
+    Handle missing_design trigger response.
+    
+    This is triggered when code generation is attempted without a design.
+    User can:
+    - RETRY: Go back to design phase
+    - SKIP_STAGE: Skip this stage
+    - STOP: Stop workflow
+    """
+    response_text = parse_user_response(user_responses)
+    
+    if check_keywords(response_text, ["RETRY"]):
+        # Reset to design phase
+        result["supervisor_verdict"] = "ok_continue"
+        result["supervisor_feedback"] = "Returning to design phase as requested."
+        result["design_revision_count"] = 0
+    
+    elif check_keywords(response_text, ["SKIP", "SKIP_STAGE"]):
+        result["supervisor_verdict"] = "ok_continue"
+        if current_stage_id:
+            _update_progress_with_error_handling(
+                state, result, current_stage_id, "blocked",
+                summary="Skipped by user due to missing design"
+            )
+    
+    elif check_keywords(response_text, ["STOP"]):
+        result["supervisor_verdict"] = "all_complete"
+        result["should_stop"] = True
+    
+    else:
+        result["supervisor_verdict"] = "ask_user"
+        result["pending_user_questions"] = [
+            "Please clarify: RETRY (go back to design), SKIP_STAGE, or STOP?"
+        ]
+
+
+def handle_unknown_escalation(
+    state: ReproState,
+    result: Dict[str, Any],
+    user_responses: Dict[str, str],
+    current_stage_id: Optional[str] = None,
+) -> None:
+    """
+    Handle unknown_escalation trigger response.
+    
+    This is a generic fallback for unexpected workflow errors where no specific
+    trigger was set. This usually indicates a bug in the workflow.
+    
+    User can:
+    - RETRY: Attempt to continue the workflow
+    - SKIP_STAGE: Skip the current stage
+    - STOP: Stop workflow
+    """
+    response_text = parse_user_response(user_responses)
+    
+    if check_keywords(response_text, ["RETRY"]):
+        result["supervisor_verdict"] = "ok_continue"
+        result["supervisor_feedback"] = "Retrying after unknown error acknowledged by user."
+    
+    elif check_keywords(response_text, ["SKIP", "SKIP_STAGE"]):
+        result["supervisor_verdict"] = "ok_continue"
+        if current_stage_id:
+            _update_progress_with_error_handling(
+                state, result, current_stage_id, "blocked",
+                summary="Skipped by user due to unexpected error"
+            )
+    
+    elif check_keywords(response_text, ["STOP"]):
+        result["supervisor_verdict"] = "all_complete"
+        result["should_stop"] = True
+    
+    else:
+        result["supervisor_verdict"] = "ask_user"
+        result["pending_user_questions"] = [
+            "Please clarify: RETRY, SKIP_STAGE, or STOP?"
+        ]
+
+
 # Registry of trigger handlers
 TRIGGER_HANDLERS: Dict[str, Callable] = {
     "material_checkpoint": handle_material_checkpoint,
@@ -788,6 +903,10 @@ TRIGGER_HANDLERS: Dict[str, Callable] = {
     "missing_paper_text": handle_critical_error_retry,
     "missing_stage_id": handle_critical_error_retry,
     "progress_init_failed": handle_critical_error_retry,
+    "supervisor_error": handle_supervisor_error,
+    
+    # Missing Requirements
+    "missing_design": handle_missing_design,
     
     # Planning Errors (Replan/Stop)
     "no_stages_available": handle_planning_error_retry,
@@ -797,6 +916,9 @@ TRIGGER_HANDLERS: Dict[str, Callable] = {
     # Specific Backtrack Errors
     "backtrack_limit": handle_backtrack_limit,
     "invalid_backtrack_decision": handle_invalid_backtrack_decision,
+    
+    # Generic Fallback (must be last resort)
+    "unknown_escalation": handle_unknown_escalation,
 }
 
 

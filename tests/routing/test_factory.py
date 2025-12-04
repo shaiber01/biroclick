@@ -914,12 +914,12 @@ class TestPreConfiguredRouters:
     def test_route_after_comparison_check_needs_revision_at_limit(
         self, base_state, mock_save_checkpoint
     ):
-        """Test comparison_check router routes to supervisor (not ask_user) when at limit."""
+        """Test comparison_check router routes to ask_user when at limit (consistent with others)."""
         base_state["comparison_verdict"] = "needs_revision"
         base_state["analysis_revision_count"] = MAX_ANALYSIS_REVISIONS
         result = route_after_comparison_check(base_state)
-        # Comparison check has route_on_limit="supervisor" (not ask_user)
-        assert result == "supervisor"
+        # Comparison check now has route_on_limit="ask_user" (consistent with others)
+        assert result == "ask_user"
         mock_save_checkpoint.assert_called_once()
 
     def test_preconfigured_routers_handle_none_verdict(

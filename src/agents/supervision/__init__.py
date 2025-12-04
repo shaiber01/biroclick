@@ -14,11 +14,15 @@ from .trigger_handlers import (
     handle_design_review_limit,
     handle_execution_failure_limit,
     handle_physics_failure_limit,
+    handle_analysis_limit,
     handle_context_overflow,
     handle_replan_limit,
     handle_backtrack_approval,
     handle_deadlock_detected,
     handle_llm_error,
+    handle_supervisor_error,
+    handle_missing_design,
+    handle_unknown_escalation,
 )
 
 __all__ = [
@@ -30,10 +34,14 @@ __all__ = [
     "handle_design_review_limit",
     "handle_execution_failure_limit",
     "handle_physics_failure_limit",
+    "handle_analysis_limit",
     "handle_context_overflow",
     "handle_replan_limit",
     "handle_backtrack_approval",
     "handle_deadlock_detected",
     "handle_llm_error",
+    "handle_supervisor_error",
+    "handle_missing_design",
+    "handle_unknown_escalation",
 ]
 

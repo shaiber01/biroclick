@@ -336,23 +336,23 @@ class TestBoundaryConditions:
         )
         mock_save_checkpoint.assert_called_once()
 
-    def test_comparison_check_boundary_routes_to_supervisor(
+    def test_comparison_check_boundary_routes_to_ask_user(
         self,
         base_state,
         mock_save_checkpoint,
     ):
-        """Test comparison_check routes to supervisor (not ask_user) at limit.
+        """Test comparison_check routes to ask_user at limit (consistent with others).
         
-        This is a special case - comparison_check has route_on_limit="supervisor".
+        This is now consistent with other routers - comparison_check has route_on_limit="ask_user".
         """
         base_state["comparison_verdict"] = "needs_revision"
         base_state["analysis_revision_count"] = MAX_ANALYSIS_REVISIONS
 
         result = route_after_comparison_check(base_state)
 
-        # Should route to supervisor, NOT ask_user
-        assert result == "supervisor", (
-            f"Comparison check should route to 'supervisor' at limit, got '{result}'"
+        # Now consistent with other routers - routes to ask_user
+        assert result == "ask_user", (
+            f"Comparison check should route to 'ask_user' at limit, got '{result}'"
         )
         mock_save_checkpoint.assert_called_once()
 
@@ -1120,20 +1120,20 @@ class TestReturnTypeConsistency:
 class TestSpecialCases:
     """Tests for special edge cases and corner cases."""
 
-    def test_comparison_check_supervisor_on_limit_not_ask_user(
+    def test_comparison_check_ask_user_on_limit(
         self,
         base_state,
         mock_save_checkpoint,
     ):
-        """Verify comparison_check uses supervisor, not ask_user, when limit reached."""
+        """Verify comparison_check uses ask_user when limit reached (consistent with others)."""
         base_state["comparison_verdict"] = "needs_revision"
         base_state["analysis_revision_count"] = MAX_ANALYSIS_REVISIONS
         
         result = route_after_comparison_check(base_state)
         
-        # This is the critical assertion - comparison_check is special
-        assert result == "supervisor", (
-            f"comparison_check should route to 'supervisor' at limit, not 'ask_user'. "
+        # Now consistent with other routers
+        assert result == "ask_user", (
+            f"comparison_check should route to 'ask_user' at limit. "
             f"Got '{result}'"
         )
 

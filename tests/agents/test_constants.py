@@ -364,12 +364,21 @@ class TestAskUserTrigger:
     def test_all_members_exist(self):
         """Should have exactly the expected members."""
         expected_members = {
+            # Stage/Review Limits
             "MATERIAL_CHECKPOINT", "CODE_REVIEW_LIMIT", "DESIGN_REVIEW_LIMIT",
-            "EXECUTION_FAILURE_LIMIT", "PHYSICS_FAILURE_LIMIT", "BACKTRACK_APPROVAL",
-            "BACKTRACK_LIMIT", "REPLAN_LIMIT", "CONTEXT_OVERFLOW", "LLM_ERROR",
+            "EXECUTION_FAILURE_LIMIT", "PHYSICS_FAILURE_LIMIT", "ANALYSIS_LIMIT",
+            "REPLAN_LIMIT", "BACKTRACK_LIMIT",
+            # Backtrack Related
+            "BACKTRACK_APPROVAL", "INVALID_BACKTRACK_DECISION",
+            "INVALID_BACKTRACK_TARGET", "BACKTRACK_TARGET_NOT_FOUND",
+            # Context/Resource Issues
+            "CONTEXT_OVERFLOW", "LLM_ERROR",
+            # Missing Requirements
             "MISSING_PAPER_TEXT", "MISSING_STAGE_ID", "MISSING_DESIGN",
-            "NO_STAGES_AVAILABLE", "DEADLOCK_DETECTED", "INVALID_BACKTRACK_DECISION",
-            "INVALID_BACKTRACK_TARGET", "BACKTRACK_TARGET_NOT_FOUND", "PROGRESS_INIT_FAILED"
+            # Workflow Issues
+            "NO_STAGES_AVAILABLE", "DEADLOCK_DETECTED", "PROGRESS_INIT_FAILED",
+            # Error Fallbacks
+            "SUPERVISOR_ERROR", "UNKNOWN_ESCALATION"
         }
         actual_members = {member.name for member in AskUserTrigger}
         assert actual_members == expected_members, f"Expected {expected_members}, got {actual_members}"

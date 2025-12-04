@@ -354,24 +354,24 @@ class TestEdgeCases:
     @patch("signal.signal")
     @patch("signal.alarm")
     def test_missing_ask_user_trigger(self, mock_alarm, mock_signal, mock_save, mock_validate, mock_input):
-        """Should handle missing ask_user_trigger."""
+        """Should handle missing ask_user_trigger with safety net."""
         mock_input.side_effect = ["APPROVE", ""]
         mock_validate.return_value = []
         
         state = {
             "pending_user_questions": ["Question?"],
-            # Missing ask_user_trigger
+            # Missing ask_user_trigger - safety net will set "unknown_escalation"
         }
         
         result = ask_user_node(state)
         
-        # Should use "unknown" as default trigger
+        # Safety net should set "unknown_escalation" as trigger
         assert result["awaiting_user_input"] is False
-        assert result["user_validation_attempts_unknown"] == 0
-        # Verify validate_user_responses was called with "unknown" trigger
+        assert result["user_validation_attempts_unknown_escalation"] == 0
+        # Verify validate_user_responses was called with "unknown_escalation" trigger
         mock_validate.assert_called_once()
         call_args = mock_validate.call_args
-        assert call_args[0][0] == "unknown"
+        assert call_args[0][0] == "unknown_escalation"
 
     @patch("builtins.input")
     @patch("src.agents.user_interaction.validate_user_responses")

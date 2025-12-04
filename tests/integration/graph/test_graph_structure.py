@@ -284,14 +284,13 @@ class TestGraphEdgeConnectivity:
         )
 
     def test_comparison_check_has_two_routes(self, graph_definition):
-        """Test comparison_check can route to supervisor or analyze."""
+        """Test comparison_check can route to supervisor, analyze, or ask_user."""
         edges = list(graph_definition.edges)
         comp_edges = [edge for edge in edges if edge[0] == "comparison_check"]
         targets = {edge[1] for edge in comp_edges}
         
-        # Note: ask_user is registered as a route but comparison_check routes to supervisor on limit
-        # The route map includes ask_user but the router logic routes to supervisor
-        expected_minimum = {"supervisor", "analyze"}
+        # comparison_check routes to ask_user on limit (consistent with other routers)
+        expected_minimum = {"supervisor", "analyze", "ask_user"}
         assert expected_minimum.issubset(targets), (
             f"comparison_check should route to at least {expected_minimum}, got: {targets}"
         )
@@ -889,16 +888,16 @@ class TestRouteAfterComparisonCheck:
         assert result == "analyze", f"Expected analyze for needs_revision under limit, got {result}"
 
     @patch('src.routing.save_checkpoint')
-    def test_needs_revision_routes_to_supervisor_at_limit(self, mock_checkpoint):
-        """Test needs_revision routes to supervisor at limit (not ask_user)."""
+    def test_needs_revision_routes_to_ask_user_at_limit(self, mock_checkpoint):
+        """Test needs_revision routes to ask_user at limit (consistent with other limits)."""
         state = make_state(
             comparison_verdict="needs_revision",
             analysis_revision_count=MAX_ANALYSIS_REVISIONS,
         )
         result = route_after_comparison_check(state)
-        # Note: comparison_check routes to supervisor on limit, not ask_user
-        assert result == "supervisor", (
-            f"Expected supervisor at analysis revision limit, got {result}"
+        # comparison_check now routes to ask_user on limit (consistent with other limits)
+        assert result == "ask_user", (
+            f"Expected ask_user at analysis revision limit, got {result}"
         )
 
     @patch('src.routing.save_checkpoint')
@@ -1939,16 +1938,16 @@ class TestRouteOnLimitCustomization:
     """Tests for customized route_on_limit behavior."""
 
     @patch('src.routing.save_checkpoint')
-    def test_comparison_check_routes_to_supervisor_on_limit(self, mock_checkpoint):
-        """Test that comparison_check routes to supervisor (not ask_user) when limit reached."""
+    def test_comparison_check_routes_to_ask_user_on_limit(self, mock_checkpoint):
+        """Test that comparison_check routes to ask_user when limit reached (consistent with others)."""
         state = make_state(
             comparison_verdict="needs_revision",
             analysis_revision_count=MAX_ANALYSIS_REVISIONS,
         )
         result = route_after_comparison_check(state)
-        # comparison_check has route_on_limit="supervisor", not the default "ask_user"
-        assert result == "supervisor", (
-            f"comparison_check should route to supervisor on limit, got {result}"
+        # comparison_check now has route_on_limit="ask_user" (consistent with other routers)
+        assert result == "ask_user", (
+            f"comparison_check should route to ask_user on limit, got {result}"
         )
 
     @patch('src.routing.save_checkpoint')

@@ -698,10 +698,9 @@ class TestComparisonCheckRouting:
         mock_checkpoint.assert_not_called()
 
     @patch("src.routing.save_checkpoint")
-    def test_comparison_needs_revision_routes_to_supervisor_at_limit(self, mock_checkpoint, test_state: ReproState):
-        """Test comparison_check -> supervisor on needs_revision when at limit (NOT ask_user)."""
-        # NOTE: This is different from other routers - comparison routes to supervisor
-        # at limit, not ask_user
+    def test_comparison_needs_revision_routes_to_ask_user_at_limit(self, mock_checkpoint, test_state: ReproState):
+        """Test comparison_check -> ask_user on needs_revision when at limit (consistent with others)."""
+        # NOTE: Now consistent with other routers - comparison routes to ask_user at limit
         apply_state_overrides(
             test_state,
             comparison_verdict="needs_revision",
@@ -710,8 +709,8 @@ class TestComparisonCheckRouting:
 
         result = routing.route_after_comparison_check(test_state)
 
-        # CRITICAL: This should route to supervisor, not ask_user
-        assert result == "supervisor"
+        # Now consistent with other routers - routes to ask_user at limit
+        assert result == "ask_user"
         mock_checkpoint.assert_called_once()
         checkpoint_name = mock_checkpoint.call_args[0][1]
         assert "limit" in checkpoint_name
@@ -1163,7 +1162,7 @@ class TestLimitEscalation:
                 "generate_code",
                 "ask_user",
             ),
-            # Note: comparison_check routes to supervisor at limit, not ask_user
+            # comparison_check now routes to ask_user at limit (consistent with others)
             (
                 "route_after_comparison_check",
                 "comparison_verdict",
@@ -1171,7 +1170,7 @@ class TestLimitEscalation:
                 "analysis_revision_count",
                 MAX_ANALYSIS_REVISIONS,
                 "analyze",
-                "supervisor",  # Special case!
+                "ask_user",  # Now consistent with other routers
             ),
         ],
     )
@@ -2094,11 +2093,11 @@ class TestComparisonCheckSpecialCases:
     """Tests for comparison_check special routing behavior."""
 
     @patch("src.routing.save_checkpoint")
-    def test_comparison_limit_routes_to_supervisor_not_ask_user(self, mock_checkpoint, test_state: ReproState):
-        """Verify comparison_check routes to supervisor (not ask_user) at limit.
+    def test_comparison_limit_routes_to_ask_user(self, mock_checkpoint, test_state: ReproState):
+        """Verify comparison_check routes to ask_user at limit.
 
-        This is a critical difference from other routers - comparison_check
-        uses route_on_limit='supervisor' instead of 'ask_user'.
+        This is now consistent with other routers - comparison_check
+        uses route_on_limit='ask_user' like code_review_limit, etc.
         """
         apply_state_overrides(
             test_state,
@@ -2108,8 +2107,8 @@ class TestComparisonCheckSpecialCases:
 
         result = routing.route_after_comparison_check(test_state)
 
-        # CRITICAL: Must be supervisor, not ask_user
-        assert result == "supervisor"
+        # Now consistent with other routers - routes to ask_user
+        assert result == "ask_user"
         mock_checkpoint.assert_called_once()
 
     @patch("src.routing.save_checkpoint")

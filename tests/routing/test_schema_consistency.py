@@ -661,17 +661,17 @@ class TestRouterSchemaIntegration:
             "Physics check should escalate when design_revision_count at limit for design_flaw"
         )
 
-    def test_comparison_check_routes_to_supervisor_on_limit(self, minimal_state, mock_save_checkpoint):
+    def test_comparison_check_routes_to_ask_user_on_limit(self, minimal_state, mock_save_checkpoint):
         """
-        Verify that comparison_check routes to 'supervisor' (not 'ask_user') when at limit.
-        This is a special case where route_on_limit is customized.
+        Verify that comparison_check routes to 'ask_user' when at limit.
+        This is now consistent with other routers.
         """
         minimal_state["comparison_verdict"] = "needs_revision"
         minimal_state["analysis_revision_count"] = MAX_ANALYSIS_REVISIONS
         
         result = route_after_comparison_check(minimal_state)
-        assert result == "supervisor", (
-            "Comparison check should route to 'supervisor' when at limit, not 'ask_user'"
+        assert result == "ask_user", (
+            "Comparison check should route to 'ask_user' when at limit (consistent with others)"
         )
 
 

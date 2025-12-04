@@ -1389,12 +1389,12 @@ class TestComparisonCheckRouter:
         result = route_after_comparison_check(state)
         assert result == "analyze"
 
-    def test_needs_revision_routes_to_supervisor_at_limit(self, state):
-        """Test needs_revision routes to supervisor (not ask_user) at limit."""
+    def test_needs_revision_routes_to_ask_user_at_limit(self, state):
+        """Test needs_revision routes to ask_user (consistent with other limits) at limit."""
         state["comparison_verdict"] = "needs_revision"
         state["analysis_revision_count"] = MAX_ANALYSIS_REVISIONS
         result = route_after_comparison_check(state)
-        assert result == "supervisor"  # Special case: routes to supervisor, not ask_user
+        assert result == "ask_user"  # Now consistent with other limits
 
     @patch("src.routing.save_checkpoint")
     def test_needs_revision_saves_checkpoint_at_limit(self, mock_checkpoint, state):
@@ -1402,7 +1402,7 @@ class TestComparisonCheckRouter:
         state["comparison_verdict"] = "needs_revision"
         state["analysis_revision_count"] = MAX_ANALYSIS_REVISIONS
         result = route_after_comparison_check(state)
-        assert result == "supervisor"
+        assert result == "ask_user"
         mock_checkpoint.assert_called_once()
         checkpoint_name = mock_checkpoint.call_args[0][1]
         assert "comparison" in checkpoint_name

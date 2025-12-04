@@ -75,25 +75,39 @@ class WorkflowPhase(str, Enum):
 
 class AskUserTrigger(str, Enum):
     """Trigger types for user interaction requests."""
+    # Stage/Review Limits
     MATERIAL_CHECKPOINT = "material_checkpoint"
     CODE_REVIEW_LIMIT = "code_review_limit"
     DESIGN_REVIEW_LIMIT = "design_review_limit"
     EXECUTION_FAILURE_LIMIT = "execution_failure_limit"
     PHYSICS_FAILURE_LIMIT = "physics_failure_limit"
-    BACKTRACK_APPROVAL = "backtrack_approval"
-    BACKTRACK_LIMIT = "backtrack_limit"
+    ANALYSIS_LIMIT = "analysis_limit"
     REPLAN_LIMIT = "replan_limit"
-    CONTEXT_OVERFLOW = "context_overflow"
-    LLM_ERROR = "llm_error"
-    MISSING_PAPER_TEXT = "missing_paper_text"
-    MISSING_STAGE_ID = "missing_stage_id"
-    MISSING_DESIGN = "missing_design"
-    NO_STAGES_AVAILABLE = "no_stages_available"
-    DEADLOCK_DETECTED = "deadlock_detected"
+    BACKTRACK_LIMIT = "backtrack_limit"
+    
+    # Backtrack Related
+    BACKTRACK_APPROVAL = "backtrack_approval"
     INVALID_BACKTRACK_DECISION = "invalid_backtrack_decision"
     INVALID_BACKTRACK_TARGET = "invalid_backtrack_target"
     BACKTRACK_TARGET_NOT_FOUND = "backtrack_target_not_found"
+    
+    # Context/Resource Issues
+    CONTEXT_OVERFLOW = "context_overflow"
+    LLM_ERROR = "llm_error"
+    
+    # Missing Requirements
+    MISSING_PAPER_TEXT = "missing_paper_text"
+    MISSING_STAGE_ID = "missing_stage_id"
+    MISSING_DESIGN = "missing_design"
+    
+    # Workflow Issues
+    NO_STAGES_AVAILABLE = "no_stages_available"
+    DEADLOCK_DETECTED = "deadlock_detected"
     PROGRESS_INIT_FAILED = "progress_init_failed"
+    
+    # Error Fallbacks
+    SUPERVISOR_ERROR = "supervisor_error"
+    UNKNOWN_ESCALATION = "unknown_escalation"
 
 
 class StageStatus(str, Enum):

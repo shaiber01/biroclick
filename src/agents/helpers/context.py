@@ -144,6 +144,21 @@ def validate_user_responses(trigger: str, responses: Dict[str, str], questions: 
                 "Response must contain one of: FORCE_ACCEPT, PROVIDE_GUIDANCE, or STOP"
             )
     
+    elif trigger == "analysis_limit":
+        valid_keywords = ["ACCEPT", "PARTIAL", "PROVIDE HINT", "HINT", "STOP"]
+        if not any(kw in all_responses_normalized for kw in valid_keywords):
+            errors.append(
+                "Response must contain one of: ACCEPT_PARTIAL, PROVIDE_HINT (with hint text), or STOP"
+            )
+    
+    elif trigger in ["supervisor_error", "missing_design", "unknown_escalation"]:
+        # Generic error handlers - accept RETRY, SKIP, or STOP
+        valid_keywords = ["RETRY", "SKIP", "STOP"]
+        if not any(kw in all_responses_normalized for kw in valid_keywords):
+            errors.append(
+                "Response must contain one of: RETRY, SKIP_STAGE, or STOP"
+            )
+    
     # For unknown triggers, just check that response is not empty
     elif trigger not in ["context_overflow", "backtrack_limit"]:
         if not all_responses.strip():

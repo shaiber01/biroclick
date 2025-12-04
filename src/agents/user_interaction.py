@@ -44,24 +44,38 @@ def ask_user_node(state: ReproState) -> Dict[str, Any]:
     Returns:
         Dict with state updates (user_responses, cleared pending questions)
     """
+    logger = logging.getLogger(__name__)
     timeout_seconds = int(os.environ.get("REPROLAB_USER_TIMEOUT_SECONDS", "86400"))
     non_interactive = os.environ.get("REPROLAB_NON_INTERACTIVE", "0") == "1"
     
     questions = state.get("pending_user_questions", [])
-    trigger = state.get("ask_user_trigger", "unknown")
+    trigger = state.get("ask_user_trigger")
     paper_id = state.get("paper_id", "unknown")
+    
+    # Early return if nothing to ask - this is the normal "no questions" case
+    if not questions:
+        return {
+            "awaiting_user_input": False,
+            "workflow_phase": "awaiting_user",
+        }
+    
+    # ═══════════════════════════════════════════════════════════════════════
+    # SAFETY NET: Ensure we always have a trigger when we have questions
+    # If trigger is missing but questions exist, it indicates a workflow bug 
+    # where routing went to ask_user without properly setting the trigger.
+    # ═══════════════════════════════════════════════════════════════════════
+    if not trigger:
+        logger.warning(
+            "ask_user_node called with questions but without ask_user_trigger - "
+            "this indicates a workflow bug. Setting generic 'unknown_escalation' trigger."
+        )
+        trigger = "unknown_escalation"
     
     # Get original questions (for mapping responses after retry) or use current questions
     original_questions = state.get("original_user_questions", questions)
     # If this is a fresh call (not a retry), store original questions
     if "original_user_questions" not in state:
         original_questions = questions.copy()
-    
-    if not questions:
-        return {
-            "awaiting_user_input": False,
-            "workflow_phase": "awaiting_user",
-        }
     
     # Non-interactive mode
     if non_interactive:

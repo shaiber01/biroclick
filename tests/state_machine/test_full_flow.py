@@ -1560,8 +1560,8 @@ class TestEdgeCases:
                     visited_nodes.append(node_name)
                     print(f"  → {node_name}")
                     
-                    # Stop when we reach supervisor after comparison limit
-                    if node_name == "supervisor":
+                    # Stop when we reach ask_user after comparison limit (now consistent with other limits)
+                    if node_name == "ask_user" or node_name == "supervisor":
                         break
                     if node_name == "__interrupt__":
                         break
@@ -1569,13 +1569,14 @@ class TestEdgeCases:
                     continue
                 break
 
-            # Should go to supervisor when comparison limit hit
+            # Should go to ask_user when comparison limit hit (consistent with other limits)
             # Note: comparison_validator might not be called if analysis fails,
             # but the routing still works via the count check
             assert "comparison_check" in visited_nodes, \
                 f"comparison_check should be visited. Nodes: {visited_nodes}"
-            assert "supervisor" in visited_nodes, \
-                "supervisor should be visited after comparison (either via limit or normal flow)"
+            # Either ask_user (at limit) or supervisor (approved) should be visited
+            assert "ask_user" in visited_nodes or "supervisor" in visited_nodes, \
+                "ask_user or supervisor should be visited after comparison"
             
             # Verify comparison_check was reached and routing worked
             final_state = graph.get_state(config).values
