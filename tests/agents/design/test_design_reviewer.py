@@ -739,3 +739,112 @@ class TestDesignReviewerNode:
         assert result["reviewer_issues"][1]["severity"] == "major"
         assert result["reviewer_issues"][2]["severity"] == "minor"
         assert mock_llm.call_count == 1
+
+    @patch("src.agents.base.check_context_or_escalate")
+    @patch("src.agents.design.build_agent_prompt")
+    @patch("src.agents.design.call_agent_with_metrics")
+    def test_escalate_to_user_string_triggers_ask_user(self, mock_llm, mock_prompt, mock_check, base_state):
+        """Test that string escalate_to_user triggers user escalation."""
+        mock_check.return_value = None
+        mock_prompt.return_value = "Prompt"
+        mock_llm.return_value = {
+            "verdict": "approve",  # Even with approve, escalation should take priority
+            "escalate_to_user": "Should I use 2D or 3D simulation for this geometry?",
+            "issues": []
+        }
+        
+        result = design_reviewer_node(base_state)
+        
+        # Should trigger escalation
+        assert result["ask_user_trigger"] == "reviewer_escalation"
+        assert result["awaiting_user_input"] is True
+        assert "pending_user_questions" in result
+        assert len(result["pending_user_questions"]) == 1
+        assert "2D or 3D" in result["pending_user_questions"][0]
+        assert result["last_node_before_ask_user"] == "design_review"
+        assert result["reviewer_escalation_source"] == "design_reviewer"
+        
+        # Should NOT have verdict-related fields (escalation short-circuits)
+        assert "last_design_review_verdict" not in result
+        assert "design_revision_count" not in result
+
+    @patch("src.agents.base.check_context_or_escalate")
+    @patch("src.agents.design.build_agent_prompt")
+    @patch("src.agents.design.call_agent_with_metrics")
+    def test_escalate_to_user_false_continues_normally(self, mock_llm, mock_prompt, mock_check, base_state):
+        """Test that boolean false escalate_to_user is ignored."""
+        mock_check.return_value = None
+        mock_prompt.return_value = "Prompt"
+        mock_llm.return_value = {
+            "verdict": "approve",
+            "escalate_to_user": False,
+            "issues": []
+        }
+        
+        result = design_reviewer_node(base_state)
+        
+        # Should NOT trigger escalation
+        assert result.get("ask_user_trigger") != "reviewer_escalation"
+        assert result["last_design_review_verdict"] == "approve"
+
+    @patch("src.agents.base.check_context_or_escalate")
+    @patch("src.agents.design.build_agent_prompt")
+    @patch("src.agents.design.call_agent_with_metrics")
+    def test_escalate_to_user_empty_string_continues_normally(self, mock_llm, mock_prompt, mock_check, base_state):
+        """Test that empty string escalate_to_user is ignored."""
+        mock_check.return_value = None
+        mock_prompt.return_value = "Prompt"
+        mock_llm.return_value = {
+            "verdict": "approve",
+            "escalate_to_user": "",
+            "issues": []
+        }
+        
+        result = design_reviewer_node(base_state)
+        
+        # Should NOT trigger escalation
+        assert result.get("ask_user_trigger") != "reviewer_escalation"
+        assert result["last_design_review_verdict"] == "approve"
+
+    @patch("src.agents.base.check_context_or_escalate")
+    @patch("src.agents.design.build_agent_prompt")
+    @patch("src.agents.design.call_agent_with_metrics")
+    def test_escalate_to_user_whitespace_only_continues_normally(self, mock_llm, mock_prompt, mock_check, base_state):
+        """Test that whitespace-only escalate_to_user is ignored."""
+        mock_check.return_value = None
+        mock_prompt.return_value = "Prompt"
+        mock_llm.return_value = {
+            "verdict": "approve",
+            "escalate_to_user": "   \n\t  ",
+            "issues": []
+        }
+        
+        result = design_reviewer_node(base_state)
+        
+        # Should NOT trigger escalation (strip() makes it empty)
+        assert result.get("ask_user_trigger") != "reviewer_escalation"
+        assert result["last_design_review_verdict"] == "approve"
+
+    @patch("src.agents.base.check_context_or_escalate")
+    @patch("src.agents.design.build_agent_prompt")
+    @patch("src.agents.design.call_agent_with_metrics")
+    def test_escalate_to_user_takes_priority_over_verdict(self, mock_llm, mock_prompt, mock_check, base_state):
+        """Test that escalation takes priority even with needs_revision verdict."""
+        mock_check.return_value = None
+        mock_prompt.return_value = "Prompt"
+        mock_llm.return_value = {
+            "verdict": "needs_revision",
+            "escalate_to_user": "Paper mentions both extinction and absorption - which should I use?",
+            "feedback": "Some feedback",
+            "issues": [{"severity": "major", "description": "Ambiguous"}]
+        }
+        
+        result = design_reviewer_node(base_state)
+        
+        # Should trigger escalation instead of normal verdict handling
+        assert result["ask_user_trigger"] == "reviewer_escalation"
+        assert "extinction and absorption" in result["pending_user_questions"][0]
+        
+        # Should NOT increment revision count (escalation happens before verdict processing)
+        assert "design_revision_count" not in result
+        assert "last_design_review_verdict" not in result

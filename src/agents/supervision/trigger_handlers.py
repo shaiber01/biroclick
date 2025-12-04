@@ -868,6 +868,48 @@ def handle_unknown_escalation(
         result["should_stop"] = True
 
 
+def handle_reviewer_escalation(
+    state: ReproState,
+    result: Dict[str, Any],
+    user_responses: Dict[str, str],
+    current_stage_id: Optional[str] = None,
+) -> None:
+    """
+    Handle reviewer_escalation trigger response.
+    
+    This handles cases where a reviewer LLM explicitly requested user input
+    via the escalate_to_user field.
+    
+    Options defined in user_options.py: PROVIDE_GUIDANCE, SKIP_STAGE, STOP
+    """
+    response_text = parse_user_response(user_responses)
+    matched = match_user_response("reviewer_escalation", response_text)
+    
+    if matched is None:
+        result["supervisor_verdict"] = "ask_user"
+        result["pending_user_questions"] = [get_clarification_message("reviewer_escalation")]
+        return
+    
+    if matched.action == "provide_guidance":
+        raw_response = list(user_responses.values())[-1] if user_responses else ""
+        guidance_text = extract_guidance_text(raw_response)
+        result["reviewer_feedback"] = f"User guidance: {guidance_text}"
+        result["supervisor_verdict"] = "ok_continue"
+        result["supervisor_feedback"] = "Continuing with user guidance for reviewer question."
+    
+    elif matched.action == "skip":
+        result["supervisor_verdict"] = "ok_continue"
+        if current_stage_id:
+            _update_progress_with_error_handling(
+                state, result, current_stage_id, "blocked",
+                summary="Skipped by user due to reviewer escalation"
+            )
+    
+    elif matched.action == "stop":
+        result["supervisor_verdict"] = "all_complete"
+        result["should_stop"] = True
+
+
 # Registry of trigger handlers
 TRIGGER_HANDLERS: Dict[str, Callable] = {
     "material_checkpoint": handle_material_checkpoint,
@@ -900,6 +942,9 @@ TRIGGER_HANDLERS: Dict[str, Callable] = {
     # Specific Backtrack Errors
     "backtrack_limit": handle_backtrack_limit,
     "invalid_backtrack_decision": handle_invalid_backtrack_decision,
+    
+    # Reviewer Escalation (explicit escalate_to_user from reviewer LLM)
+    "reviewer_escalation": handle_reviewer_escalation,
     
     # Generic Fallback (must be last resort)
     "unknown_escalation": handle_unknown_escalation,

@@ -433,6 +433,30 @@ USER_OPTIONS: Dict[str, List[UserOption]] = {
     ],
     
     # ───────────────────────────────────────────────────────────────────
+    # REVIEWER ESCALATION (when reviewer LLM explicitly asks for user input)
+    # ───────────────────────────────────────────────────────────────────
+    "reviewer_escalation": [
+        UserOption(
+            display="PROVIDE_GUIDANCE",
+            description="Answer the reviewer's question (include your response after keyword)",
+            action="provide_guidance",
+            aliases=["GUIDANCE", "ANSWER"],
+        ),
+        UserOption(
+            display="SKIP_STAGE",
+            description="Skip this stage and continue",
+            action="skip",
+            aliases=["SKIP"],
+        ),
+        UserOption(
+            display="STOP",
+            description="End the workflow",
+            action="stop",
+            aliases=["QUIT", "EXIT", "ABORT", "END"],
+        ),
+    ],
+    
+    # ───────────────────────────────────────────────────────────────────
     # CRITICAL ERRORS (shared handler: missing_paper_text, missing_stage_id, progress_init_failed)
     # ───────────────────────────────────────────────────────────────────
     "critical_error": [

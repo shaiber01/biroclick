@@ -1585,3 +1585,230 @@ class TestSupervisorArchiveErrors:
 
         # Should reset archive_errors to empty list
         assert result.get("archive_errors") == []
+
+
+# =============================================================================
+# Reviewer Escalation Tests
+# =============================================================================
+
+class TestSupervisorReviewerEscalation:
+    """Test reviewer_escalation trigger handling.
+    
+    This trigger occurs when a reviewer LLM explicitly requests user input
+    via the escalate_to_user field in its output.
+    """
+
+    def test_supervisor_handles_reviewer_escalation_provide_guidance(self, base_state):
+        """User provides PROVIDE_GUIDANCE - should set reviewer_feedback and continue."""
+        from src.agents.supervision.supervisor import supervisor_node
+
+        base_state["ask_user_trigger"] = "reviewer_escalation"
+        base_state["user_responses"] = {
+            "Q1": "PROVIDE_GUIDANCE: Use the Drude model with adjusted parameters"
+        }
+        base_state["pending_user_questions"] = [
+            "Which material model should I use: Drude or tabulated data?"
+        ]
+        base_state["reviewer_escalation_source"] = "code_reviewer"
+
+        result = supervisor_node(base_state)
+
+        assert result.get("supervisor_verdict") == "ok_continue"
+        assert "reviewer_feedback" in result
+        assert "User guidance:" in result["reviewer_feedback"]
+        assert "Drude model" in result["reviewer_feedback"]
+        assert result.get("ask_user_trigger") is None
+        assert result.get("workflow_phase") == "supervision"
+
+    def test_supervisor_handles_reviewer_escalation_guidance_alias(self, base_state):
+        """GUIDANCE alias should also work."""
+        from src.agents.supervision.supervisor import supervisor_node
+
+        base_state["ask_user_trigger"] = "reviewer_escalation"
+        base_state["user_responses"] = {"Q1": "GUIDANCE: Focus on near-field enhancement"}
+        base_state["pending_user_questions"] = ["What aspect should I prioritize?"]
+
+        result = supervisor_node(base_state)
+
+        assert result.get("supervisor_verdict") == "ok_continue"
+        assert "near-field enhancement" in result.get("reviewer_feedback", "")
+
+    def test_supervisor_handles_reviewer_escalation_answer_alias(self, base_state):
+        """ANSWER alias should also work."""
+        from src.agents.supervision.supervisor import supervisor_node
+
+        base_state["ask_user_trigger"] = "reviewer_escalation"
+        base_state["user_responses"] = {"Q1": "ANSWER: The spacing is 20nm period"}
+        base_state["pending_user_questions"] = ["What is the array spacing?"]
+
+        result = supervisor_node(base_state)
+
+        assert result.get("supervisor_verdict") == "ok_continue"
+        assert "20nm period" in result.get("reviewer_feedback", "")
+
+    def test_supervisor_handles_reviewer_escalation_skip(self, base_state):
+        """User requests SKIP - should skip the stage."""
+        from src.agents.supervision.supervisor import supervisor_node
+
+        base_state["ask_user_trigger"] = "reviewer_escalation"
+        base_state["user_responses"] = {"Q1": "SKIP"}
+        base_state["pending_user_questions"] = ["Question from reviewer"]
+        base_state["current_stage_id"] = "stage_0"
+        base_state["progress"] = {
+            "stages": [{"stage_id": "stage_0", "status": "in_progress"}]
+        }
+
+        result = supervisor_node(base_state)
+
+        assert result.get("supervisor_verdict") == "ok_continue"
+        assert result.get("ask_user_trigger") is None
+
+    def test_supervisor_handles_reviewer_escalation_stop(self, base_state):
+        """User requests STOP - should stop workflow."""
+        from src.agents.supervision.supervisor import supervisor_node
+
+        base_state["ask_user_trigger"] = "reviewer_escalation"
+        base_state["user_responses"] = {"Q1": "STOP"}
+        base_state["pending_user_questions"] = ["Question from reviewer"]
+
+        result = supervisor_node(base_state)
+
+        assert result.get("supervisor_verdict") == "all_complete"
+        assert result.get("should_stop") is True
+        assert result.get("ask_user_trigger") is None
+
+    def test_supervisor_handles_reviewer_escalation_unclear_response(self, base_state):
+        """User gives unclear response - should ask for clarification."""
+        from src.agents.supervision.supervisor import supervisor_node
+
+        base_state["ask_user_trigger"] = "reviewer_escalation"
+        base_state["user_responses"] = {"Q1": "I'm not sure what to do"}
+        base_state["pending_user_questions"] = ["Question from reviewer"]
+
+        result = supervisor_node(base_state)
+
+        assert result.get("supervisor_verdict") == "ask_user"
+        questions = result.get("pending_user_questions", [])
+        assert questions
+        # Should include the available options
+        assert "PROVIDE_GUIDANCE" in questions[0]
+        assert "SKIP" in questions[0] or "SKIP_STAGE" in questions[0]
+        assert "STOP" in questions[0]
+
+    def test_supervisor_handles_reviewer_escalation_lowercase(self, base_state):
+        """Keywords should work case-insensitively."""
+        from src.agents.supervision.supervisor import supervisor_node
+
+        base_state["ask_user_trigger"] = "reviewer_escalation"
+        base_state["user_responses"] = {"Q1": "provide_guidance: use tabulated data"}
+        base_state["pending_user_questions"] = ["Question from reviewer"]
+
+        result = supervisor_node(base_state)
+
+        assert result.get("supervisor_verdict") == "ok_continue"
+        assert "tabulated data" in result.get("reviewer_feedback", "")
+
+    def test_reviewer_escalation_full_flow_code_reviewer(self, base_state):
+        """End-to-end: code reviewer escalates -> user responds -> supervisor handles."""
+        from src.agents.code import code_reviewer_node
+        from src.agents.supervision.supervisor import supervisor_node
+
+        # Step 1: Code reviewer returns escalate_to_user
+        with patch("src.agents.code.build_agent_prompt", return_value="Prompt"):
+            with patch("src.agents.code.call_agent_with_metrics") as mock_llm:
+                mock_llm.return_value = {
+                    "verdict": "needs_revision",
+                    "escalate_to_user": "The design specifies Drude model but measured optical constants are available. Which should I use for best accuracy?",
+                    "feedback": "Material model ambiguity",
+                }
+                
+                base_state["code"] = "import meep as mp"
+                base_state["design_description"] = {"materials": ["gold"]}
+                
+                reviewer_result = code_reviewer_node(base_state)
+        
+        # Verify reviewer sets up escalation correctly
+        assert reviewer_result["ask_user_trigger"] == "reviewer_escalation"
+        assert reviewer_result["awaiting_user_input"] is True
+        assert "Drude model" in reviewer_result["pending_user_questions"][0]
+        assert reviewer_result["reviewer_escalation_source"] == "code_reviewer"
+        
+        # Step 2: User provides guidance
+        base_state.update(reviewer_result)
+        base_state["user_responses"] = {
+            "Q1": "PROVIDE_GUIDANCE: Use measured optical constants for better accuracy"
+        }
+        
+        # Step 3: Supervisor handles the user response
+        supervisor_result = supervisor_node(base_state)
+        
+        # Verify supervisor processed guidance correctly
+        assert supervisor_result["supervisor_verdict"] == "ok_continue"
+        assert "reviewer_feedback" in supervisor_result
+        assert "measured optical constants" in supervisor_result["reviewer_feedback"]
+        assert supervisor_result.get("ask_user_trigger") is None
+        # Workflow should continue with the guidance
+
+    def test_reviewer_escalation_full_flow_design_reviewer(self, base_state):
+        """End-to-end: design reviewer escalates -> user responds -> supervisor handles."""
+        from src.agents.design import design_reviewer_node
+        from src.agents.supervision.supervisor import supervisor_node
+
+        # Step 1: Design reviewer returns escalate_to_user
+        with patch("src.agents.base.check_context_or_escalate", return_value=None):
+            with patch("src.agents.design.build_agent_prompt", return_value="Prompt"):
+                with patch("src.agents.design.call_agent_with_metrics") as mock_llm:
+                    mock_llm.return_value = {
+                        "verdict": "approve",
+                        "escalate_to_user": "Should I use 2D or 3D simulation? 2D is faster but 3D may be more accurate.",
+                        "issues": [],
+                    }
+                    
+                    base_state["design_description"] = {"geometry": "nanorod"}
+                    
+                    reviewer_result = design_reviewer_node(base_state)
+        
+        # Verify reviewer sets up escalation correctly
+        assert reviewer_result["ask_user_trigger"] == "reviewer_escalation"
+        assert "2D or 3D" in reviewer_result["pending_user_questions"][0]
+        assert reviewer_result["reviewer_escalation_source"] == "design_reviewer"
+        
+        # Step 2: User chooses to skip
+        base_state.update(reviewer_result)
+        base_state["user_responses"] = {"Q1": "SKIP_STAGE"}
+        base_state["current_stage_id"] = "stage_0"
+        base_state["progress"] = {
+            "stages": [{"stage_id": "stage_0", "status": "in_progress"}]
+        }
+        
+        # Step 3: Supervisor handles the skip
+        supervisor_result = supervisor_node(base_state)
+        
+        # Verify supervisor processed skip correctly
+        assert supervisor_result["supervisor_verdict"] == "ok_continue"
+        assert supervisor_result.get("ask_user_trigger") is None
+
+    def test_supervisor_logs_reviewer_escalation_interaction(self, base_state):
+        """User interactions for reviewer_escalation should be logged to progress."""
+        from src.agents.supervision.supervisor import supervisor_node
+
+        base_state["ask_user_trigger"] = "reviewer_escalation"
+        base_state["user_responses"] = {
+            "Q1": "PROVIDE_GUIDANCE: Use the interpolated data"
+        }
+        base_state["pending_user_questions"] = ["Which data source?"]
+        base_state["current_stage_id"] = "stage_0"
+        base_state["progress"] = {
+            "stages": [{"stage_id": "stage_0", "status": "in_progress"}],
+            "user_interactions": [],
+        }
+
+        result = supervisor_node(base_state)
+
+        interactions = result.get("progress", {}).get("user_interactions", [])
+        assert len(interactions) == 1
+        entry = interactions[0]
+        assert entry.get("interaction_type") == "reviewer_escalation"
+        assert entry.get("context", {}).get("stage_id") == "stage_0"
+        assert "PROVIDE_GUIDANCE" in entry.get("user_response", "")
+        assert entry.get("question") == "Which data source?"

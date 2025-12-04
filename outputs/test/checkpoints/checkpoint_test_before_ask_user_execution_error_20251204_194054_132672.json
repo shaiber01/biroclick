@@ -1,0 +1,7 @@
+{
+  "paper_id": "test",
+  "ask_user_trigger": "supervisor_error",
+  "pending_user_questions": [
+    "ERROR: last_code_review_verdict is None - the code_review node may not have run or failed unexpectedly.\nOptions: RETRY (try again), SKIP_STAGE (skip this stage), or STOP (end workflow)?"
+  ]
+}

@@ -263,6 +263,17 @@ ASK_USER_TRIGGERS: Dict[str, Dict[str, Any]] = {
             "STOP": "Stop workflow",
         }
     },
+    "reviewer_escalation": {
+        "description": "Reviewer LLM explicitly requested user input via escalate_to_user field",
+        "source_node": "code_review/design_review/plan_review",
+        "expected_response_keys": ["action", "guidance"],
+        "valid_verdicts": ["PROVIDE_GUIDANCE", "SKIP_STAGE", "STOP"],
+        "supervisor_action": {
+            "PROVIDE_GUIDANCE": "Add guidance to reviewer_feedback, continue review process",
+            "SKIP_STAGE": "Mark stage as blocked, route to select_stage",
+            "STOP": "Stop workflow",
+        }
+    },
     "unknown_escalation": {
         "description": "Generic fallback for unexpected workflow errors",
         "source_node": "any (safety net)",

@@ -909,3 +909,123 @@ class TestPlanReviewerNode:
                 }
                 result = plan_reviewer_node(state)
                 assert result["workflow_phase"] == "plan_review"
+
+    @patch("src.agents.planning.validate_state_or_warn")
+    @patch("src.agents.planning.call_agent_with_metrics")
+    @patch("src.agents.planning.build_agent_prompt")
+    def test_escalate_to_user_string_triggers_ask_user(self, mock_prompt, mock_llm, mock_validate):
+        """Test that string escalate_to_user triggers user escalation."""
+        mock_validate.return_value = []
+        mock_prompt.return_value = "Prompt"
+        mock_llm.return_value = {
+            "verdict": "approve",  # Even with approve, escalation should take priority
+            "escalate_to_user": "Should I combine stages 3 and 4 or keep them separate?",
+        }
+        state = {
+            "plan": {"stages": [{"stage_id": "s1", "targets": ["t"]}]}
+        }
+        
+        result = plan_reviewer_node(state)
+        
+        # Should trigger escalation
+        assert result["ask_user_trigger"] == "reviewer_escalation"
+        assert result["awaiting_user_input"] is True
+        assert "pending_user_questions" in result
+        assert len(result["pending_user_questions"]) == 1
+        assert "combine stages" in result["pending_user_questions"][0]
+        assert result["last_node_before_ask_user"] == "plan_review"
+        assert result["reviewer_escalation_source"] == "plan_reviewer"
+        
+        # Should NOT have verdict-related fields (escalation short-circuits)
+        assert "last_plan_review_verdict" not in result
+        assert "replan_count" not in result
+
+    @patch("src.agents.planning.validate_state_or_warn")
+    @patch("src.agents.planning.call_agent_with_metrics")
+    @patch("src.agents.planning.build_agent_prompt")
+    def test_escalate_to_user_false_continues_normally(self, mock_prompt, mock_llm, mock_validate):
+        """Test that boolean false escalate_to_user is ignored."""
+        mock_validate.return_value = []
+        mock_prompt.return_value = "Prompt"
+        mock_llm.return_value = {
+            "verdict": "approve",
+            "escalate_to_user": False,
+        }
+        state = {
+            "plan": {"stages": [{"stage_id": "s1", "targets": ["t"]}]}
+        }
+        
+        result = plan_reviewer_node(state)
+        
+        # Should NOT trigger escalation
+        assert result.get("ask_user_trigger") != "reviewer_escalation"
+        assert result["last_plan_review_verdict"] == "approve"
+
+    @patch("src.agents.planning.validate_state_or_warn")
+    @patch("src.agents.planning.call_agent_with_metrics")
+    @patch("src.agents.planning.build_agent_prompt")
+    def test_escalate_to_user_empty_string_continues_normally(self, mock_prompt, mock_llm, mock_validate):
+        """Test that empty string escalate_to_user is ignored."""
+        mock_validate.return_value = []
+        mock_prompt.return_value = "Prompt"
+        mock_llm.return_value = {
+            "verdict": "approve",
+            "escalate_to_user": "",
+        }
+        state = {
+            "plan": {"stages": [{"stage_id": "s1", "targets": ["t"]}]}
+        }
+        
+        result = plan_reviewer_node(state)
+        
+        # Should NOT trigger escalation
+        assert result.get("ask_user_trigger") != "reviewer_escalation"
+        assert result["last_plan_review_verdict"] == "approve"
+
+    @patch("src.agents.planning.validate_state_or_warn")
+    @patch("src.agents.planning.call_agent_with_metrics")
+    @patch("src.agents.planning.build_agent_prompt")
+    def test_escalate_to_user_whitespace_only_continues_normally(self, mock_prompt, mock_llm, mock_validate):
+        """Test that whitespace-only escalate_to_user is ignored."""
+        mock_validate.return_value = []
+        mock_prompt.return_value = "Prompt"
+        mock_llm.return_value = {
+            "verdict": "approve",
+            "escalate_to_user": "   \n\t  ",
+        }
+        state = {
+            "plan": {"stages": [{"stage_id": "s1", "targets": ["t"]}]}
+        }
+        
+        result = plan_reviewer_node(state)
+        
+        # Should NOT trigger escalation (strip() makes it empty)
+        assert result.get("ask_user_trigger") != "reviewer_escalation"
+        assert result["last_plan_review_verdict"] == "approve"
+
+    @patch("src.agents.planning.validate_state_or_warn")
+    @patch("src.agents.planning.call_agent_with_metrics")
+    @patch("src.agents.planning.build_agent_prompt")
+    def test_escalate_to_user_takes_priority_over_verdict(self, mock_prompt, mock_llm, mock_validate):
+        """Test that escalation takes priority even with needs_revision verdict."""
+        mock_validate.return_value = []
+        mock_prompt.return_value = "Prompt"
+        mock_llm.return_value = {
+            "verdict": "needs_revision",
+            "escalate_to_user": "Paper mentions two simulation approaches - which should I prioritize?",
+            "feedback": "Some feedback",
+        }
+        state = {
+            "plan": {"stages": [{"stage_id": "s1", "targets": ["t"]}]},
+            "replan_count": 0,
+        }
+        
+        result = plan_reviewer_node(state)
+        
+        # Should trigger escalation instead of normal verdict handling
+        assert result["ask_user_trigger"] == "reviewer_escalation"
+        assert "two simulation approaches" in result["pending_user_questions"][0]
+        
+        # Should NOT increment replan count (escalation happens before verdict processing)
+        assert "replan_count" not in result
+        assert "last_plan_review_verdict" not in result

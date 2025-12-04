@@ -764,8 +764,24 @@ class TestMaterialCheckpointFlow:
         with MultiPatch(LLM_PATCH_LOCATIONS, side_effect=mock_llm), MultiPatch(
             CHECKPOINT_PATCH_LOCATIONS, return_value="/tmp/cp.json"
         ), patch(
-            "src.code_runner.run_code_node",
-            return_value={"workflow_phase": "running_code", "execution_output": "Output"},
+            "src.graph.run_code_node",  # Patch at import location, not definition
+            return_value={
+                "workflow_phase": "running_code", 
+                "execution_output": "Output",
+                "stage_outputs": {
+                    "files": ["spectrum.csv", "extinction.png"],
+                    "figures": ["extinction.png"],
+                },
+            },
+        ), patch(
+            "src.graph.results_analyzer_node",  # Mock entire node to return proper state
+            return_value={
+                "workflow_phase": "analysis",
+                "analysis_summary": {"classification": "GOOD_MATCH", "totals": {"matches": 1, "targets": 1}},
+                "figure_comparisons": [{"figure_id": "Fig1", "stage_id": "stage_0_materials", "classification": "good_match"}],
+                "analysis_result_reports": [{"target_figure": "Fig1", "stage_id": "stage_0_materials"}],
+                "analysis_overall_classification": "good_match",
+            },
         ), patch("src.agents.user_interaction.ask_user_node", side_effect=mock_ask_user), patch(
             "src.graph.ask_user_node", side_effect=mock_ask_user
         ):
@@ -1646,8 +1662,24 @@ class TestShouldStopFlag:
         with MultiPatch(LLM_PATCH_LOCATIONS, side_effect=mock_llm), MultiPatch(
             CHECKPOINT_PATCH_LOCATIONS, return_value="/tmp/cp.json"
         ), patch(
-            "src.code_runner.run_code_node",
-            return_value={"workflow_phase": "running_code", "execution_output": "Success"},
+            "src.graph.run_code_node",  # Patch at import location, not definition
+            return_value={
+                "workflow_phase": "running_code", 
+                "execution_output": "Success",
+                "stage_outputs": {
+                    "files": ["spectrum.csv", "extinction.png"],
+                    "figures": ["extinction.png"],
+                },
+            },
+        ), patch(
+            "src.graph.results_analyzer_node",  # Mock entire node to return proper state
+            return_value={
+                "workflow_phase": "analysis",
+                "analysis_summary": {"classification": "GOOD_MATCH", "totals": {"matches": 1, "targets": 1}},
+                "figure_comparisons": [{"figure_id": "Fig1", "stage_id": "stage_0_materials", "classification": "good_match"}],
+                "analysis_result_reports": [{"target_figure": "Fig1", "stage_id": "stage_0_materials"}],
+                "analysis_overall_classification": "good_match",
+            },
         ):
             print("\n" + "=" * 60)
             print("TEST: should_stop Routes to Report (non-material stage)")
@@ -1745,8 +1777,24 @@ class TestReplanLimitEscalation:
         with MultiPatch(LLM_PATCH_LOCATIONS, side_effect=mock_llm), MultiPatch(
             CHECKPOINT_PATCH_LOCATIONS, return_value="/tmp/cp.json"
         ), patch(
-            "src.code_runner.run_code_node",
-            return_value={"workflow_phase": "running_code", "execution_output": "Success"},
+            "src.graph.run_code_node",  # Patch at import location, not definition
+            return_value={
+                "workflow_phase": "running_code", 
+                "execution_output": "Success",
+                "stage_outputs": {
+                    "files": ["spectrum.csv", "extinction.png"],
+                    "figures": ["extinction.png"],
+                },
+            },
+        ), patch(
+            "src.graph.results_analyzer_node",  # Mock entire node to return proper state
+            return_value={
+                "workflow_phase": "analysis",
+                "analysis_summary": {"classification": "GOOD_MATCH", "totals": {"matches": 1, "targets": 1}},
+                "figure_comparisons": [{"figure_id": "Fig1", "stage_id": "stage_0_materials", "classification": "good_match"}],
+                "analysis_result_reports": [{"target_figure": "Fig1", "stage_id": "stage_0_materials"}],
+                "analysis_overall_classification": "good_match",
+            },
         ), patch("src.agents.user_interaction.ask_user_node", side_effect=mock_ask_user), patch(
             "src.graph.ask_user_node", side_effect=mock_ask_user
         ):

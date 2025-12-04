@@ -95,6 +95,18 @@ def code_reviewer_node(state: ReproState) -> dict:
         logger.error(f"Code reviewer LLM call failed: {e}")
         agent_output = create_llm_error_auto_approve("code_reviewer", e, default_verdict="needs_revision")
     
+    # Check for explicit escalation to user (before processing verdict)
+    escalate = agent_output.get("escalate_to_user")
+    if escalate and isinstance(escalate, str) and escalate.strip():
+        return {
+            "workflow_phase": "code_review",
+            "ask_user_trigger": "reviewer_escalation",
+            "pending_user_questions": [escalate],
+            "awaiting_user_input": True,
+            "last_node_before_ask_user": "code_review",
+            "reviewer_escalation_source": "code_reviewer",
+        }
+    
     # Normalize verdict to allowed values
     raw_verdict = agent_output.get("verdict", "needs_revision")
     # Normalize common variations: "pass" -> "approve", "reject" -> "needs_revision"
