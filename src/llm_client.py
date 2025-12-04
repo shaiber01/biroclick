@@ -678,21 +678,49 @@ def get_images_for_analyzer(state: Dict[str, Any]) -> List[Path]:
     Get image paths for the results analyzer agent (multimodal).
     
     Returns paths to both paper figures and simulation output plots.
+    Only includes paper figures that are targets for the current stage.
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    
     images = []
     image_extensions = [".png", ".jpg", ".jpeg", ".gif", ".webp"]
     
-    # Paper figures
+    # Get current stage targets to filter paper figures
+    stage_id = state.get("current_stage_id")
+    plan = state.get("plan") or {}
+    stages = plan.get("stages", []) if isinstance(plan, dict) else []
+    current_stage = next((s for s in stages if s.get("stage_id") == stage_id), None)
+    target_ids = []
+    if current_stage:
+        target_ids = current_stage.get("targets", [])
+    
+    # Paper figures - only include figures that are targets for this stage
     paper_figures = state.get("paper_figures") or []
     if paper_figures:
         for fig in paper_figures:
             if not isinstance(fig, dict):
+                continue
+            fig_id = fig.get("id", "")
+            # Only include if this figure is a target for the current stage
+            # (or if no targets are specified, include all - backwards compat)
+            if target_ids and fig_id not in target_ids:
                 continue
             path = fig.get("image_path")
             if path:
                 path_obj = Path(path)
                 if path_obj.exists() and path_obj.suffix.lower() in image_extensions:
                     images.append(path_obj)
+                    logger.debug(f"Added paper figure for stage {stage_id}: {fig_id} -> {path_obj}")
+    
+    # Build stage output directory path
+    run_output_dir = state.get("run_output_dir", "")
+    if run_output_dir and stage_id:
+        stage_output_dir = Path(run_output_dir) / stage_id
+    else:
+        # Legacy fallback
+        paper_id = state.get("paper_id", "unknown")
+        stage_output_dir = Path("outputs") / paper_id / (stage_id or "unknown")
     
     # Simulation output plots
     stage_outputs = state.get("stage_outputs") or {}
@@ -713,7 +741,14 @@ def get_images_for_analyzer(state: Dict[str, Any]) -> List[Path]:
             # Fallback: try to convert to Path
             path = Path(str(file_path))
         
+        # If path is not absolute, resolve it relative to stage output directory
+        if not path.is_absolute():
+            path = stage_output_dir / path
+        
         if path.exists() and path.suffix.lower() in image_extensions:
             images.append(path)
+            logger.debug(f"Added simulation output for stage {stage_id}: {path}")
     
+    logger.debug(f"get_images_for_analyzer: {len(images)} images for stage {stage_id} "
+                 f"(targets={target_ids})")
     return images

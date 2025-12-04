@@ -2021,3 +2021,186 @@ class TestGetImagesForAnalyzer:
         
         assert len(images) == 1
         assert str(images[0]) == str(img)
+
+    def test_filters_paper_figures_by_stage_targets(self, tmp_path):
+        """Test that only paper figures matching stage targets are included."""
+        # Create paper figure images
+        fig1 = tmp_path / "fig1.png"
+        fig2 = tmp_path / "fig2.png"
+        fig3 = tmp_path / "fig3.png"
+        for f in [fig1, fig2, fig3]:
+            f.write_bytes(b"fake image data")
+        
+        state = {
+            "current_stage_id": "stage1",
+            "plan": {
+                "stages": [
+                    {"stage_id": "stage1", "targets": ["fig1", "fig3"]},
+                    {"stage_id": "stage2", "targets": ["fig2"]},
+                ]
+            },
+            "paper_figures": [
+                {"id": "fig1", "image_path": str(fig1)},
+                {"id": "fig2", "image_path": str(fig2)},
+                {"id": "fig3", "image_path": str(fig3)},
+            ],
+        }
+        images = get_images_for_analyzer(state)
+        
+        # Only fig1 and fig3 should be included (targets for stage1)
+        assert len(images) == 2
+        image_paths = [str(img) for img in images]
+        assert str(fig1) in image_paths
+        assert str(fig3) in image_paths
+        assert str(fig2) not in image_paths
+
+    def test_includes_all_figures_when_no_targets_specified(self, tmp_path):
+        """Test backwards compatibility: include all figures when stage has no targets."""
+        fig1 = tmp_path / "fig1.png"
+        fig2 = tmp_path / "fig2.png"
+        for f in [fig1, fig2]:
+            f.write_bytes(b"fake image data")
+        
+        state = {
+            "current_stage_id": "stage1",
+            "plan": {
+                "stages": [
+                    {"stage_id": "stage1"},  # No targets key
+                ]
+            },
+            "paper_figures": [
+                {"id": "fig1", "image_path": str(fig1)},
+                {"id": "fig2", "image_path": str(fig2)},
+            ],
+        }
+        images = get_images_for_analyzer(state)
+        
+        # Both figures should be included (backwards compat)
+        assert len(images) == 2
+
+    def test_includes_all_figures_when_empty_targets(self, tmp_path):
+        """Test that empty targets list means include all figures."""
+        fig1 = tmp_path / "fig1.png"
+        fig2 = tmp_path / "fig2.png"
+        for f in [fig1, fig2]:
+            f.write_bytes(b"fake image data")
+        
+        state = {
+            "current_stage_id": "stage1",
+            "plan": {
+                "stages": [
+                    {"stage_id": "stage1", "targets": []},  # Empty targets
+                ]
+            },
+            "paper_figures": [
+                {"id": "fig1", "image_path": str(fig1)},
+                {"id": "fig2", "image_path": str(fig2)},
+            ],
+        }
+        images = get_images_for_analyzer(state)
+        
+        # Both figures should be included when targets is empty
+        assert len(images) == 2
+
+    def test_resolves_relative_stage_output_paths(self, tmp_path):
+        """Test that relative stage output paths are resolved using run_output_dir."""
+        # Create stage output directory structure
+        run_dir = tmp_path / "outputs" / "paper_123" / "run_20251204"
+        stage_dir = run_dir / "stage1"
+        stage_dir.mkdir(parents=True)
+        
+        # Create simulation output file
+        output_img = stage_dir / "output.png"
+        output_img.write_bytes(b"fake image data")
+        
+        state = {
+            "current_stage_id": "stage1",
+            "run_output_dir": str(run_dir),
+            "stage_outputs": {
+                "files": ["output.png"],  # Relative path (just filename)
+            },
+        }
+        images = get_images_for_analyzer(state)
+        
+        # Should resolve to full path in stage directory
+        assert len(images) == 1
+        assert str(images[0]) == str(output_img)
+
+    def test_handles_absolute_stage_output_paths(self, tmp_path):
+        """Test that absolute stage output paths are used as-is."""
+        # Create an output image somewhere
+        output_img = tmp_path / "absolute_output.png"
+        output_img.write_bytes(b"fake image data")
+        
+        state = {
+            "current_stage_id": "stage1",
+            "run_output_dir": str(tmp_path / "different_dir"),  # Different from image location
+            "stage_outputs": {
+                "files": [str(output_img)],  # Absolute path
+            },
+        }
+        images = get_images_for_analyzer(state)
+        
+        # Should use the absolute path directly
+        assert len(images) == 1
+        assert str(images[0]) == str(output_img)
+
+    def test_legacy_fallback_without_run_output_dir(self, tmp_path, monkeypatch):
+        """Test legacy fallback when run_output_dir is not set."""
+        # This test verifies the fallback path construction
+        # Without run_output_dir, it falls back to outputs/{paper_id}/{stage_id}
+        state = {
+            "current_stage_id": "stage1",
+            "paper_id": "test_paper",
+            # No run_output_dir
+            "stage_outputs": {
+                "files": ["output.png"],  # Relative path
+            },
+        }
+        images = get_images_for_analyzer(state)
+        
+        # With relative path and no run_output_dir, file likely won't exist
+        # This tests that the fallback logic doesn't crash
+        assert isinstance(images, list)
+
+    def test_combined_filtering_and_path_resolution(self, tmp_path):
+        """Test that both paper figure filtering and output path resolution work together."""
+        # Create paper figures
+        fig1 = tmp_path / "figures" / "fig1.png"
+        fig2 = tmp_path / "figures" / "fig2.png"
+        fig1.parent.mkdir(parents=True)
+        for f in [fig1, fig2]:
+            f.write_bytes(b"paper figure")
+        
+        # Create stage output directory
+        run_dir = tmp_path / "outputs" / "run_123"
+        stage_dir = run_dir / "stage1"
+        stage_dir.mkdir(parents=True)
+        output_img = stage_dir / "simulation_result.png"
+        output_img.write_bytes(b"simulation output")
+        
+        state = {
+            "current_stage_id": "stage1",
+            "run_output_dir": str(run_dir),
+            "plan": {
+                "stages": [
+                    {"stage_id": "stage1", "targets": ["fig1"]},  # Only fig1 is target
+                ]
+            },
+            "paper_figures": [
+                {"id": "fig1", "image_path": str(fig1)},
+                {"id": "fig2", "image_path": str(fig2)},  # Not a target
+            ],
+            "stage_outputs": {
+                "files": ["simulation_result.png"],
+            },
+        }
+        images = get_images_for_analyzer(state)
+        
+        # Should have: fig1 (target) + simulation_result.png (stage output)
+        # Should NOT have: fig2 (not a target for this stage)
+        assert len(images) == 2
+        image_paths = [str(img) for img in images]
+        assert str(fig1) in image_paths
+        assert str(output_img) in image_paths
+        assert str(fig2) not in image_paths

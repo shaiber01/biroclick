@@ -10,6 +10,7 @@
     "available_csv_files": [
       "palik_silver.csv",
       "palik_gold.csv",
+      "palik_al.csv",
       "rakic_aluminum.csv",
       "palik_silicon.csv",
       "malitson_sio2.csv",
@@ -263,6 +264,63 @@
         ]
       },
       "notes": "Cheaper than Au/Ag with good plasmonic properties above 600nm. Interband transitions ~590nm cause reddish color. Oxidizes rapidly in air.",
+      "csv_available": true
+    },
+    
+    {
+      "material_id": "palik_al",
+      "name": "Aluminum (Palik)",
+      "source": "E.D. Palik, Handbook of Optical Constants of Solids (1998)",
+      "source_doi": null,
+      "wavelength_range_nm": [200, 1200],
+      "data_format": "wavelength_nm_n_k",
+      "data_file": "palik_al.csv",
+      "material_type": "metal",
+      "common_applications": ["UV plasmonics", "nanoantennas", "strong coupling", "SERS"],
+      "drude_lorentz_fit": {
+        "eps_inf": 1.0,
+        "drude_terms": [
+          {"omega_p_eV": 14.75, "gamma_eV": 0.082}
+        ],
+        "lorentz_terms": [
+          {"omega_0_eV": 1.55, "gamma_eV": 0.63, "sigma": 0.85}
+        ],
+        "fit_quality": "approximate",
+        "fit_wavelength_range_nm": [200, 1000]
+      },
+      "temperature_correction": {
+        "reference_temperature_K": 300,
+        "valid_temperature_range_K": [77, 500],
+        "drude_gamma_coefficient": 0.004,
+        "model": "linear_gamma",
+        "notes": "High plasma frequency makes Al good for UV even at elevated T."
+      },
+      "thin_film_correction": {
+        "bulk_data": true,
+        "critical_thickness_nm": 15,
+        "gamma_multiplier": 2.5,
+        "mean_free_path_nm": 16,
+        "surface_scattering_model": "fuchs-sondheimer",
+        "notes": "Native oxide (2-3nm Al2O3) always present. Include oxide layer in simulations."
+      },
+      "uncertainty": {
+        "n_uncertainty_percent": 5,
+        "k_uncertainty_percent": 8,
+        "uncertainty_source": "Palik handbook compilation uncertainty",
+        "wavelength_dependent": true,
+        "high_uncertainty_regions": [
+          {
+            "wavelength_range_nm": [780, 850],
+            "uncertainty_percent": 15,
+            "reason": "Interband transition region with anomalous dispersion"
+          }
+        ]
+      },
+      "comparison_references": [
+        {"reference": "Rakic et al., Applied Optics 37, 5271 (1998)", "agreement": "good"},
+        {"reference": "McPeak et al., ACS Photonics (2015)", "agreement": "good"}
+      ],
+      "notes": "Standard reference for bulk Al optical constants. Best for UV plasmonics due to high plasma frequency. Native oxide (Al2O3, ~2-3nm) always present and may shift resonances.",
       "csv_available": true
     },
     

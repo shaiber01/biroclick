@@ -1,4 +1,28 @@
 import logging
+import sys
+
+# =============================================================================
+# FAIL-FAST: Check that meep is available in the current Python environment
+# =============================================================================
+try:
+    import meep  # noqa: F401
+except ImportError:
+    print("=" * 70)
+    print("ERROR: meep is not installed in the current Python environment.")
+    print("=" * 70)
+    print(f"Current Python: {sys.executable}")
+    print()
+    print("The simulation runner requires meep to be installed.")
+    print("Please activate your meep conda environment and try again:")
+    print()
+    print("    conda activate <your-meep-env>")
+    print("    python runner.py")
+    print()
+    print("Or install meep in your current environment:")
+    print()
+    print("    conda install -c conda-forge pymeep")
+    print("=" * 70)
+    sys.exit(1)
 
 # Import and initialize logging utilities (must be first to register VERBOSE level)
 from src.logging_utils import setup_console_logging, setup_file_logging
