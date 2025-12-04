@@ -90,7 +90,7 @@ class TestGraphCompilation:
         """Test that ALL expected nodes are present - no more, no less (except special nodes)."""
         expected_nodes = {
             "adapt_prompts",
-            "plan",
+            "planning",
             "plan_review",
             "select_stage",
             "design",
@@ -163,27 +163,27 @@ class TestGraphEdgeConnectivity:
         assert len(adapt_edges) == 1, (
             f"adapt_prompts should have exactly 1 outgoing edge, got: {adapt_edges}"
         )
-        assert adapt_edges[0][1] == "plan", (
-            f"adapt_prompts should connect to plan, got {adapt_edges[0][1]}"
+        assert adapt_edges[0][1] == "planning", (
+            f"adapt_prompts should connect to planning, got {adapt_edges[0][1]}"
         )
 
     def test_plan_has_conditional_edge_to_plan_review(self, graph_definition):
-        """Test that plan routes to plan_review via conditional edge."""
+        """Test that planning routes to plan_review via conditional edge."""
         edges = list(graph_definition.edges)
-        plan_edges = [edge for edge in edges if edge[0] == "plan"]
+        plan_edges = [edge for edge in edges if edge[0] == "planning"]
         targets = {edge[1] for edge in plan_edges}
         
         assert "plan_review" in targets, (
-            f"plan should route to plan_review, got: {targets}"
+            f"planning should route to plan_review, got: {targets}"
         )
 
     def test_plan_review_has_three_routes(self, graph_definition):
-        """Test plan_review can route to select_stage, plan, or ask_user."""
+        """Test plan_review can route to select_stage, planning, or ask_user."""
         edges = list(graph_definition.edges)
         review_edges = [edge for edge in edges if edge[0] == "plan_review"]
         targets = {edge[1] for edge in review_edges}
         
-        expected = {"select_stage", "plan", "ask_user"}
+        expected = {"select_stage", "planning", "ask_user"}
         assert targets == expected, (
             f"plan_review should route to exactly {expected}, got: {targets}"
         )
@@ -304,7 +304,7 @@ class TestGraphEdgeConnectivity:
         
         expected = {
             "select_stage",
-            "plan",
+            "planning",
             "ask_user",
             "handle_backtrack",
             "generate_report",
@@ -520,17 +520,17 @@ class TestRouteAfterSupervisor:
             replan_count=0,
         )
         result = route_after_supervisor(state)
-        assert result == "plan", f"Expected plan for replan_needed under limit, got {result}"
+        assert result == "planning", f"Expected planning for replan_needed under limit, got {result}"
 
     @patch('src.graph.save_checkpoint')
     def test_replan_needed_routes_to_plan_at_limit_minus_one(self, mock_checkpoint):
-        """Test replan_needed routes to plan when at limit-1."""
+        """Test replan_needed routes to planning when at limit-1."""
         state = make_state(
             supervisor_verdict="replan_needed",
             replan_count=MAX_REPLANS - 1,
         )
         result = route_after_supervisor(state)
-        assert result == "plan", f"Expected plan for replan_needed at limit-1, got {result}"
+        assert result == "planning", f"Expected planning for replan_needed at limit-1, got {result}"
 
     @patch('src.graph.save_checkpoint')
     def test_replan_needed_routes_to_ask_user_at_limit(self, mock_checkpoint):
@@ -602,13 +602,13 @@ class TestRouteAfterPlanReview:
 
     @patch('src.routing.save_checkpoint')
     def test_needs_revision_routes_to_plan_under_limit(self, mock_checkpoint):
-        """Test needs_revision routes to plan when under limit."""
+        """Test needs_revision routes to planning when under limit."""
         state = make_state(
             last_plan_review_verdict="needs_revision",
             replan_count=0,
         )
         result = route_after_plan_review(state)
-        assert result == "plan", f"Expected plan for needs_revision under limit, got {result}"
+        assert result == "planning", f"Expected planning for needs_revision under limit, got {result}"
 
     @patch('src.routing.save_checkpoint')
     def test_needs_revision_routes_to_ask_user_at_limit(self, mock_checkpoint):
@@ -1017,7 +1017,7 @@ class TestWorkflowPathIntegrity:
         happy_path = [
             "__start__",
             "adapt_prompts",
-            "plan",
+            "planning",
             "plan_review",
             "select_stage",
             "design",
@@ -1055,9 +1055,9 @@ class TestWorkflowPathIntegrity:
         """Test that revision loops exist for iterative improvement."""
         edges = list(graph_definition.edges)
         
-        # plan_review can go back to plan
+        # plan_review can go back to planning
         plan_review_targets = {e[1] for e in edges if e[0] == "plan_review"}
-        assert "plan" in plan_review_targets, "plan_review must be able to loop back to plan"
+        assert "planning" in plan_review_targets, "plan_review must be able to loop back to planning"
         
         # design_review can go back to design
         design_review_targets = {e[1] for e in edges if e[0] == "design_review"}
@@ -1272,7 +1272,7 @@ class TestRoutingEdgeCases:
         
         result = route_after_supervisor(state)
         # Missing replan_count defaults to 0, should allow replan
-        assert result == "plan"
+        assert result == "planning"
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -2139,7 +2139,7 @@ class TestSupervisorComplexCases:
             replan_count=0,
         )
         result = route_after_supervisor(state)
-        assert result == "plan", f"0 replan_count should allow replan, got {result}"
+        assert result == "planning", f"0 replan_count should allow replan, got {result}"
 
     @patch('src.graph.save_checkpoint')
     def test_replan_with_custom_runtime_limit(self, mock_checkpoint):
@@ -2150,7 +2150,7 @@ class TestSupervisorComplexCases:
             runtime_config={"max_replans": 10},  # Custom higher limit
         )
         result = route_after_supervisor(state)
-        assert result == "plan", (
+        assert result == "planning", (
             f"Custom runtime_config limit should allow replan, got {result}"
         )
 
@@ -2338,7 +2338,7 @@ class TestRuntimeConfigOverrides:
             runtime_config={"max_replans": 10},
         )
         result = route_after_plan_review(state)
-        assert result == "plan", (
+        assert result == "planning", (
             f"Custom limit should allow replan, got {result}"
         )
 
@@ -2379,7 +2379,7 @@ class TestEdgeCountVerification:
     def test_static_edge_nodes_have_single_outgoing(self, graph_definition):
         """Test that nodes with static edges have exactly one outgoing edge."""
         static_edge_nodes = [
-            ("adapt_prompts", "plan"),
+            ("adapt_prompts", "planning"),
             ("design", "design_review"),
             ("generate_code", "code_review"),
             ("run_code", "execution_check"),
@@ -2405,15 +2405,15 @@ class TestEdgeCountVerification:
     def test_conditional_edge_nodes_have_multiple_outgoing(self, graph_definition):
         """Test that nodes with conditional edges have appropriate number of outgoing edges."""
         conditional_edge_configs = {
-            "plan": 1,  # plan_review only
-            "plan_review": 3,  # select_stage, plan, ask_user
+            "planning": 1,  # plan_review only
+            "plan_review": 3,  # select_stage, planning, ask_user
             "select_stage": 2,  # design, generate_report
             "design_review": 3,  # generate_code, design, ask_user
             "code_review": 3,  # run_code, generate_code, ask_user
             "execution_check": 3,  # physics_check, generate_code, ask_user
             "physics_check": 4,  # analyze, generate_code, design, ask_user
             "comparison_check": 3,  # supervisor, analyze, ask_user
-            "supervisor": 6,  # select_stage, plan, ask_user, handle_backtrack, generate_report, material_checkpoint
+            "supervisor": 6,  # select_stage, planning, ask_user, handle_backtrack, generate_report, material_checkpoint
             "ask_user": 1,  # supervisor
         }
         

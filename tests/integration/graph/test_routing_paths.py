@@ -49,7 +49,7 @@ class TestPlanReviewRouting:
 
         result = routing.route_after_plan_review(test_state)
 
-        assert result == "plan"
+        assert result == "planning"
         mock_checkpoint.assert_not_called()
 
     @patch("src.routing.save_checkpoint")
@@ -79,7 +79,7 @@ class TestPlanReviewRouting:
 
         result = routing.route_after_plan_review(test_state)
 
-        assert result == "plan"
+        assert result == "planning"
         mock_checkpoint.assert_not_called()
 
     @patch("src.routing.save_checkpoint")
@@ -118,7 +118,7 @@ class TestPlanReviewRouting:
 
         result = routing.route_after_plan_review(test_state)
 
-        assert result == "plan"
+        assert result == "planning"
         mock_checkpoint.assert_not_called()
 
 
@@ -859,7 +859,7 @@ class TestSupervisorRouting:
 
         result = route_after_supervisor(test_state)
 
-        assert result == "plan"
+        assert result == "planning"
 
     @patch("src.graph.save_checkpoint")
     def test_supervisor_replan_at_limit(self, mock_checkpoint, test_state: ReproState):
@@ -901,7 +901,7 @@ class TestSupervisorRouting:
 
         result = route_after_supervisor(test_state)
 
-        assert result == "plan"
+        assert result == "planning"
 
     @patch("src.graph.save_checkpoint")
     def test_supervisor_backtrack(self, mock_checkpoint, test_state: ReproState):
@@ -1124,7 +1124,7 @@ class TestLimitEscalation:
                 "needs_revision",
                 "replan_count",
                 MAX_REPLANS,
-                "plan",
+                "planning",
                 "ask_user",
             ),
             (
@@ -1358,7 +1358,7 @@ class TestEdgeCases:
         result = route_after_supervisor(test_state)
 
         # Should treat as count=0 and route to plan
-        assert result == "plan"
+        assert result == "planning"
 
     @patch("src.graph.save_checkpoint")
     def test_supervisor_user_responses_missing(self, mock_checkpoint, test_state: ReproState):
@@ -1462,7 +1462,7 @@ class TestRoutingConsistency:
     def test_all_routers_return_valid_route_types(self, test_state: ReproState):
         """Verify all routers return valid route type strings."""
         valid_routes = {
-            "plan",
+            "planning",
             "plan_review",
             "select_stage",
             "design",
@@ -1577,7 +1577,7 @@ class TestNegativeAndBoundaryCounts:
         [
             ("route_after_code_review", "last_code_review_verdict", "needs_revision", "code_revision_count", "generate_code"),
             ("route_after_design_review", "last_design_review_verdict", "needs_revision", "design_revision_count", "design"),
-            ("route_after_plan_review", "last_plan_review_verdict", "needs_revision", "replan_count", "plan"),
+            ("route_after_plan_review", "last_plan_review_verdict", "needs_revision", "replan_count", "planning"),
             ("route_after_execution_check", "execution_verdict", "fail", "execution_failure_count", "generate_code"),
             ("route_after_physics_check", "physics_verdict", "fail", "physics_failure_count", "generate_code"),
             ("route_after_comparison_check", "comparison_verdict", "needs_revision", "analysis_revision_count", "analyze"),
@@ -1721,7 +1721,7 @@ class TestRuntimeConfigEdgeCases:
 
         result = route_after_supervisor(test_state)
 
-        assert result == "plan"  # Under the custom limit
+        assert result == "planning"  # Under the custom limit
 
     @patch("src.graph.save_checkpoint")
     def test_supervisor_runtime_config_zero_replan_limit(self, mock_checkpoint, test_state: ReproState):
@@ -1986,7 +1986,7 @@ class TestSupervisorCombinedConditions:
 
         # replan_needed should route to plan, not be affected by should_stop
         # (should_stop is only checked for ok_continue and change_priority)
-        assert result == "plan"
+        assert result == "planning"
 
     @patch("src.graph.save_checkpoint")
     def test_all_complete_overrides_material_validation(self, mock_checkpoint, test_state: ReproState):

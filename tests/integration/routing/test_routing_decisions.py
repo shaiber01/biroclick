@@ -65,12 +65,12 @@ class TestRouteAfterPlanReview:
         
         result = route_after_plan_review(base_state)
         
-        assert result == "plan", f"Expected 'plan' but got '{result}'"
+        assert result == "planning", f"Expected 'planning' but got '{result}'"
 
     def test_needs_revision_routes_to_plan_at_limit_minus_one(
         self, base_state, valid_plan
     ):
-        """needs_revision should still route to plan at count = limit - 1."""
+        """needs_revision should still route to planning at count = limit - 1."""
         from src.routing import route_after_plan_review
         from schemas.state import MAX_REPLANS
 
@@ -80,8 +80,8 @@ class TestRouteAfterPlanReview:
         
         result = route_after_plan_review(base_state)
         
-        assert result == "plan", (
-            f"At count={MAX_REPLANS-1} (limit-1), should route to 'plan', got '{result}'"
+        assert result == "planning", (
+            f"At count={MAX_REPLANS-1} (limit-1), should route to 'planning', got '{result}'"
         )
 
     @patch("src.routing.save_checkpoint")
@@ -231,8 +231,8 @@ class TestRouteAfterPlanReview:
         
         result = route_after_plan_review(base_state)
         
-        assert result == "plan", (
-            f"With runtime_config max_replans=10 and count=5, should route to 'plan', got '{result}'"
+        assert result == "planning", (
+            f"With runtime_config max_replans=10 and count=5, should route to 'planning', got '{result}'"
         )
 
     @patch("src.routing.save_checkpoint")
@@ -1622,7 +1622,7 @@ class TestDefaultLimitBoundaries:
         
         # Adjust expected based on actual limit
         if count < MAX_REPLANS:
-            assert result == "plan", f"At count={count}, expected 'plan', got '{result}'"
+            assert result == "planning", f"At count={count}, expected 'planning', got '{result}'"
         else:
             assert result == "ask_user", f"At count={count}, expected 'ask_user', got '{result}'"
 

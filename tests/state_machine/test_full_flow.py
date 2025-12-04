@@ -106,7 +106,7 @@ class TestFullSingleStageHappyPath:
                         print(f"  [{steps}] → {node_name}")
                         
                         # Capture state snapshot after key nodes
-                        if node_name in ["plan", "plan_review", "select_stage", "design", 
+                        if node_name in ["planning", "plan_review", "select_stage", "design", 
                                          "design_review", "code_review", "execution_check",
                                          "physics_check", "supervisor", "generate_report"]:
                             state_snapshots[node_name] = graph.get_state(config).values.copy()
@@ -159,8 +159,8 @@ class TestFullSingleStageHappyPath:
             # ASSERTION BLOCK: Verify node traversal
             # ═══════════════════════════════════════════════════════════════
             assert "adapt_prompts" in visited_nodes, "adapt_prompts should be first node"
-            assert "plan" in visited_nodes, "plan node must be visited"
-            assert "plan_review" in visited_nodes, "plan_review must follow plan"
+            assert "planning" in visited_nodes, "planning node must be visited"
+            assert "plan_review" in visited_nodes, "plan_review must follow planning"
             assert "select_stage" in visited_nodes, "select_stage must follow plan approval"
             assert "design" in visited_nodes, "design node must be visited"
             assert "design_review" in visited_nodes, "design_review must follow design"
@@ -177,12 +177,12 @@ class TestFullSingleStageHappyPath:
             # ═══════════════════════════════════════════════════════════════
             # ASSERTION BLOCK: Verify node ordering
             # ═══════════════════════════════════════════════════════════════
-            plan_idx = visited_nodes.index("plan")
+            plan_idx = visited_nodes.index("planning")
             plan_review_idx = visited_nodes.index("plan_review")
             select_stage_idx = visited_nodes.index("select_stage")
             design_idx = visited_nodes.index("design")
             
-            assert plan_idx < plan_review_idx, "plan must come before plan_review"
+            assert plan_idx < plan_review_idx, "planning must come before plan_review"
             assert plan_review_idx < select_stage_idx, "plan_review must come before select_stage"
             assert select_stage_idx < design_idx, "select_stage must come before design"
             
@@ -286,8 +286,8 @@ class TestPlanRevisionFlow:
                 break
 
             # Verify revision loop occurred
-            assert visited_nodes.count("plan") == 2, \
-                f"plan should be visited exactly 2 times (initial + revision), got {visited_nodes.count('plan')}"
+            assert visited_nodes.count("planning") == 2, \
+                f"planning should be visited exactly 2 times (initial + revision), got {visited_nodes.count('planning')}"
             assert visited_nodes.count("plan_review") == 2, \
                 f"plan_review should be visited exactly 2 times, got {visited_nodes.count('plan_review')}"
             assert plan_count == 2, f"planner LLM should be called 2 times, got {plan_count}"
@@ -676,8 +676,8 @@ class TestSupervisorReplanFlow:
                         visited_nodes.append(node_name)
                         print(f"  [{steps}] → {node_name}")
                         
-                        # After supervisor, look for plan (replan)
-                        if node_name == "plan" and "supervisor" in visited_nodes:
+                        # After supervisor, look for planning (replan)
+                        if node_name == "planning" and "supervisor" in visited_nodes:
                             found_replan = True
                             break
                         
@@ -708,13 +708,13 @@ class TestSupervisorReplanFlow:
             supervisor_indices = [i for i, n in enumerate(visited_nodes) if n == "supervisor"]
             assert len(supervisor_indices) >= 1, "supervisor should be visited"
             
-            # After supervisor with replan_needed, should go to plan
+            # After supervisor with replan_needed, should go to planning
             first_supervisor_idx = supervisor_indices[0]
             nodes_after_supervisor = visited_nodes[first_supervisor_idx + 1:]
             
-            # Should find plan after supervisor (might go through ask_user first)
-            assert "plan" in nodes_after_supervisor or found_replan, \
-                f"plan should be visited after supervisor replan_needed. Nodes after supervisor: {nodes_after_supervisor}"
+            # Should find planning after supervisor (might go through ask_user first)
+            assert "planning" in nodes_after_supervisor or found_replan, \
+                f"planning should be visited after supervisor replan_needed. Nodes after supervisor: {nodes_after_supervisor}"
 
             print("\n✅ Supervisor replan flow test passed!")
 
@@ -916,8 +916,8 @@ class TestVerdictNormalization:
                 break
 
             # Verify revision happened ("reject" was normalized to "needs_revision")
-            assert visited_nodes.count("plan") == 2, \
-                f"plan should be visited 2 times (initial + revision), got {visited_nodes.count('plan')}"
+            assert visited_nodes.count("planning") == 2, \
+                f"planning should be visited 2 times (initial + revision), got {visited_nodes.count('planning')}"
             
             # Verify final verdict is "approve" (from "pass" normalization)
             state = graph.get_state(config).values
@@ -1323,7 +1323,7 @@ class TestEdgeCases:
                 break
 
             # Plan with no stages should be rejected and replan loop should hit limit
-            assert "plan" in visited_nodes, "plan should be visited"
+            assert "planning" in visited_nodes, "planning should be visited"
             assert "plan_review" in visited_nodes, "plan_review should be visited"
             
             # Should NOT reach select_stage (plan is rejected)
@@ -1638,13 +1638,13 @@ class TestReplanLimitEscalation:
             assert interrupt_detected, "Should interrupt before ask_user when replan limit hit"
             
             # Verify we got an interrupt (before ask_user)
-            # The key assertion is that we didn't loop back to plan
+            # The key assertion is that we didn't loop back to planning
             supervisor_idx = visited_nodes.index("supervisor")
             nodes_after_supervisor = visited_nodes[supervisor_idx + 1:]
             
-            # Should NOT have gone to plan after supervisor (limit reached)
-            assert "plan" not in nodes_after_supervisor, \
-                f"plan should NOT follow supervisor when replan limit reached. Nodes: {nodes_after_supervisor}"
+            # Should NOT have gone to planning after supervisor (limit reached)
+            assert "planning" not in nodes_after_supervisor, \
+                f"planning should NOT follow supervisor when replan limit reached. Nodes: {nodes_after_supervisor}"
 
             print("\n✅ Replan limit escalation test passed!")
 

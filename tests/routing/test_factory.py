@@ -736,7 +736,7 @@ class TestPreConfiguredRouters:
         base_state["last_plan_review_verdict"] = "needs_revision"
         base_state["replan_count"] = 0
         result = route_after_plan_review(base_state)
-        assert result == "plan"
+        assert result == "planning"
         mock_save_checkpoint.assert_not_called()
 
     def test_route_after_plan_review_needs_revision_at_limit(

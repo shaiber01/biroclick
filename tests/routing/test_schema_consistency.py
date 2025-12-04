@@ -333,7 +333,7 @@ class TestRouteTypeConsistency:
         # Expected routes from our known router configurations
         expected_routes = {
             # From plan_review router
-            "select_stage", "plan", "ask_user",
+            "select_stage", "planning", "ask_user",
             # From design_review router
             "generate_code", "design",
             # From code_review router

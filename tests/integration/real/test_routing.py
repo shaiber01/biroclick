@@ -909,7 +909,7 @@ class TestPlanReviewRouter:
         state["last_plan_review_verdict"] = "needs_revision"
         state["replan_count"] = 0
         result = route_after_plan_review(state)
-        assert result == "plan"
+        assert result == "planning"
 
     @patch("src.routing.save_checkpoint")
     def test_needs_revision_escalates_at_limit(self, mock_checkpoint, state):
@@ -937,7 +937,7 @@ class TestPlanReviewRouter:
         state["last_plan_review_verdict"] = "needs_revision"
         state["replan_count"] = MAX_REPLANS - 1
         result = route_after_plan_review(state)
-        assert result == "plan"
+        assert result == "planning"
 
     @patch("src.routing.save_checkpoint")
     def test_none_verdict_escalates(self, mock_checkpoint, state):
@@ -964,14 +964,14 @@ class TestPlanReviewRouter:
         state["last_plan_review_verdict"] = "needs_revision"
         # replan_count not set
         result = route_after_plan_review(state)
-        assert result == "plan"
+        assert result == "planning"
 
     def test_none_replan_count_defaults_to_zero(self, state):
         """Test None replan_count defaults to 0."""
         state["last_plan_review_verdict"] = "needs_revision"
         state["replan_count"] = None
         result = route_after_plan_review(state)
-        assert result == "plan"
+        assert result == "planning"
 
     def test_uses_runtime_config_max_replans(self, state):
         """Test router uses runtime_config max_replans when available."""
@@ -979,7 +979,7 @@ class TestPlanReviewRouter:
         state["replan_count"] = 4
         state["runtime_config"] = {"max_replans": 5}
         result = route_after_plan_review(state)
-        assert result == "plan"
+        assert result == "planning"
 
     @patch("src.routing.save_checkpoint")
     def test_uses_runtime_config_max_replans_at_limit(self, mock_checkpoint, state):
@@ -1585,7 +1585,7 @@ class TestRoutingEdgeCases:
         # Test just under boundary: count == max - 1
         state["last_plan_review_verdict"] = "needs_revision"
         state["replan_count"] = MAX_REPLANS - 1
-        assert route_after_plan_review(state) == "plan"
+        assert route_after_plan_review(state) == "planning"
 
         state["last_design_review_verdict"] = "needs_revision"
         state["design_revision_count"] = MAX_DESIGN_REVISIONS - 1
@@ -1612,7 +1612,7 @@ class TestRoutingEdgeCases:
         assert route_after_plan_review(state) == "select_stage"
         state["last_plan_review_verdict"] = "needs_revision"
         state["replan_count"] = 0
-        assert route_after_plan_review(state) == "plan"
+        assert route_after_plan_review(state) == "planning"
 
         # Design review verdicts
         state["last_design_review_verdict"] = "approve"

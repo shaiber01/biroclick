@@ -489,7 +489,7 @@ class MockLLMResponses:
         return {
             "verdict": "replan_needed",
             "reasoning": "Results inconsistent, need new approach",
-            "suggested_next_step": "plan",
+            "suggested_next_step": "planning",
         }
 
     @staticmethod

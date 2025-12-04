@@ -937,7 +937,7 @@ class TestRoutingInvariants:
         # Test needs_revision → plan
         base_state["last_plan_review_verdict"] = "needs_revision"
         route = route_after_plan_review(base_state)
-        assert route == "plan", \
+        assert route == "planning", \
             f"needs_revision should route to plan, got {route}"
 
     def test_design_review_router_maps_verdicts_correctly(self, base_state):

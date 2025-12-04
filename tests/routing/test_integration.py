@@ -141,7 +141,7 @@ class TestRouterIntegration:
                 "needs_revision",
                 "replan_count",
                 0,
-                "plan",
+                "planning",
             ),
             (
                 route_after_plan_review,
@@ -383,7 +383,7 @@ class TestRuntimeConfigOverrides:
     @pytest.mark.parametrize(
         "router, verdict_field, verdict_val, count_field, config_key, default_max, expected_route_under_limit",
         [
-            (route_after_plan_review, "last_plan_review_verdict", "needs_revision", "replan_count", "max_replans", MAX_REPLANS, "plan"),
+            (route_after_plan_review, "last_plan_review_verdict", "needs_revision", "replan_count", "max_replans", MAX_REPLANS, "planning"),
             (route_after_design_review, "last_design_review_verdict", "needs_revision", "design_revision_count", "max_design_revisions", MAX_DESIGN_REVISIONS, "design"),
             (route_after_code_review, "last_code_review_verdict", "needs_revision", "code_revision_count", "max_code_revisions", MAX_CODE_REVISIONS, "generate_code"),
             (route_after_execution_check, "execution_verdict", "fail", "execution_failure_count", "max_execution_failures", MAX_EXECUTION_FAILURES, "generate_code"),
@@ -702,7 +702,7 @@ class TestAllValidVerdicts:
         # Test 'needs_revision' under limit
         base_state["last_plan_review_verdict"] = "needs_revision"
         base_state["replan_count"] = 0
-        assert route_after_plan_review(base_state) == "plan"
+        assert route_after_plan_review(base_state) == "planning"
         
         mock_save_checkpoint.assert_not_called()
 

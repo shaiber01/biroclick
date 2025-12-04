@@ -127,7 +127,7 @@ class TestPlanningPhase:
             
             # Verify node visitation order
             assert "adapt_prompts" in nodes_visited, "adapt_prompts node should be visited"
-            assert "plan" in nodes_visited, "plan node should be visited"
+            assert "planning" in nodes_visited, "planning node should be visited"
             assert "plan_review" in nodes_visited, "plan_review node should be visited"
             assert "select_stage" in nodes_visited, "select_stage node should be visited"
             
@@ -267,8 +267,8 @@ class TestPlanningPhase:
             final_state = graph.get_state(config).values
 
             # Verify revision flow occurred
-            assert nodes_visited.count("plan") == 2, \
-                f"Plan node should be visited twice (initial + revision), got {nodes_visited.count('plan')}"
+            assert nodes_visited.count("planning") == 2, \
+                f"Planning node should be visited twice (initial + revision), got {nodes_visited.count('planning')}"
             assert nodes_visited.count("plan_review") == 2, \
                 f"Plan review node should be visited twice, got {nodes_visited.count('plan_review')}"
             
@@ -336,16 +336,16 @@ class TestPlanningPhase:
             final_state = state.values
             
             # Verify we hit the replan limit
-            # MAX_REPLANS is 2, so we should see: initial plan + 2 replans = 3 plan visits
+            # MAX_REPLANS is 2, so we should see: initial planning + 2 replans = 3 planning visits
             # But routing checks count BEFORE incrementing, so we get MAX_REPLANS + 1 iterations
-            plan_count = nodes_visited.count("plan")
+            plan_count = nodes_visited.count("planning")
             review_count = nodes_visited.count("plan_review")
             
-            print(f"\n  plan visits: {plan_count}, plan_review visits: {review_count}")
+            print(f"\n  planning visits: {plan_count}, plan_review visits: {review_count}")
             print(f"  replan_count: {final_state.get('replan_count')}")
             
             assert plan_count >= MAX_REPLANS, \
-                f"Should have at least {MAX_REPLANS} plan visits, got {plan_count}"
+                f"Should have at least {MAX_REPLANS} planning visits, got {plan_count}"
             
             # Verify replan_count reached limit
             assert final_state.get("replan_count", 0) >= MAX_REPLANS, \
