@@ -30,6 +30,16 @@ from .helpers.materials import (
 )
 
 
+def _format_boxed_content(title: str, content: str, prefix: str = "   ") -> str:
+    """Format content in a box for clear log visibility."""
+    lines = content.strip().split('\n')
+    boxed_lines = [f"{prefix}┌─── {title} ───"]
+    for line in lines:
+        boxed_lines.append(f"{prefix}│ {line}")
+    boxed_lines.append(f"{prefix}└{'─' * (len(title) + 6)}")
+    return '\n'.join(boxed_lines)
+
+
 def ask_user_node(state: ReproState) -> Dict[str, Any]:
     """
     CLI-based user interaction node.
@@ -81,6 +91,102 @@ def ask_user_node(state: ReproState) -> Dict[str, Any]:
     if "original_user_questions" not in state:
         original_questions = questions.copy()
     
+    # ═══════════════════════════════════════════════════════════════════════
+    # CHECK FOR PRE-EXISTING RESPONSES (from interrupt handler like runner.py)
+    # When using LangGraph's interrupt_before pattern, the external runner
+    # may have already collected the user's response and stored it in
+    # user_responses[trigger]. If so, skip CLI prompting and just validate.
+    # ═══════════════════════════════════════════════════════════════════════
+    existing_responses = state.get("user_responses", {})
+    if trigger and trigger in existing_responses:
+        pre_provided_response = existing_responses[trigger]
+        logger.info(
+            f"✅ ask_user: found pre-provided response for trigger '{trigger}' "
+            f"(from interrupt handler), skipping CLI prompt"
+        )
+        
+        # Log the questions that were asked and the pre-provided response
+        logger.info(f"❓ ask_user (pre-provided): trigger={trigger}, {len(questions)} question(s)")
+        for i, q in enumerate(questions, 1):
+            logger.info(f"\n{_format_boxed_content(f'QUESTION {i}', q)}")
+        logger.info(f"\n{_format_boxed_content('PRE-PROVIDED RESPONSE', pre_provided_response)}")
+        
+        # Map the single response to all questions (typically there's just one)
+        # Use the first question as the key for the response
+        responses = {}
+        if questions:
+            responses[questions[0]] = pre_provided_response
+        
+        # Map to original questions for validation
+        mapped_responses = {}
+        if original_questions:
+            mapped_responses[original_questions[0]] = pre_provided_response
+        
+        # Clear the trigger from user_responses to prevent re-use on retry
+        # (we'll add the properly validated response back later)
+        updated_user_responses = {k: v for k, v in existing_responses.items() if k != trigger}
+        
+        # Jump to validation (same logic as after CLI input collection)
+        validation_errors = validate_user_responses(trigger, mapped_responses, original_questions)
+        if validation_errors:
+            validation_attempt_key = f"user_validation_attempts_{trigger}"
+            validation_attempts = state.get(validation_attempt_key, 0) + 1
+            max_validation_attempts = 3
+            
+            if validation_attempts >= max_validation_attempts:
+                logger.warning(
+                    f"User validation failed {validation_attempts} times for trigger '{trigger}'. "
+                    "Accepting response despite validation errors and escalating to supervisor."
+                )
+                result = {
+                    "user_responses": {**updated_user_responses, **mapped_responses},
+                    "pending_user_questions": [],
+                    "awaiting_user_input": False,
+                    "workflow_phase": "awaiting_user",
+                    validation_attempt_key: 0,
+                    "original_user_questions": None,
+                    "supervisor_feedback": (
+                        f"User response had validation errors but was accepted after {validation_attempts} attempts."
+                    ),
+                }
+                if safety_net_triggered:
+                    result["ask_user_trigger"] = trigger
+                return result
+            
+            error_msg = "\n".join(f"  - {err}" for err in validation_errors)
+            first_question = original_questions[0] if original_questions else 'Please provide a valid response.'
+            reask_questions = [
+                f"Your response had validation errors (attempt {validation_attempts}/{max_validation_attempts}):\n{error_msg}\n\n"
+                f"Please try again:\n{first_question}"
+            ]
+            
+            if len(original_questions) > 1:
+                reask_questions.extend(original_questions[1:])
+            
+            return {
+                "user_responses": updated_user_responses,  # Clear the invalid response
+                "pending_user_questions": reask_questions,
+                "awaiting_user_input": True,
+                "ask_user_trigger": trigger,
+                "last_node_before_ask_user": state.get("last_node_before_ask_user"),
+                validation_attempt_key: validation_attempts,
+                "original_user_questions": original_questions,
+            }
+        
+        # Validation passed - return success
+        validation_attempt_key = f"user_validation_attempts_{trigger}"
+        result = {
+            "user_responses": {**updated_user_responses, **mapped_responses},
+            "pending_user_questions": [],
+            "awaiting_user_input": False,
+            "workflow_phase": "awaiting_user",
+            validation_attempt_key: 0,
+            "original_user_questions": None,
+        }
+        if safety_net_triggered:
+            result["ask_user_trigger"] = trigger
+        return result
+    
     # Non-interactive mode
     if non_interactive:
         print("\n" + "=" * 60)
@@ -90,6 +196,11 @@ def ask_user_node(state: ReproState) -> Dict[str, Any]:
         print(f"Trigger: {trigger}")
         for i, q in enumerate(questions, 1):
             print(f"\nQuestion {i}:\n{q}")
+        
+        # Log the questions being asked (non-interactive)
+        logger.info(f"❓ ask_user (non-interactive): trigger={trigger}, {len(questions)} question(s)")
+        for i, q in enumerate(questions, 1):
+            logger.info(f"\n{_format_boxed_content(f'QUESTION {i}', q)}")
         
         checkpoint_path = save_checkpoint(state, f"awaiting_user_{trigger}")
         print(f"\n✓ Checkpoint saved: {checkpoint_path}")
@@ -105,6 +216,11 @@ def ask_user_node(state: ReproState) -> Dict[str, Any]:
     print(f"Trigger: {trigger}")
     print("(Press Ctrl+C to save checkpoint and exit)")
     print("=" * 60)
+    
+    # Log the questions being asked
+    logger.info(f"❓ ask_user: trigger={trigger}, {len(questions)} question(s)")
+    for i, q in enumerate(questions, 1):
+        logger.info(f"\n{_format_boxed_content(f'QUESTION {i}', q)}")
     
     responses = {}
     
@@ -148,6 +264,12 @@ def ask_user_node(state: ReproState) -> Dict[str, Any]:
         print("\n" + "=" * 60)
         print("✓ All responses collected")
         print("=" * 60)
+        
+        # Log the user's responses
+        logger.info(f"✅ ask_user: collected {len(responses)} response(s)")
+        for i, (q, r) in enumerate(responses.items(), 1):
+            logger.info(f"\n{_format_boxed_content(f'Q{i}', q)}")
+            logger.info(f"\n{_format_boxed_content(f'RESPONSE {i}', r)}")
             
     except KeyboardInterrupt:
         if hasattr(signal, 'SIGALRM'):
