@@ -374,7 +374,7 @@ route_after_comparison_check = create_verdict_router(
                 "count_field": "analysis_revision_count",
                 "max_count_key": "max_analysis_revisions",
                 "default_max": MAX_ANALYSIS_REVISIONS,
-                "route_on_limit": "supervisor",  # Proceed with flag, not ask_user
+                "route_on_limit": "ask_user",  # Escalate to user like other limits
             }
         },
     },

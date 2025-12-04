@@ -677,11 +677,20 @@ def comparison_validator_node(state: ReproState) -> dict:
     }
     
     if verdict == "needs_revision":
-        new_count, _ = increment_counter_with_max(
+        new_count, at_limit = increment_counter_with_max(
             state, "analysis_revision_count", "max_analysis_revisions", MAX_ANALYSIS_REVISIONS
         )
         result["analysis_revision_count"] = new_count
         result["analysis_feedback"] = feedback
+        
+        # Set trigger when at limit so user knows why they're being asked
+        if at_limit:
+            result["ask_user_trigger"] = "analysis_limit"
+            result["pending_user_questions"] = [
+                f"Analysis revision limit ({MAX_ANALYSIS_REVISIONS}) reached but results don't match paper. "
+                "Options: ACCEPT_PARTIAL (proceed with current results), "
+                "PROVIDE_HINT (retry analysis with guidance), or STOP?"
+            ]
     else:
         result["analysis_feedback"] = None
     

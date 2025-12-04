@@ -727,6 +727,48 @@ def handle_invalid_backtrack_decision(
         ]
 
 
+def handle_analysis_limit(
+    state: ReproState,
+    result: Dict[str, Any],
+    user_responses: Dict[str, str],
+    current_stage_id: Optional[str] = None,
+) -> None:
+    """
+    Handle analysis_limit trigger response.
+    
+    User can:
+    - ACCEPT_PARTIAL: Mark stage as partial success and continue
+    - PROVIDE_HINT: Reset counter and retry with guidance
+    - STOP: Stop workflow
+    """
+    response_text = parse_user_response(user_responses)
+    
+    # Use word boundary matching to avoid false positives
+    if check_keywords(response_text, ["ACCEPT", "PARTIAL", "ACCEPT_PARTIAL"]):
+        result["supervisor_verdict"] = "ok_continue"
+        if current_stage_id:
+            _update_progress_with_error_handling(
+                state, result, current_stage_id, "completed_partial",
+                summary="Accepted as partial match by user"
+            )
+    
+    elif check_keywords(response_text, ["PROVIDE_HINT", "HINT"]):
+        result["analysis_revision_count"] = 0
+        raw_response = list(user_responses.values())[-1] if user_responses else ""
+        result["analysis_feedback"] = f"User hint: {raw_response}"
+        result["supervisor_verdict"] = "ok_continue"
+    
+    elif check_keywords(response_text, ["STOP"]):
+        result["supervisor_verdict"] = "all_complete"
+        result["should_stop"] = True
+    
+    else:
+        result["supervisor_verdict"] = "ask_user"
+        result["pending_user_questions"] = [
+            "Please clarify: ACCEPT_PARTIAL, PROVIDE_HINT (with hint text), or STOP?"
+        ]
+
+
 # Registry of trigger handlers
 TRIGGER_HANDLERS: Dict[str, Callable] = {
     "material_checkpoint": handle_material_checkpoint,
@@ -734,6 +776,7 @@ TRIGGER_HANDLERS: Dict[str, Callable] = {
     "design_review_limit": handle_design_review_limit,
     "execution_failure_limit": handle_execution_failure_limit,
     "physics_failure_limit": handle_physics_failure_limit,
+    "analysis_limit": handle_analysis_limit,
     "context_overflow": handle_context_overflow,
     "replan_limit": handle_replan_limit,
     "backtrack_approval": handle_backtrack_approval,
