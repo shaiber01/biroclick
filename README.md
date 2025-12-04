@@ -149,29 +149,38 @@ graph TD
     ADAPT --> PLAN[PLAN<br/>PlannerAgent]
     PLAN --> PLAN_REVIEW[PLAN_REVIEW<br/>PlanReviewerAgent]
     PLAN_REVIEW -->|needs_revision| PLAN
+    PLAN_REVIEW -->|limit reached| ASK[ASK_USER]
     PLAN_REVIEW -->|approve| SELECT[SELECT_STAGE]
     SELECT -->|no more stages| REPORT[GENERATE_REPORT] --> END([END])
     SELECT -->|has next stage| DESIGN[DESIGN<br/>SimulationDesignerAgent]
     DESIGN --> DESIGN_REVIEW[DESIGN_REVIEW<br/>DesignReviewerAgent]
     DESIGN_REVIEW -->|needs_revision| DESIGN
+    DESIGN_REVIEW -->|limit reached| ASK
     DESIGN_REVIEW -->|approve| CODE_GEN[GENERATE_CODE<br/>CodeGeneratorAgent]
     CODE_GEN --> CODE_REVIEW[CODE_REVIEW<br/>CodeReviewerAgent]
     CODE_REVIEW -->|needs_revision| CODE_GEN
+    CODE_REVIEW -->|limit reached| ASK
     CODE_REVIEW -->|approve| RUN[RUN_CODE]
     RUN --> EXEC[EXECUTION_CHECK<br/>ExecutionValidatorAgent]
     EXEC -->|fail| CODE_GEN
+    EXEC -->|limit reached| ASK
     EXEC -->|pass| PHYSICS[PHYSICS_CHECK<br/>PhysicsSanityAgent]
     PHYSICS -->|fail| CODE_GEN
+    PHYSICS -->|limit reached| ASK
     PHYSICS -->|design_flaw| DESIGN
     PHYSICS -->|pass| ANALYZE[ANALYZE<br/>ResultsAnalyzerAgent]
     ANALYZE --> COMPARE[COMPARISON_CHECK<br/>ComparisonValidatorAgent]
     COMPARE -->|needs_revision| ANALYZE
-    COMPARE -->|approve| SUPERVISOR[SUPERVISOR<br/>SupervisorAgent]
-    SUPERVISOR -->|ok_continue + Stage 0| MATERIAL[MATERIAL_CHECKPOINT] --> ASK[ASK_USER]
+    COMPARE -->|limit reached| SUPERVISOR[SUPERVISOR<br/>SupervisorAgent]
+    COMPARE -->|approve| SUPERVISOR
+    SUPERVISOR -->|ok_continue + Stage 0| MATERIAL[MATERIAL_CHECKPOINT] --> ASK
     SUPERVISOR -->|ok_continue + other| SELECT
     SUPERVISOR -->|backtrack_to_stage| BACKTRACK[HANDLE_BACKTRACK] --> SELECT
     SUPERVISOR -->|replan_needed| PLAN
-    SUPERVISOR -->|ask_user| ASK --> SUPERVISOR
+    SUPERVISOR -->|ask_user| ASK
+    ASK --> SUPERVISOR
+    style ASK fill:#ffcccc
+    style SUPERVISOR fill:#ccffcc
 ```
 
 #### Complete Workflow Visualization
