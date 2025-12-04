@@ -75,9 +75,29 @@ class GraphProgressCallback(BaseCallbackHandler):
     
     def on_chain_start(self, serialized, inputs, **kwargs):
         """Called when a chain/node starts executing."""
-        name = serialized.get("name", "unknown") if serialized else "unknown"
+        # Try multiple sources for the node name:
+        # 1. kwargs["name"] - LangGraph often passes node name directly here
+        # 2. kwargs["tags"] - node name may be in tags list
+        # 3. serialized["name"] - fallback for LangChain chains
+        name = kwargs.get("name")
+        
+        if not name:
+            tags = kwargs.get("tags", [])
+            # LangGraph node names are often in tags, filter out internal ones
+            internal_tags = {"seq:step", "langsmith:hidden", "__start__"}
+            for tag in tags:
+                if tag not in internal_tags and not tag.startswith("seq:step:") and not tag.startswith("graph:step:"):
+                    name = tag
+                    break
+        
+        if not name and serialized:
+            name = serialized.get("name")
+        
+        if not name:
+            return  # Skip logging if we can't determine the name
+            
         # Filter out internal LangGraph wrappers to show only meaningful nodes
-        internal_names = {"RunnableSequence", "StateGraph", "CompiledStateGraph", "ChannelWrite", "ChannelRead"}
+        internal_names = {"RunnableSequence", "StateGraph", "CompiledStateGraph", "ChannelWrite", "ChannelRead", "RunnableLambda"}
         if name not in internal_names and not name.startswith("Runnable"):
             logger.info(f"🔄 Entering node: {name}")
     
