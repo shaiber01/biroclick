@@ -400,8 +400,8 @@ class TestPlanningPhase:
             state = graph.get_state(config)
             final_state = state.values
             
-            # Verify plan node detected the issue
-            assert "plan" in nodes_visited, "plan node should be visited"
+            # Verify planning node detected the issue
+            assert "planning" in nodes_visited, "planning node should be visited"
             
             # Verify error handling
             assert final_state.get("ask_user_trigger") == "missing_paper_text", \
@@ -1237,9 +1237,9 @@ class TestAdaptPromptsNode:
             assert state_after_adapt.get("prompt_adaptations") == [], \
                 f"Should have empty adaptations on LLM failure, got {state_after_adapt.get('prompt_adaptations')}"
 
-            # Should continue to plan despite failure
+            # Should continue to planning despite failure
             assert "adapt_prompts" in nodes_visited
-            assert "plan" in nodes_visited
+            assert "planning" in nodes_visited
 
             print("\n✅ LLM failure handling test passed!")
 
@@ -1344,7 +1344,7 @@ class TestVerdictNormalization:
                 break
 
             # Should normalize 'reject' to 'needs_revision' and trigger replan
-            assert nodes_visited.count("plan") == 2, \
-                f"'reject' should trigger replan (normalized to 'needs_revision'), got {nodes_visited.count('plan')} plan visits"
+            assert nodes_visited.count("planning") == 2, \
+                f"'reject' should trigger replan (normalized to 'needs_revision'), got {nodes_visited.count('planning')} planning visits"
 
             print("\n✅ Reject normalization test passed!")
