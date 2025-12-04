@@ -1,35 +1,70 @@
 import logging
+from pathlib import Path
 from langchain_core.callbacks import BaseCallbackHandler
 
-# Create a custom logger setup with different levels for console vs file
-def setup_logging():
-    # Create root logger
+# Add custom VERBOSE level (between DEBUG=10 and INFO=20)
+VERBOSE = 15
+logging.addLevelName(VERBOSE, "VERBOSE")
+
+def verbose(self, message, *args, **kwargs):
+    if self.isEnabledFor(VERBOSE):
+        self._log(VERBOSE, message, args, **kwargs)
+
+logging.Logger.verbose = verbose
+
+
+def setup_console_logging():
+    """Set up console-only logging (before we know the run folder)."""
     root_logger = logging.getLogger()
     root_logger.setLevel(logging.DEBUG)  # Capture everything at root level
     
-    # Console handler - INFO level
+    # Console handler - INFO level (user sees INFO and above)
     console_handler = logging.StreamHandler()
     console_handler.setLevel(logging.INFO)
     console_format = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
     console_handler.setFormatter(console_format)
-    
-    # File handler - DEBUG level
-    file_handler = logging.FileHandler("repro_debug.log", mode="w")  # 'w' overwrites each run
-    file_handler.setLevel(logging.DEBUG)
-    file_format = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-    file_handler.setFormatter(file_format)
-    
-    # Add handlers to root logger
     root_logger.addHandler(console_handler)
-    root_logger.addHandler(file_handler)
     
-    # Enable LangChain/LangGraph debug logging (goes to file only due to handler levels)
-    logging.getLogger("langchain").setLevel(logging.DEBUG)
-    logging.getLogger("langchain_core").setLevel(logging.DEBUG)
-    logging.getLogger("langchain_anthropic").setLevel(logging.DEBUG)
-    logging.getLogger("langgraph").setLevel(logging.DEBUG)
+    # Enable LangChain/LangGraph debug logging (will go to file once file handlers are added)
+    for name in ["langchain", "langchain_core", "langchain_anthropic", "langgraph"]:
+        logging.getLogger(name).setLevel(logging.DEBUG)
 
-setup_logging()
+
+def setup_file_logging(run_output_dir: str):
+    """Add file handlers once we know the run folder.
+    
+    Creates three log files:
+    - debug.log: Everything (DEBUG and above)
+    - verbose.log: VERBOSE and above (no DEBUG)
+    - info.log: INFO and above only
+    """
+    root_logger = logging.getLogger()
+    log_dir = Path(run_output_dir)
+    log_dir.mkdir(parents=True, exist_ok=True)
+    
+    file_format = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    
+    # DEBUG level log (everything)
+    debug_handler = logging.FileHandler(log_dir / "debug.log", mode="w")
+    debug_handler.setLevel(logging.DEBUG)
+    debug_handler.setFormatter(file_format)
+    root_logger.addHandler(debug_handler)
+    
+    # VERBOSE level log (VERBOSE and above, no DEBUG)
+    verbose_handler = logging.FileHandler(log_dir / "verbose.log", mode="w")
+    verbose_handler.setLevel(VERBOSE)
+    verbose_handler.setFormatter(file_format)
+    root_logger.addHandler(verbose_handler)
+    
+    # INFO level log (INFO and above)
+    info_handler = logging.FileHandler(log_dir / "info.log", mode="w")
+    info_handler.setLevel(logging.INFO)
+    info_handler.setFormatter(file_format)
+    root_logger.addHandler(info_handler)
+
+
+# Phase 1: Console logging only (before we know the run folder)
+setup_console_logging()
 
 # Get a logger for this module
 logger = logging.getLogger(__name__)
@@ -71,6 +106,10 @@ paper_input = load_paper_from_markdown(
     paper_id="aluminum_nanoantenna_complexes",
     paper_domain="plasmonics"
 )
+
+# Phase 2: Now we know the run folder - add file logging
+setup_file_logging(paper_input["run_output_dir"])
+logger.info(f"📁 Run output directory: {paper_input['run_output_dir']}")
 
 # Convert to initial state
 initial_state = create_state_from_paper_input(paper_input)
