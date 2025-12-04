@@ -479,14 +479,19 @@ class TestHandleDesignReviewLimit:
         assert mock_result["supervisor_verdict"] == "ask_user"
 
     def test_handle_design_review_limit_hint_raw_response_with_empty_string_value(self, mock_state, mock_result):
-        """Should handle empty string value when extracting raw_response."""
+        """Should handle empty string value when extracting raw_response.
+        
+        Note: extract_guidance_text now strips the PROVIDE_HINT: prefix,
+        so "PROVIDE_HINT:" becomes an empty hint.
+        """
         user_input = {"q1": "PROVIDE_HINT:"}
         trigger_handlers.handle_design_review_limit(
             mock_state, mock_result, user_input, "stage1"
         )
         
         assert mock_result["design_revision_count"] == 0
-        assert mock_result["reviewer_feedback"] == "User hint: PROVIDE_HINT:"
+        # The prefix is stripped, so the hint is empty
+        assert mock_result["reviewer_feedback"] == "User hint: "
         assert mock_result["supervisor_verdict"] == "ok_continue"
 
     def test_handle_design_review_limit_skip_with_falsy_stage_id_values(self, mock_state, mock_result):

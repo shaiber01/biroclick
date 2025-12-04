@@ -710,7 +710,7 @@ def extract_guidance_text(response: str, keywords: Optional[List[str]] = None) -
     - "RETRY_WITH_GUIDANCE: check the boundary conditions"
     
     Args:
-        response: User's response text
+        response: User's response text (can also be a list, which gets converted)
         keywords: Keywords to strip (defaults to common guidance keywords)
         
     Returns:
@@ -718,6 +718,12 @@ def extract_guidance_text(response: str, keywords: Optional[List[str]] = None) -
     """
     if keywords is None:
         keywords = ["GUIDANCE", "HINT", "PROVIDE_HINT", "RETRY_WITH_GUIDANCE"]
+    
+    # Handle non-string inputs gracefully
+    if isinstance(response, list):
+        response = " ".join(str(item) for item in response if item)
+    elif not isinstance(response, str):
+        response = str(response) if response else ""
     
     text = response.strip()
     text_upper = text.upper()

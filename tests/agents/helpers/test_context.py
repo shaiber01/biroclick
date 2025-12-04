@@ -214,7 +214,15 @@ class TestValidateUserResponses:
         assert "No responses provided" in errors[0]
 
     def test_material_checkpoint_all_valid_keywords(self):
-        """Should accept all valid keywords for material_checkpoint."""
+        """Should accept all valid keywords for material_checkpoint.
+        
+        Valid options are defined in src/agents/user_options.py:
+        - APPROVE (aliases: YES, OK, ACCEPT, PROCEED, CORRECT, VALID)
+        - CHANGE_DATABASE (aliases: DATABASE)
+        - CHANGE_MATERIAL (aliases: MATERIAL)
+        - NEED_HELP (aliases: HELP)
+        - STOP (aliases: QUIT, EXIT, ABORT, END)
+        """
         valid_responses = [
             "APPROVE",
             "CHANGE_MATERIAL",
@@ -223,10 +231,7 @@ class TestValidateUserResponses:
             "STOP",
             "HELP",
             "YES",
-            "NO",
-            "REJECT",
             "CORRECT",
-            "WRONG",
             "approve",  # case insensitive
             "yes please",
             "I need help",
@@ -261,9 +266,11 @@ class TestValidateUserResponses:
 
     def test_material_checkpoint_error_message_contains_valid_options(self):
         """Should include valid options in error message."""
+        # Use a response that doesn't match any keyword (not even as substring)
+        # Note: "invalid" contains "VALID" which is an alias, so we use something else
         errors = validate_user_responses(
             "material_checkpoint",
-            {"q": "invalid"},
+            {"q": "gibberish_xyz_123"},
             ["q"]
         )
         assert len(errors) == 1
@@ -273,13 +280,16 @@ class TestValidateUserResponses:
         assert any(opt in error_msg for opt in valid_options), f"Error message should contain valid options: {error_msg}"
 
     def test_code_review_limit_all_valid_keywords(self):
-        """Should accept all valid keywords for code_review_limit."""
+        """Should accept all valid keywords for code_review_limit.
+        
+        Valid options: PROVIDE_HINT (alias: HINT), SKIP_STAGE (alias: SKIP), STOP (aliases: QUIT, EXIT, ABORT, END)
+        """
         valid_responses = [
             "PROVIDE_HINT",
             "HINT",
             "SKIP",
+            "SKIP_STAGE",
             "STOP",
-            "RETRY",
             "provide hint",
             "skip this",
             "let's stop",
@@ -303,13 +313,16 @@ class TestValidateUserResponses:
         assert "PROVIDE_HINT" in errors[0] or "SKIP_STAGE" in errors[0] or "STOP" in errors[0]
 
     def test_design_review_limit_all_valid_keywords(self):
-        """Should accept all valid keywords for design_review_limit."""
+        """Should accept all valid keywords for design_review_limit.
+        
+        Valid options: PROVIDE_HINT (alias: HINT), SKIP_STAGE (alias: SKIP), STOP (aliases: QUIT, EXIT, ABORT, END)
+        """
         valid_responses = [
             "PROVIDE_HINT",
             "HINT",
             "SKIP",
+            "SKIP_STAGE",
             "STOP",
-            "RETRY",
         ]
         for response in valid_responses:
             errors = validate_user_responses(
@@ -443,17 +456,19 @@ class TestValidateUserResponses:
         assert len(errors) == 1
         assert "FORCE_ACCEPT" in errors[0] or "PROVIDE_GUIDANCE" in errors[0] or "STOP" in errors[0]
 
-    def test_context_overflow_accepts_any_nonempty(self):
-        """Should accept any non-empty response for context_overflow."""
+    def test_context_overflow_accepts_valid_keywords(self):
+        """Should accept valid keywords for context_overflow.
+        
+        Valid options: SUMMARIZE, TRUNCATE, SKIP_STAGE (alias: SKIP), STOP (aliases: QUIT, EXIT, ABORT, END)
+        """
         valid_responses = [
-            "anything",
-            "proceed",
-            "skip",
+            "SUMMARIZE",
+            "TRUNCATE",
+            "SKIP",
+            "SKIP_STAGE",
             "stop",
-            "continue",
-            "yes",
-            "no",
-            "   ",
+            "QUIT",
+            "exit",
         ]
         for response in valid_responses:
             errors = validate_user_responses(
@@ -463,37 +478,27 @@ class TestValidateUserResponses:
             )
             assert errors == [], f"Should accept '{response}' but got errors: {errors}"
 
-    def test_context_overflow_rejects_empty(self):
-        """Should reject empty response for context_overflow."""
+    def test_context_overflow_rejects_invalid_keyword(self):
+        """Should reject invalid keyword for context_overflow."""
         errors = validate_user_responses(
             "context_overflow",
-            {"q": ""},
+            {"q": "invalid_keyword_xyz"},
             ["q"]
         )
-        # context_overflow should accept empty strings based on code logic
-        # Actually, looking at the code, it checks if all_responses.strip() is empty
-        # So empty string should be rejected for unknown triggers but context_overflow is special
-        # Let me check the code again - context_overflow is in the special list, so it should accept empty
-        # Wait, the code checks `elif trigger not in ["context_overflow", "backtrack_limit"]`
-        # So context_overflow is excluded from the empty check, meaning it accepts anything
-        # But empty string when joined becomes empty, so let's test this
-        all_responses = " ".join(str("").upper() for r in [""])
-        assert all_responses.strip() == ""
-        # So for context_overflow, it should accept empty because it's excluded from the check
-        errors = validate_user_responses(
-            "context_overflow",
-            {"q": ""},
-            ["q"]
-        )
-        assert errors == []
+        # Should get clarification message for invalid keyword
+        assert len(errors) > 0
+        assert "clarify" in errors[0].lower()
 
-    def test_backtrack_limit_accepts_any_nonempty(self):
-        """Should accept any non-empty response for backtrack_limit."""
+    def test_backtrack_limit_accepts_valid_keywords(self):
+        """Should accept valid keywords for backtrack_limit.
+        
+        Valid options: FORCE_CONTINUE (aliases: FORCE, CONTINUE), STOP (aliases: QUIT, EXIT, ABORT, END)
+        """
         valid_responses = [
-            "anything",
-            "proceed",
-            "yes",
-            "no",
+            "FORCE",
+            "FORCE_CONTINUE",
+            "CONTINUE",
+            "STOP",
         ]
         for response in valid_responses:
             errors = validate_user_responses(

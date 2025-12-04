@@ -138,7 +138,8 @@ class TestHandleReplanLimit:
         assert "pending_user_questions" in mock_result
         assert isinstance(mock_result["pending_user_questions"], list)
         assert len(mock_result["pending_user_questions"]) == 1
-        assert "FORCE_ACCEPT" in mock_result["pending_user_questions"][0]
+        # Clarification message shows display names from user_options.py
+        assert "APPROVE_PLAN" in mock_result["pending_user_questions"][0]
         assert "GUIDANCE" in mock_result["pending_user_questions"][0]
         assert "STOP" in mock_result["pending_user_questions"][0]
         assert mock_result.get("should_stop") is not True

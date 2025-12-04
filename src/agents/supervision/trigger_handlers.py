@@ -90,20 +90,29 @@ def handle_material_checkpoint(
     Options defined in user_options.py: APPROVE, CHANGE_DATABASE, CHANGE_MATERIAL, NEED_HELP, STOP
     
     Note: This handler has special logic for combined rejection+keyword patterns
-    (e.g., "REJECT DATABASE" -> CHANGE_DATABASE).
+    (e.g., "REJECT DATABASE" -> CHANGE_DATABASE). Rejection patterns take precedence
+    over approval keywords when both are present.
     """
     response_text = parse_user_response(user_responses)
     
-    # First, try the standard matching
-    matched = match_user_response("material_checkpoint", response_text)
-    
-    # Special case: check for rejection patterns (REJECT + DATABASE/MATERIAL)
-    # These take precedence over simple approval/rejection
+    # Check for rejection/change keywords FIRST - these take precedence
     is_rejection = check_keywords(response_text, REJECTION_KEYWORDS)
+    is_approval = check_keywords(response_text, APPROVAL_KEYWORDS)
     
-    if is_rejection and check_keywords(response_text, ["DATABASE"]):
-        # Treat as CHANGE_DATABASE
-        matched = None  # Clear any match
+    # Check for database-related keywords (CHANGE_DATABASE, DATABASE, or rejection + database)
+    wants_database_change = (
+        check_keywords(response_text, ["CHANGE_DATABASE"]) or 
+        (is_rejection and check_keywords(response_text, ["DATABASE"]))
+    )
+    
+    # Check for material-related keywords (CHANGE_MATERIAL, MATERIAL, or rejection + material)
+    wants_material_change = (
+        check_keywords(response_text, ["CHANGE_MATERIAL"]) or
+        (is_rejection and check_keywords(response_text, ["MATERIAL"]))
+    )
+    
+    # Database change requested
+    if wants_database_change:
         result["supervisor_verdict"] = "replan_needed"
         result["planner_feedback"] = f"User rejected material validation and requested database change: {response_text}."
         if current_stage_id:
@@ -115,9 +124,8 @@ def handle_material_checkpoint(
         result["validated_materials"] = []
         return
     
-    if is_rejection and check_keywords(response_text, ["MATERIAL"]):
-        # Treat as CHANGE_MATERIAL
-        matched = None  # Clear any match
+    # Material change requested
+    if wants_material_change:
         result["supervisor_verdict"] = "replan_needed"
         result["planner_feedback"] = f"User indicated wrong material: {response_text}. Please update plan."
         if current_stage_id:
@@ -129,14 +137,27 @@ def handle_material_checkpoint(
         result["validated_materials"] = []
         return
     
-    # If rejection without specific target, ask for clarification
-    if is_rejection and matched is None:
+    # If both approval AND rejection without specific target, ask for clarification
+    # (e.g., "YES but I don't like it")
+    if is_approval and is_rejection:
+        result["supervisor_verdict"] = "ask_user"
+        result["pending_user_questions"] = [
+            "Your response contains both approval and rejection indicators. "
+            "Please be more specific: APPROVE, CHANGE_DATABASE, or CHANGE_MATERIAL?"
+        ]
+        return
+    
+    # If rejection alone without DATABASE/MATERIAL, ask for clarification
+    if is_rejection:
         result["supervisor_verdict"] = "ask_user"
         result["pending_user_questions"] = [
             "You indicated rejection but didn't specify what to change. "
             f"{get_clarification_message('material_checkpoint')}"
         ]
         return
+    
+    # Now try standard matching
+    matched = match_user_response("material_checkpoint", response_text)
     
     if matched is None:
         result["supervisor_verdict"] = "ask_user"
