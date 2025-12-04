@@ -1,0 +1,39 @@
+{
+  "current_stage_id": "stage1",
+  "current_stage_type": "SINGLE_STRUCTURE",
+  "plan": {
+    "stages": [
+      {
+        "stage_id": "stage1",
+        "stage_type": "SINGLE_STRUCTURE"
+      }
+    ]
+  },
+  "progress": {
+    "stages": [],
+    "user_interactions": []
+  },
+  "code": "import meep\n# buggy code",
+  "design_description": "FDTD simulation",
+  "execution_result": {
+    "success": false,
+    "error": "IndexError: list index out of range",
+    "stdout": "",
+    "stderr": "Traceback..."
+  },
+  "execution_failure_count": 3,
+  "runtime_config": {
+    "max_execution_failures": 3
+  },
+  "paper_id": "test_paper",
+  "workflow_phase": "execution_validation",
+  "execution_verdict": "fail",
+  "execution_feedback": "Code crashed with IndexError: list index out of range",
+  "total_execution_failures": 1,
+  "ask_user_trigger": "execution_failure_limit",
+  "pending_user_questions": [
+    "Execution failed 3/3 times. Last error: Unknown.\n\nOptions:\n- RETRY_WITH_GUIDANCE: Reset counter and retry with guidance\n- SKIP_STAGE: Skip this stage and continue\n- STOP: End the workflow"
+  ],
+  "awaiting_user_input": true,
+  "last_node_before_ask_user": "execution_check"
+}

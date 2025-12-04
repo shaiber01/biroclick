@@ -638,35 +638,31 @@ class TestStateIsolation:
             (route_after_comparison_check, "comparison_verdict"),
         ],
     )
-    def test_router_sets_trigger_on_escalation(
+    def test_router_does_not_modify_state_on_escalation(
         self,
         router,
         verdict_field,
         base_state,
         mock_save_checkpoint,
     ):
-        """Test that escalation routing sets ask_user_trigger and pending_user_questions.
+        """Test that escalation routing doesn't modify state (except checkpoint call).
         
-        When a router escalates to ask_user due to None/invalid verdicts, it MUST
-        set ask_user_trigger and pending_user_questions to satisfy the ask_user contract.
+        Routers should be pure functions that only return the next node name.
+        State modifications should be done by nodes, not routers.
+        The ask_user_node has a safety net to set trigger/questions if missing.
         """
         base_state[verdict_field] = None  # Triggers escalation
-
-        result = router(base_state)
-
-        # Verify route is ask_user
-        assert result == "ask_user", f"None verdict should route to ask_user, got {result}"
         
-        # Verify contract fields are set
-        assert base_state.get("ask_user_trigger") is not None, (
-            "ask_user_trigger MUST be set when routing to ask_user"
-        )
-        assert base_state.get("pending_user_questions") is not None, (
-            "pending_user_questions MUST be set when routing to ask_user"
-        )
-        assert len(base_state.get("pending_user_questions", [])) > 0, (
-            "pending_user_questions MUST not be empty when routing to ask_user"
-        )
+        # Deep copy state before routing
+        state_snapshot = copy.deepcopy(dict(base_state))
+
+        router(base_state)
+
+        # Verify no fields were modified (routers should be pure)
+        for key in state_snapshot:
+            assert base_state.get(key) == state_snapshot[key], (
+                f"State field '{key}' was modified during escalation routing"
+            )
 
     def test_routers_are_independent(self, base_state, mock_save_checkpoint):
         """Test that each router only examines its own verdict field."""

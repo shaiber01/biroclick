@@ -236,12 +236,6 @@ def create_verdict_router(
                 f"Escalating to user for guidance."
             )
             save_checkpoint(state, f"before_ask_user_{checkpoint_prefix}_error")
-            # Set trigger and questions so user knows what happened
-            state["ask_user_trigger"] = "supervisor_error"
-            state["pending_user_questions"] = [
-                f"ERROR: {verdict_field} is None - the {checkpoint_prefix} node may not have run or failed unexpectedly.\n"
-                "Options: RETRY (try again), SKIP_STAGE (skip this stage), or STOP (end workflow)?"
-            ]
             return "ask_user"
         
         # ═══════════════════════════════════════════════════════════════════════
@@ -253,13 +247,6 @@ def create_verdict_router(
                 f"Value: {verdict}. Escalating to user for guidance."
             )
             save_checkpoint(state, f"before_ask_user_{checkpoint_prefix}_error")
-            # Set trigger and questions so user knows what happened
-            state["ask_user_trigger"] = "supervisor_error"
-            state["pending_user_questions"] = [
-                f"ERROR: {verdict_field} has invalid type {type(verdict).__name__} (expected string).\n"
-                "This indicates a bug in the workflow. "
-                "Options: RETRY (try again), SKIP_STAGE (skip this stage), or STOP (end workflow)?"
-            ]
             return "ask_user"
         
         # ═══════════════════════════════════════════════════════════════════════
@@ -312,12 +299,6 @@ def create_verdict_router(
             f"Escalating to ask_user."
         )
         save_checkpoint(state, f"before_ask_user_{checkpoint_prefix}_fallback")
-        # Set trigger and questions so user knows what happened
-        state["ask_user_trigger"] = "unknown_escalation"
-        state["pending_user_questions"] = [
-            f"Unexpected verdict '{verdict}' from {checkpoint_prefix}.\n"
-            "Options: RETRY (try again), SKIP_STAGE (skip this stage), or STOP (end workflow)?"
-        ]
         return "ask_user"
     
     return router

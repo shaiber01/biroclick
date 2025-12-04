@@ -63,13 +63,17 @@ def ask_user_node(state: ReproState) -> Dict[str, Any]:
     # SAFETY NET: Ensure we always have a trigger when we have questions
     # If trigger is missing but questions exist, it indicates a workflow bug 
     # where routing went to ask_user without properly setting the trigger.
+    # We set a fallback trigger AND return it in the result so it gets merged
+    # into state, allowing supervisor to handle the response correctly.
     # ═══════════════════════════════════════════════════════════════════════
+    safety_net_triggered = False
     if not trigger:
         logger.warning(
             "ask_user_node called with questions but without ask_user_trigger - "
             "this indicates a workflow bug. Setting generic 'unknown_escalation' trigger."
         )
         trigger = "unknown_escalation"
+        safety_net_triggered = True
     
     # Get original questions (for mapping responses after retry) or use current questions
     original_questions = state.get("original_user_questions", questions)
@@ -223,7 +227,7 @@ def ask_user_node(state: ReproState) -> Dict[str, Any]:
                 f"User validation failed {validation_attempts} times for trigger '{trigger}'. "
                 "Accepting response despite validation errors and escalating to supervisor."
             )
-            return {
+            result = {
                 "user_responses": {**state.get("user_responses", {}), **mapped_responses},
                 "pending_user_questions": [],
                 "awaiting_user_input": False,
@@ -234,6 +238,10 @@ def ask_user_node(state: ReproState) -> Dict[str, Any]:
                     f"User response had validation errors but was accepted after {validation_attempts} attempts."
                 ),
             }
+            # If safety net triggered, include the trigger in result so supervisor knows
+            if safety_net_triggered:
+                result["ask_user_trigger"] = trigger
+            return result
         
         error_msg = "\n".join(f"  - {err}" for err in validation_errors)
         
@@ -265,6 +273,9 @@ def ask_user_node(state: ReproState) -> Dict[str, Any]:
         validation_attempt_key: 0,
         "original_user_questions": None,  # Clear after successful validation
     }
+    # If safety net triggered, include the trigger in result so supervisor knows
+    if safety_net_triggered:
+        result["ask_user_trigger"] = trigger
     return result
 
 
