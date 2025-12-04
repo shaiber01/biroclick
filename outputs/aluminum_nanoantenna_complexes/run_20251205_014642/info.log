@@ -17,3 +17,16 @@
 2025-12-05 01:53:14,074 - httpx - INFO - HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
 2025-12-05 01:53:14,087 - src.agents.design - INFO - 🔧 design: stage=stage0_material_validation, geometry=unknown, domain=?x?
 2025-12-05 01:53:14,089 - src.callbacks - INFO - 🔄 Entering node: design_review
+2025-12-05 01:54:17,350 - httpx - INFO - HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2025-12-05 01:54:17,356 - src.callbacks - INFO - 🔄 Entering node: router
+2025-12-05 01:54:17,357 - src.routing - INFO - ✅ design_review: verdict=approve → generate_code
+2025-12-05 01:54:17,359 - src.callbacks - INFO - 🔄 Entering node: generate_code
+2025-12-05 01:56:49,384 - httpx - INFO - HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2025-12-05 01:56:49,652 - src.agents.code - INFO - 💻 generate_code: stage=stage0_material_validation, 629 lines, 7 expected outputs
+2025-12-05 01:56:49,654 - src.callbacks - INFO - 🔄 Entering node: code_review
+2025-12-05 01:57:49,665 - httpx - INFO - HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2025-12-05 01:57:49,676 - src.callbacks - INFO - 🔄 Entering node: router
+2025-12-05 01:57:49,676 - src.routing - INFO - ✅ code_review: verdict=approve → run_code
+2025-12-05 01:57:49,677 - src.callbacks - INFO - 🔄 Entering node: run_code
+2025-12-05 01:57:51,908 - src.code_runner - INFO - ⚡ run_code: stage=stage0_material_validation, FAILED in 2.2s (Simulation diverged (NaN/Inf detected)...)
+2025-12-05 01:57:51,909 - src.callbacks - INFO - 🔄 Entering node: execution_check
