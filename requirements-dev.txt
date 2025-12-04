@@ -46,6 +46,11 @@ ipython==8.30.0            # Interactive Python shell
 ipdb==0.13.13              # IPython debugger
 
 # ═══════════════════════════════════════════════════════════════════════
+# Visualization
+# ═══════════════════════════════════════════════════════════════════════
+grandalf>=0.7              # Graph layout for LangGraph ASCII visualization
+
+# ═══════════════════════════════════════════════════════════════════════
 # Notebook Support (optional - for experimentation)
 # ═══════════════════════════════════════════════════════════════════════
 # jupyter==1.1.1           # Jupyter notebooks (optional)
