@@ -20,7 +20,7 @@ These tests:
 2. Validate real LLM outputs conform to schemas
 3. Test actual prompt → response flow
 """
-
+"""
 import json
 import os
 import pytest
@@ -400,3 +400,4 @@ class TestLLMErrorHandling:
             # Acceptable to fail on context limits
             assert "context" in str(e).lower() or "token" in str(e).lower()
 
+"""
