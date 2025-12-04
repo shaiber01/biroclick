@@ -1278,6 +1278,127 @@ The checkpoint contains full state, so resumption continues exactly where paused
 ══════════════════════════════════════════════════════════════════════════════
 ```
 
+#### Detailed Workflow (Mermaid)
+
+```mermaid
+---
+config:
+  flowchart:
+    curve: linear
+---
+graph TD
+    START([START]) --> ADAPT[adapt_prompts]
+    ADAPT --> PLAN[planning]
+    PLAN --> PLAN_REVIEW[plan_review]
+    PLAN_REVIEW -->|approve| SELECT[select_stage]
+    PLAN_REVIEW -->|revise| PLAN
+    PLAN_REVIEW -->|limit| ASK[ask_user]
+    SELECT -->|has next| DESIGN[design]
+    SELECT -->|no more| REPORT[generate_report] --> END([END])
+    DESIGN --> DESIGN_REVIEW[design_review]
+    DESIGN_REVIEW -->|approve| CODE_GEN[generate_code]
+    DESIGN_REVIEW -->|revise| DESIGN
+    DESIGN_REVIEW -->|limit| ASK
+    CODE_GEN --> CODE_REVIEW[code_review]
+    CODE_REVIEW -->|ok| RUN[run_code]
+    CODE_REVIEW -->|rev| CODE_GEN
+    CODE_REVIEW -->|limit| ASK
+    RUN --> EXEC[execution_check]
+    EXEC -->|pass| PHYSICS[physics_check]
+    EXEC -->|fail| CODE_GEN
+    EXEC -->|limit| ASK
+    PHYSICS -->|pass| ANALYZE[analyze]
+    PHYSICS -->|fail| CODE_GEN
+    PHYSICS -->|design_flaw| DESIGN
+    PHYSICS -->|limit| ASK
+    ANALYZE --> COMPARE[comparison_check]
+    COMPARE -->|approve| SUPERVISOR[supervisor]
+    COMPARE -->|revise| ANALYZE
+    COMPARE -->|limit| ASK
+    SUPERVISOR -->|continue| SELECT
+    SUPERVISOR -->|replan| PLAN
+    SUPERVISOR -->|ask| ASK
+    SUPERVISOR -->|backtrack| BACKTRACK[handle_backtrack] --> SELECT
+    SUPERVISOR -->|Stage 0 complete| MATERIAL[material_checkpoint] --> ASK
+    ASK --> SUPERVISOR
+```
+
+#### Complete Workflow Visualization
+
+For the complete detailed workflow with all nodes, edges, and routing logic rendered from the actual LangGraph definition:
+
+```mermaid
+---
+config:
+  flowchart:
+    curve: linear
+---
+graph TD;
+	__start__([<p>__start__</p>]):::first
+	adapt_prompts(adapt_prompts)
+	planning(planning)
+	plan_review(plan_review)
+	select_stage(select_stage)
+	design(design)
+	design_review(design_review)
+	code_review(code_review)
+	generate_code(generate_code)
+	run_code(run_code)
+	execution_check(execution_check)
+	physics_check(physics_check)
+	analyze(analyze)
+	comparison_check(comparison_check)
+	supervisor(supervisor)
+	ask_user(ask_user<hr/><small><em>__interrupt = before</em></small>)
+	generate_report(generate_report)
+	handle_backtrack(handle_backtrack)
+	material_checkpoint(material_checkpoint)
+	__end__([<p>__end__</p>]):::last
+	__start__ --> adapt_prompts;
+	adapt_prompts --> planning;
+	analyze --> comparison_check;
+	ask_user -.-> supervisor;
+	code_review -.-> ask_user;
+	code_review -.-> generate_code;
+	code_review -.-> run_code;
+	comparison_check -.-> analyze;
+	comparison_check -.-> ask_user;
+	comparison_check -.-> supervisor;
+	design --> design_review;
+	design_review -.-> ask_user;
+	design_review -.-> design;
+	design_review -.-> generate_code;
+	execution_check -.-> ask_user;
+	execution_check -.-> generate_code;
+	execution_check -.-> physics_check;
+	generate_code --> code_review;
+	handle_backtrack --> select_stage;
+	material_checkpoint --> ask_user;
+	physics_check -.-> analyze;
+	physics_check -.-> ask_user;
+	physics_check -.-> design;
+	physics_check -.-> generate_code;
+	plan_review -.-> ask_user;
+	plan_review -.-> planning;
+	plan_review -.-> select_stage;
+	planning -.-> plan_review;
+	run_code --> execution_check;
+	select_stage -.-> design;
+	select_stage -.-> generate_report;
+	supervisor -.-> ask_user;
+	supervisor -.-> generate_report;
+	supervisor -.-> handle_backtrack;
+	supervisor -.-> material_checkpoint;
+	supervisor -.-> planning;
+	supervisor -.-> select_stage;
+	generate_report --> __end__;
+	classDef default fill:#f2f0ff,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#bfb6fc
+```
+
+> **Note**: This diagram is automatically generated from the LangGraph definition. To regenerate it, run `python visualize_graph.py`.
+
 **Routing Summary:**
 
 | Node | Verdict | Routes To | On Limit | Limit |

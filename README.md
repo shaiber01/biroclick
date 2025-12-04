@@ -141,6 +141,115 @@ SELECT_STAGE
 - **Material checkpoint**: After Stage 0 completes, `material_checkpoint` node ALWAYS routes to `ask_user` for mandatory user confirmation
 - **Backtracking**: `handle_backtrack` node marks target stage as `needs_rerun` and dependent stages as `invalidated`
 
+#### Simplified Workflow (Mermaid)
+
+```mermaid
+graph TD
+    START([START]) --> ADAPT[ADAPT_PROMPTS<br/>PromptAdaptorAgent]
+    ADAPT --> PLAN[PLAN<br/>PlannerAgent]
+    PLAN --> PLAN_REVIEW[PLAN_REVIEW<br/>PlanReviewerAgent]
+    PLAN_REVIEW -->|needs_revision| PLAN
+    PLAN_REVIEW -->|approve| SELECT[SELECT_STAGE]
+    SELECT -->|no more stages| REPORT[GENERATE_REPORT] --> END([END])
+    SELECT -->|has next stage| DESIGN[DESIGN<br/>SimulationDesignerAgent]
+    DESIGN --> DESIGN_REVIEW[DESIGN_REVIEW<br/>DesignReviewerAgent]
+    DESIGN_REVIEW -->|needs_revision| DESIGN
+    DESIGN_REVIEW -->|approve| CODE_GEN[GENERATE_CODE<br/>CodeGeneratorAgent]
+    CODE_GEN --> CODE_REVIEW[CODE_REVIEW<br/>CodeReviewerAgent]
+    CODE_REVIEW -->|needs_revision| CODE_GEN
+    CODE_REVIEW -->|approve| RUN[RUN_CODE]
+    RUN --> EXEC[EXECUTION_CHECK<br/>ExecutionValidatorAgent]
+    EXEC -->|fail| CODE_GEN
+    EXEC -->|pass| PHYSICS[PHYSICS_CHECK<br/>PhysicsSanityAgent]
+    PHYSICS -->|fail| CODE_GEN
+    PHYSICS -->|design_flaw| DESIGN
+    PHYSICS -->|pass| ANALYZE[ANALYZE<br/>ResultsAnalyzerAgent]
+    ANALYZE --> COMPARE[COMPARISON_CHECK<br/>ComparisonValidatorAgent]
+    COMPARE -->|needs_revision| ANALYZE
+    COMPARE -->|approve| SUPERVISOR[SUPERVISOR<br/>SupervisorAgent]
+    SUPERVISOR -->|ok_continue + Stage 0| MATERIAL[MATERIAL_CHECKPOINT] --> ASK[ASK_USER]
+    SUPERVISOR -->|ok_continue + other| SELECT
+    SUPERVISOR -->|backtrack_to_stage| BACKTRACK[HANDLE_BACKTRACK] --> SELECT
+    SUPERVISOR -->|replan_needed| PLAN
+    SUPERVISOR -->|ask_user| ASK --> SUPERVISOR
+```
+
+#### Complete Workflow Visualization
+
+The complete detailed workflow with all nodes, edges, and routing logic (automatically generated from the LangGraph definition):
+
+```mermaid
+---
+config:
+  flowchart:
+    curve: linear
+---
+graph TD;
+	__start__([<p>__start__</p>]):::first
+	adapt_prompts(adapt_prompts)
+	planning(planning)
+	plan_review(plan_review)
+	select_stage(select_stage)
+	design(design)
+	design_review(design_review)
+	code_review(code_review)
+	generate_code(generate_code)
+	run_code(run_code)
+	execution_check(execution_check)
+	physics_check(physics_check)
+	analyze(analyze)
+	comparison_check(comparison_check)
+	supervisor(supervisor)
+	ask_user(ask_user<hr/><small><em>__interrupt = before</em></small>)
+	generate_report(generate_report)
+	handle_backtrack(handle_backtrack)
+	material_checkpoint(material_checkpoint)
+	__end__([<p>__end__</p>]):::last
+	__start__ --> adapt_prompts;
+	adapt_prompts --> planning;
+	analyze --> comparison_check;
+	ask_user -.-> supervisor;
+	code_review -.-> ask_user;
+	code_review -.-> generate_code;
+	code_review -.-> run_code;
+	comparison_check -.-> analyze;
+	comparison_check -.-> ask_user;
+	comparison_check -.-> supervisor;
+	design --> design_review;
+	design_review -.-> ask_user;
+	design_review -.-> design;
+	design_review -.-> generate_code;
+	execution_check -.-> ask_user;
+	execution_check -.-> generate_code;
+	execution_check -.-> physics_check;
+	generate_code --> code_review;
+	handle_backtrack --> select_stage;
+	material_checkpoint --> ask_user;
+	physics_check -.-> analyze;
+	physics_check -.-> ask_user;
+	physics_check -.-> design;
+	physics_check -.-> generate_code;
+	plan_review -.-> ask_user;
+	plan_review -.-> planning;
+	plan_review -.-> select_stage;
+	planning -.-> plan_review;
+	run_code --> execution_check;
+	select_stage -.-> design;
+	select_stage -.-> generate_report;
+	supervisor -.-> ask_user;
+	supervisor -.-> generate_report;
+	supervisor -.-> handle_backtrack;
+	supervisor -.-> material_checkpoint;
+	supervisor -.-> planning;
+	supervisor -.-> select_stage;
+	generate_report --> __end__;
+	classDef default fill:#f2f0ff,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#bfb6fc
+```
+
+> **Note**: To regenerate this diagram, run `python visualize_graph.py`.
+
 ### Adaptive Validation Hierarchy
 
 **Core principle**: Validate foundations before adding complexity. Stages adapt to the paper's content.
