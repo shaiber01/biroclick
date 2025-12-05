@@ -339,8 +339,27 @@ def create_repro_graph():
     
     workflow.add_edge("handle_backtrack", "select_stage")
     
-    # Material checkpoint ALWAYS routes to ask_user (mandatory user confirmation)
-    workflow.add_edge("material_checkpoint", "ask_user")
+    # Material checkpoint routes based on whether materials are already validated
+    def route_after_material_checkpoint(state: ReproState) -> str:
+        """
+        Route after material checkpoint.
+        
+        If materials are already validated, skip ask_user and go to select_stage.
+        Otherwise, route to ask_user for user confirmation.
+        """
+        validated_materials = state.get("validated_materials", [])
+        if validated_materials:
+            return "select_stage"
+        return "ask_user"
+    
+    workflow.add_conditional_edges(
+        "material_checkpoint",
+        route_after_material_checkpoint,
+        {
+            "ask_user": "ask_user",
+            "select_stage": "select_stage"
+        }
+    )
     
     # Ask user resumes to Supervisor, who evaluates user feedback and decides next steps.
     # 

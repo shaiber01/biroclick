@@ -419,6 +419,26 @@ def material_checkpoint_node(state: ReproState) -> dict:
     Returns:
         Dict with state updates including pending_user_questions and pending_validated_materials
     """
+    logger = logging.getLogger(__name__)
+    
+    # ═══════════════════════════════════════════════════════════════════════
+    # SKIP CHECK: If materials are already validated, don't ask again
+    # This prevents infinite loops when route_after_supervisor routes here
+    # after user has already approved materials.
+    # ═══════════════════════════════════════════════════════════════════════
+    validated_materials = state.get("validated_materials", [])
+    if validated_materials:
+        logger.info(
+            f"material_checkpoint: Materials already validated ({len(validated_materials)} items), skipping checkpoint"
+        )
+        # Return empty update to pass through to next edge (which goes to ask_user,
+        # but ask_user will see no pending_user_questions and pass through quickly)
+        return {
+            "workflow_phase": "material_checkpoint",
+            "pending_user_questions": [],  # No questions = ask_user passes through
+            "awaiting_user_input": False,
+        }
+    
     # Get material validation results from progress
     progress = state.get("progress", {})
     stages = progress.get("stages", [])
