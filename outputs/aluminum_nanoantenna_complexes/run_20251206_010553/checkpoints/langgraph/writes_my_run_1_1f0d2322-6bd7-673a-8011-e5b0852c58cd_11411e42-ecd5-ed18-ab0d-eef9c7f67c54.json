@@ -1,0 +1,38 @@
+{
+  "writes": [
+    {
+      "channel": "workflow_phase",
+      "value_type": "msgpack",
+      "value_data": "q2NvZGVfcmV2aWV3"
+    },
+    {
+      "channel": "last_code_review_verdict",
+      "value_type": "msgpack",
+      "value_data": "p2FwcHJvdmU="
+    },
+    {
+      "channel": "reviewer_issues",
+      "value_type": "msgpack",
+      "value_data": "kYWoc2V2ZXJpdHmlbWlub3KoY2F0ZWdvcnmsY29kZV9xdWFsaXR5q2Rlc2NyaXB0aW9u2aJDU1YgaGVhZGVyIHVzZXMgY29tbWVudCBmb3JtYXQgcmF0aGVyIHRoYW4gc3RhbmRhcmQgQ1NWIGhlYWRlciByb3cuIFRoZSBjb2x1bW4gbmFtZXMgYXJlIGVtYmVkZGVkIGluIGEgbXVsdGktbGluZSBjb21tZW50IGJsb2NrIHJhdGhlciB0aGFuIGFzIHRoZSBmaXJzdCBkYXRhIHJvdy6tc3VnZ2VzdGVkX2ZpeNoBCUZvciBiZXR0ZXIgQ1NWIGNvbXBhdGliaWxpdHksIGFkZCBhIHByb3BlciBoZWFkZXIgcm93OiAnd2F2ZWxlbmd0aF9ubSxBbF9lcHNfcmVhbCxBbF9lcHNfaW1hZyxBbF9uLEFsX2ssVERCQ19lcHNfcmVhbCxUREJDX2Vwc19pbWFnLFREQkNfbixUREJDX2ssSVRPX24sSVRPX2snLiBDdXJyZW50IGZvcm1hdCBzaG91bGQgc3RpbGwgd29yayBmb3IgbW9zdCBkb3duc3RyZWFtIHVzZXMgc2luY2UgbnVtcHkubG9hZHR4dCBjYW4gaGFuZGxlIGNvbW1lbnQgaGVhZGVycy6tY29kZV9sb2NhdGlvbrxMaW5lIH40NDU6IG5wLnNhdmV0eHQoKSBjYWxs"
+    },
+    {
+      "channel": "code_revision_count",
+      "value_type": "msgpack",
+      "value_data": "AA=="
+    },
+    {
+      "channel": "reviewer_feedback",
+      "value_type": "null",
+      "value_data": ""
+    },
+    {
+      "channel": "branch:to:run_code",
+      "value_type": "null",
+      "value_data": ""
+    }
+  ],
+  "task_id": "11411e42-ecd5-ed18-ab0d-eef9c7f67c54",
+  "thread_id": "my_run_1",
+  "checkpoint_id": "1f0d2322-6bd7-673a-8011-e5b0852c58cd",
+  "saved_at": "2025-12-06T01:29:49.067964"
+}

@@ -1,0 +1,73 @@
+{
+  "writes": [
+    {
+      "channel": "workflow_phase",
+      "value_type": "msgpack",
+      "value_data": "tGV4ZWN1dGlvbl92YWxpZGF0aW9u"
+    },
+    {
+      "channel": "execution_verdict",
+      "value_type": "msgpack",
+      "value_data": "pGZhaWw="
+    },
+    {
+      "channel": "execution_feedback",
+      "value_type": "msgpack",
+      "value_data": "2gGHRXhlY3V0aW9uIGZhaWxlZCBpbW1lZGlhdGVseSBkdXJpbmcgQ1NWIHBhcnNpbmcgb2YgdGhlIGFsdW1pbnVtIG9wdGljYWwgZGF0YSBmaWxlLiBUaGUgUGFsaWsgZGF0YSBmaWxlIGhhcyBhbiBpbmNvbnNpc3RlbnQgZm9ybWF0ICgzIGZpZWxkcyBvbiBsaW5lIDQsIGV4cGVjdGVkIDIpLCBpbmRpY2F0aW5nIHRoZSBjb2RlJ3MgQ1NWIHJlYWRlciBwYXJhbWV0ZXJzIGRvbid0IG1hdGNoIHRoZSBhY3R1YWwgZmlsZSBmb3JtYXQuIFRoaXMgaXMgYSBjb2RlLWxldmVsIGZpeCAtIHRoZSByZWFkX2NzdiBjYWxsIG5lZWRzIGFwcHJvcHJpYXRlIGRlbGltaXRlciwgc2tpcHJvd3MsIG9yIGNvbW1lbnQgcGFyYW1ldGVycyB0byBoYW5kbGUgdGhlIGRhdGEgZmlsZSBmb3JtYXQgY29ycmVjdGx5Lg=="
+    },
+    {
+      "channel": "execution_warnings",
+      "value_type": "msgpack",
+      "value_data": "kdlYTm8gbWVlcCBpbXBvcnQgZm91bmQgaW4gY29kZSAtIHRoaXMgaXMgYSBtYXRlcmlhbCB2YWxpZGF0aW9uIHN0YWdlIHNvIG1heSBiZSBpbnRlbnRpb25hbA=="
+    },
+    {
+      "channel": "execution_status",
+      "value_type": "msgpack",
+      "value_data": "hKljb21wbGV0ZWTCqWV4aXRfY29kZQGvcnVudGltZV9zZWNvbmRzy0AaFHrhR64UqXRpbWVkX291dMI="
+    },
+    {
+      "channel": "execution_files_check",
+      "value_type": "msgpack",
+      "value_data": "ha5leHBlY3RlZF9maWxlc5LZPWFsdW1pbnVtX25hbm9hbnRlbm5hX2NvbXBsZXhlc19zdGFnZTBfbWF0ZXJpYWxfcHJvcGVydGllcy5jc3bZOGFsdW1pbnVtX25hbm9hbnRlbm5hX2NvbXBsZXhlc19zdGFnZTBfbWF0ZXJpYWxfcGxvdHMucG5nq2ZvdW5kX2ZpbGVzkK1taXNzaW5nX2ZpbGVzktk9YWx1bWludW1fbmFub2FudGVubmFfY29tcGxleGVzX3N0YWdlMF9tYXRlcmlhbF9wcm9wZXJ0aWVzLmNzdtk4YWx1bWludW1fbmFub2FudGVubmFfY29tcGxleGVzX3N0YWdlMF9tYXRlcmlhbF9wbG90cy5wbmerYWxsX3ByZXNlbnTCr3NwZWNfY29tcGxpYW5jZZKIrWFydGlmYWN0X3R5cGWsbWF0ZXJpYWxfY3N2sWV4cGVjdGVkX2ZpbGVuYW1l2T1hbHVtaW51bV9uYW5vYW50ZW5uYV9jb21wbGV4ZXNfc3RhZ2UwX21hdGVyaWFsX3Byb3BlcnRpZXMuY3N2r2FjdHVhbF9maWxlbmFtZcCmZXhpc3Rzwqlub25fZW1wdHnCrHZhbGlkX2Zvcm1hdMKtY29sdW1uc19tYXRjaMKmaXNzdWVzkdktRmlsZSBub3QgZ2VuZXJhdGVkIGR1ZSB0byBjcmFzaCBiZWZvcmUgb3V0cHV0iK1hcnRpZmFjdF90eXBlqHBsb3RfcG5nsWV4cGVjdGVkX2ZpbGVuYW1l2ThhbHVtaW51bV9uYW5vYW50ZW5uYV9jb21wbGV4ZXNfc3RhZ2UwX21hdGVyaWFsX3Bsb3RzLnBuZ69hY3R1YWxfZmlsZW5hbWXApmV4aXN0c8Kpbm9uX2VtcHR5wqx2YWxpZF9mb3JtYXTCrWNvbHVtbnNfbWF0Y2jCpmlzc3Vlc5HZLUZpbGUgbm90IGdlbmVyYXRlZCBkdWUgdG8gY3Jhc2ggYmVmb3JlIG91dHB1dA=="
+    },
+    {
+      "channel": "execution_failure_count",
+      "value_type": "msgpack",
+      "value_data": "Ag=="
+    },
+    {
+      "channel": "total_execution_failures",
+      "value_type": "msgpack",
+      "value_data": "Ag=="
+    },
+    {
+      "channel": "ask_user_trigger",
+      "value_type": "msgpack",
+      "value_data": "t2V4ZWN1dGlvbl9mYWlsdXJlX2xpbWl0"
+    },
+    {
+      "channel": "pending_user_questions",
+      "value_type": "msgpack",
+      "value_data": "kdnWRXhlY3V0aW9uIGZhaWxlZCAyLzIgdGltZXMuIExhc3QgZXJyb3I6IFNpbXVsYXRpb24gZmFpbGVkIHdpdGggZXhpdCBjb2RlIDEuCgpPcHRpb25zOgotIFJFVFJZX1dJVEhfR1VJREFOQ0U6IFJlc2V0IGNvdW50ZXIgYW5kIHJldHJ5IHdpdGggZ3VpZGFuY2UKLSBTS0lQX1NUQUdFOiBTa2lwIHRoaXMgc3RhZ2UgYW5kIGNvbnRpbnVlCi0gU1RPUDogRW5kIHRoZSB3b3JrZmxvdw=="
+    },
+    {
+      "channel": "awaiting_user_input",
+      "value_type": "msgpack",
+      "value_data": "ww=="
+    },
+    {
+      "channel": "last_node_before_ask_user",
+      "value_type": "msgpack",
+      "value_data": "r2V4ZWN1dGlvbl9jaGVjaw=="
+    },
+    {
+      "channel": "branch:to:ask_user",
+      "value_type": "null",
+      "value_data": ""
+    }
+  ],
+  "task_id": "50130626-ea83-fce1-0072-ee111c5606b7",
+  "thread_id": "my_run_1",
+  "checkpoint_id": "1f0d230c-ee61-6c48-800d-487a70086564",
+  "saved_at": "2025-12-06T01:19:43.980277"
+}

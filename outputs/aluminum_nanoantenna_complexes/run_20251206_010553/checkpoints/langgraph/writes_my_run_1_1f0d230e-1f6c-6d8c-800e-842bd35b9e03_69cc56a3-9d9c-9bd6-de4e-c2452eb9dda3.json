@@ -1,0 +1,38 @@
+{
+  "writes": [
+    {
+      "channel": "__resume__",
+      "value_type": "msgpack",
+      "value_data": "kdoBZVJFVFJZX1dJVEhfR1VJREFOQ0U6IEZpeCB0aGVzZSB0d28gZXJyb3JzOiAxLiAicGFuZGFzLmVycm9ycy5QYXJzZXJFcnJvcjogRXJyb3IgdG9rZW5pemluZyBkYXRhLiBDIGVycm9yOiBFeHBlY3RlZCAyIGZpZWxkcyBpbiBsaW5lIDQsIHNhdyAzIiBpbiBzaW11bGF0aW9uX3N0YWdlMF9tYXRlcmlhbF92YWxpZGF0aW9uLnB5LCBsaW5lIDEyMC4gMi4gQWx1bWludW0gKFBhbGlrKSBDU1YgZGF0YSBmaWxlIGhhcyBpbmNvbnNpc3RlbnQgY29sdW1uIGNvdW50IC0gbGluZSA0IGhhcyAzIGZpZWxkcyBidXQgZXhwZWN0ZWQgMiBiYXNlZCBvbiBlYXJsaWVyIGxpbmVzIGF0IGFsX2RhdGFfZmlsZSAoZXh0ZXJuYWwgZGF0YSBmaWxlKQ=="
+    },
+    {
+      "channel": "user_responses",
+      "value_type": "msgpack",
+      "value_data": "gdnWRXhlY3V0aW9uIGZhaWxlZCAyLzIgdGltZXMuIExhc3QgZXJyb3I6IFNpbXVsYXRpb24gZmFpbGVkIHdpdGggZXhpdCBjb2RlIDEuCgpPcHRpb25zOgotIFJFVFJZX1dJVEhfR1VJREFOQ0U6IFJlc2V0IGNvdW50ZXIgYW5kIHJldHJ5IHdpdGggZ3VpZGFuY2UKLSBTS0lQX1NUQUdFOiBTa2lwIHRoaXMgc3RhZ2UgYW5kIGNvbnRpbnVlCi0gU1RPUDogRW5kIHRoZSB3b3JrZmxvd9oBZVJFVFJZX1dJVEhfR1VJREFOQ0U6IEZpeCB0aGVzZSB0d28gZXJyb3JzOiAxLiAicGFuZGFzLmVycm9ycy5QYXJzZXJFcnJvcjogRXJyb3IgdG9rZW5pemluZyBkYXRhLiBDIGVycm9yOiBFeHBlY3RlZCAyIGZpZWxkcyBpbiBsaW5lIDQsIHNhdyAzIiBpbiBzaW11bGF0aW9uX3N0YWdlMF9tYXRlcmlhbF92YWxpZGF0aW9uLnB5LCBsaW5lIDEyMC4gMi4gQWx1bWludW0gKFBhbGlrKSBDU1YgZGF0YSBmaWxlIGhhcyBpbmNvbnNpc3RlbnQgY29sdW1uIGNvdW50IC0gbGluZSA0IGhhcyAzIGZpZWxkcyBidXQgZXhwZWN0ZWQgMiBiYXNlZCBvbiBlYXJsaWVyIGxpbmVzIGF0IGFsX2RhdGFfZmlsZSAoZXh0ZXJuYWwgZGF0YSBmaWxlKQ=="
+    },
+    {
+      "channel": "pending_user_questions",
+      "value_type": "msgpack",
+      "value_data": "kA=="
+    },
+    {
+      "channel": "awaiting_user_input",
+      "value_type": "msgpack",
+      "value_data": "wg=="
+    },
+    {
+      "channel": "workflow_phase",
+      "value_type": "msgpack",
+      "value_data": "rWF3YWl0aW5nX3VzZXI="
+    },
+    {
+      "channel": "branch:to:supervisor",
+      "value_type": "null",
+      "value_data": ""
+    }
+  ],
+  "task_id": "69cc56a3-9d9c-9bd6-de4e-c2452eb9dda3",
+  "thread_id": "my_run_1",
+  "checkpoint_id": "1f0d230e-1f6c-6d8c-800e-842bd35b9e03",
+  "saved_at": "2025-12-06T01:25:37.195473"
+}

@@ -1,0 +1,13 @@
+{
+  "writes": [
+    {
+      "channel": "branch:to:ask_user",
+      "value_type": "null",
+      "value_data": ""
+    }
+  ],
+  "task_id": "d538debf-8cd5-a21d-b0a5-36f0bbd9160c",
+  "thread_id": "my_run_1",
+  "checkpoint_id": "1f0d2337-047a-66c2-801b-a57d1b6fa079",
+  "saved_at": "2025-12-06T01:38:01.745081"
+}

@@ -24,3 +24,149 @@
 2025-12-06 01:12:52,893 - src.callbacks - INFO - 🔄 Entering node: router
 2025-12-06 01:12:52,894 - src.routing - INFO - ✅ design_review: verdict=approve → generate_code
 2025-12-06 01:12:52,896 - src.callbacks - INFO - 🔄 Entering node: generate_code
+2025-12-06 01:14:55,245 - httpx - INFO - HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2025-12-06 01:14:55,255 - src.agents.code - INFO - 💻 generate_code: stage=stage0_material_validation, 540 lines, 6 expected outputs
+2025-12-06 01:14:55,256 - src.callbacks - INFO - 🔄 Entering node: code_review
+2025-12-06 01:15:57,402 - httpx - INFO - HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2025-12-06 01:15:57,411 - src.callbacks - INFO - 🔄 Entering node: router
+2025-12-06 01:15:57,412 - src.routing - INFO - ✅ code_review: verdict=approve → run_code
+2025-12-06 01:15:57,414 - src.callbacks - INFO - 🔄 Entering node: run_code
+2025-12-06 01:15:58,349 - src.code_runner - INFO - ⚡ run_code: stage=stage0_material_validation, FAILED in 0.9s (exit=1: Simulation failed with exit code 1)
+2025-12-06 01:15:58,353 - src.callbacks - INFO - 🔄 Entering node: execution_check
+2025-12-06 01:16:21,057 - httpx - INFO - HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2025-12-06 01:16:21,064 - src.agents.execution - INFO - ❌ execution_check: stage=stage0_material_validation, verdict=fail, exit=1, runtime=0.9s, files=0/3
+2025-12-06 01:16:21,064 - src.agents.execution - INFO -    ⚠️ 1 warning(s) from execution validation:
+2025-12-06 01:16:21,064 - src.agents.execution - INFO -       1. No meep import found in code - this may be intentional for material validation stage
+2025-12-06 01:16:21,065 - src.callbacks - INFO - 🔄 Entering node: router
+2025-12-06 01:16:21,066 - src.routing - INFO - ❌ execution: verdict=fail → generate_code
+2025-12-06 01:16:21,068 - src.callbacks - INFO - 🔄 Entering node: generate_code
+2025-12-06 01:18:16,176 - httpx - INFO - HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2025-12-06 01:18:16,187 - src.agents.code - INFO - 💻 generate_code: stage=stage0_material_validation, 494 lines, 6 expected outputs
+2025-12-06 01:18:16,189 - src.callbacks - INFO - 🔄 Entering node: code_review
+2025-12-06 01:19:05,360 - httpx - INFO - HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2025-12-06 01:19:05,466 - src.callbacks - INFO - 🔄 Entering node: router
+2025-12-06 01:19:05,467 - src.routing - INFO - ✅ code_review: verdict=approve → run_code
+2025-12-06 01:19:05,468 - src.callbacks - INFO - 🔄 Entering node: run_code
+2025-12-06 01:19:11,992 - src.code_runner - INFO - ⚡ run_code: stage=stage0_material_validation, FAILED in 6.5s (exit=1: Simulation failed with exit code 1)
+2025-12-06 01:19:11,993 - src.callbacks - INFO - 🔄 Entering node: execution_check
+2025-12-06 01:19:43,970 - httpx - INFO - HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2025-12-06 01:19:43,975 - src.agents.execution - INFO - ❌ execution_check: stage=stage0_material_validation, verdict=fail, exit=1, runtime=6.5s, files=0/2
+2025-12-06 01:19:43,975 - src.agents.execution - INFO -    ⚠️ 1 warning(s) from execution validation:
+2025-12-06 01:19:43,975 - src.agents.execution - INFO -       1. No meep import found in code - this is a material validation stage so may be intentional
+2025-12-06 01:19:43,976 - src.callbacks - INFO - 🔄 Entering node: router
+2025-12-06 01:19:43,977 - src.routing - INFO - execution: ask_user_trigger is set, routing to ask_user
+2025-12-06 01:19:43,980 - src.callbacks - INFO - 🔄 Entering node: ask_user
+2025-12-06 01:19:43,982 - src.callbacks - INFO - _extract_trigger: type=GraphInterrupt, obj=(Interrupt(value={'trigger': 'execution_failure_limit', 'questions': ['Execution failed 2/2 times. Last error: Simulation failed with exit code 1.\n\nOptions:\n- RETRY_WITH_GUIDANCE: Reset counter and retry with guidance\n- SKIP_STAGE: Skip this stage and continue\n- STOP: End the workflow'], 'paper_id': 'aluminum_nanoantenna_complexes'}, id='7e53f02ae4b8664e0fa04fc7a4499d01'),)
+2025-12-06 01:19:43,983 - src.callbacks - INFO - _extract_trigger: attrs=['add_note', 'args', 'with_traceback']
+2025-12-06 01:19:43,983 - src.callbacks - INFO - _extract_trigger: args=((Interrupt(value={'trigger': 'execution_failure_limit', 'questions': ['Execution failed 2/2 times. Last error: Simulation failed with exit code 1.\n\nOptions:\n- RETRY_WITH_GUIDANCE: Reset counter and retry with guidance\n- SKIP_STAGE: Skip this stage and continue\n- STOP: End the workflow'], 'paper_id': 'aluminum_nanoantenna_complexes'}, id='7e53f02ae4b8664e0fa04fc7a4499d01'),),), args_type=<class 'tuple'>
+2025-12-06 01:19:43,984 - src.callbacks - INFO - ⏸️  Graph paused for user input (trigger: execution_failure_limit)
+2025-12-06 01:25:37,192 - src.callbacks - INFO - 🔄 Entering node: ask_user
+2025-12-06 01:25:37,193 - src.agents.user_interaction - INFO - ❓ ask_user: trigger=execution_failure_limit, 1 question(s), received response
+2025-12-06 01:25:37,194 - src.agents.user_interaction - INFO - 
+   ┌─── USER RESPONSE ───
+   │ RETRY_WITH_GUIDANCE: Fix these two errors: 1. "pandas.errors.ParserError: Error tokenizing data. C error: Expected 2 fields in line 4, saw 3" in simulation_stage0_material_validation.py, line 120. 2. Aluminum (Palik) CSV data file has inconsistent column count - line 4 has 3 fields but expected 2 based on earlier lines at al_data_file (external data file)
+   └───────────────────
+2025-12-06 01:25:37,194 - src.callbacks - INFO - 🔄 Entering node: route_after_ask_user
+2025-12-06 01:25:37,196 - src.callbacks - INFO - 🔄 Entering node: supervisor
+2025-12-06 01:25:37,199 - src.agents.user_options - INFO - ✅ Matched 'RETRY_WITH_GUIDANCE: FIX THESE TWO ERRORS: 1. "PAN...' to 'RETRY_WITH_GUIDANCE' via keywords
+2025-12-06 01:25:37,199 - src.agents.supervision.supervisor - INFO - 🔍 supervisor: stage=stage0_material_validation, verdict=retry_generate_code (User guidance: Fix these two errors: 1. "pandas.errors.ParserError: Error tokenizing data. C error: Expected 2 fields in line 4, saw 3" in simulation_stage0_material_validation.py, line 120. 2. Aluminum (Palik) CSV data file has inconsistent column count - line 4 has 3 fields but expected 2 based on earlier lines at al_data_file (external data file))
+2025-12-06 01:25:37,200 - src.callbacks - INFO - 🔄 Entering node: route_after_supervisor
+2025-12-06 01:25:37,202 - src.callbacks - INFO - 🔄 Entering node: generate_code
+2025-12-06 01:28:48,722 - httpx - INFO - HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2025-12-06 01:28:48,862 - src.agents.code - INFO - 💻 generate_code: stage=stage0_material_validation, 647 lines, 7 expected outputs
+2025-12-06 01:28:48,863 - src.callbacks - INFO - 🔄 Entering node: code_review
+2025-12-06 01:29:49,057 - httpx - INFO - HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2025-12-06 01:29:49,064 - src.callbacks - INFO - 🔄 Entering node: router
+2025-12-06 01:29:49,066 - src.routing - INFO - ✅ code_review: verdict=approve → run_code
+2025-12-06 01:29:49,067 - src.callbacks - INFO - 🔄 Entering node: run_code
+2025-12-06 01:29:50,937 - src.code_runner - INFO - ⚡ run_code: stage=stage0_material_validation, SUCCESS in 1.9s, 7 output file(s)
+2025-12-06 01:29:50,939 - src.callbacks - INFO - 🔄 Entering node: execution_check
+2025-12-06 01:30:24,066 - httpx - INFO - HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2025-12-06 01:30:24,075 - src.agents.execution - INFO - ⚠️ execution_check: stage=stage0_material_validation, verdict=warning, exit=0, runtime=1.9s, files=7/7
+2025-12-06 01:30:24,075 - src.agents.execution - INFO -    ⚠️ 4 warning(s) from execution validation:
+2025-12-06 01:30:24,075 - src.agents.execution - INFO -       1. TDBC FWHM significantly differs from paper target: 0.0145 eV computed vs 0.066 eV target (78% error)
+2025-12-06 01:30:24,075 - src.agents.execution - INFO -       2. Code suggests γX adjustment from 2.45e13 to 1.116e14 rad/s may be needed
+2025-12-06 01:30:24,076 - src.agents.execution - INFO -       3. No Meep import found (expected for analytical Stage 0)
+2025-12-06 01:30:24,076 - src.agents.execution - INFO -       4. Peak wavelength minor discrepancy: 585 nm computed vs 590 nm target (0.8% error - acceptable)
+2025-12-06 01:30:24,076 - src.callbacks - INFO - 🔄 Entering node: router
+2025-12-06 01:30:24,078 - src.routing - INFO - ⚠️ execution: verdict=warning → physics_check (4 warning(s))
+2025-12-06 01:30:24,080 - src.callbacks - INFO - 🔄 Entering node: physics_check
+2025-12-06 01:31:20,647 - httpx - INFO - HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2025-12-06 01:31:20,739 - src.callbacks - INFO - 🔄 Entering node: router
+2025-12-06 01:31:20,739 - src.routing - INFO - physics: ask_user_trigger is set, routing to ask_user
+2025-12-06 01:31:20,740 - src.callbacks - INFO - 🔄 Entering node: ask_user
+2025-12-06 01:31:20,741 - src.callbacks - INFO - _extract_trigger: type=GraphInterrupt, obj=(Interrupt(value={'trigger': 'reviewer_escalation', 'questions': ["Material Validation Complete - User Review Required.\n\nMATERIALS LOADED:\n• Aluminum (Palik): ε₁=-48.9, ε₂=18.5 at 600nm ✓ Plasmonic\n• TDBC (Lorentzian): Peak 585nm (target 590nm, 0.8% error) ✓\n• ITO (Konig): n=1.86, k=0.007 ✓ Transparent conductor\n• Glass: n=1.51 ✓\n\n⚠️ CRITICAL DISCREPANCY:\nTDBC linewidth: Computed 0.0145 eV vs Paper's 0.066 eV (78% narrower)\n\nFor strong coupling, the criterion is Ω_R > (γ_plasmon + γ_exciton)/2.\nUsing γ_exciton=0.016 eV (computed) vs 0.066 eV (paper) significantly affects this.\n\nOPTIONS:\n(a) Proceed with paper's γX parameter (0.016 eV) - narrower linewidth may overestimate coupling strength\n(b) Adjust γX to 1.116×10¹⁴ rad/s to match 0.066 eV FWHM\n(c) You have alternative TDBC data to provide\n\nDoes the material data look correct? Which option for TDBC linewidth?\n\nOptions:\n- PROVIDE_GUIDANCE: Answer the reviewer's question (include your response after keyword)\n- SKIP_STAGE: Skip this stage and continue\n- STOP: End the workflow"], 'paper_id': 'aluminum_nanoantenna_complexes'}, id='90fc4bea255c383e106ea10da3733968'),)
+2025-12-06 01:31:20,742 - src.callbacks - INFO - _extract_trigger: attrs=['add_note', 'args', 'with_traceback']
+2025-12-06 01:31:20,742 - src.callbacks - INFO - _extract_trigger: args=((Interrupt(value={'trigger': 'reviewer_escalation', 'questions': ["Material Validation Complete - User Review Required.\n\nMATERIALS LOADED:\n• Aluminum (Palik): ε₁=-48.9, ε₂=18.5 at 600nm ✓ Plasmonic\n• TDBC (Lorentzian): Peak 585nm (target 590nm, 0.8% error) ✓\n• ITO (Konig): n=1.86, k=0.007 ✓ Transparent conductor\n• Glass: n=1.51 ✓\n\n⚠️ CRITICAL DISCREPANCY:\nTDBC linewidth: Computed 0.0145 eV vs Paper's 0.066 eV (78% narrower)\n\nFor strong coupling, the criterion is Ω_R > (γ_plasmon + γ_exciton)/2.\nUsing γ_exciton=0.016 eV (computed) vs 0.066 eV (paper) significantly affects this.\n\nOPTIONS:\n(a) Proceed with paper's γX parameter (0.016 eV) - narrower linewidth may overestimate coupling strength\n(b) Adjust γX to 1.116×10¹⁴ rad/s to match 0.066 eV FWHM\n(c) You have alternative TDBC data to provide\n\nDoes the material data look correct? Which option for TDBC linewidth?\n\nOptions:\n- PROVIDE_GUIDANCE: Answer the reviewer's question (include your response after keyword)\n- SKIP_STAGE: Skip this stage and continue\n- STOP: End the workflow"], 'paper_id': 'aluminum_nanoantenna_complexes'}, id='90fc4bea255c383e106ea10da3733968'),),), args_type=<class 'tuple'>
+2025-12-06 01:31:20,743 - src.callbacks - INFO - ⏸️  Graph paused for user input (trigger: reviewer_escalation)
+2025-12-06 01:33:13,298 - src.callbacks - INFO - 🔄 Entering node: ask_user
+2025-12-06 01:33:13,299 - src.agents.user_interaction - INFO - ❓ ask_user: trigger=reviewer_escalation, 1 question(s), received response
+2025-12-06 01:33:13,300 - src.agents.user_interaction - INFO - 
+   ┌─── USER RESPONSE ───
+   │ option b - Adjust γX to 1.116×10¹⁴ rad/s to match 0.066 eV FWHM
+   └───────────────────
+2025-12-06 01:33:13,300 - src.callbacks - INFO - 🔄 Entering node: route_after_ask_user
+2025-12-06 01:33:13,303 - src.callbacks - INFO - 🔄 Entering node: supervisor
+2025-12-06 01:33:38,860 - httpx - INFO - HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2025-12-06 01:33:38,865 - src.agents.supervision.trigger_handlers - INFO - LLM routing decision: verdict=retry_generate_code, source=physics_check
+2025-12-06 01:33:38,865 - src.agents.supervision.supervisor - INFO - 🔍 supervisor: stage=stage0_material_validation, verdict=retry_generate_code (User reports two code-level errors preventing Stage 0 execution: (1) A pandas CSV parsing error at line 120 of simulation_stage0_material_validation.py expecting 2 fields but finding 3, and (2) the external Aluminum (Palik) data file has inconsistent column counts starting at line 4. These are implementation bugs in how the code reads the material data files, NOT design-level issues. The code generator must fix the CSV parsing logic to handle the actual format of the aluminum optical data file - likely by specifying correct delimiters, handling comment lines, or using appropriate skiprows/usecols parameters. Routing to code generator for fixes.)
+2025-12-06 01:33:38,866 - src.callbacks - INFO - 🔄 Entering node: route_after_supervisor
+2025-12-06 01:33:38,869 - src.callbacks - INFO - 🔄 Entering node: generate_code
+2025-12-06 01:35:23,677 - httpx - INFO - HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 520 "
+2025-12-06 01:35:23,683 - anthropic._base_client - INFO - Retrying request to /v1/messages in 0.425992 seconds
+2025-12-06 01:37:59,508 - httpx - INFO - HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2025-12-06 01:37:59,523 - src.agents.code - INFO - 💻 generate_code: stage=stage0_material_validation, 748 lines, 7 expected outputs
+2025-12-06 01:37:59,525 - src.callbacks - INFO - 🔄 Entering node: code_review
+2025-12-06 01:37:59,528 - src.callbacks - INFO - 🔄 Entering node: router
+2025-12-06 01:37:59,530 - src.routing - INFO - ✅ code_review: verdict=approve → run_code
+2025-12-06 01:37:59,532 - src.callbacks - INFO - 🔄 Entering node: run_code
+2025-12-06 01:38:01,735 - src.code_runner - INFO - ⚡ run_code: stage=stage0_material_validation, FAILED in 2.2s (exit=1: Simulation failed with exit code 1)
+2025-12-06 01:38:01,736 - src.callbacks - INFO - 🔄 Entering node: execution_check
+2025-12-06 01:38:01,737 - src.callbacks - INFO - 🔄 Entering node: router
+2025-12-06 01:38:01,738 - src.routing - INFO - ⚠️ execution: verdict=warning → physics_check (4 warning(s))
+2025-12-06 01:38:01,739 - src.callbacks - INFO - 🔄 Entering node: physics_check
+2025-12-06 01:38:01,740 - src.callbacks - INFO - 🔄 Entering node: router
+2025-12-06 01:38:01,740 - src.routing - ERROR - physics_verdict is None - node may not have run or failed. Escalating to user for guidance.
+2025-12-06 01:38:01,745 - src.callbacks - INFO - 🔄 Entering node: ask_user
+2025-12-06 01:38:01,746 - src.agents.user_interaction - WARNING - ask_user_node called with questions but without ask_user_trigger - this indicates a workflow bug. Setting generic 'unknown_escalation' trigger.
+2025-12-06 01:38:01,746 - src.callbacks - INFO - _extract_trigger: type=GraphInterrupt, obj=(Interrupt(value={'trigger': 'unknown_escalation', 'questions': ["Your response had validation errors (attempt 1/3):\n  - Please clarify: PROVIDE_GUIDANCE, SKIP_STAGE, or STOP?\n\nPlease try again:\nMaterial Validation Complete - User Review Required.\n\nMATERIALS LOADED:\n• Aluminum (Palik): ε₁=-48.9, ε₂=18.5 at 600nm ✓ Plasmonic\n• TDBC (Lorentzian): Peak 585nm (target 590nm, 0.8% error) ✓\n• ITO (Konig): n=1.86, k=0.007 ✓ Transparent conductor\n• Glass: n=1.51 ✓\n\n⚠️ CRITICAL DISCREPANCY:\nTDBC linewidth: Computed 0.0145 eV vs Paper's 0.066 eV (78% narrower)\n\nFor strong coupling, the criterion is Ω_R > (γ_plasmon + γ_exciton)/2.\nUsing γ_exciton=0.016 eV (computed) vs 0.066 eV (paper) significantly affects this.\n\nOPTIONS:\n(a) Proceed with paper's γX parameter (0.016 eV) - narrower linewidth may overestimate coupling strength\n(b) Adjust γX to 1.116×10¹⁴ rad/s to match 0.066 eV FWHM\n(c) You have alternative TDBC data to provide\n\nDoes the material data look correct? Which option for TDBC linewidth?\n\nOptions:\n- PROVIDE_GUIDANCE: Answer the reviewer's question (include your response after keyword)\n- SKIP_STAGE: Skip this stage and continue\n- STOP: End the workflow"], 'paper_id': 'aluminum_nanoantenna_complexes'}, id='e26b6eeadbe6fa1cd7ba1ab2245a1846'),)
+2025-12-06 01:38:01,746 - src.callbacks - INFO - _extract_trigger: attrs=['add_note', 'args', 'with_traceback']
+2025-12-06 01:38:01,746 - src.callbacks - INFO - _extract_trigger: args=((Interrupt(value={'trigger': 'unknown_escalation', 'questions': ["Your response had validation errors (attempt 1/3):\n  - Please clarify: PROVIDE_GUIDANCE, SKIP_STAGE, or STOP?\n\nPlease try again:\nMaterial Validation Complete - User Review Required.\n\nMATERIALS LOADED:\n• Aluminum (Palik): ε₁=-48.9, ε₂=18.5 at 600nm ✓ Plasmonic\n• TDBC (Lorentzian): Peak 585nm (target 590nm, 0.8% error) ✓\n• ITO (Konig): n=1.86, k=0.007 ✓ Transparent conductor\n• Glass: n=1.51 ✓\n\n⚠️ CRITICAL DISCREPANCY:\nTDBC linewidth: Computed 0.0145 eV vs Paper's 0.066 eV (78% narrower)\n\nFor strong coupling, the criterion is Ω_R > (γ_plasmon + γ_exciton)/2.\nUsing γ_exciton=0.016 eV (computed) vs 0.066 eV (paper) significantly affects this.\n\nOPTIONS:\n(a) Proceed with paper's γX parameter (0.016 eV) - narrower linewidth may overestimate coupling strength\n(b) Adjust γX to 1.116×10¹⁴ rad/s to match 0.066 eV FWHM\n(c) You have alternative TDBC data to provide\n\nDoes the material data look correct? Which option for TDBC linewidth?\n\nOptions:\n- PROVIDE_GUIDANCE: Answer the reviewer's question (include your response after keyword)\n- SKIP_STAGE: Skip this stage and continue\n- STOP: End the workflow"], 'paper_id': 'aluminum_nanoantenna_complexes'}, id='e26b6eeadbe6fa1cd7ba1ab2245a1846'),),), args_type=<class 'tuple'>
+2025-12-06 01:38:01,746 - src.callbacks - INFO - ⏸️  Graph paused for user input (trigger: unknown_escalation)
+2025-12-06 01:42:39,218 - src.callbacks - INFO - 🔄 Entering node: ask_user
+2025-12-06 01:42:39,219 - src.agents.user_interaction - WARNING - ask_user_node called with questions but without ask_user_trigger - this indicates a workflow bug. Setting generic 'unknown_escalation' trigger.
+2025-12-06 01:42:39,219 - src.agents.user_interaction - INFO - ❓ ask_user: trigger=unknown_escalation, 1 question(s), received response
+2025-12-06 01:42:39,219 - src.agents.user_interaction - INFO - 
+   ┌─── USER RESPONSE ───
+   │ [1;2BAdjust γX to 1.116×10¹⁴ rad/s to match 0.066 eV FWHM
+   └───────────────────
+2025-12-06 01:42:39,220 - src.callbacks - INFO - 🔄 Entering node: route_after_ask_user
+2025-12-06 01:42:39,221 - src.callbacks - INFO - 🔄 Entering node: supervisor
+2025-12-06 01:42:39,224 - src.agents.user_options - INFO - 🔍 Keyword matching failed for 'RETRY_WITH_GUIDANCE: FIX THESE TWO ERRORS: 1. "PAN...', trying LLM fallback
+2025-12-06 01:42:39,224 - src.agents.user_options - WARNING - ⚠️ ollama not installed, skipping LLM classification (pip install ollama)
+2025-12-06 01:42:39,224 - src.agents.user_options - INFO - ❌ No match for 'RETRY_WITH_GUIDANCE: FIX THESE TWO ERRORS: 1. "PAN...' in trigger 'unknown_escalation'
+2025-12-06 01:42:39,224 - src.agents.supervision.supervisor - INFO - ❓ supervisor: stage=stage0_material_validation, verdict=ask_user
+2025-12-06 01:42:39,224 - src.callbacks - INFO - 🔄 Entering node: route_after_supervisor
+2025-12-06 01:42:39,225 - src.callbacks - INFO - 🔄 Entering node: ask_user
+2025-12-06 01:42:39,226 - src.callbacks - INFO - _extract_trigger: type=GraphInterrupt, obj=(Interrupt(value={'trigger': 'unknown_escalation', 'questions': ['Please clarify: RETRY, SKIP_STAGE, or STOP?'], 'paper_id': 'aluminum_nanoantenna_complexes'}, id='6ef398374d3c230d46808e54f89b254a'),)
+2025-12-06 01:42:39,228 - src.callbacks - INFO - _extract_trigger: attrs=['add_note', 'args', 'with_traceback']
+2025-12-06 01:42:39,228 - src.callbacks - INFO - _extract_trigger: args=((Interrupt(value={'trigger': 'unknown_escalation', 'questions': ['Please clarify: RETRY, SKIP_STAGE, or STOP?'], 'paper_id': 'aluminum_nanoantenna_complexes'}, id='6ef398374d3c230d46808e54f89b254a'),),), args_type=<class 'tuple'>
+2025-12-06 01:42:39,228 - src.callbacks - INFO - ⏸️  Graph paused for user input (trigger: unknown_escalation)
+2025-12-06 01:42:48,667 - src.callbacks - INFO - 🔄 Entering node: ask_user
+2025-12-06 01:42:48,668 - src.agents.user_interaction - INFO - ❓ ask_user: trigger=unknown_escalation, 1 question(s), received response
+2025-12-06 01:42:48,668 - src.agents.user_interaction - INFO - 
+   ┌─── USER RESPONSE ───
+   │ RETRY:
+   └───────────────────
+2025-12-06 01:42:48,669 - src.callbacks - INFO - 🔄 Entering node: route_after_ask_user
+2025-12-06 01:42:48,671 - src.callbacks - INFO - 🔄 Entering node: supervisor
+2025-12-06 01:42:48,672 - src.agents.user_options - INFO - ✅ Matched 'RETRY:...' to 'RETRY' via keywords
+2025-12-06 01:42:48,672 - src.agents.supervision.supervisor - INFO - ✅ supervisor: stage=stage0_material_validation, verdict=ok_continue (Retrying after unknown error acknowledged by user.)
+2025-12-06 01:42:48,673 - src.callbacks - INFO - 🔄 Entering node: route_after_supervisor
+2025-12-06 01:42:48,677 - src.callbacks - INFO - 🔄 Entering node: material_checkpoint
+2025-12-06 01:42:48,682 - src.callbacks - INFO - 🔄 Entering node: route_after_material_checkpoint
+2025-12-06 01:42:48,683 - src.callbacks - INFO - 🔄 Entering node: ask_user
+2025-12-06 01:42:48,685 - src.callbacks - INFO - _extract_trigger: type=GraphInterrupt, obj=(Interrupt(value={'trigger': 'material_checkpoint', 'questions': ["\n═══════════════════════════════════════════════════════════════════════\nMANDATORY MATERIAL VALIDATION CHECKPOINT\n═══════════════════════════════════════════════════════════════════════\n\nStage 0 (Material Validation) has completed for paper: aluminum_nanoantenna_complexes\n\n**Validated materials (will be used for all subsequent stages):**\n- STAGE0 MATERIALS DATA: source=stage0_output, file=stage0_materials_data.csv\n\n**Generated plots:**\n- stage0_al_nk.png\n- stage0_al_permittivity.png\n- stage0_all_materials.png\n- stage0_ito_properties.png\n- stage0_materials_summary.png\n- stage0_tdbc_absorption.png\n- stage0_tdbc_permittivity.png\n\nPlease review the material optical constants comparison plots above.\n\n**Required confirmation:**\n\nDo the simulated optical constants (n, k, ε) match the paper's data \nwithin acceptable tolerance?\n\nOptions:\n1. APPROVE - Material validation looks correct, proceed to Stage 1\n2. CHANGE_DATABASE - Use different material database (specify which)\n3. CHANGE_MATERIAL - Paper uses different material than assumed (specify which)\n4. NEED_HELP - Unclear how to validate, need guidance\n\nNote: If you APPROVE, the validated_materials list above will be passed\nto Code Generator for all subsequent stages.\n\nPlease respond with your choice and any notes.\n═══════════════════════════════════════════════════════════════════════\n"], 'paper_id': 'aluminum_nanoantenna_complexes'}, id='3310e3816d53b2b27be6e8062a4848d5'),)
+2025-12-06 01:42:48,685 - src.callbacks - INFO - _extract_trigger: attrs=['add_note', 'args', 'with_traceback']
+2025-12-06 01:42:48,685 - src.callbacks - INFO - _extract_trigger: args=((Interrupt(value={'trigger': 'material_checkpoint', 'questions': ["\n═══════════════════════════════════════════════════════════════════════\nMANDATORY MATERIAL VALIDATION CHECKPOINT\n═══════════════════════════════════════════════════════════════════════\n\nStage 0 (Material Validation) has completed for paper: aluminum_nanoantenna_complexes\n\n**Validated materials (will be used for all subsequent stages):**\n- STAGE0 MATERIALS DATA: source=stage0_output, file=stage0_materials_data.csv\n\n**Generated plots:**\n- stage0_al_nk.png\n- stage0_al_permittivity.png\n- stage0_all_materials.png\n- stage0_ito_properties.png\n- stage0_materials_summary.png\n- stage0_tdbc_absorption.png\n- stage0_tdbc_permittivity.png\n\nPlease review the material optical constants comparison plots above.\n\n**Required confirmation:**\n\nDo the simulated optical constants (n, k, ε) match the paper's data \nwithin acceptable tolerance?\n\nOptions:\n1. APPROVE - Material validation looks correct, proceed to Stage 1\n2. CHANGE_DATABASE - Use different material database (specify which)\n3. CHANGE_MATERIAL - Paper uses different material than assumed (specify which)\n4. NEED_HELP - Unclear how to validate, need guidance\n\nNote: If you APPROVE, the validated_materials list above will be passed\nto Code Generator for all subsequent stages.\n\nPlease respond with your choice and any notes.\n═══════════════════════════════════════════════════════════════════════\n"], 'paper_id': 'aluminum_nanoantenna_complexes'}, id='3310e3816d53b2b27be6e8062a4848d5'),),), args_type=<class 'tuple'>
+2025-12-06 01:42:48,685 - src.callbacks - INFO - ⏸️  Graph paused for user input (trigger: material_checkpoint)

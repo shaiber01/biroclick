@@ -1,0 +1,38 @@
+{
+  "writes": [
+    {
+      "channel": "__resume__",
+      "value_type": "msgpack",
+      "value_data": "kdk/G1sxOzJCQWRqdXN0IM6zWCB0byAxLjExNsOXMTDCueKBtCByYWQvcyB0byBtYXRjaCAwLjA2NiBlViBGV0hN"
+    },
+    {
+      "channel": "pending_user_questions",
+      "value_type": "msgpack",
+      "value_data": "kdoE51lvdXIgcmVzcG9uc2UgaGFkIHZhbGlkYXRpb24gZXJyb3JzIChhdHRlbXB0IDEvMyk6CiAgLSBQbGVhc2UgY2xhcmlmeTogUkVUUlksIFNLSVBfU1RBR0UsIG9yIFNUT1A/CgpQbGVhc2UgdHJ5IGFnYWluOgpZb3VyIHJlc3BvbnNlIGhhZCB2YWxpZGF0aW9uIGVycm9ycyAoYXR0ZW1wdCAxLzMpOgogIC0gUGxlYXNlIGNsYXJpZnk6IFBST1ZJREVfR1VJREFOQ0UsIFNLSVBfU1RBR0UsIG9yIFNUT1A/CgpQbGVhc2UgdHJ5IGFnYWluOgpNYXRlcmlhbCBWYWxpZGF0aW9uIENvbXBsZXRlIC0gVXNlciBSZXZpZXcgUmVxdWlyZWQuCgpNQVRFUklBTFMgTE9BREVEOgrigKIgQWx1bWludW0gKFBhbGlrKTogzrXigoE9LTQ4LjksIM614oKCPTE4LjUgYXQgNjAwbm0g4pyTIFBsYXNtb25pYwrigKIgVERCQyAoTG9yZW50emlhbik6IFBlYWsgNTg1bm0gKHRhcmdldCA1OTBubSwgMC44JSBlcnJvcikg4pyTCuKAoiBJVE8gKEtvbmlnKTogbj0xLjg2LCBrPTAuMDA3IOKckyBUcmFuc3BhcmVudCBjb25kdWN0b3IK4oCiIEdsYXNzOiBuPTEuNTEg4pyTCgrimqDvuI8gQ1JJVElDQUwgRElTQ1JFUEFOQ1k6ClREQkMgbGluZXdpZHRoOiBDb21wdXRlZCAwLjAxNDUgZVYgdnMgUGFwZXIncyAwLjA2NiBlViAoNzglIG5hcnJvd2VyKQoKRm9yIHN0cm9uZyBjb3VwbGluZywgdGhlIGNyaXRlcmlvbiBpcyDOqV9SID4gKM6zX3BsYXNtb24gKyDOs19leGNpdG9uKS8yLgpVc2luZyDOs19leGNpdG9uPTAuMDE2IGVWIChjb21wdXRlZCkgdnMgMC4wNjYgZVYgKHBhcGVyKSBzaWduaWZpY2FudGx5IGFmZmVjdHMgdGhpcy4KCk9QVElPTlM6CihhKSBQcm9jZWVkIHdpdGggcGFwZXIncyDOs1ggcGFyYW1ldGVyICgwLjAxNiBlVikgLSBuYXJyb3dlciBsaW5ld2lkdGggbWF5IG92ZXJlc3RpbWF0ZSBjb3VwbGluZyBzdHJlbmd0aAooYikgQWRqdXN0IM6zWCB0byAxLjExNsOXMTDCueKBtCByYWQvcyB0byBtYXRjaCAwLjA2NiBlViBGV0hNCihjKSBZb3UgaGF2ZSBhbHRlcm5hdGl2ZSBUREJDIGRhdGEgdG8gcHJvdmlkZQoKRG9lcyB0aGUgbWF0ZXJpYWwgZGF0YSBsb29rIGNvcnJlY3Q/IFdoaWNoIG9wdGlvbiBmb3IgVERCQyBsaW5ld2lkdGg/CgpPcHRpb25zOgotIFBST1ZJREVfR1VJREFOQ0U6IEFuc3dlciB0aGUgcmV2aWV3ZXIncyBxdWVzdGlvbiAoaW5jbHVkZSB5b3VyIHJlc3BvbnNlIGFmdGVyIGtleXdvcmQpCi0gU0tJUF9TVEFHRTogU2tpcCB0aGlzIHN0YWdlIGFuZCBjb250aW51ZQotIFNUT1A6IEVuZCB0aGUgd29ya2Zsb3c="
+    },
+    {
+      "channel": "awaiting_user_input",
+      "value_type": "msgpack",
+      "value_data": "ww=="
+    },
+    {
+      "channel": "ask_user_trigger",
+      "value_type": "msgpack",
+      "value_data": "snVua25vd25fZXNjYWxhdGlvbg=="
+    },
+    {
+      "channel": "last_node_before_ask_user",
+      "value_type": "msgpack",
+      "value_data": "rXBoeXNpY3NfY2hlY2s="
+    },
+    {
+      "channel": "branch:to:supervisor",
+      "value_type": "null",
+      "value_data": ""
+    }
+  ],
+  "task_id": "5ac364c3-4f8e-5e76-4a04-4f5f4188e58d",
+  "thread_id": "my_run_1",
+  "checkpoint_id": "1f0d2337-0487-6c28-801c-9057ce0a56cd",
+  "saved_at": "2025-12-06T01:42:39.221141"
+}
