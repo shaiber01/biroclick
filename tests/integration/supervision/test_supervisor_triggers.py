@@ -1677,23 +1677,21 @@ class TestSupervisorReviewerEscalation:
         assert result.get("should_stop") is True
         assert result.get("ask_user_trigger") is None
 
-    def test_supervisor_handles_reviewer_escalation_unclear_response(self, base_state):
-        """User gives unclear response - should ask for clarification."""
+    def test_supervisor_handles_reviewer_escalation_freeform_response(self, base_state):
+        """User gives free-form response - should accept as guidance (no keyword required)."""
         from src.agents.supervision.supervisor import supervisor_node
 
         base_state["ask_user_trigger"] = "reviewer_escalation"
-        base_state["user_responses"] = {"Q1": "I'm not sure what to do"}
+        base_state["user_responses"] = {"Q1": "I'm not sure what to do, but try the Drude model first"}
         base_state["pending_user_questions"] = ["Question from reviewer"]
 
         result = supervisor_node(base_state)
 
-        assert result.get("supervisor_verdict") == "ask_user"
-        questions = result.get("pending_user_questions", [])
-        assert questions
-        # Should include the available options
-        assert "PROVIDE_GUIDANCE" in questions[0]
-        assert "SKIP" in questions[0] or "SKIP_STAGE" in questions[0]
-        assert "STOP" in questions[0]
+        # Free-form responses should now be accepted as guidance
+        assert result.get("supervisor_verdict") == "ok_continue"
+        # Verify reviewer feedback contains the user's response
+        assert "reviewer_feedback" in result
+        assert "try the Drude model first" in result["reviewer_feedback"]
 
     def test_supervisor_handles_reviewer_escalation_lowercase(self, base_state):
         """Keywords should work case-insensitively."""
@@ -1743,11 +1741,12 @@ class TestSupervisorReviewerEscalation:
         supervisor_result = supervisor_node(base_state)
         
         # Verify supervisor processed guidance correctly
-        assert supervisor_result["supervisor_verdict"] == "ok_continue"
+        # Should route back to code_review since escalation came from there
+        assert supervisor_result["supervisor_verdict"] == "retry_code_review"
         assert "reviewer_feedback" in supervisor_result
         assert "measured optical constants" in supervisor_result["reviewer_feedback"]
         assert supervisor_result.get("ask_user_trigger") is None
-        # Workflow should continue with the guidance
+        # Workflow will route back to code reviewer with the guidance
 
     def test_reviewer_escalation_full_flow_design_reviewer(self, base_state):
         """End-to-end: design reviewer escalates -> user responds -> supervisor handles."""

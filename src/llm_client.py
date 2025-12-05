@@ -599,6 +599,10 @@ def build_user_content_for_designer(state: Dict[str, Any]) -> str:
     materials = state.get("validated_materials") or []
     if materials:
         parts.append(f"## Validated Materials\n```json\n{json.dumps(materials, indent=2, ensure_ascii=False)}\n```")
+    else:
+        # For Stage 0: provide available materials from database
+        from src.agents.helpers.materials import get_material_summary_for_prompt
+        parts.append(get_material_summary_for_prompt())
     
     # Revision feedback if any
     feedback = state.get("reviewer_feedback") or ""

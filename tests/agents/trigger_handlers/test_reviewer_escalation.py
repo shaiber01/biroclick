@@ -136,25 +136,25 @@ class TestReviewerEscalationTrigger:
         assert result.get("ask_user_trigger") is None
 
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
-    def test_unclear_response_asks_clarification(self, mock_context):
-        """Should ask for clarification on unclear response."""
+    def test_freeform_response_accepted_as_guidance(self, mock_context):
+        """Should accept free-form response as guidance (no keyword required)."""
         mock_context.return_value = None
         
         state = {
             "ask_user_trigger": "reviewer_escalation",
-            "user_responses": {"Question": "I dont know what to do"},
+            "user_responses": {"Question": "I think we should use the FWHM interpretation"},
         }
         
         result = supervisor_node(state)
         
-        assert result["supervisor_verdict"] == "ask_user"
-        assert result.get("ask_user_trigger") is None
-        # Verify clarification question is set
-        assert "pending_user_questions" in result
-        assert len(result["pending_user_questions"]) == 1
-        assert "PROVIDE_GUIDANCE" in result["pending_user_questions"][0]
-        assert "SKIP" in result["pending_user_questions"][0] or "SKIP_STAGE" in result["pending_user_questions"][0]
-        assert "STOP" in result["pending_user_questions"][0]
+        # Free-form responses should be accepted as guidance
+        assert result["supervisor_verdict"] == "ok_continue"
+        assert result.get("ask_user_trigger") is None  # Trigger is cleared
+        # Verify reviewer feedback contains the guidance
+        assert "reviewer_feedback" in result
+        assert "I think we should use the FWHM interpretation" in result["reviewer_feedback"]
+        # Verify supervisor feedback is set
+        assert "Continuing with user guidance" in result.get("supervisor_feedback", "")
 
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_empty_response_asks_clarification(self, mock_context):
@@ -272,20 +272,19 @@ class TestHandleReviewerEscalation:
         assert mock_result["supervisor_verdict"] == "all_complete"
         assert mock_result["should_stop"] is True
 
-    def test_unknown_response(self, mock_state, mock_result):
-        """Should handle unknown response correctly."""
-        user_input = {"q1": "Just keep going"}
+    def test_freeform_response_accepted_as_guidance(self, mock_state, mock_result):
+        """Should accept free-form response as guidance (no keyword required)."""
+        user_input = {"q1": "Just keep going and use the default parameters"}
         
         trigger_handlers.handle_reviewer_escalation(mock_state, mock_result, user_input, "stage1")
         
-        assert mock_result["supervisor_verdict"] == "ask_user"
-        # Verify clarification question is set
-        assert "pending_user_questions" in mock_result
-        assert len(mock_result["pending_user_questions"]) == 1
-        question = mock_result["pending_user_questions"][0]
-        assert "PROVIDE_GUIDANCE" in question
-        assert "SKIP" in question or "SKIP_STAGE" in question
-        assert "STOP" in question
+        # Free-form responses should be accepted as guidance
+        assert mock_result["supervisor_verdict"] == "ok_continue"
+        # Verify reviewer feedback contains the guidance
+        assert "reviewer_feedback" in mock_result
+        assert "Just keep going and use the default parameters" in mock_result["reviewer_feedback"]
+        # Verify supervisor feedback
+        assert "Continuing with user guidance" in mock_result.get("supervisor_feedback", "")
         # Verify should_stop is NOT set
         assert mock_result.get("should_stop") is not True
 
@@ -337,5 +336,39 @@ class TestHandleReviewerEscalation:
         assert mock_result["supervisor_verdict"] == "ok_continue"
         assert "λ = 500nm" in mock_result["reviewer_feedback"]
         assert "ε = -5.0+0.3i" in mock_result["reviewer_feedback"]
+
+    def test_natural_physics_response(self, mock_state, mock_result):
+        """Should accept natural response to physics question (bug report scenario)."""
+        # This is the exact scenario from the bug report - user responds naturally
+        # to a question about TDBC linewidth without using any keyword
+        user_input = {"q1": "Assume the paper meant FWHM and then adjust γX. For secondary issue: you are supposed to have Palik Al data available to you"}
+        
+        trigger_handlers.handle_reviewer_escalation(mock_state, mock_result, user_input, "stage1")
+        
+        # Should accept as guidance without requiring keyword
+        assert mock_result["supervisor_verdict"] == "ok_continue"
+        assert "reviewer_feedback" in mock_result
+        assert "Assume the paper meant FWHM" in mock_result["reviewer_feedback"]
+        assert "Palik Al data" in mock_result["reviewer_feedback"]
+
+    def test_response_with_numbers(self, mock_state, mock_result):
+        """Should accept response that's just a number or short answer."""
+        user_input = {"q1": "2"}  # User selecting option 2
+        
+        trigger_handlers.handle_reviewer_escalation(mock_state, mock_result, user_input, "stage1")
+        
+        # Even short responses should be accepted as guidance
+        assert mock_result["supervisor_verdict"] == "ok_continue"
+        assert "2" in mock_result["reviewer_feedback"]
+
+    def test_whitespace_only_asks_clarification(self, mock_state, mock_result):
+        """Should ask for clarification on whitespace-only response."""
+        user_input = {"q1": "   \n\t  "}
+        
+        trigger_handlers.handle_reviewer_escalation(mock_state, mock_result, user_input, "stage1")
+        
+        # Whitespace-only should be treated as empty
+        assert mock_result["supervisor_verdict"] == "ask_user"
+        assert "pending_user_questions" in mock_result
 
 

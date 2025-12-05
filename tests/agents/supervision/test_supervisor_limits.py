@@ -195,7 +195,7 @@ class TestDesignReviewLimitTrigger:
         result = supervisor_node(state)
 
         assert result["design_revision_count"] == 0
-        assert result["supervisor_verdict"] == "ok_continue"
+        assert result["supervisor_verdict"] == "retry_design"  # Retry with hint
         assert result["ask_user_trigger"] is None  # Should be cleared
         assert "reviewer_feedback" in result
         assert "User hint:" in result["reviewer_feedback"]
@@ -318,7 +318,7 @@ class TestExecutionFailureLimitTrigger:
         result = supervisor_node(state)
 
         assert result["execution_failure_count"] == 0
-        assert result["supervisor_verdict"] == "ok_continue"
+        assert result["supervisor_verdict"] == "retry_generate_code"  # Retry with guidance
         assert result["ask_user_trigger"] is None  # Should be cleared
         assert "supervisor_feedback" in result
         assert "User guidance:" in result["supervisor_feedback"]
@@ -437,7 +437,7 @@ class TestPhysicsFailureLimitTrigger:
         result = supervisor_node(state)
 
         assert result["physics_failure_count"] == 0
-        assert result["supervisor_verdict"] == "ok_continue"
+        assert result["supervisor_verdict"] == "retry_generate_code"  # Retry with guidance
         assert result["ask_user_trigger"] is None  # Should be cleared
         assert "supervisor_feedback" in result
         assert result.get("should_stop") is not True  # Should not stop
@@ -455,7 +455,7 @@ class TestPhysicsFailureLimitTrigger:
 
         result = supervisor_node(state)
 
-        assert result["supervisor_verdict"] == "ok_continue"
+        assert result["supervisor_verdict"] == "retry_analyze"  # Accept partial → analyze
         mock_update.assert_called_with(
             state,
             "stage1",
@@ -476,7 +476,7 @@ class TestPhysicsFailureLimitTrigger:
 
         result = supervisor_node(state)
 
-        assert result["supervisor_verdict"] == "ok_continue"
+        assert result["supervisor_verdict"] == "retry_analyze"  # Accept partial → analyze
         assert result["ask_user_trigger"] is None  # Should be cleared
         assert result.get("should_stop") is not True  # Should not stop
         mock_update.assert_called_once_with(
@@ -512,7 +512,7 @@ class TestPhysicsFailureLimitTrigger:
 
         result = supervisor_node(state)
 
-        assert result["supervisor_verdict"] == "ok_continue"
+        assert result["supervisor_verdict"] == "retry_analyze"  # Accept partial → analyze
         assert result["ask_user_trigger"] is None
 
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
@@ -802,7 +802,7 @@ class TestErrorHandling:
         result = supervisor_node(state)
 
         assert result["code_revision_count"] == 0
-        assert result["supervisor_verdict"] == "ok_continue"
+        assert result["supervisor_verdict"] == "retry_generate_code"  # Retry with hint
 
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_handles_partial_keyword_match(self, mock_context):
@@ -817,7 +817,7 @@ class TestErrorHandling:
         result = supervisor_node(state)
 
         assert result["code_revision_count"] == 0
-        assert result["supervisor_verdict"] == "ok_continue"
+        assert result["supervisor_verdict"] == "retry_generate_code"  # Retry with hint
 
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_handles_empty_string_response(self, mock_context):
@@ -1666,7 +1666,7 @@ class TestUserResponseVariations:
         result = supervisor_node(state)
 
         assert result["code_revision_count"] == 0
-        assert result["supervisor_verdict"] == "ok_continue"
+        assert result["supervisor_verdict"] == "retry_generate_code"  # Retry with hint
         assert "numpy arrays" in result["reviewer_feedback"]
 
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
@@ -1682,7 +1682,7 @@ class TestUserResponseVariations:
         result = supervisor_node(state)
 
         assert result["code_revision_count"] == 0
-        assert result["supervisor_verdict"] == "ok_continue"
+        assert result["supervisor_verdict"] == "retry_generate_code"  # Retry with hint
         assert "np.array" in result["reviewer_feedback"]
 
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
@@ -1730,7 +1730,7 @@ class TestUserResponseVariations:
         result = supervisor_node(state)
 
         assert result["code_revision_count"] == 0
-        assert result["supervisor_verdict"] == "ok_continue"
+        assert result["supervisor_verdict"] == "retry_generate_code"  # Retry with hint
         assert "User hint:" in result["reviewer_feedback"]
 
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")

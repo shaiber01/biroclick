@@ -1847,7 +1847,7 @@ class TestTriggerHandlerIntegration:
         
         # Verify counter is reset
         assert result["code_revision_count"] == 0
-        assert result["supervisor_verdict"] == "ok_continue"
+        assert result["supervisor_verdict"] == "retry_generate_code"  # Retry with hint
         # Verify hint is passed to reviewer
         assert "numpy" in result["reviewer_feedback"]
 
@@ -2065,7 +2065,7 @@ class TestTriggerHandlerIntegration:
         
         # Verify counter is reset
         assert result["execution_failure_count"] == 0
-        assert result["supervisor_verdict"] == "ok_continue"
+        assert result["supervisor_verdict"] == "retry_generate_code"  # Retry with guidance
         assert "mesh" in result.get("supervisor_feedback", "").lower()
 
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
@@ -2084,7 +2084,7 @@ class TestTriggerHandlerIntegration:
         
         result = supervisor_node(state)
         
-        assert result["supervisor_verdict"] == "ok_continue"
+        assert result["supervisor_verdict"] == "retry_analyze"  # Accept partial → analyze
 
 
 class TestRetryArchiveErrors:

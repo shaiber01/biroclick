@@ -638,20 +638,24 @@ def classify_with_local_llm(trigger: str, response: str) -> Optional[UserOption]
     """
     # Check if local LLM is enabled
     if os.environ.get("REPROLAB_USE_LOCAL_LLM", "0") != "1":
+        logger.info("🔇 LLM fallback disabled (set REPROLAB_USE_LOCAL_LLM=1 to enable)")
         return None
     
     options = get_options_for_trigger(trigger)
     if not options:
+        logger.info(f"🔇 LLM fallback: no options defined for trigger '{trigger}'")
         return None
     
     try:
         import ollama
     except ImportError:
-        logger.debug("ollama not installed, skipping LLM classification")
+        logger.warning("⚠️ ollama not installed, skipping LLM classification (pip install ollama)")
         return None
     
     # Build a tight, directive prompt that minimizes rambling
     option_names = ', '.join(opt.display for opt in options)
+    model = os.environ.get("REPROLAB_LOCAL_LLM_MODEL", "llama3.2:3b")
+    logger.info(f"🤖 Using LLM fallback ({model}) to classify user response for trigger '{trigger}'")
     
     prompt = f"""Task: Single-word classification.
 
@@ -663,7 +667,6 @@ Output (ONE WORD ONLY):"""
 
     try:
         # Use a small, fast model (llama3.2:3b is good at following instructions)
-        model = os.environ.get("REPROLAB_LOCAL_LLM_MODEL", "llama3.2:3b")
         result = ollama.chat(
             model=model,
             messages=[{"role": "user", "content": prompt}],
@@ -678,17 +681,19 @@ Output (ONE WORD ONLY):"""
         words = raw_answer.split()
         answer = words[0].upper() if words else ""
         
-        logger.debug(f"Local LLM classified '{response}' as '{answer}' (raw: '{raw_answer}')")
+        logger.info(f"🤖 LLM returned: '{answer}' (raw: '{raw_answer}')")
         
         # Find matching option
         for opt in options:
             if opt.display.upper() == answer:
+                logger.info(f"✅ LLM fallback matched '{response[:50]}...' → {opt.display}")
                 return opt
         
+        logger.warning(f"⚠️ LLM fallback returned '{answer}' which is not a valid option for '{trigger}'. Valid options: {option_names}")
         return None
         
     except Exception as e:
-        logger.warning(f"Local LLM classification failed: {e}")
+        logger.warning(f"⚠️ Local LLM classification failed: {e}")
         return None
 
 
@@ -711,17 +716,18 @@ def match_user_response(trigger: str, response: str) -> Optional[UserOption]:
     # 1. Keyword matching (fast path)
     option = match_option_by_keywords(trigger, response)
     if option:
-        logger.debug(f"Matched '{response}' to '{option.display}' via keywords")
+        logger.info(f"✅ Matched '{response[:50]}...' to '{option.display}' via keywords")
         return option
     
     # 2. LLM fallback (slow path, optional)
+    logger.info(f"🔍 Keyword matching failed for '{response[:50]}...', trying LLM fallback")
     option = classify_with_local_llm(trigger, response)
     if option:
-        logger.info(f"Matched '{response}' to '{option.display}' via local LLM")
+        # Success already logged in classify_with_local_llm
         return option
     
     # 3. No match
-    logger.debug(f"No match for '{response}' in trigger '{trigger}'")
+    logger.info(f"❌ No match for '{response[:50]}...' in trigger '{trigger}'")
     return None
 
 

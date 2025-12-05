@@ -96,8 +96,27 @@ gold_data = np.loadtxt('materials/palik_gold.csv', delimiter=',', skiprows=1)
 # ... fit Drude-Lorentz model from data ...
 ```
 
-If validated_materials is empty or missing, ASK FOR CLARIFICATION before proceeding.
+If validated_materials is empty or missing AND this is NOT Stage 0 (material_validation), ASK FOR CLARIFICATION before proceeding.
 Never guess material sources - wrong optical constants invalidate all physics.
+
+**FOR STAGE 0 (Material Validation):**
+When `validated_materials` is empty, resolve material paths from the design's `material_id`:
+- Look up `material_id` in `materials/index.json`
+- Use the `data_file` field from the database entry
+- Example: `material_id: "palik_al"` resolves to `materials/palik_al.csv`
+
+```python
+# Load material database for path resolution
+import json
+with open('materials/index.json', 'r') as f:
+    mat_db = json.load(f)
+mat_lookup = {m['material_id']: m for m in mat_db.get('materials', [])}
+
+# Resolve path from material_id
+al_entry = mat_lookup.get('palik_al', {})
+al_data_file = al_entry.get('data_file')  # 'palik_al.csv'
+al_path = f"materials/{al_data_file}" if al_data_file else None
+```
 
 ═══════════════════════════════════════════════════════════════════════
 A3. MANDATORY: OUTPUT FILE NAMES FROM STAGE SPEC

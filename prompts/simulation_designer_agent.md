@@ -446,7 +446,7 @@ Return a JSON object with your simulation design. The system validates structure
 
 **geometry**: Specify `dimensionality` ("2D" or "3D"), `cell_size`, `resolution`, and `structures` array. Each structure needs: name, type (block/cylinder/sphere), material_ref, center, dimensions in Meep units, and real_dimensions in nm for verification.
 
-**materials**: Array with `id`, `name`, `model_type` (drude_lorentz/constant/tabulated), `source`, `data_file` path (from state.material_paths), and relevant `parameters`.
+**materials**: Array with `id` (use exact `material_id` from Available Materials table), `name`, `model_type` (drude_lorentz/constant/tabulated), `source`. Do NOT include `data_file` - CodeGenerator will resolve paths from material_id.
 
 **sources**: Array with `type` (gaussian/continuous), `component` (Ex/Ey/Ez), `center`, `size`, wavelength range in nm, AND converted Meep frequencies.
 

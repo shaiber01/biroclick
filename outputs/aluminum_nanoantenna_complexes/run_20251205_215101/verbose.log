@@ -1,0 +1,5 @@
+2025-12-05 21:51:16,258 - __main__ - INFO - 📁 Run output directory: outputs/aluminum_nanoantenna_complexes/run_20251205_215101
+2025-12-05 21:51:16,373 - __main__ - INFO - 💾 Checkpoints will be saved to: outputs/aluminum_nanoantenna_complexes/run_20251205_215101/checkpoints
+2025-12-05 21:51:16,416 - src.callbacks - INFO - 🔄 Entering node: adapt_prompts
+2025-12-05 21:51:22,094 - src.callbacks - INFO - ⏸️  Graph paused for user input (trigger: unknown)
+2025-12-05 21:51:22,097 - src.callbacks - INFO - ⏸️  Graph paused for user input (trigger: unknown)

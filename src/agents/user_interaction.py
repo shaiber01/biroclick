@@ -101,11 +101,15 @@ def ask_user_node(state: ReproState) -> Dict[str, Any]:
         trigger = "unknown_escalation"
         safety_net_triggered = True
     
-    # Get original questions (for mapping responses after retry) or use current questions
-    original_questions = state.get("original_user_questions", questions)
-    # If this is a fresh call (not a retry), store original questions
-    if "original_user_questions" not in state:
-        original_questions = questions.copy()
+    # Get original questions (for mapping responses after retry) or use current questions.
+    # NOTE: We use `or questions` instead of the default parameter because
+    # state.get("key", default) returns None if key exists with value None,
+    # not the default. Previous successful ask_user calls set this to None,
+    # which would poison subsequent calls without this fix.
+    original_questions = state.get("original_user_questions") or questions
+    # If this is a fresh call (not a retry), make a copy to avoid mutation
+    if not state.get("original_user_questions"):
+        original_questions = questions.copy() if questions else []
     
     # ═══════════════════════════════════════════════════════════════════════
     # INTERRUPT: Pause execution and wait for user response

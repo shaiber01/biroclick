@@ -490,7 +490,7 @@ def plan_reviewer_node(state: ReproState) -> dict:
         return {
             "workflow_phase": "plan_review",
             "ask_user_trigger": "reviewer_escalation",
-            "pending_user_questions": [escalate],
+            "pending_user_questions": [f"{escalate}\n\n{get_options_prompt('reviewer_escalation')}"],
             "awaiting_user_input": True,
             "last_node_before_ask_user": "plan_review",
             "reviewer_escalation_source": "plan_reviewer",

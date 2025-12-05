@@ -211,7 +211,7 @@ class TestCodeReviewLimitTrigger:
         result = supervisor_node(state)
         
         assert result["supervisor_verdict"] == "ask_user"
-        assert result.get("ask_user_trigger") is None
+        assert result.get("ask_user_trigger") == "code_review_limit"  # Preserved for clarification
         # Verify clarification question is set
         assert "pending_user_questions" in result
         assert len(result["pending_user_questions"]) == 1

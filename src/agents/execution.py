@@ -264,7 +264,7 @@ def physics_sanity_node(state: ReproState) -> dict:
         return {
             "workflow_phase": "physics_validation",
             "ask_user_trigger": "reviewer_escalation",
-            "pending_user_questions": [escalate],
+            "pending_user_questions": [f"{escalate}\n\n{get_options_prompt('reviewer_escalation')}"],
             "awaiting_user_input": True,
             "last_node_before_ask_user": "physics_check",
             "reviewer_escalation_source": "physics_sanity",

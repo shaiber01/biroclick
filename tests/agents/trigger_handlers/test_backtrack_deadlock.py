@@ -1351,7 +1351,7 @@ class TestSupervisorNodeTriggerClearing:
 
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_preserves_trigger_when_asking_clarification(self, mock_context):
-        """Should NOT clear trigger when asking for clarification (ask_user verdict)."""
+        """Should preserve trigger when asking for clarification (ask_user verdict)."""
         mock_context.return_value = None
         
         state = {
@@ -1361,9 +1361,9 @@ class TestSupervisorNodeTriggerClearing:
         
         result = supervisor_node(state)
         
-        # When verdict is ask_user, the trigger is still cleared but new questions are set
-        assert result.get("ask_user_trigger") is None, \
-            "ask_user_trigger should be cleared even when asking clarification"
+        # When verdict is ask_user, the trigger is PRESERVED so the next cycle uses the right handler
+        assert result.get("ask_user_trigger") == "deadlock_detected", \
+            "ask_user_trigger should be preserved when asking for clarification"
         assert result["supervisor_verdict"] == "ask_user"
         assert len(result.get("pending_user_questions", [])) > 0, \
             "New questions should be set for clarification"

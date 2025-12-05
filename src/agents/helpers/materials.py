@@ -66,6 +66,32 @@ def load_material_database() -> dict:
         return {}
 
 
+def get_material_summary_for_prompt() -> str:
+    """Generate a compact material summary for LLM prompts.
+    
+    This is used to provide SimulationDesigner with available material_ids
+    so it can reference them correctly instead of inventing file paths.
+    """
+    db = load_material_database()
+    if not db:
+        return "## Available Materials\n\nNo material database found."
+    
+    lines = [
+        "## Available Materials (from materials/index.json)",
+        "Use these exact `material_id` values in your design. Do NOT invent file paths.",
+        "",
+        "| material_id | name | csv_available |",
+        "|-------------|------|---------------|"
+    ]
+    for mat in db.get("materials", []):
+        mat_id = mat.get("material_id", "")
+        name = mat.get("name", "")
+        csv = "Yes" if mat.get("csv_available") else "No"
+        lines.append(f"| {mat_id} | {name} | {csv} |")
+    
+    return "\n".join(lines)
+
+
 def match_material_from_text(text: str, material_lookup: dict) -> Optional[dict]:
     """
     Match material name from text against material database.

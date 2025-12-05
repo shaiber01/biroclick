@@ -898,21 +898,42 @@ def handle_reviewer_escalation(
     This handles cases where a reviewer LLM explicitly requested user input
     via the escalate_to_user field.
     
-    Options defined in user_options.py: PROVIDE_GUIDANCE, SKIP_STAGE, STOP
+    SPECIAL BEHAVIOR: Unlike other triggers, reviewer_escalation accepts
+    free-form responses as guidance. This is because the question is domain-specific
+    (e.g., "Should we use FWHM or HWHM?") and users naturally answer directly.
+    
+    Only SKIP_STAGE and STOP require explicit keywords for safety.
+    Any other non-empty response is treated as guidance.
     """
     response_text = parse_user_response(user_responses)
-    matched = match_user_response("reviewer_escalation", response_text)
     
-    if matched is None:
-        result["supervisor_verdict"] = "ask_user"
-        result["pending_user_questions"] = [get_clarification_message("reviewer_escalation")]
+    # First check for explicit SKIP - user wants to skip this stage
+    if check_keywords(response_text, ["SKIP", "SKIP_STAGE"]):
+        result["supervisor_verdict"] = "ok_continue"
+        if current_stage_id:
+            _update_progress_with_error_handling(
+                state, result, current_stage_id, "blocked",
+                summary="Skipped by user due to reviewer escalation"
+            )
         return
     
-    if matched.action == "provide_guidance":
+    # Check for explicit STOP - user wants to end the workflow
+    if check_keywords(response_text, ["STOP", "QUIT", "EXIT", "ABORT", "END"]):
+        result["supervisor_verdict"] = "all_complete"
+        result["should_stop"] = True
+        return
+    
+    # For reviewer_escalation, ANY other non-empty response is treated as guidance.
+    # This is different from other triggers because the question is domain-specific
+    # and users naturally respond with their answer, not with keywords.
+    if response_text.strip():
         raw_response = list(user_responses.values())[-1] if user_responses else ""
+        # Use the full response as guidance (extract_guidance_text will strip any
+        # optional keyword prefixes like "GUIDANCE:" if present)
         guidance_text = extract_guidance_text(raw_response)
         result["reviewer_feedback"] = f"User guidance: {guidance_text}"
         result["supervisor_feedback"] = "Continuing with user guidance for reviewer question."
+        
         # Route back to the specific reviewer that escalated
         last_node = state.get("last_node_before_ask_user", "")
         if last_node == "code_review":
@@ -921,21 +942,20 @@ def handle_reviewer_escalation(
             result["supervisor_verdict"] = "retry_design_review"
         elif last_node == "plan_review":
             result["supervisor_verdict"] = "retry_plan_review"
+        elif last_node == "physics_check":
+            # Physics check escalation should continue to analysis or next stage
+            result["supervisor_verdict"] = "ok_continue"
         else:
             # Fallback: continue to select_stage if we can't determine the reviewer
             result["supervisor_verdict"] = "ok_continue"
+        return
     
-    elif matched.action == "skip":
-        result["supervisor_verdict"] = "ok_continue"
-        if current_stage_id:
-            _update_progress_with_error_handling(
-                state, result, current_stage_id, "blocked",
-                summary="Skipped by user due to reviewer escalation"
-            )
-    
-    elif matched.action == "stop":
-        result["supervisor_verdict"] = "all_complete"
-        result["should_stop"] = True
+    # Only ask for clarification if response is completely empty
+    result["supervisor_verdict"] = "ask_user"
+    result["pending_user_questions"] = [
+        "Your response was empty. Please provide your answer to the question, "
+        "or type SKIP_STAGE to skip this stage, or STOP to end the workflow."
+    ]
 
 
 # Registry of trigger handlers
