@@ -139,13 +139,15 @@ def simulation_designer_node(state: ReproState) -> dict:
     
     # Log design summary
     if isinstance(agent_output, dict):
-        geometry = agent_output.get("geometry_type") or agent_output.get("simulation_type", "unknown")
-        domain_size = agent_output.get("domain_size", {})
-        if isinstance(domain_size, dict):
-            size_info = f"{domain_size.get('x', '?')}x{domain_size.get('y', '?')}"
+        # Use schema-defined fields for logging
+        geometry_spec = agent_output.get("geometry", {})
+        geometry_type = geometry_spec.get("dimensionality", "unknown") if isinstance(geometry_spec, dict) else "unknown"
+        cell_size = geometry_spec.get("cell_size", {}) if isinstance(geometry_spec, dict) else {}
+        if isinstance(cell_size, dict):
+            size_info = f"{cell_size.get('x', '?')}x{cell_size.get('y', '?')}"
         else:
-            size_info = str(domain_size) if domain_size else "unspecified"
-        logger.info(f"🔧 design: stage={current_stage_id}, geometry={geometry}, domain={size_info}")
+            size_info = str(cell_size) if cell_size else "unspecified"
+        logger.info(f"🔧 design: stage={current_stage_id}, geometry={geometry_type}, domain={size_info}")
     else:
         logger.info(f"🔧 design: stage={current_stage_id}, design created")
     
@@ -248,7 +250,7 @@ def design_reviewer_node(state: ReproState) -> dict:
             state, "design_revision_count", "max_design_revisions", MAX_DESIGN_REVISIONS
         )
         result["design_revision_count"] = new_count
-        result["reviewer_feedback"] = agent_output.get("feedback", agent_output.get("summary", ""))
+        result["reviewer_feedback"] = agent_output.get("summary", "")
         
         # If we hit the max revision budget, escalate to ask_user immediately.
         # BUG FIX: Check if new_count >= max (not just if increment failed).

@@ -94,10 +94,13 @@ def _log_routing_decision(state: "ReproState", checkpoint_prefix: str, verdict: 
                 context_parts.append(f"{len(warnings)} warning(s)")
             
     elif checkpoint_prefix == "physics":
-        issues = state.get("physics_issues", [])
-        if issues and verdict in ["fail", "warning", "design_flaw"]:
-            issues_preview = issues[:3] if isinstance(issues, list) else [str(issues)]
-            context_parts.append(f"issues: {issues_preview}")
+        # Check physics_warnings first (new structured field), fall back to physics_issues
+        warnings = state.get("physics_warnings", []) or state.get("physics_issues", [])
+        if warnings and verdict in ["fail", "warning", "design_flaw"]:
+            if isinstance(warnings, list):
+                context_parts.append(f"{len(warnings)} concern(s)")
+            else:
+                context_parts.append(f"concerns: {warnings}")
     
     elif checkpoint_prefix == "comparison":
         match_score = state.get("match_score")

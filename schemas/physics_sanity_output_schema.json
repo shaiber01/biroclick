@@ -97,6 +97,13 @@
         "required": ["concern", "severity"]
       }
     },
+    "escalate_to_user": {
+      "oneOf": [
+        { "type": "boolean" },
+        { "type": "string" }
+      ],
+      "description": "False, or a specific question string for user when physics validation needs human input"
+    },
     "backtrack_suggestion": {
       "type": "object",
       "description": "Suggestion to backtrack if physics issues reveal design problems",

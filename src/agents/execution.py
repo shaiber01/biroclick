@@ -122,19 +122,32 @@ def execution_validator_node(state: ReproState) -> dict:
             # Always indicate missing verdict in summary, even if summary was provided
             missing_verdict_msg = "Missing verdict in LLM response, defaulting to pass."
             if "summary" in agent_output:
-                agent_output["summary"] = f"{missing_verdict_msg} Original summary: {agent_output['summary']}"
+                agent_output["summary"] = f"{missing_verdict_msg} Original summary: {agent_output.get('summary', '')}"
             else:
                 agent_output["summary"] = missing_verdict_msg
         agent_output["stage_id"] = stage_id
     
+    # Extract warnings array from agent output (schema field: "warnings")
+    warnings_list = agent_output.get("warnings", [])
+    if not isinstance(warnings_list, list):
+        warnings_list = [str(warnings_list)] if warnings_list else []
+    
+    # Extract structured data from agent output (preserves rich LLM response)
+    execution_status = agent_output.get("execution_status")
+    execution_files_check = agent_output.get("files_check")
+    
     result: Dict[str, Any] = {
         "workflow_phase": "execution_validation",
-        "execution_verdict": agent_output["verdict"],
+        "execution_verdict": agent_output.get("verdict", "pass"),
         "execution_feedback": agent_output.get("summary", "No feedback provided."),
+        "execution_warnings": warnings_list,
+        # Preserve structured data from LLM output
+        "execution_status": execution_status,
+        "execution_files_check": execution_files_check,
     }
     
     # Increment failure counters if verdict is "fail"
-    if agent_output["verdict"] == "fail":
+    if agent_output.get("verdict") == "fail":
         new_count, _ = increment_counter_with_max(
             state, "execution_failure_count", "max_execution_failures", MAX_EXECUTION_FAILURES
         )
@@ -159,12 +172,34 @@ def execution_validator_node(state: ReproState) -> dict:
             result["awaiting_user_input"] = True
             result["last_node_before_ask_user"] = "execution_check"
     
-    # Log execution validation result
-    verdict = agent_output["verdict"]
+    # Log execution validation result using structured data
+    verdict = agent_output.get("verdict", "pass")
     stage_id = state.get("current_stage_id", "unknown")
-    summary = agent_output.get("summary", "")
     emoji = "✅" if verdict == "pass" else "⚠️" if verdict == "warning" else "❌"
-    logger.info(f"{emoji} execution_check: stage={stage_id}, verdict={verdict} ({summary})")
+    
+    # Build concise log message from structured data
+    status = execution_status or {}
+    files = execution_files_check or {}
+    exit_code = status.get("exit_code", "?")
+    runtime = status.get("runtime_seconds", 0)
+    files_found = len(files.get("found_files", []))
+    files_expected = len(files.get("expected_files", []))
+    
+    logger.info(
+        f"{emoji} execution_check: stage={stage_id}, verdict={verdict}, "
+        f"exit={exit_code}, runtime={runtime:.1f}s, files={files_found}/{files_expected}"
+    )
+    
+    # Log full summary at DEBUG level for detailed troubleshooting
+    summary = agent_output.get("summary", "")
+    if summary:
+        logger.debug(f"   execution_check details: {summary[:300]}{'...' if len(summary) > 300 else ''}")
+    
+    # Log warnings separately for visibility
+    if warnings_list:
+        logger.info(f"   ⚠️ {len(warnings_list)} warning(s) from execution validation:")
+        for i, warning in enumerate(warnings_list, 1):
+            logger.info(f"      {i}. {warning}")
     
     return result
 
@@ -223,6 +258,18 @@ def physics_sanity_node(state: ReproState) -> dict:
         agent_output = create_llm_error_auto_approve("physics_sanity", e, default_verdict="pass")
         agent_output["summary"] = f"Auto-approved due to LLM error: {e}"
     
+    # Check for explicit escalation to user (before processing verdict)
+    escalate = agent_output.get("escalate_to_user")
+    if escalate and isinstance(escalate, str) and escalate.strip():
+        return {
+            "workflow_phase": "physics_validation",
+            "ask_user_trigger": "reviewer_escalation",
+            "pending_user_questions": [escalate],
+            "awaiting_user_input": True,
+            "last_node_before_ask_user": "physics_check",
+            "reviewer_escalation_source": "physics_sanity",
+        }
+    
     # Handle missing verdict gracefully (separate from LLM unavailability)
     if "verdict" not in agent_output:
         logger.warning("Physics sanity output missing 'verdict'. Defaulting to 'pass'.")
@@ -230,7 +277,7 @@ def physics_sanity_node(state: ReproState) -> dict:
         # Always indicate missing verdict in summary, even if summary was provided
         missing_verdict_msg = "Missing verdict in LLM response, defaulting to pass."
         if "summary" in agent_output:
-            agent_output["summary"] = f"{missing_verdict_msg} Original summary: {agent_output['summary']}"
+            agent_output["summary"] = f"{missing_verdict_msg} Original summary: {agent_output.get('summary', '')}"
         else:
             agent_output["summary"] = missing_verdict_msg
     
@@ -238,14 +285,36 @@ def physics_sanity_node(state: ReproState) -> dict:
     if "backtrack_suggestion" not in agent_output:
         agent_output["backtrack_suggestion"] = {"suggest_backtrack": False}
     
+    # Extract concerns from agent output (schema field: "concerns")
+    # Transform concern objects into warning strings for state
+    concerns_list = agent_output.get("concerns", [])
+    physics_warnings = []
+    if isinstance(concerns_list, list):
+        for concern in concerns_list:
+            if isinstance(concern, dict):
+                concern_text = concern.get("concern", "")
+                severity = concern.get("severity", "")
+                if concern_text:
+                    physics_warnings.append(f"[{severity}] {concern_text}" if severity else concern_text)
+            elif isinstance(concern, str):
+                physics_warnings.append(concern)
+    
+    # Extract structured data from agent output (preserves rich LLM response)
+    conservation_checks = agent_output.get("conservation_checks")
+    value_range_checks = agent_output.get("value_range_checks")
+    
     result: Dict[str, Any] = {
         "workflow_phase": "physics_validation",
-        "physics_verdict": agent_output["verdict"],
+        "physics_verdict": agent_output.get("verdict", "pass"),
         "physics_feedback": agent_output.get("summary", "No feedback provided."),
+        "physics_warnings": physics_warnings,
+        # Preserve structured data from LLM output
+        "physics_conservation_checks": conservation_checks,
+        "physics_value_range_checks": value_range_checks,
     }
     
     # Increment failure counters based on verdict type
-    if agent_output["verdict"] == "fail":
+    if agent_output.get("verdict") == "fail":
         new_count, _ = increment_counter_with_max(
             state, "physics_failure_count", "max_physics_failures", MAX_PHYSICS_FAILURES
         )
@@ -267,7 +336,7 @@ def physics_sanity_node(state: ReproState) -> dict:
             ]
             result["awaiting_user_input"] = True
             result["last_node_before_ask_user"] = "physics_check"
-    elif agent_output["verdict"] == "design_flaw":
+    elif agent_output.get("verdict") == "design_flaw":
         new_count, _ = increment_counter_with_max(
             state, "design_revision_count", "max_design_revisions", MAX_DESIGN_REVISIONS
         )
@@ -296,11 +365,34 @@ def physics_sanity_node(state: ReproState) -> dict:
     if isinstance(backtrack, dict) and backtrack.get("suggest_backtrack"):
         result["backtrack_suggestion"] = backtrack
     
-    # Log physics sanity result
-    verdict = agent_output["verdict"]
-    summary = agent_output.get("summary", "")
+    # Log physics sanity result using structured data
+    verdict = agent_output.get("verdict", "pass")
     emoji = "✅" if verdict == "pass" else "⚠️" if verdict == "warning" else "🔧" if verdict == "design_flaw" else "❌"
-    logger.info(f"{emoji} physics_check: stage={stage_id}, verdict={verdict} ({summary})")
+    
+    # Build concise log message from structured data
+    n_conservation = len(conservation_checks) if conservation_checks else 0
+    n_range = len(value_range_checks) if value_range_checks else 0
+    n_concerns = len(physics_warnings)
+    
+    # Count passed vs failed checks
+    conservation_passed = sum(1 for c in (conservation_checks or []) if c.get("status") == "pass")
+    range_passed = sum(1 for c in (value_range_checks or []) if c.get("status") == "pass")
+    
+    logger.info(
+        f"{emoji} physics_check: stage={stage_id}, verdict={verdict}, "
+        f"conservation={conservation_passed}/{n_conservation}, ranges={range_passed}/{n_range}, concerns={n_concerns}"
+    )
+    
+    # Log full summary at DEBUG level for detailed troubleshooting
+    summary = agent_output.get("summary", "")
+    if summary:
+        logger.debug(f"   physics_check details: {summary[:300]}{'...' if len(summary) > 300 else ''}")
+    
+    # Log concerns/warnings separately for visibility
+    if physics_warnings:
+        logger.info(f"   ⚠️ {len(physics_warnings)} concern(s) from physics validation:")
+        for i, warning in enumerate(physics_warnings, 1):
+            logger.info(f"      {i}. {warning}")
     
     return result
 

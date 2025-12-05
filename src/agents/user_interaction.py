@@ -24,10 +24,11 @@ When ask_user_node needs user input, it calls `interrupt(payload)` which:
 3. When resumed with `Command(resume=user_response)`, the interrupt() call returns user_response
 4. The node continues execution with the user's response
 
-This is cleaner than the interrupt_before pattern because:
-- The node runs only once (not twice)
-- No "pre-provided response" handling needed
-- User response flows directly into the node via interrupt()'s return value
+IMPORTANT: When resumed, the entire node function re-executes from the beginning.
+The interrupt() call returns the user's response on the second execution instead
+of pausing. Therefore:
+- Code BEFORE interrupt() runs TWICE (keep it side-effect free)
+- Code AFTER interrupt() runs ONCE (put logging/state changes here)
 """
 
 import os
@@ -106,15 +107,12 @@ def ask_user_node(state: ReproState) -> Dict[str, Any]:
     if "original_user_questions" not in state:
         original_questions = questions.copy()
     
-    # Log the questions being asked
-    logger.info(f"❓ ask_user: trigger={trigger}, {len(questions)} question(s)")
-    for i, q in enumerate(questions, 1):
-        logger.info(f"\n{_format_boxed_content(f'QUESTION {i}', q)}")
-    
     # ═══════════════════════════════════════════════════════════════════════
     # INTERRUPT: Pause execution and wait for user response
     # The interrupt() call pauses the graph. When resumed with 
     # Command(resume=user_response), interrupt() returns that value.
+    # NOTE: Code BEFORE this point runs TWICE (on initial call and on resume).
+    #       Code AFTER this point runs ONCE (only after user responds).
     # ═══════════════════════════════════════════════════════════════════════
     user_response = interrupt({
         "trigger": trigger,
@@ -123,8 +121,9 @@ def ask_user_node(state: ReproState) -> Dict[str, Any]:
     })
     
     # ═══════════════════════════════════════════════════════════════════════
-    # RESUMED: User has provided a response
+    # RESUMED: User has provided a response (this code runs only once)
     # ═══════════════════════════════════════════════════════════════════════
+    logger.info(f"❓ ask_user: trigger={trigger}, {len(questions)} question(s), received response")
     logger.info(f"\n{_format_boxed_content('USER RESPONSE', str(user_response))}")
     
     # Map the response to the first question (typically there's just one question)

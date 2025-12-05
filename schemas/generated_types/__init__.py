@@ -24,7 +24,7 @@ from .planner_output_schema import *
 from .progress_schema import *
 from .prompt_adaptations_schema import *
 from .prompt_adaptor_output_schema import *
-from .report_schema import *
+from .report_output_schema import *
 from .results_analyzer_output_schema import *
 from .simulation_designer_output_schema import *
 from .supervisor_output_schema import *

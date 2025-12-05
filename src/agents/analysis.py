@@ -561,7 +561,7 @@ def results_analyzer_node(state: ReproState) -> dict:
         user_content += f"Matched: {len(matched_targets)}, Pending: {pending_count}, Missing: {missing_count}, Mismatch: {mismatch_count}"
         
         try:
-            llm_analysis = call_agent_with_metrics(
+            agent_output = call_agent_with_metrics(
                 agent_name="results_analyzer",
                 system_prompt=system_prompt,
                 user_content=user_content,
@@ -569,14 +569,14 @@ def results_analyzer_node(state: ReproState) -> dict:
                 images=images[:10],
             )
             
-            if llm_analysis:
-                if llm_analysis.get("overall_classification"):
-                    overall_classification = llm_analysis["overall_classification"]
+            if agent_output:
+                if agent_output.get("overall_classification"):
+                    overall_classification = agent_output.get("overall_classification")
                 
-                if llm_analysis.get("summary"):
-                    summary["llm_qualitative_analysis"] = llm_analysis["summary"]
+                if agent_output.get("summary"):
+                    summary["llm_qualitative_analysis"] = agent_output.get("summary")
                 
-                for llm_comp in llm_analysis.get("figure_comparisons", []):
+                for llm_comp in agent_output.get("figure_comparisons", []):
                     fig_id = llm_comp.get("figure_id")
                     for existing_comp in figure_comparisons:
                         if existing_comp.get("figure_id") == fig_id:

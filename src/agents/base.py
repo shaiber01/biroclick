@@ -75,14 +75,20 @@ def parse_user_response(user_responses: Dict[str, str]) -> str:
     Returns:
         Uppercased last response string, or empty string if no responses
     """
+    logger = logging.getLogger(__name__)
+    
     if user_responses is None:
+        logger.debug("parse_user_response: user_responses is None, returning ''")
         return ""
     if not isinstance(user_responses, dict):
         raise TypeError(f"user_responses must be a dict, got {type(user_responses).__name__}")
     if not user_responses:
+        logger.debug("parse_user_response: user_responses is empty dict, returning ''")
         return ""
     last_response = list(user_responses.values())[-1]
-    return str(last_response).strip().upper()
+    result = str(last_response).strip().upper()
+    logger.debug(f"parse_user_response: extracted '{result[:100]}...' from {len(user_responses)} response(s)")
+    return result
 
 
 def check_keywords(response: str, keywords: list) -> bool:

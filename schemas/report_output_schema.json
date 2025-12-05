@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "report_schema.json",
+  "$id": "report_output_schema.json",
   "title": "Paper Reproduction Report",
   "description": "Schema for REPRODUCTION_REPORT_<paper_id>.md generation",
   

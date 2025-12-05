@@ -31,7 +31,7 @@ class TestExecutionFailureLimitTrigger:
         result = supervisor_node(state)
         
         assert result["execution_failure_count"] == 0
-        assert result["supervisor_verdict"] == "ok_continue"
+        assert result["supervisor_verdict"] == "retry_generate_code"
         assert "supervisor_feedback" in result
         assert "more memory" in result["supervisor_feedback"]
 
@@ -49,7 +49,7 @@ class TestExecutionFailureLimitTrigger:
         result = supervisor_node(state)
         
         assert result["execution_failure_count"] == 0
-        assert result["supervisor_verdict"] == "ok_continue"
+        assert result["supervisor_verdict"] == "retry_generate_code"
         assert "reduce resolution" in result["supervisor_feedback"]
 
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
@@ -122,7 +122,7 @@ class TestPhysicsFailureLimitTrigger:
         result = supervisor_node(state)
         
         assert result["physics_failure_count"] == 0
-        assert result["supervisor_verdict"] == "ok_continue"
+        assert result["supervisor_verdict"] == "retry_generate_code"
         assert "supervisor_feedback" in result
 
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
@@ -139,7 +139,7 @@ class TestPhysicsFailureLimitTrigger:
         
         result = supervisor_node(state)
         
-        assert result["supervisor_verdict"] == "ok_continue"
+        assert result["supervisor_verdict"] == "retry_analyze"
         mock_update.assert_called_once_with(
             state, result, "stage1", "completed_partial",
             summary="Accepted as partial by user despite physics issues"
@@ -159,7 +159,7 @@ class TestPhysicsFailureLimitTrigger:
         
         result = supervisor_node(state)
         
-        assert result["supervisor_verdict"] == "ok_continue"
+        assert result["supervisor_verdict"] == "retry_analyze"
         mock_update.assert_called_once_with(
             state, result, "stage1", "completed_partial",
             summary="Accepted as partial by user despite physics issues"
@@ -230,7 +230,7 @@ class TestHandleExecutionFailureLimit:
         
         assert mock_result["execution_failure_count"] == 0
         assert "Check memory" in mock_result["supervisor_feedback"]
-        assert mock_result["supervisor_verdict"] == "ok_continue"
+        assert mock_result["supervisor_verdict"] == "retry_generate_code"
         assert mock_result["supervisor_feedback"].startswith("User guidance:")
 
     def test_handle_execution_failure_limit_retry_keyword_only(self, mock_state, mock_result):
@@ -241,7 +241,7 @@ class TestHandleExecutionFailureLimit:
         trigger_handlers.handle_execution_failure_limit(mock_state, mock_result, user_input, "stage1")
         
         assert mock_result["execution_failure_count"] == 0
-        assert mock_result["supervisor_verdict"] == "ok_continue"
+        assert mock_result["supervisor_verdict"] == "retry_generate_code"
         assert "supervisor_feedback" in mock_result
 
     def test_handle_execution_failure_limit_guidance_keyword(self, mock_state, mock_result):
@@ -252,7 +252,7 @@ class TestHandleExecutionFailureLimit:
         trigger_handlers.handle_execution_failure_limit(mock_state, mock_result, user_input, "stage1")
         
         assert mock_result["execution_failure_count"] == 0
-        assert mock_result["supervisor_verdict"] == "ok_continue"
+        assert mock_result["supervisor_verdict"] == "retry_generate_code"
         assert "reduce resolution" in mock_result["supervisor_feedback"]
 
     def test_handle_execution_failure_limit_retry_with_empty_guidance(self, mock_state, mock_result):
@@ -263,7 +263,7 @@ class TestHandleExecutionFailureLimit:
         trigger_handlers.handle_execution_failure_limit(mock_state, mock_result, user_input, "stage1")
         
         assert mock_result["execution_failure_count"] == 0
-        assert mock_result["supervisor_verdict"] == "ok_continue"
+        assert mock_result["supervisor_verdict"] == "retry_generate_code"
 
     def test_handle_execution_failure_limit_skip_with_stage_id(self, mock_state, mock_result):
         """Test SKIP updates stage status when stage_id provided."""
@@ -327,7 +327,7 @@ class TestHandleExecutionFailureLimit:
         
         # Should use last response (RETRY)
         assert mock_result["execution_failure_count"] == 0
-        assert mock_result["supervisor_verdict"] == "ok_continue"
+        assert mock_result["supervisor_verdict"] == "retry_generate_code"
         assert "guidance" in mock_result["supervisor_feedback"]
 
     def test_handle_execution_failure_limit_case_insensitive(self, mock_state, mock_result):
@@ -338,7 +338,7 @@ class TestHandleExecutionFailureLimit:
         trigger_handlers.handle_execution_failure_limit(mock_state, mock_result, user_input, "stage1")
         
         assert mock_result["execution_failure_count"] == 0
-        assert mock_result["supervisor_verdict"] == "ok_continue"
+        assert mock_result["supervisor_verdict"] == "retry_generate_code"
 
     def test_handle_execution_failure_limit_retry_and_guidance_both_present(self, mock_state, mock_result):
         """Test when both RETRY and GUIDANCE keywords present."""
@@ -348,7 +348,7 @@ class TestHandleExecutionFailureLimit:
         trigger_handlers.handle_execution_failure_limit(mock_state, mock_result, user_input, "stage1")
         
         assert mock_result["execution_failure_count"] == 0
-        assert mock_result["supervisor_verdict"] == "ok_continue"
+        assert mock_result["supervisor_verdict"] == "retry_generate_code"
         assert "fix memory" in mock_result["supervisor_feedback"]
 
 
@@ -364,7 +364,7 @@ class TestHandlePhysicsFailureLimit:
         trigger_handlers.handle_physics_failure_limit(mock_state, mock_result, user_input, "stage1")
         
         assert mock_result["physics_failure_count"] == 0
-        assert mock_result["supervisor_verdict"] == "ok_continue"
+        assert mock_result["supervisor_verdict"] == "retry_generate_code"
         assert "supervisor_feedback" in mock_result
 
     def test_handle_physics_failure_limit_retry_with_guidance(self, mock_state, mock_result):
@@ -375,7 +375,7 @@ class TestHandlePhysicsFailureLimit:
         trigger_handlers.handle_physics_failure_limit(mock_state, mock_result, user_input, "stage1")
         
         assert mock_result["physics_failure_count"] == 0
-        assert mock_result["supervisor_verdict"] == "ok_continue"
+        assert mock_result["supervisor_verdict"] == "retry_generate_code"
         assert "better parameters" in mock_result["supervisor_feedback"]
 
     def test_handle_physics_failure_limit_accept_with_stage_id(self, mock_state, mock_result):
@@ -385,7 +385,7 @@ class TestHandlePhysicsFailureLimit:
         with patch("src.agents.supervision.trigger_handlers._update_progress_with_error_handling") as mock_update:
             trigger_handlers.handle_physics_failure_limit(mock_state, mock_result, user_input, "stage1")
             
-            assert mock_result["supervisor_verdict"] == "ok_continue"
+            assert mock_result["supervisor_verdict"] == "retry_analyze"
             mock_update.assert_called_once_with(
                 mock_state, mock_result, "stage1", "completed_partial",
                 summary="Accepted as partial by user despite physics issues"
@@ -398,7 +398,7 @@ class TestHandlePhysicsFailureLimit:
         with patch("src.agents.supervision.trigger_handlers._update_progress_with_error_handling") as mock_update:
             trigger_handlers.handle_physics_failure_limit(mock_state, mock_result, user_input, None)
             
-            assert mock_result["supervisor_verdict"] == "ok_continue"
+            assert mock_result["supervisor_verdict"] == "retry_analyze"
             mock_update.assert_not_called()
 
     def test_handle_physics_failure_limit_partial_with_stage_id(self, mock_state, mock_result):
@@ -408,7 +408,7 @@ class TestHandlePhysicsFailureLimit:
         with patch("src.agents.supervision.trigger_handlers._update_progress_with_error_handling") as mock_update:
             trigger_handlers.handle_physics_failure_limit(mock_state, mock_result, user_input, "stage1")
             
-            assert mock_result["supervisor_verdict"] == "ok_continue"
+            assert mock_result["supervisor_verdict"] == "retry_analyze"
             mock_update.assert_called_once_with(
                 mock_state, mock_result, "stage1", "completed_partial",
                 summary="Accepted as partial by user despite physics issues"
@@ -421,7 +421,7 @@ class TestHandlePhysicsFailureLimit:
         with patch("src.agents.supervision.trigger_handlers._update_progress_with_error_handling") as mock_update:
             trigger_handlers.handle_physics_failure_limit(mock_state, mock_result, user_input, "stage1")
             
-            assert mock_result["supervisor_verdict"] == "ok_continue"
+            assert mock_result["supervisor_verdict"] == "retry_analyze"
             mock_update.assert_called_once_with(
                 mock_state, mock_result, "stage1", "completed_partial",
                 summary="Accepted as partial by user despite physics issues"
@@ -489,7 +489,7 @@ class TestHandlePhysicsFailureLimit:
         
         # Should use last response (RETRY)
         assert mock_result["physics_failure_count"] == 0
-        assert mock_result["supervisor_verdict"] == "ok_continue"
+        assert mock_result["supervisor_verdict"] == "retry_generate_code"
 
     def test_handle_physics_failure_limit_case_insensitive(self, mock_state, mock_result):
         """Test keywords are case-insensitive."""
@@ -498,7 +498,7 @@ class TestHandlePhysicsFailureLimit:
         with patch("src.agents.supervision.trigger_handlers._update_progress_with_error_handling") as mock_update:
             trigger_handlers.handle_physics_failure_limit(mock_state, mock_result, user_input, "stage1")
             
-            assert mock_result["supervisor_verdict"] == "ok_continue"
+            assert mock_result["supervisor_verdict"] == "retry_analyze"
             mock_update.assert_called_once()
 
     def test_handle_physics_failure_limit_retry_takes_precedence_over_accept(self, mock_state, mock_result):
@@ -510,7 +510,7 @@ class TestHandlePhysicsFailureLimit:
         
         # RETRY should be checked first
         assert mock_result["physics_failure_count"] == 0
-        assert mock_result["supervisor_verdict"] == "ok_continue"
+        assert mock_result["supervisor_verdict"] == "retry_generate_code"
 
     def test_handle_physics_failure_limit_accept_partial_both_keywords(self, mock_state, mock_result):
         """Test when both ACCEPT and PARTIAL keywords present."""
@@ -519,7 +519,7 @@ class TestHandlePhysicsFailureLimit:
         with patch("src.agents.supervision.trigger_handlers._update_progress_with_error_handling") as mock_update:
             trigger_handlers.handle_physics_failure_limit(mock_state, mock_result, user_input, "stage1")
             
-            assert mock_result["supervisor_verdict"] == "ok_continue"
+            assert mock_result["supervisor_verdict"] == "retry_analyze"
             mock_update.assert_called_once_with(
                 mock_state, mock_result, "stage1", "completed_partial",
                 summary="Accepted as partial by user despite physics issues"
@@ -583,7 +583,7 @@ class TestHandlePhysicsFailureLimit:
         trigger_handlers.handle_physics_failure_limit(mock_state, mock_result, user_input, "stage1")
         
         assert mock_result["physics_failure_count"] == 0
-        assert mock_result["supervisor_verdict"] == "ok_continue"
+        assert mock_result["supervisor_verdict"] == "retry_generate_code"
 
     def test_handle_physics_failure_limit_accept_with_whitespace(self, mock_state, mock_result):
         """Test ACCEPT keyword with surrounding whitespace."""
@@ -592,7 +592,7 @@ class TestHandlePhysicsFailureLimit:
         with patch("src.agents.supervision.trigger_handlers._update_progress_with_error_handling") as mock_update:
             trigger_handlers.handle_physics_failure_limit(mock_state, mock_result, user_input, "stage1")
             
-            assert mock_result["supervisor_verdict"] == "ok_continue"
+            assert mock_result["supervisor_verdict"] == "retry_analyze"
             mock_update.assert_called_once()
 
     def test_handle_physics_failure_limit_count_not_present_in_result(self, mock_state, mock_result):
@@ -603,7 +603,7 @@ class TestHandlePhysicsFailureLimit:
         trigger_handlers.handle_physics_failure_limit(mock_state, mock_result, user_input, "stage1")
         
         assert mock_result["physics_failure_count"] == 0
-        assert mock_result["supervisor_verdict"] == "ok_continue"
+        assert mock_result["supervisor_verdict"] == "retry_generate_code"
 
     def test_handle_physics_failure_limit_verdict_overwrites_existing(self, mock_state, mock_result):
         """Test handler overwrites existing verdict."""
@@ -612,7 +612,7 @@ class TestHandlePhysicsFailureLimit:
         
         trigger_handlers.handle_physics_failure_limit(mock_state, mock_result, user_input, "stage1")
         
-        assert mock_result["supervisor_verdict"] == "ok_continue"
+        assert mock_result["supervisor_verdict"] == "retry_generate_code"
 
     def test_handle_physics_failure_limit_feedback_overwrites_existing(self, mock_state, mock_result):
         """Test handler overwrites existing feedback."""
@@ -690,7 +690,7 @@ class TestHandlePhysicsFailureLimit:
         trigger_handlers.handle_execution_failure_limit(mock_state, mock_result, user_input, "stage1")
         
         assert mock_result["execution_failure_count"] == 0
-        assert mock_result["supervisor_verdict"] == "ok_continue"
+        assert mock_result["supervisor_verdict"] == "retry_generate_code"
 
     def test_handle_execution_failure_limit_skip_empty_string(self, mock_state, mock_result):
         """Test SKIP with empty string value."""
@@ -707,7 +707,7 @@ class TestHandlePhysicsFailureLimit:
         
         trigger_handlers.handle_execution_failure_limit(mock_state, mock_result, user_input, "stage1")
         
-        assert mock_result["supervisor_verdict"] == "ok_continue"
+        assert mock_result["supervisor_verdict"] == "retry_generate_code"
 
     def test_handle_execution_failure_limit_feedback_overwrites_existing(self, mock_state, mock_result):
         """Test handler overwrites existing feedback."""
@@ -727,7 +727,7 @@ class TestHandlePhysicsFailureLimit:
         trigger_handlers.handle_execution_failure_limit(mock_state, mock_result, user_input, "stage1")
         
         assert mock_result["execution_failure_count"] == 0
-        assert mock_result["supervisor_verdict"] == "ok_continue"
+        assert mock_result["supervisor_verdict"] == "retry_generate_code"
 
 
 class TestTriggerHandlersRegistry:
@@ -766,7 +766,7 @@ class TestHandleTriggerDispatch:
         )
         
         assert mock_result["execution_failure_count"] == 0
-        assert mock_result["supervisor_verdict"] == "ok_continue"
+        assert mock_result["supervisor_verdict"] == "retry_generate_code"
         assert "guidance" in mock_result["supervisor_feedback"]
 
     def test_dispatches_to_physics_failure_limit_handler(self, mock_state, mock_result):
@@ -783,7 +783,7 @@ class TestHandleTriggerDispatch:
         )
         
         assert mock_result["physics_failure_count"] == 0
-        assert mock_result["supervisor_verdict"] == "ok_continue"
+        assert mock_result["supervisor_verdict"] == "retry_generate_code"
 
     def test_unknown_trigger_defaults_to_continue(self, mock_state, mock_result):
         """Unknown triggers should default to ok_continue."""
@@ -827,7 +827,7 @@ class TestKeywordPrecedence:
         
         # RETRY should win (checked first in if-elif chain)
         assert mock_result["execution_failure_count"] == 0
-        assert mock_result["supervisor_verdict"] == "ok_continue"
+        assert mock_result["supervisor_verdict"] == "retry_generate_code"
 
     def test_execution_retry_checked_before_stop(self, mock_state, mock_result):
         """RETRY should be checked before STOP in execution handler."""
@@ -838,7 +838,7 @@ class TestKeywordPrecedence:
         
         # RETRY should win
         assert mock_result["execution_failure_count"] == 0
-        assert mock_result["supervisor_verdict"] == "ok_continue"
+        assert mock_result["supervisor_verdict"] == "retry_generate_code"
         assert mock_result.get("should_stop") is not True
 
     def test_execution_skip_checked_before_stop(self, mock_state, mock_result):
@@ -862,7 +862,7 @@ class TestKeywordPrecedence:
         
         # RETRY should win (checked first)
         assert mock_result["physics_failure_count"] == 0
-        assert mock_result["supervisor_verdict"] == "ok_continue"
+        assert mock_result["supervisor_verdict"] == "retry_generate_code"
 
     def test_physics_accept_checked_before_skip(self, mock_state, mock_result):
         """ACCEPT should be checked before SKIP in physics handler."""
@@ -872,7 +872,7 @@ class TestKeywordPrecedence:
             trigger_handlers.handle_physics_failure_limit(mock_state, mock_result, user_input, "stage1")
         
         # ACCEPT should win (checked before SKIP)
-        assert mock_result["supervisor_verdict"] == "ok_continue"
+        assert mock_result["supervisor_verdict"] == "retry_analyze"
         mock_update.assert_called_once_with(
             mock_state, mock_result, "stage1", "completed_partial",
             summary="Accepted as partial by user despite physics issues"
@@ -972,7 +972,7 @@ class TestWordBoundaryKeywordMatching:
         
         # RETRY as whole word = matches
         assert mock_result["execution_failure_count"] == 0
-        assert mock_result["supervisor_verdict"] == "ok_continue"
+        assert mock_result["supervisor_verdict"] == "retry_generate_code"
 
     def test_physics_accept_matches_whole_word(self, mock_state, mock_result):
         """ACCEPT should match when it's a whole word."""
@@ -982,7 +982,7 @@ class TestWordBoundaryKeywordMatching:
             trigger_handlers.handle_physics_failure_limit(mock_state, mock_result, user_input, "stage1")
         
         # ACCEPT as whole word = matches
-        assert mock_result["supervisor_verdict"] == "ok_continue"
+        assert mock_result["supervisor_verdict"] == "retry_analyze"
         mock_update.assert_called_once()
 
 
@@ -1023,7 +1023,7 @@ class TestSkipDoesNotResetCounters:
         
         # Count should NOT be reset - only RETRY resets
         assert mock_result["physics_failure_count"] == 3
-        assert mock_result["supervisor_verdict"] == "ok_continue"
+        assert mock_result["supervisor_verdict"] == "retry_analyze"
 
 
 class TestStopActionBehavior:
@@ -1175,7 +1175,7 @@ class TestMultipleUserResponses:
         # So if last is "RETRY", response_text = "RETRY"
         # But the handler checks "RETRY" in response_text which would match
         assert mock_result["execution_failure_count"] == 0
-        assert mock_result["supervisor_verdict"] == "ok_continue"
+        assert mock_result["supervisor_verdict"] == "retry_generate_code"
 
     def test_physics_uses_last_response_for_raw(self, mock_state, mock_result):
         """Raw response should be from the last response."""
@@ -1341,7 +1341,7 @@ class TestSpecialCharactersInResponses:
         trigger_handlers.handle_execution_failure_limit(mock_state, mock_result, user_input, "stage1")
         
         assert mock_result["execution_failure_count"] == 0
-        assert mock_result["supervisor_verdict"] == "ok_continue"
+        assert mock_result["supervisor_verdict"] == "retry_generate_code"
         assert "multiline" in mock_result["supervisor_feedback"]
 
     def test_physics_response_with_special_chars(self, mock_state, mock_result):
@@ -1351,7 +1351,7 @@ class TestSpecialCharactersInResponses:
         with patch("src.agents.supervision.trigger_handlers._update_progress_with_error_handling"):
             trigger_handlers.handle_physics_failure_limit(mock_state, mock_result, user_input, "stage1")
         
-        assert mock_result["supervisor_verdict"] == "ok_continue"
+        assert mock_result["supervisor_verdict"] == "retry_analyze"
 
     def test_execution_response_with_unicode(self, mock_state, mock_result):
         """Handler should work with unicode characters."""
@@ -1463,7 +1463,7 @@ class TestBoundaryConditions:
         trigger_handlers.handle_execution_failure_limit(mock_state, mock_result, user_input, "stage1")
         
         assert mock_result["execution_failure_count"] == 0
-        assert mock_result["supervisor_verdict"] == "ok_continue"
+        assert mock_result["supervisor_verdict"] == "retry_generate_code"
         # Full response should be in feedback
         assert len(mock_result["supervisor_feedback"]) > 10000
 
@@ -1476,7 +1476,7 @@ class TestBoundaryConditions:
         trigger_handlers.handle_physics_failure_limit(mock_state, mock_result, user_input, "stage1")
         
         assert mock_result["physics_failure_count"] == 0
-        assert mock_result["supervisor_verdict"] == "ok_continue"
+        assert mock_result["supervisor_verdict"] == "retry_generate_code"
 
     def test_execution_high_failure_count(self, mock_state, mock_result):
         """Handler should work with very high failure counts."""
@@ -1542,7 +1542,7 @@ class TestDictKeyOrdering:
         
         # Last response "RETRY with this guidance" should be used
         assert mock_result["execution_failure_count"] == 0
-        assert mock_result["supervisor_verdict"] == "ok_continue"
+        assert mock_result["supervisor_verdict"] == "retry_generate_code"
         assert "RETRY with this guidance" in mock_result["supervisor_feedback"]
 
     def test_physics_single_response_key_doesnt_matter(self, mock_state, mock_result):
@@ -1566,7 +1566,7 @@ class TestKeywordOnlyResponses:
         trigger_handlers.handle_execution_failure_limit(mock_state, mock_result, user_input, "stage1")
         
         assert mock_result["execution_failure_count"] == 0
-        assert mock_result["supervisor_verdict"] == "ok_continue"
+        assert mock_result["supervisor_verdict"] == "retry_generate_code"
         # Feedback should still be set
         assert "supervisor_feedback" in mock_result
         assert mock_result["supervisor_feedback"].startswith("User guidance:")
@@ -1598,7 +1598,7 @@ class TestKeywordOnlyResponses:
         with patch("src.agents.supervision.trigger_handlers._update_progress_with_error_handling"):
             trigger_handlers.handle_physics_failure_limit(mock_state, mock_result, user_input, "stage1")
         
-        assert mock_result["supervisor_verdict"] == "ok_continue"
+        assert mock_result["supervisor_verdict"] == "retry_analyze"
 
     def test_physics_exact_partial_keyword(self, mock_state, mock_result):
         """Exact 'PARTIAL' keyword should work."""
@@ -1607,7 +1607,7 @@ class TestKeywordOnlyResponses:
         with patch("src.agents.supervision.trigger_handlers._update_progress_with_error_handling"):
             trigger_handlers.handle_physics_failure_limit(mock_state, mock_result, user_input, "stage1")
         
-        assert mock_result["supervisor_verdict"] == "ok_continue"
+        assert mock_result["supervisor_verdict"] == "retry_analyze"
 
 
 class TestStateFieldTypes:
@@ -1656,7 +1656,7 @@ class TestConcurrentKeywords:
         
         # RETRY/GUIDANCE checked first
         assert mock_result["execution_failure_count"] == 0
-        assert mock_result["supervisor_verdict"] == "ok_continue"
+        assert mock_result["supervisor_verdict"] == "retry_generate_code"
 
     def test_physics_all_keywords_present(self, mock_state, mock_result):
         """When all keywords present, first in precedence order wins."""
@@ -1667,7 +1667,7 @@ class TestConcurrentKeywords:
         
         # RETRY checked first
         assert mock_result["physics_failure_count"] == 0
-        assert mock_result["supervisor_verdict"] == "ok_continue"
+        assert mock_result["supervisor_verdict"] == "retry_generate_code"
 
     def test_physics_accept_and_partial_both_trigger_same_path(self, mock_state, mock_result):
         """ACCEPT and PARTIAL both go to same code path."""

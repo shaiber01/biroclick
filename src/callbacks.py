@@ -69,6 +69,68 @@ class GraphProgressCallback(BaseCallbackHandler):
     
     def on_chain_error(self, error, **kwargs):
         """Called when a chain/node errors."""
+        # LangGraph interrupts are passed as tuple of Interrupt objects.
+        # These are expected control flow for human-in-the-loop, not errors.
+        
+        # Helper to extract trigger from Interrupt-like object
+        def _extract_trigger(obj):
+            """Try to extract trigger from an Interrupt object."""
+            try:
+                # Try attribute access (for dataclass/namedtuple)
+                if hasattr(obj, 'value'):
+                    val = obj.value
+                    if isinstance(val, dict):
+                        return val.get('trigger', 'unknown')
+                # Try index access (for tuple-like)
+                if hasattr(obj, '__getitem__'):
+                    val = obj[0] if len(obj) > 0 else None
+                    if isinstance(val, dict):
+                        return val.get('trigger', 'unknown')
+            except (TypeError, IndexError, KeyError):
+                pass
+            return None
+        
+        # Helper to check if object is an Interrupt
+        def _is_interrupt(obj):
+            """Check if object is a LangGraph Interrupt."""
+            obj_type = type(obj).__name__
+            # Check type name
+            if 'Interrupt' in obj_type:
+                return True
+            # Check module
+            obj_module = getattr(type(obj), '__module__', '')
+            if 'langgraph' in obj_module and 'Interrupt' in obj_type:
+                return True
+            # Check for Interrupt-like attributes
+            if hasattr(obj, 'value') and hasattr(obj, 'id'):
+                return True
+            return False
+        
+        # Check 1: Error is a tuple containing Interrupt objects
+        if isinstance(error, tuple) and len(error) > 0:
+            first = error[0]
+            if _is_interrupt(first):
+                trigger = _extract_trigger(first) or 'unknown'
+                logger.info(f"⏸️  Graph paused for user input (trigger: {trigger})")
+                return
+        
+        # Check 2: Error itself is an Interrupt
+        if _is_interrupt(error):
+            trigger = _extract_trigger(error) or 'unknown'
+            logger.info(f"⏸️  Graph paused for user input (trigger: {trigger})")
+            return
+        
+        # Check 3: String-based fallback for edge cases
+        error_str = str(error)
+        if "Interrupt(" in error_str or "GraphInterrupt" in error_str:
+            # Try to extract trigger from string representation
+            import re
+            trigger_match = re.search(r"'trigger':\s*'([^']+)'", error_str)
+            trigger = trigger_match.group(1) if trigger_match else 'unknown'
+            logger.info(f"⏸️  Graph paused for user input (trigger: {trigger})")
+            return
+        
+        # Log actual errors
         logger.error(f"❌ Node error: {error}")
 
 

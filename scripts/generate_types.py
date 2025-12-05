@@ -35,7 +35,7 @@ SCHEMAS = [
     "plan_schema.json",
     "progress_schema.json",
     "metrics_schema.json",
-    "report_schema.json",
+    "report_output_schema.json",
     "assumptions_schema.json",
     "prompt_adaptations_schema.json",
     # Agent output schemas

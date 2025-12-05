@@ -36,7 +36,7 @@ class TestCodeReviewLimitTrigger:
         result = supervisor_node(state)
 
         assert result["code_revision_count"] == 0
-        assert result["supervisor_verdict"] == "ok_continue"
+        assert result["supervisor_verdict"] == "retry_generate_code"  # Retry with hint
         assert result["ask_user_trigger"] is None  # Should be cleared
         assert "reviewer_feedback" in result
         assert "User hint:" in result["reviewer_feedback"]
@@ -94,7 +94,7 @@ class TestCodeReviewLimitTrigger:
         result = supervisor_node(state)
 
         assert result["supervisor_verdict"] == "ask_user"
-        assert result["ask_user_trigger"] is None  # Should be cleared
+        assert result["ask_user_trigger"] == "code_review_limit"  # Preserved for clarification
         assert "pending_user_questions" in result
         assert len(result["pending_user_questions"]) > 0
         assert "PROVIDE_HINT" in result["pending_user_questions"][0] or "clarify" in result["pending_user_questions"][0].lower()
@@ -112,7 +112,7 @@ class TestCodeReviewLimitTrigger:
         result = supervisor_node(state)
 
         assert result["supervisor_verdict"] == "ask_user"
-        assert result["ask_user_trigger"] is None
+        assert result["ask_user_trigger"] == "code_review_limit"  # Preserved for clarification
         assert "pending_user_questions" in result
 
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
@@ -143,7 +143,7 @@ class TestCodeReviewLimitTrigger:
         result = supervisor_node(state)
 
         assert result["code_revision_count"] == 0
-        assert result["supervisor_verdict"] == "ok_continue"
+        assert result["supervisor_verdict"] == "retry_generate_code"  # Retry with hint
 
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_handles_missing_code_revision_count(self, mock_context):
@@ -157,7 +157,7 @@ class TestCodeReviewLimitTrigger:
         result = supervisor_node(state)
 
         assert result["code_revision_count"] == 0
-        assert result["supervisor_verdict"] == "ok_continue"
+        assert result["supervisor_verdict"] == "retry_generate_code"  # Retry with hint
 
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_handles_multiple_responses_takes_last(self, mock_context):
@@ -175,7 +175,7 @@ class TestCodeReviewLimitTrigger:
         result = supervisor_node(state)
 
         assert result["code_revision_count"] == 0
-        assert result["supervisor_verdict"] == "ok_continue"
+        assert result["supervisor_verdict"] == "retry_generate_code"  # Retry with hint
         assert "final answer" in result["reviewer_feedback"]
 
 
@@ -251,7 +251,7 @@ class TestDesignReviewLimitTrigger:
         result = supervisor_node(state)
 
         assert result["supervisor_verdict"] == "ask_user"
-        assert result["ask_user_trigger"] is None
+        assert result["ask_user_trigger"] == "design_review_limit"  # Preserved for clarification
 
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_handles_none_current_stage_id_on_skip(self, mock_context):
@@ -280,7 +280,7 @@ class TestDesignReviewLimitTrigger:
         result = supervisor_node(state)
 
         assert result["design_revision_count"] == 0
-        assert result["supervisor_verdict"] == "ok_continue"
+        assert result["supervisor_verdict"] == "retry_design"  # Retry with hint
 
 
 class TestExecutionFailureLimitTrigger:
@@ -299,7 +299,7 @@ class TestExecutionFailureLimitTrigger:
         result = supervisor_node(state)
 
         assert result["execution_failure_count"] == 0
-        assert result["supervisor_verdict"] == "ok_continue"
+        assert result["supervisor_verdict"] == "retry_generate_code"  # Retry with guidance
         assert result["ask_user_trigger"] is None  # Should be cleared
         assert "supervisor_feedback" in result
         assert "User guidance:" in result["supervisor_feedback"]
@@ -374,7 +374,7 @@ class TestExecutionFailureLimitTrigger:
         result = supervisor_node(state)
 
         assert result["supervisor_verdict"] == "ask_user"
-        assert result["ask_user_trigger"] is None
+        assert result["ask_user_trigger"] == "execution_failure_limit"  # Preserved for clarification
 
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_handles_none_current_stage_id_on_skip(self, mock_context):
@@ -403,7 +403,7 @@ class TestExecutionFailureLimitTrigger:
         result = supervisor_node(state)
 
         assert result["execution_failure_count"] == 0
-        assert result["supervisor_verdict"] == "ok_continue"
+        assert result["supervisor_verdict"] == "retry_generate_code"  # Retry with guidance
 
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_handles_unclear_response(self, mock_context):
@@ -417,7 +417,7 @@ class TestExecutionFailureLimitTrigger:
         result = supervisor_node(state)
 
         assert result["supervisor_verdict"] == "ask_user"
-        assert result["ask_user_trigger"] is None
+        assert result["ask_user_trigger"] == "execution_failure_limit"  # Preserved for clarification
         assert "pending_user_questions" in result
 
 
@@ -498,7 +498,7 @@ class TestPhysicsFailureLimitTrigger:
         result = supervisor_node(state)
 
         assert result["supervisor_verdict"] == "ask_user"
-        assert result["ask_user_trigger"] is None
+        assert result["ask_user_trigger"] == "physics_failure_limit"  # Preserved for clarification
 
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_handles_none_current_stage_id_on_accept(self, mock_context):
@@ -527,7 +527,7 @@ class TestPhysicsFailureLimitTrigger:
         result = supervisor_node(state)
 
         assert result["physics_failure_count"] == 0
-        assert result["supervisor_verdict"] == "ok_continue"
+        assert result["supervisor_verdict"] == "retry_generate_code"  # Retry with guidance
 
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     @patch("src.agents.supervision.trigger_handlers.update_progress_stage_status")
@@ -559,7 +559,7 @@ class TestPhysicsFailureLimitTrigger:
         result = supervisor_node(state)
 
         assert result["supervisor_verdict"] == "ask_user"
-        assert result["ask_user_trigger"] is None
+        assert result["ask_user_trigger"] == "physics_failure_limit"  # Preserved for clarification
         assert "pending_user_questions" in result
 
 
@@ -645,7 +645,7 @@ class TestReplanLimitTrigger:
         result = supervisor_node(state)
 
         assert result["supervisor_verdict"] == "ask_user"
-        assert result["ask_user_trigger"] is None
+        assert result["ask_user_trigger"] == "replan_limit"  # Preserved for clarification
 
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_handles_missing_replan_count(self, mock_context):
@@ -673,7 +673,7 @@ class TestReplanLimitTrigger:
         result = supervisor_node(state)
 
         assert result["supervisor_verdict"] == "ask_user"
-        assert result["ask_user_trigger"] is None
+        assert result["ask_user_trigger"] == "replan_limit"  # Preserved for clarification
         assert "pending_user_questions" in result
 
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
@@ -755,7 +755,11 @@ class TestErrorHandling:
 
         # Should either handle it or set ask_user
         assert "supervisor_verdict" in result
-        assert result["ask_user_trigger"] is None
+        # If verdict is ask_user, trigger is preserved; otherwise it's cleared
+        if result.get("supervisor_verdict") == "ask_user":
+            assert result["ask_user_trigger"] == "code_review_limit"
+        else:
+            assert result["ask_user_trigger"] is None
 
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_handles_none_user_responses(self, mock_context):
@@ -769,7 +773,7 @@ class TestErrorHandling:
         result = supervisor_node(state)
 
         assert result["supervisor_verdict"] == "ask_user"
-        assert result["ask_user_trigger"] is None
+        assert result["ask_user_trigger"] == "code_review_limit"  # Preserved for clarification
 
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_handles_whitespace_only_response(self, mock_context):
@@ -783,7 +787,7 @@ class TestErrorHandling:
         result = supervisor_node(state)
 
         assert result["supervisor_verdict"] == "ask_user"
-        assert result["ask_user_trigger"] is None
+        assert result["ask_user_trigger"] == "code_review_limit"  # Preserved for clarification
 
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_handles_mixed_case_keywords(self, mock_context):
@@ -827,7 +831,7 @@ class TestErrorHandling:
         result = supervisor_node(state)
 
         assert result["supervisor_verdict"] == "ask_user"
-        assert result["ask_user_trigger"] is None
+        assert result["ask_user_trigger"] == "code_review_limit"  # Preserved for clarification
 
 
 class TestLlmErrorTrigger:
@@ -903,7 +907,7 @@ class TestLlmErrorTrigger:
         result = supervisor_node(state)
 
         assert result["supervisor_verdict"] == "ask_user"
-        assert result["ask_user_trigger"] is None
+        assert result["ask_user_trigger"] == "llm_error"  # Preserved for clarification
         assert "pending_user_questions" in result
         assert len(result["pending_user_questions"]) > 0
         question = result["pending_user_questions"][0]
@@ -922,7 +926,7 @@ class TestLlmErrorTrigger:
         result = supervisor_node(state)
 
         assert result["supervisor_verdict"] == "ask_user"
-        assert result["ask_user_trigger"] is None
+        assert result["ask_user_trigger"] == "llm_error"  # Preserved for clarification
 
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_handles_none_current_stage_id_on_skip(self, mock_context):
@@ -1077,7 +1081,7 @@ class TestCriticalErrorTriggers:
         result = supervisor_node(state)
 
         assert result["supervisor_verdict"] == "ask_user"
-        assert result["ask_user_trigger"] is None
+        assert result["ask_user_trigger"] == "missing_paper_text"  # Preserved for clarification
         assert "pending_user_questions" in result
         question = result["pending_user_questions"][0]
         assert "RETRY" in question or "STOP" in question
@@ -1156,7 +1160,7 @@ class TestCriticalErrorTriggers:
         result = supervisor_node(state)
 
         assert result["supervisor_verdict"] == "ask_user"
-        assert result["ask_user_trigger"] is None
+        assert result["ask_user_trigger"] == "missing_paper_text"  # Preserved for clarification
         assert "pending_user_questions" in result
 
 
@@ -1210,7 +1214,7 @@ class TestPlanningErrorTriggers:
         result = supervisor_node(state)
 
         assert result["supervisor_verdict"] == "ask_user"
-        assert result["ask_user_trigger"] is None
+        assert result["ask_user_trigger"] == "no_stages_available"  # Preserved for clarification
         assert "pending_user_questions" in result
         question = result["pending_user_questions"][0]
         assert "REPLAN" in question or "STOP" in question
@@ -1288,7 +1292,7 @@ class TestPlanningErrorTriggers:
         result = supervisor_node(state)
 
         assert result["supervisor_verdict"] == "ask_user"
-        assert result["ask_user_trigger"] is None
+        assert result["ask_user_trigger"] == "no_stages_available"  # Preserved for clarification
         assert "pending_user_questions" in result
 
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
@@ -1371,7 +1375,7 @@ class TestBacktrackLimitTrigger:
         result = supervisor_node(state)
 
         assert result["supervisor_verdict"] == "ask_user"
-        assert result["ask_user_trigger"] is None
+        assert result["ask_user_trigger"] == "backtrack_limit"  # Preserved for clarification
         assert "pending_user_questions" in result
         question = result["pending_user_questions"][0]
         assert "FORCE" in question or "CONTINUE" in question or "STOP" in question
@@ -1389,7 +1393,7 @@ class TestBacktrackLimitTrigger:
         result = supervisor_node(state)
 
         assert result["supervisor_verdict"] == "ask_user"
-        assert result["ask_user_trigger"] is None
+        assert result["ask_user_trigger"] == "backtrack_limit"  # Preserved for clarification
 
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_handles_case_insensitive_force(self, mock_context):
@@ -1456,7 +1460,7 @@ class TestInvalidBacktrackDecisionTrigger:
         result = supervisor_node(state)
 
         assert result["supervisor_verdict"] == "ask_user"
-        assert result["ask_user_trigger"] is None
+        assert result["ask_user_trigger"] == "invalid_backtrack_decision"  # Preserved for clarification
         assert "pending_user_questions" in result
         question = result["pending_user_questions"][0]
         assert "CONTINUE" in question or "STOP" in question
@@ -1474,7 +1478,7 @@ class TestInvalidBacktrackDecisionTrigger:
         result = supervisor_node(state)
 
         assert result["supervisor_verdict"] == "ask_user"
-        assert result["ask_user_trigger"] is None
+        assert result["ask_user_trigger"] == "invalid_backtrack_decision"  # Preserved for clarification
 
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_handles_missing_backtrack_decision(self, mock_context):
@@ -1744,5 +1748,5 @@ class TestUserResponseVariations:
 
         # Should ask for clarification since "42" doesn't match any keyword
         assert result["supervisor_verdict"] == "ask_user"
-        assert result["ask_user_trigger"] is None
+        assert result["ask_user_trigger"] == "code_review_limit"  # Preserved for clarification
 

@@ -135,9 +135,8 @@ def get_agent_schema(agent_name: str) -> dict:
         raise ValueError(f"Unknown agent: '{agent_name}'. Agent name cannot be empty or whitespace.")
     
     # Special cases that don't follow the standard naming convention
-    special_mapping = {
-        "report": "report_schema",
-    }
+    # (All schemas now follow {agent_name}_output_schema.json convention)
+    special_mapping: Dict[str, str] = {}
     
     # Check special cases first
     if agent_name in special_mapping:

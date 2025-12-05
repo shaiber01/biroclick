@@ -138,7 +138,7 @@ def code_reviewer_node(state: ReproState) -> dict:
             state, "code_revision_count", "max_code_revisions", MAX_CODE_REVISIONS
         )
         result["code_revision_count"] = new_count
-        result["reviewer_feedback"] = agent_output.get("feedback", agent_output.get("summary", "Missing verdict or feedback in review"))
+        result["reviewer_feedback"] = agent_output.get("summary", "Missing verdict in review")
         
         # If we hit the max revision budget, escalate to ask_user immediately.
         # BUG FIX: Check if new_count >= max (not just if increment failed).
@@ -314,13 +314,11 @@ def code_generator_node(state: ReproState) -> dict:
     # Extract generated code from agent output
     generated_code = ""
     if isinstance(agent_output, dict):
-        # Check if "code" key exists (even if empty string)
+        # Use "code" field (as defined in schema)
         if "code" in agent_output:
-            generated_code = agent_output["code"]
-        elif "simulation_code" in agent_output:
-            generated_code = agent_output["simulation_code"]
+            generated_code = agent_output.get("code", "")
         else:
-            # Fall back to JSON dump only if neither key exists
+            # Fall back to JSON dump only if "code" key is missing
             generated_code = json.dumps(agent_output, indent=2)
     else:
         generated_code = str(agent_output)

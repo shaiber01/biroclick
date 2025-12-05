@@ -2464,7 +2464,7 @@ class TestEdgeCountVerification:
             "execution_check": 3,  # physics_check, generate_code, ask_user
             "physics_check": 4,  # analyze, generate_code, design, ask_user
             "comparison_check": 3,  # supervisor, analyze, ask_user
-            "supervisor": 9,  # select_stage, planning, ask_user, handle_backtrack, generate_report, material_checkpoint, analyze, generate_code, design
+            "supervisor": 12,  # select_stage, planning, ask_user, handle_backtrack, generate_report, material_checkpoint, analyze, generate_code, design, code_review, design_review, plan_review
             "ask_user": 1,  # supervisor
         }
         

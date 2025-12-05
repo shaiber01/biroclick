@@ -238,16 +238,18 @@ def _run_normal_supervision(
         )
         
         result["supervisor_verdict"] = agent_output.get("verdict", "ok_continue")
-        result["supervisor_feedback"] = agent_output.get("reasoning", "")
+        result["supervisor_feedback"] = agent_output.get("summary", "")
         
         # Propagate should_stop if present
         if "should_stop" in agent_output:
-            result["should_stop"] = agent_output["should_stop"]
+            result["should_stop"] = agent_output.get("should_stop", False)
         
-        if agent_output.get("verdict") == "backtrack_to_stage" and agent_output.get("backtrack_target"):
+        # Handle backtrack decision - schema uses nested backtrack_decision object
+        backtrack_decision = agent_output.get("backtrack_decision", {})
+        if isinstance(backtrack_decision, dict) and backtrack_decision.get("target_stage_id"):
             result["backtrack_decision"] = {
-                "target_stage_id": agent_output["backtrack_target"],
-                "reason": agent_output.get("reasoning", ""),
+                "target_stage_id": backtrack_decision.get("target_stage_id", ""),
+                "reason": backtrack_decision.get("reason", ""),
             }
             
     except Exception as e:
@@ -361,8 +363,6 @@ def supervisor_node(state: ReproState) -> dict:
     
     # Post ask_user handling
     if ask_user_trigger:
-        result["ask_user_trigger"] = None  # Clear trigger
-        
         # Dispatch to appropriate trigger handler
         handle_trigger(
             trigger=ask_user_trigger,
@@ -372,6 +372,15 @@ def supervisor_node(state: ReproState) -> dict:
             current_stage_id=current_stage_id,
             get_dependent_stages_fn=_get_dependent_stages,
         )
+        
+        # Only clear trigger if handler didn't request more user input.
+        # If handler set supervisor_verdict="ask_user" (needs clarification),
+        # preserve the trigger so the next ask_user→supervisor cycle uses
+        # the correct handler instead of falling back to "unknown_escalation".
+        if result.get("supervisor_verdict") != "ask_user":
+            result["ask_user_trigger"] = None
+        else:
+            result["ask_user_trigger"] = ask_user_trigger
         
         # After handling a trigger, we skip the LLM call because:
         # 1. handle_trigger() already set the appropriate verdict

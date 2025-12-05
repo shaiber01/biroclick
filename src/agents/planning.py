@@ -102,8 +102,9 @@ def adapt_prompts_node(state: ReproState) -> Dict[str, Any]:
             adaptations = []
         result["prompt_adaptations"] = adaptations
         
-        # Store detected paper domain if provided
-        detected_domain = agent_output.get("paper_domain")
+        # Store detected paper domain if provided (nested in analysis_summary per schema)
+        analysis_summary = agent_output.get("analysis_summary", {})
+        detected_domain = analysis_summary.get("domain") if isinstance(analysis_summary, dict) else None
         if detected_domain:
             result["paper_domain"] = detected_domain
         
@@ -536,17 +537,17 @@ def plan_reviewer_node(state: ReproState) -> dict:
             max_replans = runtime_config.get("max_replans", MAX_REPLANS)
             
             if new_count >= max_replans:
-                feedback_text = agent_output.get("feedback", agent_output.get("summary", "No feedback available"))
+                summary_text = agent_output.get("summary", "No feedback available")
                 result["ask_user_trigger"] = "replan_limit"
                 result["pending_user_questions"] = [
                     f"Plan review rejected {new_count}/{max_replans} times.\n\n"
-                    f"- Latest feedback: {feedback_text}\n\n"
+                    f"- Latest feedback: {summary_text}\n\n"
                     f"{get_options_prompt('replan_limit')}"
                 ]
                 result["awaiting_user_input"] = True
                 result["last_node_before_ask_user"] = "plan_review"
         
-        result["planner_feedback"] = agent_output.get("feedback", agent_output.get("summary", ""))
+        result["planner_feedback"] = agent_output.get("summary", "")
     
     return result
 

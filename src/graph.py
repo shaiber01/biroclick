@@ -126,7 +126,7 @@ def route_after_select_stage(state: ReproState) -> Literal["design", "generate_r
 # Complex Routing Function (too many special cases for factory)
 # ═══════════════════════════════════════════════════════════════════════
 
-def route_after_supervisor(state: ReproState) -> Literal["select_stage", "planning", "ask_user", "handle_backtrack", "generate_report", "material_checkpoint"]:
+def route_after_supervisor(state: ReproState) -> Literal["select_stage", "planning", "ask_user", "handle_backtrack", "generate_report", "material_checkpoint", "analyze", "generate_code", "design", "code_review", "design_review", "plan_review"]:
     """
     Route after supervisor decision.
     
@@ -197,6 +197,30 @@ def route_after_supervisor(state: ReproState) -> Literal["select_stage", "planni
         
     elif verdict == "all_complete":
         return "generate_report"
+    
+    elif verdict == "retry_analyze":
+        # User provided hint for analysis_limit - retry analysis with the hint
+        return "analyze"
+    
+    elif verdict == "retry_generate_code":
+        # User provided hint for code_review_limit - retry code generation with the hint
+        return "generate_code"
+    
+    elif verdict == "retry_design":
+        # User provided hint for design_review_limit - retry design with the hint
+        return "design"
+    
+    elif verdict == "retry_code_review":
+        # User provided guidance for reviewer_escalation from code_review
+        return "code_review"
+    
+    elif verdict == "retry_design_review":
+        # User provided guidance for reviewer_escalation from design_review
+        return "design_review"
+    
+    elif verdict == "retry_plan_review":
+        # User provided guidance for reviewer_escalation from plan_review
+        return "plan_review"
         
     return "ask_user"  # Fallback
 
@@ -341,7 +365,13 @@ def create_repro_graph(checkpoint_dir: Optional[str] = None):
             "ask_user": "ask_user",
             "handle_backtrack": "handle_backtrack",
             "generate_report": "generate_report",
-            "material_checkpoint": "material_checkpoint"
+            "material_checkpoint": "material_checkpoint",
+            "analyze": "analyze",
+            "generate_code": "generate_code",
+            "design": "design",
+            "code_review": "code_review",
+            "design_review": "design_review",
+            "plan_review": "plan_review",
         }
     )
     

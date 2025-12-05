@@ -245,7 +245,7 @@ def handle_code_review_limit(
         result["code_revision_count"] = 0
         raw_response = list(user_responses.values())[-1] if user_responses else ""
         result["reviewer_feedback"] = f"User hint: {extract_guidance_text(raw_response)}"
-        result["supervisor_verdict"] = "ok_continue"
+        result["supervisor_verdict"] = "retry_generate_code"
         result["supervisor_feedback"] = "Retrying code generation with user hint."
     
     elif matched.action == "skip":
@@ -284,7 +284,7 @@ def handle_design_review_limit(
         result["design_revision_count"] = 0
         raw_response = list(user_responses.values())[-1] if user_responses else ""
         result["reviewer_feedback"] = f"User hint: {extract_guidance_text(raw_response)}"
-        result["supervisor_verdict"] = "ok_continue"
+        result["supervisor_verdict"] = "retry_design"
     
     elif matched.action == "skip":
         result["supervisor_verdict"] = "ok_continue"
@@ -322,7 +322,7 @@ def handle_execution_failure_limit(
         result["execution_failure_count"] = 0
         raw_response = list(user_responses.values())[-1] if user_responses else ""
         result["supervisor_feedback"] = f"User guidance: {extract_guidance_text(raw_response)}"
-        result["supervisor_verdict"] = "ok_continue"
+        result["supervisor_verdict"] = "retry_generate_code"
     
     elif matched.action == "skip":
         result["supervisor_verdict"] = "ok_continue"
@@ -360,10 +360,17 @@ def handle_physics_failure_limit(
         result["physics_failure_count"] = 0
         raw_response = list(user_responses.values())[-1] if user_responses else ""
         result["supervisor_feedback"] = f"User guidance: {extract_guidance_text(raw_response)}"
-        result["supervisor_verdict"] = "ok_continue"
+        # Route based on where the physics failure originated
+        # If from design_review, route back to design; otherwise route to code generation
+        last_node = state.get("last_node_before_ask_user", "")
+        if last_node == "design_review" or "design" in last_node.lower():
+            result["supervisor_verdict"] = "retry_design"
+        else:
+            result["supervisor_verdict"] = "retry_generate_code"
     
     elif matched.action == "accept_partial":
-        result["supervisor_verdict"] = "ok_continue"
+        # User accepts partial results - proceed to analysis phase
+        result["supervisor_verdict"] = "retry_analyze"
         if current_stage_id:
             _update_progress_with_error_handling(
                 state, result, current_stage_id, "completed_partial",
@@ -741,12 +748,20 @@ def handle_analysis_limit(
     response_text = parse_user_response(user_responses)
     matched = match_user_response("analysis_limit", response_text)
     
+    # Debug logging to trace match results
+    logger.debug(
+        f"handle_analysis_limit: user_responses={user_responses}, "
+        f"response_text='{response_text}', matched={matched}"
+    )
+    
     if matched is None:
+        logger.info(f"handle_analysis_limit: No match found for '{response_text}', asking for clarification")
         result["supervisor_verdict"] = "ask_user"
         result["pending_user_questions"] = [get_clarification_message("analysis_limit")]
         return
     
     if matched.action == "accept_partial":
+        logger.info(f"handle_analysis_limit: Matched 'accept_partial', setting verdict=ok_continue")
         result["supervisor_verdict"] = "ok_continue"
         if current_stage_id:
             _update_progress_with_error_handling(
@@ -755,12 +770,15 @@ def handle_analysis_limit(
             )
     
     elif matched.action == "provide_hint":
-        result["analysis_revision_count"] = 0
         raw_response = list(user_responses.values())[-1] if user_responses else ""
-        result["analysis_feedback"] = f"User hint: {extract_guidance_text(raw_response)}"
-        result["supervisor_verdict"] = "ok_continue"
+        hint_text = extract_guidance_text(raw_response)
+        logger.info(f"handle_analysis_limit: Matched 'provide_hint', setting verdict=retry_analyze, hint='{hint_text[:100]}...'")
+        result["analysis_revision_count"] = 0
+        result["analysis_feedback"] = f"User hint: {hint_text}"
+        result["supervisor_verdict"] = "retry_analyze"
     
     elif matched.action == "stop":
+        logger.info(f"handle_analysis_limit: Matched 'stop', setting verdict=all_complete")
         result["supervisor_verdict"] = "all_complete"
         result["should_stop"] = True
 
@@ -814,7 +832,7 @@ def handle_missing_design(
     
     if matched.action == "retry":
         # Reset to design phase
-        result["supervisor_verdict"] = "ok_continue"
+        result["supervisor_verdict"] = "retry_design"
         result["supervisor_feedback"] = "Returning to design phase as requested."
         result["design_revision_count"] = 0
     
@@ -894,8 +912,18 @@ def handle_reviewer_escalation(
         raw_response = list(user_responses.values())[-1] if user_responses else ""
         guidance_text = extract_guidance_text(raw_response)
         result["reviewer_feedback"] = f"User guidance: {guidance_text}"
-        result["supervisor_verdict"] = "ok_continue"
         result["supervisor_feedback"] = "Continuing with user guidance for reviewer question."
+        # Route back to the specific reviewer that escalated
+        last_node = state.get("last_node_before_ask_user", "")
+        if last_node == "code_review":
+            result["supervisor_verdict"] = "retry_code_review"
+        elif last_node == "design_review":
+            result["supervisor_verdict"] = "retry_design_review"
+        elif last_node == "plan_review":
+            result["supervisor_verdict"] = "retry_plan_review"
+        else:
+            # Fallback: continue to select_stage if we can't determine the reviewer
+            result["supervisor_verdict"] = "ok_continue"
     
     elif matched.action == "skip":
         result["supervisor_verdict"] = "ok_continue"

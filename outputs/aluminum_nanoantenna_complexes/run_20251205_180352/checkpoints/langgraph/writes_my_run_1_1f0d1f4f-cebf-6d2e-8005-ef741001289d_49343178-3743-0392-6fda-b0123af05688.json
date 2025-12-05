@@ -1,0 +1,93 @@
+{
+  "writes": [
+    {
+      "channel": "workflow_phase",
+      "value_type": "msgpack",
+      "value_data": "r3N0YWdlX3NlbGVjdGlvbg=="
+    },
+    {
+      "channel": "current_stage_id",
+      "value_type": "msgpack",
+      "value_data": "unN0YWdlMF9tYXRlcmlhbF92YWxpZGF0aW9u"
+    },
+    {
+      "channel": "current_stage_type",
+      "value_type": "msgpack",
+      "value_data": "s01BVEVSSUFMX1ZBTElEQVRJT04="
+    },
+    {
+      "channel": "stage_start_time",
+      "value_type": "msgpack",
+      "value_data": "2SAyMDI1LTEyLTA1VDE2OjEwOjU5LjQwNDU4MCswMDowMA=="
+    },
+    {
+      "channel": "stage_outputs",
+      "value_type": "msgpack",
+      "value_data": "gA=="
+    },
+    {
+      "channel": "run_error",
+      "value_type": "null",
+      "value_data": ""
+    },
+    {
+      "channel": "design_revision_count",
+      "value_type": "msgpack",
+      "value_data": "AA=="
+    },
+    {
+      "channel": "code_revision_count",
+      "value_type": "msgpack",
+      "value_data": "AA=="
+    },
+    {
+      "channel": "execution_failure_count",
+      "value_type": "msgpack",
+      "value_data": "AA=="
+    },
+    {
+      "channel": "physics_failure_count",
+      "value_type": "msgpack",
+      "value_data": "AA=="
+    },
+    {
+      "channel": "analysis_revision_count",
+      "value_type": "msgpack",
+      "value_data": "AA=="
+    },
+    {
+      "channel": "reviewer_feedback",
+      "value_type": "null",
+      "value_data": ""
+    },
+    {
+      "channel": "physics_feedback",
+      "value_type": "null",
+      "value_data": ""
+    },
+    {
+      "channel": "execution_feedback",
+      "value_type": "null",
+      "value_data": ""
+    },
+    {
+      "channel": "analysis_feedback",
+      "value_type": "null",
+      "value_data": ""
+    },
+    {
+      "channel": "design_feedback",
+      "value_type": "null",
+      "value_data": ""
+    },
+    {
+      "channel": "branch:to:design",
+      "value_type": "null",
+      "value_data": ""
+    }
+  ],
+  "task_id": "49343178-3743-0392-6fda-b0123af05688",
+  "thread_id": "my_run_1",
+  "checkpoint_id": "1f0d1f4f-cebf-6d2e-8005-ef741001289d",
+  "saved_at": "2025-12-05T18:10:59.406908"
+}

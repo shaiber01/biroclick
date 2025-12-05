@@ -434,14 +434,16 @@ def run_simulation(
                 error_msg = f"Process killed (signal {-result.returncode}) - likely resource limit"
             else:
                 error_msg = f"Simulation failed with exit code {result.returncode}"
-        else:
-            # Check for divergence or NaN even if exit code is 0
-            stdout_lower = result.stdout.lower()
-            stderr_lower = result.stderr.lower()
-            if "nan" in stdout_lower or "inf" in stdout_lower or "diverged" in stdout_lower:
-                 error_msg = "Simulation diverged (NaN/Inf detected)"
-            if "nan" in stderr_lower or "inf" in stderr_lower:
-                 error_msg = "Simulation diverged (NaN/Inf detected in stderr)"
+        # NOTE: We do NOT check for "nan"/"inf" strings in stdout/stderr here.
+        # Reason: This causes false positives from legitimate physics terms like
+        # "ε_inf" (epsilon infinity), "nanoantenna", variable names, etc.
+        # 
+        # Instead, NaN/Inf detection is handled by:
+        # 1. Meep itself raises RuntimeError on field divergence (exit_code != 0)
+        # 2. ExecutionValidatorAgent checks actual output files for NaN/Inf values
+        # 3. Generated code should validate results and sys.exit(1) if NaN found
+        #
+        # See: prompts/execution_validator_agent.md section D (Data Integrity)
         
         # List output files (excluding the script itself)
         output_files = _list_output_files(output_dir, exclude=[script_name])
@@ -803,12 +805,20 @@ def run_code_node(state: Dict[str, Any]) -> Dict[str, Any]:
     )
     
     # Log execution result
+    # Note: Use exit_code as primary success indicator, not error message.
+    # Generated code may print warnings/errors but still produce valid output.
     import logging
     logger = logging.getLogger(__name__)
     runtime_str = f"{result['runtime_seconds']:.1f}s"
     num_files = len(result['output_files'])
-    if result['error']:
-        logger.info(f"⚡ run_code: stage={stage_id}, FAILED in {runtime_str} ({result['error']})")
+    exit_code = result['exit_code']
+    
+    if exit_code != 0:
+        # Non-zero exit code is definitive failure
+        logger.info(f"⚡ run_code: stage={stage_id}, FAILED in {runtime_str} (exit={exit_code}: {result['error'] or 'unknown error'})")
+    elif result['error']:
+        # Exit code 0 but error message present - likely spurious, log as warning
+        logger.info(f"⚡ run_code: stage={stage_id}, COMPLETED in {runtime_str}, {num_files} file(s) (warning: {result['error']})")
     else:
         logger.info(f"⚡ run_code: stage={stage_id}, SUCCESS in {runtime_str}, {num_files} output file(s)")
     

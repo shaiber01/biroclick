@@ -303,7 +303,7 @@ reprolab/
 │   ├── assumptions_schema.json # Assumptions tracking schema
 │   ├── progress_schema.json  # Progress logging schema
 │   ├── metrics_schema.json   # Metrics tracking schema
-│   ├── report_schema.json    # Reproduction report schema
+│   ├── report_output_schema.json    # Reproduction report schema
 │   ├── prompt_adaptations_schema.json # Prompt adaptation schema
 │   ├── *_output_schema.json  # Agent output schemas for function calling
 │   └── state.py              # LangGraph workflow state (imports generated types)
@@ -407,7 +407,7 @@ datamodel-codegen \
     --input schemas/plan_schema.json \
     --input schemas/progress_schema.json \
     --input schemas/metrics_schema.json \
-    --input schemas/report_schema.json \
+    --input schemas/report_output_schema.json \
     --input-file-type jsonschema \
     --output-model-type typing.TypedDict \
     --output schemas/generated_types.py

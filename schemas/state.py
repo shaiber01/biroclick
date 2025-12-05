@@ -17,7 +17,7 @@ JSON Schema Files:
 - assumptions_schema.json → Assumption, GeometryInterpretation
 - progress_schema.json    → StageProgress, Output, Discrepancy, UserInteraction
 - metrics_schema.json     → AgentCall, StageMetric, ReproductionMetrics
-- report_schema.json      → FigureComparison, OverallAssessment, Conclusions
+- report_output_schema.json      → FigureComparison, OverallAssessment, Conclusions
 - prompt_adaptations_schema.json → Adaptation records
 
 To generate Python types from JSON schemas:
@@ -28,7 +28,7 @@ To generate Python types from JSON schemas:
         --input schemas/plan_schema.json \\
         --input schemas/progress_schema.json \\
         --input schemas/metrics_schema.json \\
-        --input schemas/report_schema.json \\
+        --input schemas/report_output_schema.json \\
         --input-file-type jsonschema \\
         --output-model-type typing.TypedDict \\
         --output schemas/generated_types.py
@@ -850,7 +850,9 @@ class ReproState(TypedDict, total=False):
     reviewer_issues: List[ReviewerIssue]
     # Validation verdicts (from validator agents - copied from agent output's "verdict" field):
     execution_verdict: Optional[str]  # pass | warning | fail (from ExecutionValidatorAgent)
+    execution_warnings: List[str]  # Warnings from ExecutionValidatorAgent (non-blocking issues)
     physics_verdict: Optional[str]  # pass | warning | fail | design_flaw (from PhysicsSanityAgent)
+    physics_warnings: List[str]  # Warnings from PhysicsSanityAgent (non-blocking issues)
     comparison_verdict: Optional[str]  # approve | needs_revision (from ComparisonValidatorAgent)
     # Supervisor verdict:
     supervisor_verdict: Optional[str]  # ok_continue | replan_needed | change_priority | ask_user | backtrack_to_stage
@@ -871,6 +873,18 @@ class ReproState(TypedDict, total=False):
     reviewer_feedback: Optional[str]  # Last reviewer feedback for revision
     supervisor_feedback: Optional[str]  # Last supervisor feedback
     planner_feedback: Optional[str]  # Feedback for replanning
+    execution_feedback: Optional[str]  # From ExecutionValidatorAgent summary
+    physics_feedback: Optional[str]  # From PhysicsSanityAgent summary
+    analysis_feedback: Optional[str]  # From ResultsAnalyzer/ComparisonValidator
+    design_feedback: Optional[str]  # Design revision feedback
+    
+    # ─── Structured Agent Output Data ─────────────────────────────────────
+    # These fields preserve the rich structured data from LLM agent outputs
+    # instead of only storing verdict + summary strings.
+    execution_status: Optional[Dict[str, Any]]  # From ExecutionValidatorAgent: {completed, exit_code, runtime_seconds, ...}
+    execution_files_check: Optional[Dict[str, Any]]  # From ExecutionValidatorAgent: {expected_files, found_files, missing_files, ...}
+    physics_conservation_checks: Optional[List[Dict[str, Any]]]  # From PhysicsSanityAgent: [{law, status, expected_value, ...}]
+    physics_value_range_checks: Optional[List[Dict[str, Any]]]  # From PhysicsSanityAgent: [{quantity, status, value, ...}]
     
     # ─── Performance Tracking ───────────────────────────────────────────
     runtime_budget_remaining_seconds: float
@@ -889,11 +903,11 @@ class ReproState(TypedDict, total=False):
     last_node_before_ask_user: Optional[str]  # Which node triggered the ask_user
     
     # ─── Report Generation ──────────────────────────────────────────────
-    # Structures match report_schema.json definitions
-    figure_comparisons: List[Dict[str, Any]]  # Matches report_schema.json#/definitions/figure_comparison
-    overall_assessment: List[Dict[str, Any]]  # Matches report_schema.json executive_summary.overall_assessment
-    systematic_discrepancies_identified: List[Dict[str, Any]]  # Matches report_schema.json systematic_discrepancies
-    report_conclusions: Optional[Dict[str, Any]]  # Matches report_schema.json conclusions
+    # Structures match report_output_schema.json definitions
+    figure_comparisons: List[Dict[str, Any]]  # Matches report_output_schema.json#/definitions/figure_comparison
+    overall_assessment: List[Dict[str, Any]]  # Matches report_output_schema.json executive_summary.overall_assessment
+    systematic_discrepancies_identified: List[Dict[str, Any]]  # Matches report_output_schema.json systematic_discrepancies
+    report_conclusions: Optional[Dict[str, Any]]  # Matches report_output_schema.json conclusions
     final_report_markdown: Optional[str]  # Generated REPRODUCTION_REPORT.md
     
     # ─── Metrics Tracking ─────────────────────────────────────────────────
@@ -1020,7 +1034,9 @@ def create_initial_state(
         last_code_review_verdict=None,
         reviewer_issues=[],
         execution_verdict=None,  # From ExecutionValidatorAgent
+        execution_warnings=[],  # Warnings from ExecutionValidatorAgent
         physics_verdict=None,  # From PhysicsSanityAgent
+        physics_warnings=[],  # Warnings from PhysicsSanityAgent
         comparison_verdict=None,  # From ComparisonValidatorAgent
         supervisor_verdict=None,
         backtrack_decision=None,
@@ -1037,6 +1053,16 @@ def create_initial_state(
         reviewer_feedback=None,
         supervisor_feedback=None,
         planner_feedback=None,
+        execution_feedback=None,
+        physics_feedback=None,
+        analysis_feedback=None,
+        design_feedback=None,
+        
+        # Structured agent output data
+        execution_status=None,
+        execution_files_check=None,
+        physics_conservation_checks=None,
+        physics_value_range_checks=None,
         
         # Performance tracking
         runtime_budget_remaining_seconds=runtime_budget_minutes * 60,
