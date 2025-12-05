@@ -25,7 +25,7 @@ class TestDesignReviewLimitTrigger:
         result = supervisor_node(state)
         
         assert result["design_revision_count"] == 0
-        assert result["supervisor_verdict"] == "ok_continue"
+        assert result["supervisor_verdict"] == "retry_design"
         assert "Try using a larger simulation domain" in result.get("reviewer_feedback", "")
         assert result.get("ask_user_trigger") is None  # Should be cleared
 
@@ -43,7 +43,7 @@ class TestDesignReviewLimitTrigger:
         result = supervisor_node(state)
         
         assert result["design_revision_count"] == 0
-        assert result["supervisor_verdict"] == "ok_continue"
+        assert result["supervisor_verdict"] == "retry_design"
         assert "Use a different material" in result.get("reviewer_feedback", "")
 
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
@@ -133,7 +133,7 @@ class TestHandleDesignReviewLimit:
         assert mock_result["design_revision_count"] == 0
         assert "Fix the dimensions." in mock_result["reviewer_feedback"]
         assert mock_result["reviewer_feedback"].startswith("User hint:")
-        assert mock_result["supervisor_verdict"] == "ok_continue"
+        assert mock_result["supervisor_verdict"] == "retry_design"
         assert "supervisor_feedback" not in mock_result  # Should NOT set supervisor_feedback
 
     def test_handle_design_review_limit_hint_keyword(self, mock_state, mock_result):
@@ -145,7 +145,7 @@ class TestHandleDesignReviewLimit:
         
         assert mock_result["design_revision_count"] == 0
         assert "Use a larger domain size" in mock_result["reviewer_feedback"]
-        assert mock_result["supervisor_verdict"] == "ok_continue"
+        assert mock_result["supervisor_verdict"] == "retry_design"
 
     def test_handle_design_review_limit_hint_case_insensitive(self, mock_state, mock_result):
         """Should handle hint in lowercase (parse_user_response uppercases)."""
@@ -156,7 +156,7 @@ class TestHandleDesignReviewLimit:
         
         assert mock_result["design_revision_count"] == 0
         assert "lowercase hint" in mock_result["reviewer_feedback"]
-        assert mock_result["supervisor_verdict"] == "ok_continue"
+        assert mock_result["supervisor_verdict"] == "retry_design"
 
     def test_handle_design_review_limit_hint_multiple_responses(self, mock_state, mock_result):
         """Should use last response when multiple responses exist."""
@@ -181,7 +181,7 @@ class TestHandleDesignReviewLimit:
         
         assert mock_result["design_revision_count"] == 0
         assert "User hint:" in mock_result["reviewer_feedback"]
-        assert mock_result["supervisor_verdict"] == "ok_continue"
+        assert mock_result["supervisor_verdict"] == "retry_design"
 
     def test_handle_design_review_limit_hint_empty_user_responses(self, mock_state, mock_result):
         """Should handle empty user_responses dict."""
@@ -313,7 +313,7 @@ class TestHandleDesignReviewLimit:
         assert mock_result["existing_key"] == "existing_value"
         assert mock_result["another_key"] == 42
         assert mock_result["design_revision_count"] == 0
-        assert mock_result["supervisor_verdict"] == "ok_continue"
+        assert mock_result["supervisor_verdict"] == "retry_design"
 
     def test_handle_design_review_limit_hint_overwrites_existing_count(self, mock_state, mock_result):
         """Should overwrite existing design_revision_count."""
@@ -492,7 +492,7 @@ class TestHandleDesignReviewLimit:
         assert mock_result["design_revision_count"] == 0
         # The prefix is stripped, so the hint is empty
         assert mock_result["reviewer_feedback"] == "User hint: "
-        assert mock_result["supervisor_verdict"] == "ok_continue"
+        assert mock_result["supervisor_verdict"] == "retry_design"
 
     def test_handle_design_review_limit_skip_with_falsy_stage_id_values(self, mock_state, mock_result):
         """Should not call update_progress_stage_status for falsy stage_id values."""

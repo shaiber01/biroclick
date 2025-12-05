@@ -28,7 +28,7 @@ ALL_SCHEMA_FILES = [
     "progress_schema.json",
     "prompt_adaptations_schema.json",
     "prompt_adaptor_output_schema.json",
-    "report_schema.json",
+    "report_output_schema.json",
     "results_analyzer_output_schema.json",
     "simulation_designer_output_schema.json",
     "supervisor_output_schema.json",
@@ -374,31 +374,27 @@ class TestGetAgentSchema:
                 f"Schema ID for {agent_name} should be '{expected_id}', got '{schema.get('$id')}'"
             )
 
-    def test_get_agent_schema_special_case_report(self):
-        """Special-case mapping for report agent uses correct schema."""
+    def test_get_agent_schema_report_follows_convention(self):
+        """Report agent now follows standard naming convention."""
         schema = get_agent_schema("report")
         
         assert schema is not None
         assert isinstance(schema, dict)
         assert "properties" in schema
-        # Verify exact $id value for report schema
-        assert schema.get("$id") == "report_schema.json"
+        # Verify exact $id value - now follows convention
+        assert schema.get("$id") == "report_output_schema.json"
         # Verify report-specific fields
         assert "paper_id" in schema["properties"]
         assert "executive_summary" in schema["properties"]
         assert "figure_comparisons" in schema["properties"]
 
-    def test_get_agent_schema_special_case_takes_precedence(self):
-        """Special-case mapping takes precedence over auto-discovery."""
-        # "report" should use special mapping, not try "report_output_schema"
+    def test_get_agent_schema_report_auto_discovery(self):
+        """Report agent uses auto-discovery like all other agents."""
         schema = get_agent_schema("report")
         
-        # Verify it's using the special mapping (report_schema.json)
-        assert schema.get("$id") == "report_schema.json"
-        # Should NOT be report_output_schema
-        assert schema.get("$id") != "report_output_schema.json"
+        # Verify it's using auto-discovery (report_output_schema.json)
+        assert schema.get("$id") == "report_output_schema.json"
         
-        # If report_output_schema.json existed, special mapping should still take precedence
         # Verify the returned schema has the correct structure for reports
         assert "paper_citation" in schema["properties"]
         assert "conclusions" in schema["properties"]
@@ -496,9 +492,9 @@ class TestGetAgentSchema:
             
     def test_get_agent_schema_report_and_all_agents(self):
         """Both special-case 'report' and all auto-discovered agents work."""
-        # Get report (special case)
+        # Get report (now follows convention like all others)
         report_schema = get_agent_schema("report")
-        assert report_schema.get("$id") == "report_schema.json"
+        assert report_schema.get("$id") == "report_output_schema.json"
         
         # Verify we can still get all auto-discovered agents after loading report
         for agent_name in AUTO_DISCOVERED_AGENTS:
@@ -870,17 +866,15 @@ class TestSchemaLoadingEdgeCases:
             llm_client.SCHEMAS_DIR = original_schemas_dir
             llm_client._schema_cache.clear()
             
-    def test_get_agent_schema_special_mapping_keys(self):
-        """Verify the special mapping dictionary structure."""
-        # The special mapping is internal, but we can verify its behavior
-        # "report" should map to "report_schema" (not "report_output_schema")
+    def test_get_agent_schema_report_follows_convention(self):
+        """Verify report agent follows standard naming convention."""
+        # All agents now follow the standard {agent}_output_schema.json convention
         schema = get_agent_schema("report")
-        assert schema.get("$id") == "report_schema.json"
+        assert schema.get("$id") == "report_output_schema.json"
         
-        # Verify that trying to load "report_output_schema" directly fails
-        # (since the file doesn't exist)
-        with pytest.raises(FileNotFoundError):
-            load_schema("report_output_schema.json")
+        # Verify report_output_schema can be loaded directly
+        direct_schema = load_schema("report_output_schema.json")
+        assert direct_schema.get("$id") == "report_output_schema.json"
             
     def test_load_schema_with_bom_raises_error(self, tmp_path):
         """Loading JSON files with UTF-8 BOM raises JSONDecodeError.

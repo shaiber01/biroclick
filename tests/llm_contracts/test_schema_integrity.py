@@ -1197,7 +1197,7 @@ class TestSchemaCoverage:
             "progress_schema.json",
             "prompt_adaptations_schema.json",
             "prompt_adaptor_output_schema.json",
-            "report_schema.json",
+            "report_output_schema.json",
         }
         
         unexpected = non_agent_schemas - expected_non_agent

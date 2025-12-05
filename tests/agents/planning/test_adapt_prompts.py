@@ -17,7 +17,7 @@ class TestAdaptPromptsNode:
         """Test successful adaptation with paper_domain update."""
         mock_build_prompt.return_value = "system prompt"
         mock_llm.return_value = {
-            "adaptations": ["a1", "a2"],
+            "prompt_modifications": ["a1", "a2"],
             "paper_domain": "new_domain"
         }
         
@@ -58,7 +58,7 @@ class TestAdaptPromptsNode:
         """Test successful adaptation without paper_domain update."""
         mock_build_prompt.return_value = "system prompt"
         mock_llm.return_value = {
-            "adaptations": ["a1"]
+            "prompt_modifications": ["a1"]
         }
         
         state = {"paper_text": "some paper text", "paper_domain": "existing_domain"}
@@ -76,7 +76,7 @@ class TestAdaptPromptsNode:
         """Test successful call with empty adaptations list."""
         mock_build_prompt.return_value = "system prompt"
         mock_llm.return_value = {
-            "adaptations": []
+            "prompt_modifications": []
         }
         
         state = {"paper_text": "some paper text"}
@@ -108,7 +108,7 @@ class TestAdaptPromptsNode:
         """Test handling when agent returns None for adaptations."""
         mock_build_prompt.return_value = "system prompt"
         mock_llm.return_value = {
-            "adaptations": None
+            "prompt_modifications": None
         }
         
         state = {"paper_text": "some paper text"}
@@ -124,7 +124,7 @@ class TestAdaptPromptsNode:
         """Test handling when agent returns None for paper_domain."""
         mock_build_prompt.return_value = "system prompt"
         mock_llm.return_value = {
-            "adaptations": ["a1"],
+            "prompt_modifications": ["a1"],
             "paper_domain": None
         }
         
@@ -142,7 +142,7 @@ class TestAdaptPromptsNode:
         """Test handling when agent returns empty string for paper_domain."""
         mock_build_prompt.return_value = "system prompt"
         mock_llm.return_value = {
-            "adaptations": ["a1"],
+            "prompt_modifications": ["a1"],
             "paper_domain": ""
         }
         
@@ -216,7 +216,7 @@ class TestAdaptPromptsNode:
     def test_adapt_prompts_short_text(self, mock_build_prompt, mock_llm):
         """Test with short paper text (< 3000 chars)."""
         mock_build_prompt.return_value = "system prompt"
-        mock_llm.return_value = {"adaptations": []}
+        mock_llm.return_value = {"prompt_modifications": []}
         
         short_text = "a" * 100
         state = {"paper_text": short_text}
@@ -234,7 +234,7 @@ class TestAdaptPromptsNode:
     def test_adapt_prompts_empty_paper_text(self, mock_build_prompt, mock_llm):
         """Test with empty paper_text."""
         mock_build_prompt.return_value = "system prompt"
-        mock_llm.return_value = {"adaptations": []}
+        mock_llm.return_value = {"prompt_modifications": []}
         
         state = {"paper_text": ""}
         result = adapt_prompts_node(state)
@@ -252,7 +252,7 @@ class TestAdaptPromptsNode:
     def test_adapt_prompts_missing_paper_text_key(self, mock_build_prompt, mock_llm):
         """Test with missing paper_text key in state."""
         mock_build_prompt.return_value = "system prompt"
-        mock_llm.return_value = {"adaptations": []}
+        mock_llm.return_value = {"prompt_modifications": []}
         
         state = {}
         result = adapt_prompts_node(state)
@@ -270,7 +270,7 @@ class TestAdaptPromptsNode:
     def test_adapt_prompts_none_paper_text(self, mock_build_prompt, mock_llm):
         """Test with None paper_text."""
         mock_build_prompt.return_value = "system prompt"
-        mock_llm.return_value = {"adaptations": []}
+        mock_llm.return_value = {"prompt_modifications": []}
         
         state = {"paper_text": None}
         result = adapt_prompts_node(state)
@@ -283,7 +283,7 @@ class TestAdaptPromptsNode:
     def test_adapt_prompts_paper_domain_in_user_content(self, mock_build_prompt, mock_llm):
         """Test that paper_domain from state is included in user_content."""
         mock_build_prompt.return_value = "system prompt"
-        mock_llm.return_value = {"adaptations": []}
+        mock_llm.return_value = {"prompt_modifications": []}
         
         state = {"paper_text": "some text", "paper_domain": "optics"}
         adapt_prompts_node(state)
@@ -298,7 +298,7 @@ class TestAdaptPromptsNode:
     def test_adapt_prompts_empty_paper_domain(self, mock_build_prompt, mock_llm):
         """Test with empty paper_domain in state."""
         mock_build_prompt.return_value = "system prompt"
-        mock_llm.return_value = {"adaptations": []}
+        mock_llm.return_value = {"prompt_modifications": []}
         
         state = {"paper_text": "some text", "paper_domain": ""}
         adapt_prompts_node(state)
@@ -313,7 +313,7 @@ class TestAdaptPromptsNode:
     def test_adapt_prompts_missing_paper_domain_key(self, mock_build_prompt, mock_llm):
         """Test with missing paper_domain key in state."""
         mock_build_prompt.return_value = "system prompt"
-        mock_llm.return_value = {"adaptations": []}
+        mock_llm.return_value = {"prompt_modifications": []}
         
         state = {"paper_text": "some text"}
         adapt_prompts_node(state)
@@ -328,7 +328,7 @@ class TestAdaptPromptsNode:
     def test_adapt_prompts_user_content_structure(self, mock_build_prompt, mock_llm):
         """Test that user_content has correct structure."""
         mock_build_prompt.return_value = "system prompt"
-        mock_llm.return_value = {"adaptations": []}
+        mock_llm.return_value = {"prompt_modifications": []}
         
         state = {"paper_text": "test paper text", "paper_domain": "test_domain"}
         adapt_prompts_node(state)
@@ -348,7 +348,7 @@ class TestAdaptPromptsNode:
         """Test that original state is not mutated."""
         mock_build_prompt.return_value = "system prompt"
         mock_llm.return_value = {
-            "adaptations": ["a1"],
+            "prompt_modifications": ["a1"],
             "paper_domain": "new_domain"
         }
         
@@ -397,7 +397,7 @@ class TestAdaptPromptsNode:
         """Test with multiple adaptations."""
         mock_build_prompt.return_value = "system prompt"
         mock_llm.return_value = {
-            "adaptations": ["adapt1", "adapt2", "adapt3", "adapt4"]
+            "prompt_modifications": ["adapt1", "adapt2", "adapt3", "adapt4"]
         }
         
         state = {"paper_text": "some text"}
@@ -411,7 +411,7 @@ class TestAdaptPromptsNode:
     def test_adapt_prompts_exact_truncation_length(self, mock_build_prompt, mock_llm):
         """Test exact truncation behavior at boundaries."""
         mock_build_prompt.return_value = "system prompt"
-        mock_llm.return_value = {"adaptations": []}
+        mock_llm.return_value = {"prompt_modifications": []}
         
         # Test exactly 3000 chars
         text_3000 = "a" * 3000
@@ -442,10 +442,10 @@ class TestAdaptPromptsNode:
         mock_build_prompt.return_value = "system prompt"
         
         test_cases = [
-            {"adaptations": ["a1"]},
-            {"adaptations": []},
+            {"prompt_modifications": ["a1"]},
+            {"prompt_modifications": []},
             {},
-            {"adaptations": None},
+            {"prompt_modifications": None},
         ]
         
         for agent_output in test_cases:

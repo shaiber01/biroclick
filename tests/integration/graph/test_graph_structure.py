@@ -295,7 +295,7 @@ class TestGraphEdgeConnectivity:
             f"comparison_check should route to at least {expected_minimum}, got: {targets}"
         )
 
-    def test_supervisor_has_six_routes(self, graph_definition):
+    def test_supervisor_has_all_expected_routes(self, graph_definition):
         """Test supervisor can route to all expected destinations."""
         edges = list(graph_definition.edges)
         supervisor_edges = [edge for edge in edges if edge[0] == "supervisor"]
@@ -308,6 +308,12 @@ class TestGraphEdgeConnectivity:
             "handle_backtrack",
             "generate_report",
             "material_checkpoint",
+            "analyze",
+            "generate_code",
+            "design",
+            "code_review",
+            "design_review",
+            "plan_review",
         }
         assert targets == expected, (
             f"supervisor should route to exactly {expected}, got: {targets}"
@@ -2458,7 +2464,7 @@ class TestEdgeCountVerification:
             "execution_check": 3,  # physics_check, generate_code, ask_user
             "physics_check": 4,  # analyze, generate_code, design, ask_user
             "comparison_check": 3,  # supervisor, analyze, ask_user
-            "supervisor": 6,  # select_stage, planning, ask_user, handle_backtrack, generate_report, material_checkpoint
+            "supervisor": 9,  # select_stage, planning, ask_user, handle_backtrack, generate_report, material_checkpoint, analyze, generate_code, design
             "ask_user": 1,  # supervisor
         }
         
@@ -2514,9 +2520,9 @@ class TestUserGuidanceIntegration:
             f"User's hint should be in reviewer_feedback, got: {result.get('reviewer_feedback')}"
         )
         
-        # Verify verdict allows continuation
-        assert result.get("supervisor_verdict") == "ok_continue", (
-            f"Expected ok_continue verdict, got {result.get('supervisor_verdict')}"
+        # Verify verdict routes directly to generate_code (bypasses select_stage)
+        assert result.get("supervisor_verdict") == "retry_generate_code", (
+            f"Expected retry_generate_code verdict, got {result.get('supervisor_verdict')}"
         )
 
     @patch('src.graph.save_checkpoint')
@@ -2660,12 +2666,12 @@ class TestUserGuidanceIntegration:
 
     @patch('src.graph.save_checkpoint')
     def test_code_review_limit_full_flow_routes_correctly(self, mock_checkpoint):
-        """Test full flow: code_review_limit + HINT → ok_continue → select_stage.
+        """Test full flow: code_review_limit + HINT → retry_generate_code → generate_code.
         
         Verifies the state machine flow after user provides code hint:
         1. User provides PROVIDE_HINT after code_review_limit
-        2. Supervisor sets ok_continue verdict with reviewer_feedback
-        3. Router sends to select_stage (for next stage selection)
+        2. Supervisor sets retry_generate_code verdict with reviewer_feedback
+        3. Router sends directly to generate_code (bypasses select_stage)
         """
         from src.agents.supervision.supervisor import supervisor_node
         
@@ -2681,16 +2687,16 @@ class TestUserGuidanceIntegration:
         
         result = supervisor_node(state)
         
-        # Verify ok_continue verdict
-        assert result.get("supervisor_verdict") == "ok_continue", (
-            f"Expected ok_continue verdict, got {result.get('supervisor_verdict')}"
+        # Verify retry_generate_code verdict (routes directly to generate_code)
+        assert result.get("supervisor_verdict") == "retry_generate_code", (
+            f"Expected retry_generate_code verdict, got {result.get('supervisor_verdict')}"
         )
         
-        # Verify routing after supervisor
+        # Verify routing after supervisor goes directly to generate_code
         merged_state = {**state, **result}
         route_result = route_after_supervisor(merged_state)
-        assert route_result == "select_stage", (
-            f"ok_continue should route to select_stage, got {route_result}"
+        assert route_result == "generate_code", (
+            f"retry_generate_code should route to generate_code, got {route_result}"
         )
         
         # Verify hint is preserved for when code_generator runs next
@@ -3796,11 +3802,11 @@ class TestComplexE2EFlows:
             f"reviewer_feedback should contain user's hint, got: {hint_result['reviewer_feedback']}"
         )
         
-        # Verify routing continues (ok_continue leads to select_stage)
+        # Verify routing goes directly to generate_code (bypass select_stage)
         post_hint_state = {**hint_state, **hint_result}
         route_after_hint = route_after_supervisor(post_hint_state)
-        assert route_after_hint == "select_stage", (
-            f"After HINT should route to select_stage, got {route_after_hint}"
+        assert route_after_hint == "generate_code", (
+            f"After HINT should route to generate_code, got {route_after_hint}"
         )
         
         # Step 3: Simulate code still failing after hint - another limit hit

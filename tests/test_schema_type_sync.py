@@ -289,9 +289,9 @@ class TestSchemaTypeSync:
         assert "properties" in schema, "metrics_schema.json missing 'properties'"
     
     def test_report_schema_exists_and_valid(self):
-        """report_schema.json should exist and be valid JSON."""
-        schema = load_schema("report_schema.json")
-        assert "properties" in schema, "report_schema.json missing 'properties'"
+        """report_output_schema.json should exist and be valid JSON."""
+        schema = load_schema("report_output_schema.json")
+        assert "properties" in schema, "report_output_schema.json missing 'properties'"
     
     def test_agent_output_schemas_exist(self):
         """All agent output schemas should exist and be valid."""

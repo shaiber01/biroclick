@@ -26,8 +26,8 @@ class TestCodeReviewLimitTrigger:
         
         # Verify counter reset
         assert result["code_revision_count"] == 0
-        # Verify verdict
-        assert result["supervisor_verdict"] == "ok_continue"
+        # Verify verdict - routes directly to generate_code
+        assert result["supervisor_verdict"] == "retry_generate_code"
         # Verify trigger is cleared
         assert result.get("ask_user_trigger") is None
         # Verify reviewer feedback contains the hint
@@ -52,7 +52,7 @@ class TestCodeReviewLimitTrigger:
         result = supervisor_node(state)
         
         assert result["code_revision_count"] == 0
-        assert result["supervisor_verdict"] == "ok_continue"
+        assert result["supervisor_verdict"] == "retry_generate_code"
         assert "try a different approach" in result["reviewer_feedback"]
 
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
@@ -69,7 +69,7 @@ class TestCodeReviewLimitTrigger:
         result = supervisor_node(state)
         
         assert result["code_revision_count"] == 0
-        assert result["supervisor_verdict"] == "ok_continue"
+        assert result["supervisor_verdict"] == "retry_generate_code"
         assert "Use pandas" in result["reviewer_feedback"]
 
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
@@ -85,7 +85,7 @@ class TestCodeReviewLimitTrigger:
         result = supervisor_node(state)
         
         assert result["code_revision_count"] == 0
-        assert result["supervisor_verdict"] == "ok_continue"
+        assert result["supervisor_verdict"] == "retry_generate_code"
 
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     @patch("src.agents.supervision.trigger_handlers.update_progress_stage_status")
@@ -296,8 +296,8 @@ class TestHandleCodeReviewLimit:
         assert "reviewer_feedback" in mock_result
         assert "User hint:" in mock_result["reviewer_feedback"]
         assert "Use a loop instead." in mock_result["reviewer_feedback"]
-        # Verify verdict
-        assert mock_result["supervisor_verdict"] == "ok_continue"
+        # Verify verdict - routes directly to generate_code
+        assert mock_result["supervisor_verdict"] == "retry_generate_code"
         # Verify supervisor feedback
         assert mock_result.get("supervisor_feedback") == "Retrying code generation with user hint."
         # Verify should_stop is NOT set
@@ -313,7 +313,7 @@ class TestHandleCodeReviewLimit:
         
         assert mock_result["code_revision_count"] == 0
         assert "Try recursion" in mock_result["reviewer_feedback"]
-        assert mock_result["supervisor_verdict"] == "ok_continue"
+        assert mock_result["supervisor_verdict"] == "retry_generate_code"
 
     def test_handle_code_review_limit_hint_empty_user_responses(self, mock_state, mock_result):
         """Should handle empty user_responses dict gracefully."""
@@ -332,7 +332,7 @@ class TestHandleCodeReviewLimit:
         trigger_handlers.handle_code_review_limit(mock_state, mock_result, user_input, None)
         
         assert mock_result["code_revision_count"] == 0
-        assert mock_result["supervisor_verdict"] == "ok_continue"
+        assert mock_result["supervisor_verdict"] == "retry_generate_code"
 
     @patch("src.agents.supervision.trigger_handlers._update_progress_with_error_handling")
     def test_handle_code_review_limit_skip(self, mock_update, mock_state, mock_result):
@@ -482,7 +482,7 @@ class TestHandleCodeReviewLimit:
         trigger_handlers.handle_code_review_limit(mock_state, mock_result, user_input, "stage1")
         
         assert mock_result["code_revision_count"] == 0
-        assert mock_result["supervisor_verdict"] == "ok_continue"
+        assert mock_result["supervisor_verdict"] == "retry_generate_code"
 
     def test_handle_code_review_limit_partial_match_provide_hint(self, mock_state, mock_result):
         """Should match PROVIDE_HINT correctly."""
@@ -491,13 +491,13 @@ class TestHandleCodeReviewLimit:
         trigger_handlers.handle_code_review_limit(mock_state, mock_result, user_input, "stage1")
         
         assert mock_result["code_revision_count"] == 0
-        assert mock_result["supervisor_verdict"] == "ok_continue"
+        assert mock_result["supervisor_verdict"] == "retry_generate_code"
 
     def test_handle_code_review_limit_case_insensitive_matching(self, mock_state, mock_result):
         """Should match keywords case-insensitively."""
         test_cases = [
-            ("provide_hint: test", "ok_continue", True, False),
-            ("hint: test", "ok_continue", True, False),
+            ("provide_hint: test", "retry_generate_code", True, False),
+            ("hint: test", "retry_generate_code", True, False),
             ("skip", "ok_continue", False, False),
             ("stop", "all_complete", False, True),
         ]
@@ -522,7 +522,7 @@ class TestHandleCodeReviewLimit:
         
         # Should match PROVIDE_HINT (checked first), not SKIP
         assert mock_result["code_revision_count"] == 0
-        assert mock_result["supervisor_verdict"] == "ok_continue"
+        assert mock_result["supervisor_verdict"] == "retry_generate_code"
         assert "SKIP this stage" in mock_result["reviewer_feedback"]
 
     def test_handle_code_review_limit_keyword_precedence_hint_before_stop(self, mock_state, mock_result):
@@ -533,7 +533,7 @@ class TestHandleCodeReviewLimit:
         
         # Should match PROVIDE_HINT (checked first), not STOP
         assert mock_result["code_revision_count"] == 0
-        assert mock_result["supervisor_verdict"] == "ok_continue"
+        assert mock_result["supervisor_verdict"] == "retry_generate_code"
         assert mock_result.get("should_stop") is not True
 
     def test_handle_code_review_limit_keyword_precedence_skip_before_stop(self, mock_state, mock_result):
@@ -598,7 +598,7 @@ class TestHandleCodeReviewLimit:
         
         # Should still reset counter and set verdict
         assert mock_result["code_revision_count"] == 0
-        assert mock_result["supervisor_verdict"] == "ok_continue"
+        assert mock_result["supervisor_verdict"] == "retry_generate_code"
         # reviewer_feedback should still be set, even if empty
         assert "reviewer_feedback" in mock_result
         assert mock_result["reviewer_feedback"].startswith("User hint:")

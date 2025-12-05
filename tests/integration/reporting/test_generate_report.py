@@ -239,7 +239,7 @@ class TestGenerateReportNode:
         assert call_kwargs.get("agent_name") == "report", "Agent name must be 'report'"
         assert "system_prompt" in call_kwargs, "System prompt must be provided"
         assert "user_content" in call_kwargs, "User content must be provided"
-        assert call_kwargs.get("schema_name") == "report_schema", "Schema name must be 'report_schema'"
+        assert call_kwargs.get("schema_name") == "report_output_schema", "Schema name must be 'report_output_schema'"
         
         user_content = call_kwargs.get("user_content", "")
         # Verify all sections are included

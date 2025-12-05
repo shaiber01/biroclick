@@ -197,16 +197,16 @@ class TestCallAgentSchemaLoading:
         assert input_schema == override_schema
 
     @patch("src.llm_client.get_llm_client")
-    def test_call_agent_special_mapping_for_report(self, mock_get_client):
-        """Agent 'report' should use 'report_schema' (special case)."""
+    def test_call_agent_report_follows_convention(self, mock_get_client):
+        """Agent 'report' now follows standard naming convention."""
         mock_llm = MagicMock()
         mock_response = MagicMock()
         mock_response.tool_calls = [{"args": {"output": "value"}}]
         mock_llm.bind_tools.return_value.invoke.return_value = mock_response
         mock_get_client.return_value = mock_llm
 
-        # Load the expected report schema
-        expected_schema = load_schema("report_schema")
+        # Load the expected report schema (now follows convention)
+        expected_schema = load_schema("report_output_schema")
 
         call_agent(
             agent_name="report",
@@ -218,7 +218,7 @@ class TestCallAgentSchemaLoading:
         tools = kwargs["tools"]
         input_schema = tools[0]["input_schema"]
         assert input_schema == expected_schema
-        # Verify it has specific fields from report_schema
+        # Verify it has specific fields from report_output_schema
         assert "paper_id" in input_schema.get("properties", {})
         assert "executive_summary" in input_schema.get("properties", {})
 

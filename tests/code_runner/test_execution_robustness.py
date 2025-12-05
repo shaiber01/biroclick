@@ -535,11 +535,22 @@ print("stderr message", file=sys.stderr)
         assert result["exit_code"] == 0, "Should execute successfully"
         assert result["timeout_exceeded"] is False, "Should not timeout"
 
-    def test_nan_detection_in_output(self, tmp_path):
-        """Test that NaN detection works in stdout."""
+    def test_nan_in_output_does_not_cause_false_positive(self, tmp_path):
+        """Test that printing np.nan does NOT cause false positive errors.
+        
+        We intentionally removed string-based NaN detection because it caused
+        false positives from legitimate physics terms like "ε_inf" (epsilon infinity),
+        "nanoantenna", variable names, etc.
+        
+        NaN/Inf detection is now handled by:
+        1. Meep itself raises RuntimeError on field divergence (exit_code != 0)
+        2. ExecutionValidatorAgent checks actual output files for NaN/Inf values
+        3. Generated code should validate results and sys.exit(1) if NaN found
+        """
         code = """
 import numpy as np
 print("Result:", np.nan)
+print("eps_inf = 2.56")  # Legitimate physics term containing "inf"
 """
         result = run_simulation(
             code=code,
@@ -547,20 +558,24 @@ print("Result:", np.nan)
             output_dir=tmp_path,
         )
 
-        # NaN detection should mark as diverged
-        # Note: This depends on implementation - check if NaN detection is enabled
-        assert "exit_code" in result, "Should return result dict"
-        # If NaN detection is working, error should mention divergence
-        if result["error"]:
-            assert "nan" in str(result["error"]).lower() or \
-                   "diverged" in str(result["error"]).lower(), \
-                f"NaN should trigger divergence detection: {result['error']}"
+        # Should complete successfully - no false positive from "nan" string
+        assert result["exit_code"] == 0, "Should not fail just because 'nan' appears in output"
+        assert result["error"] is None, \
+            f"Should not set error for legitimate 'nan' in output: {result['error']}"
 
-    def test_inf_detection_in_output(self, tmp_path):
-        """Test that Inf detection works in stdout."""
+    def test_inf_in_output_does_not_cause_false_positive(self, tmp_path):
+        """Test that printing np.inf or physics terms like eps_inf does NOT cause errors.
+        
+        The string "inf" appears in many legitimate contexts:
+        - np.inf, float('inf')
+        - eps_inf (epsilon infinity - high frequency permittivity)
+        - variable names containing "inf"
+        """
         code = """
 import numpy as np
 print("Result:", np.inf)
+print("eps_inf = 2.56")  # Common physics parameter name
+print("Information: test complete")  # Word containing "inf"
 """
         result = run_simulation(
             code=code,
@@ -568,12 +583,10 @@ print("Result:", np.inf)
             output_dir=tmp_path,
         )
 
-        assert "exit_code" in result, "Should return result dict"
-        # If Inf detection is working, error should mention divergence
-        if result["error"]:
-            assert "inf" in str(result["error"]).lower() or \
-                   "diverged" in str(result["error"]).lower(), \
-                f"Inf should trigger divergence detection: {result['error']}"
+        # Should complete successfully - no false positive from "inf" string
+        assert result["exit_code"] == 0, "Should not fail just because 'inf' appears in output"
+        assert result["error"] is None, \
+            f"Should not set error for legitimate 'inf' in output: {result['error']}"
 
     def test_output_dir_creation(self):
         """Test that output directory is created if it doesn't exist."""

@@ -62,7 +62,7 @@ class TestGenerateReportNode:
         call_kwargs = mock_call.call_args[1]
         assert call_kwargs["agent_name"] == "report"
         assert call_kwargs["system_prompt"] == "system prompt"
-        assert call_kwargs["schema_name"] == "report_schema"
+        assert call_kwargs["schema_name"] == "report_output_schema"
         assert call_kwargs["state"] == state
         
         # Verify metrics are present

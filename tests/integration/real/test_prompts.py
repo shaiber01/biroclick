@@ -424,7 +424,7 @@ class TestPromptAdaptations:
             {
                 "target_agent": "planner",
                 "modification_type": "append",
-                "content": "Additional content appended.",
+                "new_content": "Additional content appended.",
             }
         ]
 
@@ -440,7 +440,7 @@ class TestPromptAdaptations:
             {
                 "target_agent": "planner",
                 "modification_type": "prepend",
-                "content": "Content prepended.",
+                "new_content": "Content prepended.",
             }
         ]
 
@@ -449,15 +449,15 @@ class TestPromptAdaptations:
         assert "Content prepended." in result
         assert result.startswith("# Paper-Specific Adaptation") or "Content prepended." in result[:100]
 
-    def test_replace_adaptation(self):
-        """Test replace adaptation type."""
+    def test_modify_adaptation(self):
+        """Test modify adaptation type."""
         base_prompt = "Original prompt with MARKER to replace."
         adaptations = [
             {
                 "target_agent": "planner",
-                "modification_type": "replace",
-                "content": "Replaced content.",
-                "section_marker": "MARKER",
+                "modification_type": "modify",
+                "new_content": "Replaced content.",
+                "section": "MARKER",
             }
         ]
 
@@ -472,7 +472,7 @@ class TestPromptAdaptations:
             {
                 "target_agent": "planner",
                 "modification_type": "disable",
-                "section_marker": "MARKER",
+                "section": "MARKER",
             }
         ]
 
@@ -486,7 +486,7 @@ class TestPromptAdaptations:
             {
                 "target_agent": "planner",
                 "modification_type": "append",
-                "content": "Planner-specific content.",
+                "new_content": "Planner-specific content.",
             }
         ]
 
@@ -517,7 +517,7 @@ class TestPromptAdaptations:
             {
                 "target_agent": "planner",
                 "modification_type": "append",
-                "content": "TEST ADAPTATION CONTENT",
+                "new_content": "TEST ADAPTATION CONTENT",
             }
         ]
 
@@ -538,7 +538,7 @@ class TestPromptAdaptations:
             {
                 "target_agent": "planner",
                 "modification_type": "append",
-                "content": "Planner-specific content.",
+                "new_content": "Planner-specific content.",
             }
         ]
 
@@ -570,7 +570,7 @@ class TestPromptAdaptations:
             {
                 "target_agent": "code",
                 "modification_type": "append",
-                "content": "Code-specific content.",
+                "new_content": "Code-specific content.",
             }
         ]
         
@@ -586,7 +586,7 @@ class TestPromptAdaptations:
             {
                 "target_agent": "plan",
                 "modification_type": "append",
-                "content": "Plan-specific content.",
+                "new_content": "Plan-specific content.",
             }
         ]
         
@@ -601,7 +601,7 @@ class TestPromptAdaptations:
             {
                 "target_agent": "simulation",
                 "modification_type": "append",
-                "content": "Simulation-specific content.",
+                "new_content": "Simulation-specific content.",
             }
         ]
         
@@ -620,7 +620,7 @@ class TestPromptAdaptations:
             {
                 "target_agent": "code_generator",
                 "modification_type": "append",
-                "content": "Generator-specific content.",
+                "new_content": "Generator-specific content.",
             }
         ]
         
@@ -637,7 +637,7 @@ class TestPromptAdaptations:
             {
                 "target_agent": "PLANNER",  # Uppercase
                 "modification_type": "append",
-                "content": "Planner content.",
+                "new_content": "Planner content.",
             }
         ]
 
@@ -654,7 +654,7 @@ class TestPromptAdaptations:
             {
                 "target_agent": "PlannerAgent",  # With 'Agent' suffix
                 "modification_type": "append",
-                "content": "Planner content.",
+                "new_content": "Planner content.",
             }
         ]
 
@@ -664,22 +664,22 @@ class TestPromptAdaptations:
             "Adaptation matching should handle 'Agent' suffix in target_agent"
         )
 
-    def test_replace_adaptation_requires_marker(self):
-        """Replace adaptation should only work if marker exists."""
+    def test_modify_adaptation_requires_marker(self):
+        """Modify adaptation should only work if marker exists."""
         base_prompt = "Original prompt without marker."
         adaptations = [
             {
                 "target_agent": "planner",
-                "modification_type": "replace",
-                "content": "Replaced content.",
-                "section_marker": "NONEXISTENT_MARKER",
+                "modification_type": "modify",
+                "new_content": "Replaced content.",
+                "section": "NONEXISTENT_MARKER",
             }
         ]
 
         result = apply_prompt_adaptations(base_prompt, "planner", adaptations)
         # Should remain unchanged if marker doesn't exist
         assert result == base_prompt, (
-            "Replace adaptation should not modify prompt if marker doesn't exist"
+            "Modify adaptation should not modify prompt if marker doesn't exist"
         )
         assert "Replaced content." not in result
 
@@ -690,7 +690,7 @@ class TestPromptAdaptations:
             {
                 "target_agent": "planner",
                 "modification_type": "disable",
-                "section_marker": "NONEXISTENT_MARKER",
+                "section": "NONEXISTENT_MARKER",
             }
         ]
 
@@ -708,17 +708,17 @@ class TestPromptAdaptations:
             {
                 "target_agent": "planner",
                 "modification_type": "append",
-                "content": "First adaptation.",
+                "new_content": "First adaptation.",
             },
             {
                 "target_agent": "planner",
                 "modification_type": "append",
-                "content": "Second adaptation.",
+                "new_content": "Second adaptation.",
             },
             {
                 "target_agent": "planner",
                 "modification_type": "prepend",
-                "content": "Prepended content.",
+                "new_content": "Prepended content.",
             },
         ]
 
@@ -735,12 +735,12 @@ class TestPromptAdaptations:
             {
                 "target_agent": "planner",
                 "modification_type": "append",
-                "content": "FIRST",
+                "new_content": "FIRST",
             },
             {
                 "target_agent": "planner",
                 "modification_type": "append",
-                "content": "SECOND",
+                "new_content": "SECOND",
             },
         ]
 
@@ -757,7 +757,7 @@ class TestPromptAdaptations:
         adaptations = [
             {
                 "modification_type": "append",
-                "content": "Content without target.",
+                "new_content": "Content without target.",
             }
         ]
 
@@ -773,7 +773,7 @@ class TestPromptAdaptations:
         adaptations = [
             {
                 "target_agent": "planner",
-                "content": "Content without type.",
+                "new_content": "Content without type.",
             }
         ]
 
@@ -790,7 +790,7 @@ class TestPromptAdaptations:
             {
                 "target_agent": "planner",
                 "modification_type": "invalid_type",
-                "content": "Content with invalid type.",
+                "new_content": "Content with invalid type.",
             }
         ]
 
@@ -807,7 +807,7 @@ class TestPromptAdaptations:
             {
                 "target_agent": "planner",
                 "modification_type": "append",
-                "content": "",
+                "new_content": "",
             }
         ]
 
@@ -822,7 +822,7 @@ class TestPromptAdaptations:
             {
                 "target_agent": "planner",
                 "modification_type": "append",
-                "content": None,
+                "new_content": None,
             }
         ]
 
@@ -838,7 +838,7 @@ class TestPromptAdaptations:
             {
                 "target_agent": None,
                 "modification_type": "append",
-                "content": "Content with None target.",
+                "new_content": "Content with None target.",
             }
         ]
 

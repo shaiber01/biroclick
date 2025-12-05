@@ -25,7 +25,7 @@ class TestSchemaFilesExist:
         "physics_sanity_output_schema.json",
         "results_analyzer_output_schema.json",
         "supervisor_output_schema.json",
-        "report_schema.json",
+        "report_output_schema.json",
     ]
 
     @pytest.mark.parametrize("schema_name", REQUIRED_SCHEMAS)

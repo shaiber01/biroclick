@@ -75,9 +75,9 @@ class TestLoadSchema:
     def test_cache_stores_correct_key_with_extension(self):
         """Cache should normalize schema names to include .json extension."""
         _schema_cache.clear()
-        load_schema("report_schema")
-        assert "report_schema.json" in _schema_cache
-        assert "report_schema" not in _schema_cache
+        load_schema("report_output_schema")
+        assert "report_output_schema.json" in _schema_cache
+        assert "report_output_schema" not in _schema_cache
 
     def test_cache_hit_returns_same_object(self):
         """Cached schema should be the exact same object (not a copy)."""
@@ -179,7 +179,7 @@ class TestGetAgentSchema:
         assert "paper_id" in schema["properties"]
         assert "figure_comparisons" in schema["properties"]
 
-    def test_report_schema_has_correct_structure(self):
+    def test_report_output_schema_has_correct_structure(self):
         """Report schema should have report-specific structure."""
         schema = get_agent_schema("report")
         required = schema.get("required", [])
@@ -227,7 +227,7 @@ class TestSchemaValidation:
         "comparison_validator_output_schema",
         "supervisor_output_schema",
         "prompt_adaptor_output_schema",
-        "report_schema",
+        "report_output_schema",
     ]
 
     @pytest.mark.parametrize("schema_name", REQUIRED_SCHEMAS)
@@ -393,9 +393,9 @@ class TestSchemaContent:
     # Report Schema Tests
     # ─────────────────────────────────────────────────────────────────────
 
-    def test_report_schema_required_fields(self):
+    def test_report_output_schema_required_fields(self):
         """Report schema should have all required fields."""
-        schema = load_schema("report_schema")
+        schema = load_schema("report_output_schema")
         required = schema.get("required", [])
         expected_required = [
             "paper_id", "paper_citation", "executive_summary",
@@ -405,9 +405,9 @@ class TestSchemaContent:
         for field in expected_required:
             assert field in required, f"Report missing required field: {field}"
 
-    def test_report_schema_paper_citation_structure(self):
+    def test_report_output_schema_paper_citation_structure(self):
         """Report schema paper_citation should have correct structure."""
-        schema = load_schema("report_schema")
+        schema = load_schema("report_output_schema")
         citation = schema["properties"]["paper_citation"]
         assert citation["type"] == "object"
         assert "required" in citation
@@ -415,9 +415,9 @@ class TestSchemaContent:
         for field in required_citation_fields:
             assert field in citation["required"]
 
-    def test_report_schema_conclusions_structure(self):
+    def test_report_output_schema_conclusions_structure(self):
         """Report schema conclusions should have correct structure."""
-        schema = load_schema("report_schema")
+        schema = load_schema("report_output_schema")
         conclusions = schema["properties"]["conclusions"]
         assert conclusions["type"] == "object"
         assert "required" in conclusions
@@ -426,15 +426,15 @@ class TestSchemaContent:
         # Verify main_physics_reproduced is boolean
         assert conclusions["properties"]["main_physics_reproduced"]["type"] == "boolean"
 
-    def test_report_schema_has_definitions(self):
+    def test_report_output_schema_has_definitions(self):
         """Report schema should have definitions section."""
-        schema = load_schema("report_schema")
+        schema = load_schema("report_output_schema")
         assert "definitions" in schema
         assert "figure_comparison" in schema["definitions"]
 
-    def test_report_schema_figure_comparison_definition(self):
+    def test_report_output_schema_figure_comparison_definition(self):
         """Report schema figure_comparison definition should be complete."""
-        schema = load_schema("report_schema")
+        schema = load_schema("report_output_schema")
         fig_comp = schema["definitions"]["figure_comparison"]
         assert fig_comp["type"] == "object"
         assert "required" in fig_comp
@@ -514,7 +514,7 @@ class TestSchemaPathsAndFiles:
             "comparison_validator_output_schema.json",
             "supervisor_output_schema.json",
             "prompt_adaptor_output_schema.json",
-            "report_schema.json",
+            "report_output_schema.json",
         ]
         for filename in required_files:
             path = SCHEMAS_DIR / filename
@@ -579,7 +579,7 @@ class TestSchemaJSONSchemaCompliance:
         "comparison_validator_output_schema",
         "supervisor_output_schema",
         "prompt_adaptor_output_schema",
-        "report_schema",
+        "report_output_schema",
     ]
 
     @pytest.mark.parametrize("schema_name", REQUIRED_SCHEMAS)
@@ -1037,7 +1037,7 @@ class TestSchemaPropertyDescriptions:
     REQUIRED_SCHEMAS = [
         "planner_output_schema",
         "supervisor_output_schema",
-        "report_schema",
+        "report_output_schema",
     ]
 
     @pytest.mark.parametrize("schema_name", REQUIRED_SCHEMAS)
