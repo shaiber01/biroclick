@@ -273,6 +273,23 @@ def physics_sanity_node(state: ReproState) -> dict:
         )
         result["design_revision_count"] = new_count
         result["design_feedback"] = agent_output.get("summary", "Design flaw detected.")
+        
+        # If we hit the max design revision limit, escalate to ask_user immediately.
+        # This mirrors the physics_failure_limit logic above.
+        runtime_config = state.get("runtime_config", {})
+        max_revisions = runtime_config.get("max_design_revisions", MAX_DESIGN_REVISIONS)
+        stage_id = state.get("current_stage_id", "unknown")
+        
+        if new_count >= max_revisions:
+            result["ask_user_trigger"] = "design_flaw_limit"
+            result["pending_user_questions"] = [
+                f"Physics check detected design flaws {new_count}/{max_revisions} times.\n\n"
+                f"- Stage: {stage_id}\n"
+                f"- Latest feedback: {result.get('design_feedback', 'No feedback available')}\n\n"
+                f"{get_options_prompt('design_flaw_limit')}"
+            ]
+            result["awaiting_user_input"] = True
+            result["last_node_before_ask_user"] = "physics_check"
     
     # If agent suggests backtrack, populate backtrack_suggestion for supervisor
     backtrack = agent_output.get("backtrack_suggestion", {})

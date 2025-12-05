@@ -64,6 +64,17 @@ ASK_USER_TRIGGERS: Dict[str, Dict[str, Any]] = {
             "STOP": "Route to generate_report",
         }
     },
+    "design_flaw_limit": {
+        "description": "Design flaw detected by physics_check, design revision limit (MAX_DESIGN_REVISIONS) exceeded",
+        "source_node": "physics_check",
+        "expected_response_keys": ["action", "hint"],
+        "valid_verdicts": ["PROVIDE_HINT", "SKIP_STAGE", "STOP"],
+        "supervisor_action": {
+            "PROVIDE_HINT": "Reset design_revision_count=0, add hint to design_feedback, route to design",
+            "SKIP_STAGE": "Mark stage as blocked, route to select_stage",
+            "STOP": "Route to generate_report",
+        }
+    },
     "execution_failure_limit": {
         "description": "Execution failure limit (MAX_EXECUTION_FAILURES) exceeded",
         "source_node": "execution_check",

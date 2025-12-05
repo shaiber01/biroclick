@@ -490,9 +490,10 @@ class TestCodeGeneratorNode:
             mock_llm.return_value = {"code": ""}  # Empty code!
             result = code_generator_node(state)
         
-        # Should increment revision count
-        assert result.get("code_revision_count", 0) >= 1, (
-            f"Expected code_revision_count >= 1 for empty code, got {result.get('code_revision_count')}"
+        # Should NOT increment revision count - that's code_review's job
+        # (avoids double-counting when code_review also increments on needs_revision)
+        assert "code_revision_count" not in result, (
+            f"code_generator should not set code_revision_count for empty code, got {result.get('code_revision_count')}"
         )
         assert "reviewer_feedback" in result, (
             "Should have reviewer_feedback about empty code"
@@ -516,9 +517,10 @@ class TestCodeGeneratorNode:
             mock_llm.return_value = {"code": "# TODO: Implement simulation"}
             result = code_generator_node(state)
         
-        # Should increment revision count
-        assert result.get("code_revision_count", 0) >= 1, (
-            f"Expected code_revision_count >= 1 for stub code, got {result.get('code_revision_count')}"
+        # Should NOT increment revision count - that's code_review's job
+        # (avoids double-counting when code_review also increments on needs_revision)
+        assert "code_revision_count" not in result, (
+            f"code_generator should not set code_revision_count for stub code, got {result.get('code_revision_count')}"
         )
 
     def test_valid_code_sets_expected_outputs(self):

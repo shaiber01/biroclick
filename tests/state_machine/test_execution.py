@@ -367,6 +367,54 @@ class TestPhysicsSanityNode:
             
             assert result["design_revision_count"] == 3
 
+    def test_design_flaw_sets_trigger_at_limit(self, physics_state):
+        """Test that design_flaw verdict sets ask_user_trigger when at limit."""
+        from schemas.state import MAX_DESIGN_REVISIONS
+        
+        # Set count to max - 1 so increment reaches the limit
+        physics_state["design_revision_count"] = MAX_DESIGN_REVISIONS - 1
+        physics_state["runtime_config"] = {"max_design_revisions": MAX_DESIGN_REVISIONS}
+        
+        with patch("src.agents.execution.call_agent_with_metrics") as mock_llm:
+            mock_llm.return_value = {
+                "verdict": "design_flaw",
+                "summary": "Fundamental geometry error",
+            }
+            
+            result = physics_sanity_node(physics_state)
+            
+            # Counter should reach the limit
+            assert result["design_revision_count"] == MAX_DESIGN_REVISIONS
+            
+            # Trigger and questions should be set
+            assert result.get("ask_user_trigger") == "design_flaw_limit", (
+                f"Expected ask_user_trigger='design_flaw_limit', got '{result.get('ask_user_trigger')}'"
+            )
+            assert result.get("awaiting_user_input") is True
+            assert result.get("last_node_before_ask_user") == "physics_check"
+            assert len(result.get("pending_user_questions", [])) > 0
+            assert "design flaws" in result["pending_user_questions"][0].lower()
+
+    def test_design_flaw_no_trigger_under_limit(self, physics_state):
+        """Test that design_flaw verdict does NOT set trigger when under limit."""
+        physics_state["design_revision_count"] = 0
+        physics_state["runtime_config"] = {"max_design_revisions": 3}
+        
+        with patch("src.agents.execution.call_agent_with_metrics") as mock_llm:
+            mock_llm.return_value = {
+                "verdict": "design_flaw",
+                "summary": "Geometry needs adjustment",
+            }
+            
+            result = physics_sanity_node(physics_state)
+            
+            # Counter should be 1 (incremented from 0)
+            assert result["design_revision_count"] == 1
+            
+            # No trigger should be set (still under limit)
+            assert result.get("ask_user_trigger") is None
+            assert result.get("awaiting_user_input") is None or result.get("awaiting_user_input") is False
+
     def test_warning_verdict_does_not_increment_counters(self, physics_state):
         """Test that warning verdict does not increment any counters."""
         with patch("src.agents.execution.call_agent_with_metrics") as mock_llm:

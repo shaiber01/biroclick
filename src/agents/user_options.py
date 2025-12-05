@@ -503,6 +503,8 @@ _TRIGGER_ALIASES = {
     "no_stages_available": "planning_error",
     "invalid_backtrack_target": "planning_error",
     "backtrack_target_not_found": "planning_error",
+    # Design flaw limit (from physics_check) uses same options as design_review_limit
+    "design_flaw_limit": "design_review_limit",
 }
 
 

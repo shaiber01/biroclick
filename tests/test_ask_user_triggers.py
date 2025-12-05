@@ -31,6 +31,7 @@ class TestAskUserTriggersStructure:
         "material_checkpoint",
         "code_review_limit",
         "design_review_limit",
+        "design_flaw_limit",  # From physics_check when design_flaw verdict hits limit
         "execution_failure_limit",
         "physics_failure_limit",
         "analysis_limit",

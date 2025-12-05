@@ -29,6 +29,7 @@ from schemas.state import (
     get_validation_hierarchy,
     update_progress_stage_status,
     archive_stage_outputs_to_progress,
+    MAX_REPLANS,
 )
 from src.prompts import build_agent_prompt
 from src.llm_client import call_agent_with_metrics
@@ -39,6 +40,7 @@ from src.agents.helpers.validation import (
     breakdown_comparison_classifications,
 )
 from .trigger_handlers import handle_trigger
+from src.agents.user_options import get_options_prompt
 
 
 def _get_dependent_stages(plan: dict, target_stage_id: str) -> list:
@@ -379,6 +381,34 @@ def supervisor_node(state: ReproState) -> dict:
     # Normal supervision (not post-ask_user)
     else:
         _run_normal_supervision(state, result, system_prompt, current_stage_id, logger)
+    
+    # ═══════════════════════════════════════════════════════════════════════
+    # CHECK FOR REPLAN LIMIT: If supervisor returns replan_needed but we're
+    # already at the replan limit, set up ask_user state so the routing
+    # function doesn't send us to ask_user with empty questions.
+    # ═══════════════════════════════════════════════════════════════════════
+    verdict = result.get("supervisor_verdict")
+    if verdict == "replan_needed":
+        runtime_config = state.get("runtime_config") or {}
+        max_replans = runtime_config.get("max_replans", MAX_REPLANS)
+        current_replan_count = state.get("replan_count", 0)
+        
+        if current_replan_count >= max_replans:
+            logger.warning(
+                f"Supervisor returned replan_needed but replan_count ({current_replan_count}) "
+                f">= max_replans ({max_replans}). Setting up ask_user state."
+            )
+            feedback = result.get("supervisor_feedback", "No feedback available")
+            question = (
+                f"Supervisor requested replanning but replan limit reached.\n\n"
+                f"- Replan attempts: {current_replan_count}/{max_replans}\n"
+                f"- Supervisor feedback: {feedback}\n\n"
+                f"{get_options_prompt('replan_limit')}"
+            )
+            result["ask_user_trigger"] = "replan_limit"
+            result["pending_user_questions"] = [question]
+            result["awaiting_user_input"] = True
+            result["last_node_before_ask_user"] = "supervisor"
     
     # Log user interaction if one just happened
     # Log even if user_responses is empty (to track that user was asked)

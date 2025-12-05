@@ -342,15 +342,13 @@ def code_generator_node(state: ReproState) -> dict:
             f"Generated code is stub or empty (stub={is_stub}, empty={is_empty}). "
             "Code generation must produce valid simulation code."
         )
-        # Calculate new revision count respecting max
-        new_count, _ = increment_counter_with_max(
-            state, "code_revision_count", "max_code_revisions", MAX_CODE_REVISIONS
-        )
-        
+        # Don't increment code_revision_count here - let code_review be the sole
+        # owner of that counter to avoid double-counting. The graph routes
+        # generate_code -> code_review, and code_review will increment when it
+        # gives needs_revision verdict for this bad code.
         result: Dict[str, Any] = {
             "workflow_phase": "code_generation",
             "code": generated_code,
-            "code_revision_count": new_count,
             "reviewer_feedback": (
                 "ERROR: Generated code is empty or contains stub markers. "
                 "Code generation must produce valid Meep simulation code. "

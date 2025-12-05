@@ -915,6 +915,7 @@ TRIGGER_HANDLERS: Dict[str, Callable] = {
     "material_checkpoint": handle_material_checkpoint,
     "code_review_limit": handle_code_review_limit,
     "design_review_limit": handle_design_review_limit,
+    "design_flaw_limit": handle_design_review_limit,  # Same as design_review_limit (from physics_check)
     "execution_failure_limit": handle_execution_failure_limit,
     "physics_failure_limit": handle_physics_failure_limit,
     "analysis_limit": handle_analysis_limit,
