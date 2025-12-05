@@ -1,0 +1,13 @@
+{
+  "writes": [
+    {
+      "channel": "__resume__",
+      "value_type": "msgpack",
+      "value_data": "2etQUk9WSURFX0dVSURBTkNFOiAxLiBBc3N1bWUgdGhlIHdpZHRoIGlzIGdpdmVuIGluIEZXSE0uIFRoZW4gZml4IM6zIHNvIHRoYXQgdGhlIHJlc3VsdCBhbGlnbnMgd2l0aCB0aGUgcGFwZUU6IDEuIEFzc3VtZSB0aGUgd2lkdGggaXMgZ2l2ZW4gaW4gRldITS4gVGhlbiBmaXggzrMgc28gdGhhdCB0aGUgcmVzdWx0IGFsaWducyB3aXRoIHRoZSBwYXBlciAyLiB5ZXMuIDMuIEtvbmlnIElUTyBpcyBhY2NlcHRhYmxl"
+    }
+  ],
+  "task_id": "00000000-0000-0000-0000-000000000000",
+  "thread_id": "my_run_1",
+  "checkpoint_id": "1f0d2176-faf1-6ca2-8013-b58d9bea043c",
+  "saved_at": "2025-12-05T22:52:33.262118"
+}

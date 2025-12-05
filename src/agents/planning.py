@@ -459,12 +459,15 @@ def plan_reviewer_node(state: ReproState) -> dict:
     
     # Handle blocking issues or call LLM
     is_blocking_issue = bool(blocking_issues)
+    warning_issues = [i for i in validation_issues if i.startswith("PLAN_WARNING:")]
+    
     if blocking_issues:
+        # Include warnings alongside blocking issues for complete feedback
+        all_feedback = blocking_issues + (warning_issues if warning_issues else [])
         agent_output = {
             "verdict": "needs_revision",
             "issues": [{"severity": "blocking", "description": issue} for issue in blocking_issues],
-            "summary": f"Plan has {len(blocking_issues)} blocking issue(s) requiring revision",
-            "feedback": "The following issues must be resolved:\n" + "\n".join(blocking_issues),
+            "summary": f"Plan has {len(blocking_issues)} blocking issue(s) requiring revision:\n" + "\n".join(all_feedback),
         }
     else:
         user_content = f"# REPRODUCTION PLAN TO REVIEW\n\n```json\n{json.dumps(plan, indent=2)}\n```"

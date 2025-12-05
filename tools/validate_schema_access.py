@@ -636,6 +636,7 @@ class FieldAccessVisitor(ast.NodeVisitor):
         Patterns detected:
         - x = tracked_var.get("field", {})  -> derive x from tracked_var
         - x = tracked_var                   -> alias
+        - x = array_tracked_var[index]      -> derive x from array item
         """
         # Only handle simple single assignments
         if len(node.targets) != 1 or not isinstance(node.targets[0], ast.Name):
@@ -653,6 +654,27 @@ class FieldAccessVisitor(ast.NodeVisitor):
         # Check for: x = tracked_var (direct alias)
         elif isinstance(node.value, ast.Name) and node.value.id in self.tracked_vars:
             self._add_alias(target_name, node.value.id, node.lineno)
+        
+        # Check for: x = array_tracked_var[index] (subscript access on array)
+        elif isinstance(node.value, ast.Subscript):
+            var_name = self._get_var_name(node.value.value)
+            if var_name and var_name in self.tracked_vars:
+                if self._is_array_tracked_var(var_name):
+                    # Derive new tracked variable with same schema as array items
+                    tracked = self.tracked_vars[var_name]
+                    derived = TrackedVariable(
+                        name=target_name,
+                        schema_file=tracked.schema_file,
+                        json_pointer=tracked.json_pointer,  # Already points to /items
+                        source_var=var_name,
+                        source_field=None,
+                    )
+                    self.tracked_vars[target_name] = derived
+                    self.function_derived_vars[target_name] = derived
+                    self.derived_vars_log.append(
+                        f"  {target_name} <- {var_name}[index] "
+                        f"[pointer: {tracked.json_pointer}]"
+                    )
         
         self.generic_visit(node)
     
@@ -851,6 +873,93 @@ class FieldAccessVisitor(ast.NodeVisitor):
             if get_info:
                 parent_var, field = get_info
                 self._add_loop_var(node.target.id, parent_var, field, node.lineno)
+        
+        self.generic_visit(node)
+    
+    def _handle_comprehension(self, comp: ast.comprehension, lineno: int):
+        """
+        Handle a comprehension (used in generator expressions, list/dict/set comprehensions).
+        
+        Tracks loop variables when iterating over tracked variables or their .get() results.
+        Similar to visit_For but for comprehension syntax.
+        """
+        # Get the iterator expression
+        iter_expr = comp.iter
+        
+        # Handle: for x in (tracked_var or []) - common pattern with fallback
+        # Extract the tracked var from BoolOp (e.g., conservation_checks or [])
+        actual_iter = iter_expr
+        if isinstance(iter_expr, ast.BoolOp) and isinstance(iter_expr.op, ast.Or):
+            # Take the first value (the tracked var before 'or')
+            if iter_expr.values:
+                actual_iter = iter_expr.values[0]
+        
+        # Direct iteration: for x in tracked_var
+        var_name = self._get_var_name(actual_iter)
+        if var_name in self.tracked_vars:
+            if self._is_array_tracked_var(var_name):
+                # Track the loop variable with the array's items schema
+                if isinstance(comp.target, ast.Name):
+                    loop_var_name = comp.target.id
+                    tracked = self.tracked_vars[var_name]
+                    derived = TrackedVariable(
+                        name=loop_var_name,
+                        schema_file=tracked.schema_file,
+                        json_pointer=tracked.json_pointer,
+                        source_var=var_name,
+                        source_field=None,
+                    )
+                    self.tracked_vars[loop_var_name] = derived
+                    self.function_derived_vars[loop_var_name] = derived
+                    self.derived_vars_log.append(
+                        f"  {loop_var_name} <- comprehension over {var_name} "
+                        f"[pointer: {tracked.json_pointer}]"
+                    )
+        
+        # Iteration over .get() result: for x in tracked_var.get("items")
+        if isinstance(comp.target, ast.Name):
+            get_info = self._extract_get_call_info(actual_iter)
+            if get_info:
+                parent_var, field = get_info
+                self._add_loop_var(comp.target.id, parent_var, field, lineno)
+    
+    def visit_GeneratorExp(self, node: ast.GeneratorExp):
+        """
+        Handle generator expressions like: (x for x in items if x.get("status") == "pass")
+        
+        Tracks loop variables so field accesses inside the generator are validated.
+        """
+        for comp in node.generators:
+            self._handle_comprehension(comp, node.lineno)
+        
+        self.generic_visit(node)
+    
+    def visit_ListComp(self, node: ast.ListComp):
+        """
+        Handle list comprehensions like: [x.get("field") for x in items]
+        
+        Tracks loop variables so field accesses inside the comprehension are validated.
+        """
+        for comp in node.generators:
+            self._handle_comprehension(comp, node.lineno)
+        
+        self.generic_visit(node)
+    
+    def visit_SetComp(self, node: ast.SetComp):
+        """
+        Handle set comprehensions like: {x.get("field") for x in items}
+        """
+        for comp in node.generators:
+            self._handle_comprehension(comp, node.lineno)
+        
+        self.generic_visit(node)
+    
+    def visit_DictComp(self, node: ast.DictComp):
+        """
+        Handle dict comprehensions like: {x.get("key"): x.get("value") for x in items}
+        """
+        for comp in node.generators:
+            self._handle_comprehension(comp, node.lineno)
         
         self.generic_visit(node)
 

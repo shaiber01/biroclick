@@ -76,17 +76,27 @@ class GraphProgressCallback(BaseCallbackHandler):
         def _extract_trigger(obj):
             """Try to extract trigger from an Interrupt object."""
             try:
-                # Try attribute access (for dataclass/namedtuple)
+                # LangGraph 1.x: GraphInterrupt stores interrupts in args[0]
+                # Structure: GraphInterrupt.args[0][0].value = {"trigger": "...", ...}
+                if hasattr(obj, 'args') and obj.args and len(obj.args) > 0:
+                    interrupts = obj.args[0]
+                    if interrupts and len(interrupts) > 0:
+                        first_interrupt = interrupts[0]
+                        if hasattr(first_interrupt, 'value') and isinstance(first_interrupt.value, dict):
+                            return first_interrupt.value.get('trigger', 'unknown')
+                
+                # Direct Interrupt object: has .value attribute directly
                 if hasattr(obj, 'value'):
                     val = obj.value
                     if isinstance(val, dict):
                         return val.get('trigger', 'unknown')
-                # Try index access (for tuple-like)
+                
+                # Tuple of Interrupt objects (older LangGraph versions)
                 if hasattr(obj, '__getitem__'):
                     val = obj[0] if len(obj) > 0 else None
                     if isinstance(val, dict):
                         return val.get('trigger', 'unknown')
-            except (TypeError, IndexError, KeyError):
+            except (TypeError, IndexError, KeyError, AttributeError):
                 pass
             return None
         

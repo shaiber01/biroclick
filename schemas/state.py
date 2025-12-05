@@ -2685,9 +2685,14 @@ def validate_state_for_node(state: ReproState, node_name: str) -> List[str]:
         plan = state.get("plan", {})
         if plan:
             precision_issues = validate_plan_targets_precision(plan)
-            blocking = [i for i in precision_issues if i["severity"] == "blocking"]
-            for issue in blocking:
-                missing.append(f"PLAN_ISSUE: {issue['issue']}")
+            for issue in precision_issues:
+                suggestion = issue.get('suggestion', '')
+                suggestion_text = f"\n  -> Fix: {suggestion}" if suggestion else ""
+                
+                if issue["severity"] == "blocking":
+                    missing.append(f"PLAN_ISSUE: {issue['issue']}{suggestion_text}")
+                elif issue["severity"] == "warning":
+                    missing.append(f"PLAN_WARNING: {issue['issue']}{suggestion_text}")
     
     return missing
 

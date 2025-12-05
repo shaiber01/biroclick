@@ -34,16 +34,10 @@ When reviewing a reproduction plan, verify EVERY item:
   - Target quantities match what's shown in paper figures?
   - All relevant wavelength/parameter ranges covered?
 
-□ DIGITIZED DATA (for quantitative comparison) — ENFORCED RULE
+□ DIGITIZED DATA (for quantitative comparison)
   - precision_requirement set appropriately for each target?
-  - **BLOCKING RULE**: Targets with precision_requirement="excellent" (<2%) MUST have digitized_data_path
-    → This is validated by validate_plan_targets_precision() in state.py
-    → Plans violating this rule MUST be rejected with verdict="needs_revision"
-  - Cannot achieve <2% error comparing against PNG images (vision comparison)
-  - If target needs <2% precision but has no digitized data:
-    → Either: User must provide digitized (x,y) CSV via WebPlotDigitizer
-    → Or: Downgrade precision_requirement to "good" (5%) or "acceptable" (10%)
   - "good" precision targets SHOULD have digitized data (warning, not blocking)
+  - Note: "excellent" precision without digitized_data_path is caught programmatically before review
 
 □ STAGING
   - MANDATORY stages present:
@@ -173,10 +167,6 @@ HIGH PRIORITY (blocking):
 - Reproducible figure not assigned to any stage
 - Material used in stages but not validated in Stage 0
 - Circular dependencies in stage order
-- **ENFORCED**: Target with precision_requirement="excellent" but no digitized_data_path
-  → This is validated programmatically by validate_plan_targets_precision()
-  → MUST reject plan: "Cannot achieve <2% precision with vision-only comparison"
-  → Resolution: Either provide digitized (x,y) CSV or downgrade to "good" precision
 
 MEDIUM PRIORITY (major):
 - Parameter extracted from wrong section

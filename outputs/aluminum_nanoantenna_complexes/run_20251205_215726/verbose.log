@@ -82,3 +82,17 @@
 2025-12-05 22:17:34,830 - src.routing - INFO - physics: ask_user_trigger is set, routing to ask_user
 2025-12-05 22:17:34,831 - src.callbacks - INFO - 🔄 Entering node: ask_user
 2025-12-05 22:17:34,837 - src.callbacks - INFO - ⏸️  Graph paused for user input (trigger: unknown)
+2025-12-05 22:52:33,262 - src.callbacks - INFO - 🔄 Entering node: ask_user
+2025-12-05 22:52:33,263 - src.agents.user_interaction - INFO - ❓ ask_user: trigger=reviewer_escalation, 1 question(s), received response
+2025-12-05 22:52:33,263 - src.agents.user_interaction - INFO - 
+   ┌─── USER RESPONSE ───
+   │ PROVIDE_GUIDANCE: 1. Assume the width is given in FWHM. Then fix γ so that the result aligns with the papeE: 1. Assume the width is given in FWHM. Then fix γ so that the result aligns with the paper 2. yes. 3. Konig ITO is acceptable
+   └───────────────────
+2025-12-05 22:52:33,265 - src.callbacks - INFO - 🔄 Entering node: route_after_ask_user
+2025-12-05 22:52:33,267 - src.callbacks - INFO - 🔄 Entering node: supervisor
+2025-12-05 22:52:33,271 - src.agents.supervision.supervisor - INFO - ✅ supervisor: stage=stage0_material_validation, verdict=ok_continue (Continuing with user guidance for reviewer question.)
+2025-12-05 22:52:33,272 - src.callbacks - INFO - 🔄 Entering node: route_after_supervisor
+2025-12-05 22:52:33,276 - src.callbacks - INFO - 🔄 Entering node: material_checkpoint
+2025-12-05 22:52:33,279 - src.callbacks - INFO - 🔄 Entering node: route_after_material_checkpoint
+2025-12-05 22:52:33,282 - src.callbacks - INFO - 🔄 Entering node: ask_user
+2025-12-05 22:52:33,284 - src.callbacks - INFO - ⏸️  Graph paused for user input (trigger: unknown)
