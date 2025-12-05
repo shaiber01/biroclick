@@ -30,3 +30,498 @@
 2025-12-05 01:57:49,677 - src.callbacks - INFO - 🔄 Entering node: run_code
 2025-12-05 01:57:51,908 - src.code_runner - INFO - ⚡ run_code: stage=stage0_material_validation, FAILED in 2.2s (Simulation diverged (NaN/Inf detected)...)
 2025-12-05 01:57:51,909 - src.callbacks - INFO - 🔄 Entering node: execution_check
+2025-12-05 01:58:26,342 - httpx - INFO - HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2025-12-05 01:58:26,344 - src.agents.execution - INFO - ✅ execution_check: stage=stage0_material_validation, verdict=pass (Stage 0 material validation executed successfully with exit ...)
+2025-12-05 01:58:26,344 - src.callbacks - INFO - 🔄 Entering node: router
+2025-12-05 01:58:26,345 - src.routing - INFO - ✅ execution: verdict=pass → physics_check
+2025-12-05 01:58:26,345 - src.callbacks - INFO - 🔄 Entering node: physics_check
+2025-12-05 01:59:13,785 - httpx - INFO - HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2025-12-05 01:59:13,791 - src.agents.execution - INFO - ⚠️ physics_check: stage=stage0_material_validation, verdict=warning (Stage 0 material validation passes physics sanity checks wit...)
+2025-12-05 01:59:13,792 - src.callbacks - INFO - 🔄 Entering node: router
+2025-12-05 01:59:13,793 - src.routing - INFO - ⚠️ physics: verdict=warning → analyze
+2025-12-05 01:59:13,795 - src.callbacks - INFO - 🔄 Entering node: analyze
+2025-12-05 02:00:09,332 - httpx - INFO - HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2025-12-05 02:00:09,339 - src.agents.analysis - INFO - ❌ analyze: stage=stage0_material_validation, classification=ACCEPTABLE_MATCH, 0/1 targets matched
+2025-12-05 02:00:09,340 - src.callbacks - INFO - 🔄 Entering node: comparison_check
+2025-12-05 02:00:09,341 - src.callbacks - INFO - 🔄 Entering node: router
+2025-12-05 02:00:09,341 - src.routing - INFO - 🔄 comparison: verdict=needs_revision → analyze
+2025-12-05 02:00:09,342 - src.callbacks - INFO - 🔄 Entering node: analyze
+2025-12-05 02:01:37,577 - httpx - INFO - HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2025-12-05 02:01:37,587 - src.agents.analysis - INFO - ❌ analyze: stage=stage0_material_validation, classification=ACCEPTABLE_MATCH, 0/1 targets matched
+2025-12-05 02:01:37,588 - src.callbacks - INFO - 🔄 Entering node: comparison_check
+2025-12-05 02:01:37,590 - src.callbacks - INFO - 🔄 Entering node: router
+2025-12-05 02:01:37,591 - src.routing - WARNING - comparison: analysis_revision_count=2 >= max_analysis_revisions=2, escalating to ask_user
+2025-12-05 02:02:06,051 - src.callbacks - INFO - 🔄 Entering node: LangGraphUpdateState
+2025-12-05 02:02:06,054 - src.callbacks - INFO - 🔄 Entering node: router
+2025-12-05 02:02:06,055 - src.routing - WARNING - comparison: analysis_revision_count=2 >= max_analysis_revisions=2, escalating to ask_user
+2025-12-05 02:02:06,062 - src.callbacks - INFO - 🔄 Entering node: ask_user
+2025-12-05 02:02:06,063 - src.agents.user_interaction - INFO - ✅ ask_user: found pre-provided response for trigger 'analysis_limit' (from interrupt handler), skipping CLI prompt
+2025-12-05 02:02:06,063 - src.agents.user_interaction - INFO - ❓ ask_user (pre-provided): trigger=analysis_limit, 1 question(s)
+2025-12-05 02:02:06,063 - src.agents.user_interaction - INFO - 
+   ┌─── QUESTION 1 ───
+   │ Analysis revision limit (2) reached but results don't match paper.
+   │ 
+   │ Options:
+   │ - ACCEPT_PARTIAL: Mark stage as partial success and continue
+   │ - PROVIDE_HINT: Reset counter and retry with guidance
+   │ - STOP: End the workflow
+   └────────────────
+2025-12-05 02:02:06,063 - src.agents.user_interaction - INFO - 
+   ┌─── PRE-PROVIDED RESPONSE ───
+   │ accept partial
+   └───────────────────────────
+2025-12-05 02:02:06,064 - src.callbacks - INFO - 🔄 Entering node: route_after_ask_user
+2025-12-05 02:02:06,065 - src.callbacks - INFO - 🔄 Entering node: supervisor
+2025-12-05 02:02:06,067 - src.agents.supervision.supervisor - INFO - ✅ supervisor: stage=stage0_material_validation, verdict=ok_continue
+2025-12-05 02:02:06,067 - src.callbacks - INFO - 🔄 Entering node: route_after_supervisor
+2025-12-05 02:02:06,071 - src.callbacks - INFO - 🔄 Entering node: material_checkpoint
+2025-12-05 02:02:15,795 - src.callbacks - INFO - 🔄 Entering node: ask_user
+2025-12-05 02:02:15,796 - src.agents.user_interaction - INFO - ✅ ask_user: found pre-provided response for trigger 'material_checkpoint' (from interrupt handler), skipping CLI prompt
+2025-12-05 02:02:15,796 - src.agents.user_interaction - INFO - ❓ ask_user (pre-provided): trigger=material_checkpoint, 1 question(s)
+2025-12-05 02:02:15,796 - src.agents.user_interaction - INFO - 
+   ┌─── QUESTION 1 ───
+   │ ═══════════════════════════════════════════════════════════════════════
+   │ MANDATORY MATERIAL VALIDATION CHECKPOINT
+   │ ═══════════════════════════════════════════════════════════════════════
+   │ 
+   │ Stage 0 (Material Validation) has completed for paper: aluminum_nanoantenna_complexes
+   │ 
+   │ **Validated materials (will be used for all subsequent stages):**
+   │ - STAGE0 ALUMINUM EPSILON: source=stage0_output, file=stage0_aluminum_epsilon.csv
+   │ - STAGE0 GLASS EPSILON: source=stage0_output, file=stage0_glass_epsilon.csv
+   │ - STAGE0 ITO EPSILON: source=stage0_output, file=stage0_ito_epsilon.csv
+   │ - STAGE0 TDBC EPSILON: source=stage0_output, file=stage0_tdbc_epsilon.csv
+   │ 
+   │ **Generated plots:**
+   │ - stage0_aluminum_permittivity.png
+   │ - stage0_fig2a_tdbc_absorption.png
+   │ - stage0_materials_validation.png
+   │ 
+   │ Please review the material optical constants comparison plots above.
+   │ 
+   │ **Required confirmation:**
+   │ 
+   │ Do the simulated optical constants (n, k, ε) match the paper's data 
+   │ within acceptable tolerance?
+   │ 
+   │ Options:
+   │ 1. APPROVE - Material validation looks correct, proceed to Stage 1
+   │ 2. CHANGE_DATABASE - Use different material database (specify which)
+   │ 3. CHANGE_MATERIAL - Paper uses different material than assumed (specify which)
+   │ 4. NEED_HELP - Unclear how to validate, need guidance
+   │ 
+   │ Note: If you APPROVE, the validated_materials list above will be passed
+   │ to Code Generator for all subsequent stages.
+   │ 
+   │ Please respond with your choice and any notes.
+   │ ═══════════════════════════════════════════════════════════════════════
+   └────────────────
+2025-12-05 02:02:15,796 - src.agents.user_interaction - INFO - 
+   ┌─── PRE-PROVIDED RESPONSE ───
+   │ accept partial
+   └───────────────────────────
+2025-12-05 02:02:15,796 - src.callbacks - INFO - 🔄 Entering node: route_after_ask_user
+2025-12-05 02:02:15,798 - src.callbacks - INFO - 🔄 Entering node: supervisor
+2025-12-05 02:02:15,799 - src.agents.supervision.supervisor - INFO - ✅ supervisor: stage=stage0_material_validation, verdict=ok_continue (Material validation approved by user....)
+2025-12-05 02:02:15,800 - src.callbacks - INFO - 🔄 Entering node: route_after_supervisor
+2025-12-05 02:02:15,804 - src.callbacks - INFO - 🔄 Entering node: material_checkpoint
+2025-12-05 02:02:48,812 - src.callbacks - INFO - 🔄 Entering node: ask_user
+2025-12-05 02:02:48,814 - src.agents.user_interaction - INFO - ✅ ask_user: found pre-provided response for trigger 'material_checkpoint' (from interrupt handler), skipping CLI prompt
+2025-12-05 02:02:48,814 - src.agents.user_interaction - INFO - ❓ ask_user (pre-provided): trigger=material_checkpoint, 1 question(s)
+2025-12-05 02:02:48,814 - src.agents.user_interaction - INFO - 
+   ┌─── QUESTION 1 ───
+   │ ═══════════════════════════════════════════════════════════════════════
+   │ MANDATORY MATERIAL VALIDATION CHECKPOINT
+   │ ═══════════════════════════════════════════════════════════════════════
+   │ 
+   │ Stage 0 (Material Validation) has completed for paper: aluminum_nanoantenna_complexes
+   │ 
+   │ **Validated materials (will be used for all subsequent stages):**
+   │ - STAGE0 ALUMINUM EPSILON: source=stage0_output, file=stage0_aluminum_epsilon.csv
+   │ - STAGE0 GLASS EPSILON: source=stage0_output, file=stage0_glass_epsilon.csv
+   │ - STAGE0 ITO EPSILON: source=stage0_output, file=stage0_ito_epsilon.csv
+   │ - STAGE0 TDBC EPSILON: source=stage0_output, file=stage0_tdbc_epsilon.csv
+   │ 
+   │ **Generated plots:**
+   │ - stage0_aluminum_permittivity.png
+   │ - stage0_fig2a_tdbc_absorption.png
+   │ - stage0_materials_validation.png
+   │ 
+   │ Please review the material optical constants comparison plots above.
+   │ 
+   │ **Required confirmation:**
+   │ 
+   │ Do the simulated optical constants (n, k, ε) match the paper's data 
+   │ within acceptable tolerance?
+   │ 
+   │ Options:
+   │ 1. APPROVE - Material validation looks correct, proceed to Stage 1
+   │ 2. CHANGE_DATABASE - Use different material database (specify which)
+   │ 3. CHANGE_MATERIAL - Paper uses different material than assumed (specify which)
+   │ 4. NEED_HELP - Unclear how to validate, need guidance
+   │ 
+   │ Note: If you APPROVE, the validated_materials list above will be passed
+   │ to Code Generator for all subsequent stages.
+   │ 
+   │ Please respond with your choice and any notes.
+   │ ═══════════════════════════════════════════════════════════════════════
+   └────────────────
+2025-12-05 02:02:48,814 - src.agents.user_interaction - INFO - 
+   ┌─── PRE-PROVIDED RESPONSE ───
+   │ approve
+   └───────────────────────────
+2025-12-05 02:02:48,815 - src.callbacks - INFO - 🔄 Entering node: route_after_ask_user
+2025-12-05 02:02:48,817 - src.callbacks - INFO - 🔄 Entering node: supervisor
+2025-12-05 02:02:48,818 - src.agents.supervision.supervisor - INFO - ✅ supervisor: stage=stage0_material_validation, verdict=ok_continue (Material validation approved by user....)
+2025-12-05 02:02:48,819 - src.callbacks - INFO - 🔄 Entering node: route_after_supervisor
+2025-12-05 02:02:48,824 - src.callbacks - INFO - 🔄 Entering node: material_checkpoint
+2025-12-05 02:02:56,001 - src.callbacks - INFO - 🔄 Entering node: ask_user
+2025-12-05 02:02:56,002 - src.agents.user_interaction - INFO - ✅ ask_user: found pre-provided response for trigger 'material_checkpoint' (from interrupt handler), skipping CLI prompt
+2025-12-05 02:02:56,002 - src.agents.user_interaction - INFO - ❓ ask_user (pre-provided): trigger=material_checkpoint, 1 question(s)
+2025-12-05 02:02:56,003 - src.agents.user_interaction - INFO - 
+   ┌─── QUESTION 1 ───
+   │ ═══════════════════════════════════════════════════════════════════════
+   │ MANDATORY MATERIAL VALIDATION CHECKPOINT
+   │ ═══════════════════════════════════════════════════════════════════════
+   │ 
+   │ Stage 0 (Material Validation) has completed for paper: aluminum_nanoantenna_complexes
+   │ 
+   │ **Validated materials (will be used for all subsequent stages):**
+   │ - STAGE0 ALUMINUM EPSILON: source=stage0_output, file=stage0_aluminum_epsilon.csv
+   │ - STAGE0 GLASS EPSILON: source=stage0_output, file=stage0_glass_epsilon.csv
+   │ - STAGE0 ITO EPSILON: source=stage0_output, file=stage0_ito_epsilon.csv
+   │ - STAGE0 TDBC EPSILON: source=stage0_output, file=stage0_tdbc_epsilon.csv
+   │ 
+   │ **Generated plots:**
+   │ - stage0_aluminum_permittivity.png
+   │ - stage0_fig2a_tdbc_absorption.png
+   │ - stage0_materials_validation.png
+   │ 
+   │ Please review the material optical constants comparison plots above.
+   │ 
+   │ **Required confirmation:**
+   │ 
+   │ Do the simulated optical constants (n, k, ε) match the paper's data 
+   │ within acceptable tolerance?
+   │ 
+   │ Options:
+   │ 1. APPROVE - Material validation looks correct, proceed to Stage 1
+   │ 2. CHANGE_DATABASE - Use different material database (specify which)
+   │ 3. CHANGE_MATERIAL - Paper uses different material than assumed (specify which)
+   │ 4. NEED_HELP - Unclear how to validate, need guidance
+   │ 
+   │ Note: If you APPROVE, the validated_materials list above will be passed
+   │ to Code Generator for all subsequent stages.
+   │ 
+   │ Please respond with your choice and any notes.
+   │ ═══════════════════════════════════════════════════════════════════════
+   └────────────────
+2025-12-05 02:02:56,003 - src.agents.user_interaction - INFO - 
+   ┌─── PRE-PROVIDED RESPONSE ───
+   │ APPROVE
+   └───────────────────────────
+2025-12-05 02:02:56,003 - src.callbacks - INFO - 🔄 Entering node: route_after_ask_user
+2025-12-05 02:02:56,006 - src.callbacks - INFO - 🔄 Entering node: supervisor
+2025-12-05 02:02:56,008 - src.agents.supervision.supervisor - INFO - ✅ supervisor: stage=stage0_material_validation, verdict=ok_continue (Material validation approved by user....)
+2025-12-05 02:02:56,008 - src.callbacks - INFO - 🔄 Entering node: route_after_supervisor
+2025-12-05 02:02:56,016 - src.callbacks - INFO - 🔄 Entering node: material_checkpoint
+2025-12-05 02:02:59,710 - src.callbacks - INFO - 🔄 Entering node: ask_user
+2025-12-05 02:02:59,711 - src.agents.user_interaction - INFO - ✅ ask_user: found pre-provided response for trigger 'material_checkpoint' (from interrupt handler), skipping CLI prompt
+2025-12-05 02:02:59,711 - src.agents.user_interaction - INFO - ❓ ask_user (pre-provided): trigger=material_checkpoint, 1 question(s)
+2025-12-05 02:02:59,712 - src.agents.user_interaction - INFO - 
+   ┌─── QUESTION 1 ───
+   │ ═══════════════════════════════════════════════════════════════════════
+   │ MANDATORY MATERIAL VALIDATION CHECKPOINT
+   │ ═══════════════════════════════════════════════════════════════════════
+   │ 
+   │ Stage 0 (Material Validation) has completed for paper: aluminum_nanoantenna_complexes
+   │ 
+   │ **Validated materials (will be used for all subsequent stages):**
+   │ - STAGE0 ALUMINUM EPSILON: source=stage0_output, file=stage0_aluminum_epsilon.csv
+   │ - STAGE0 GLASS EPSILON: source=stage0_output, file=stage0_glass_epsilon.csv
+   │ - STAGE0 ITO EPSILON: source=stage0_output, file=stage0_ito_epsilon.csv
+   │ - STAGE0 TDBC EPSILON: source=stage0_output, file=stage0_tdbc_epsilon.csv
+   │ 
+   │ **Generated plots:**
+   │ - stage0_aluminum_permittivity.png
+   │ - stage0_fig2a_tdbc_absorption.png
+   │ - stage0_materials_validation.png
+   │ 
+   │ Please review the material optical constants comparison plots above.
+   │ 
+   │ **Required confirmation:**
+   │ 
+   │ Do the simulated optical constants (n, k, ε) match the paper's data 
+   │ within acceptable tolerance?
+   │ 
+   │ Options:
+   │ 1. APPROVE - Material validation looks correct, proceed to Stage 1
+   │ 2. CHANGE_DATABASE - Use different material database (specify which)
+   │ 3. CHANGE_MATERIAL - Paper uses different material than assumed (specify which)
+   │ 4. NEED_HELP - Unclear how to validate, need guidance
+   │ 
+   │ Note: If you APPROVE, the validated_materials list above will be passed
+   │ to Code Generator for all subsequent stages.
+   │ 
+   │ Please respond with your choice and any notes.
+   │ ═══════════════════════════════════════════════════════════════════════
+   └────────────────
+2025-12-05 02:02:59,712 - src.agents.user_interaction - INFO - 
+   ┌─── PRE-PROVIDED RESPONSE ───
+   │ APPROVE
+   └───────────────────────────
+2025-12-05 02:02:59,713 - src.callbacks - INFO - 🔄 Entering node: route_after_ask_user
+2025-12-05 02:02:59,714 - src.callbacks - INFO - 🔄 Entering node: supervisor
+2025-12-05 02:02:59,715 - src.agents.supervision.supervisor - INFO - ✅ supervisor: stage=stage0_material_validation, verdict=ok_continue (Material validation approved by user....)
+2025-12-05 02:02:59,715 - src.callbacks - INFO - 🔄 Entering node: route_after_supervisor
+2025-12-05 02:02:59,721 - src.callbacks - INFO - 🔄 Entering node: material_checkpoint
+2025-12-05 02:03:01,478 - src.callbacks - INFO - 🔄 Entering node: ask_user
+2025-12-05 02:03:01,479 - src.agents.user_interaction - INFO - ✅ ask_user: found pre-provided response for trigger 'material_checkpoint' (from interrupt handler), skipping CLI prompt
+2025-12-05 02:03:01,479 - src.agents.user_interaction - INFO - ❓ ask_user (pre-provided): trigger=material_checkpoint, 1 question(s)
+2025-12-05 02:03:01,479 - src.agents.user_interaction - INFO - 
+   ┌─── QUESTION 1 ───
+   │ ═══════════════════════════════════════════════════════════════════════
+   │ MANDATORY MATERIAL VALIDATION CHECKPOINT
+   │ ═══════════════════════════════════════════════════════════════════════
+   │ 
+   │ Stage 0 (Material Validation) has completed for paper: aluminum_nanoantenna_complexes
+   │ 
+   │ **Validated materials (will be used for all subsequent stages):**
+   │ - STAGE0 ALUMINUM EPSILON: source=stage0_output, file=stage0_aluminum_epsilon.csv
+   │ - STAGE0 GLASS EPSILON: source=stage0_output, file=stage0_glass_epsilon.csv
+   │ - STAGE0 ITO EPSILON: source=stage0_output, file=stage0_ito_epsilon.csv
+   │ - STAGE0 TDBC EPSILON: source=stage0_output, file=stage0_tdbc_epsilon.csv
+   │ 
+   │ **Generated plots:**
+   │ - stage0_aluminum_permittivity.png
+   │ - stage0_fig2a_tdbc_absorption.png
+   │ - stage0_materials_validation.png
+   │ 
+   │ Please review the material optical constants comparison plots above.
+   │ 
+   │ **Required confirmation:**
+   │ 
+   │ Do the simulated optical constants (n, k, ε) match the paper's data 
+   │ within acceptable tolerance?
+   │ 
+   │ Options:
+   │ 1. APPROVE - Material validation looks correct, proceed to Stage 1
+   │ 2. CHANGE_DATABASE - Use different material database (specify which)
+   │ 3. CHANGE_MATERIAL - Paper uses different material than assumed (specify which)
+   │ 4. NEED_HELP - Unclear how to validate, need guidance
+   │ 
+   │ Note: If you APPROVE, the validated_materials list above will be passed
+   │ to Code Generator for all subsequent stages.
+   │ 
+   │ Please respond with your choice and any notes.
+   │ ═══════════════════════════════════════════════════════════════════════
+   └────────────────
+2025-12-05 02:03:01,479 - src.agents.user_interaction - INFO - 
+   ┌─── PRE-PROVIDED RESPONSE ───
+   │ APPROVE
+   └───────────────────────────
+2025-12-05 02:03:01,480 - src.callbacks - INFO - 🔄 Entering node: route_after_ask_user
+2025-12-05 02:03:01,481 - src.callbacks - INFO - 🔄 Entering node: supervisor
+2025-12-05 02:03:01,481 - src.agents.supervision.supervisor - INFO - ✅ supervisor: stage=stage0_material_validation, verdict=ok_continue (Material validation approved by user....)
+2025-12-05 02:03:01,482 - src.callbacks - INFO - 🔄 Entering node: route_after_supervisor
+2025-12-05 02:03:01,485 - src.callbacks - INFO - 🔄 Entering node: material_checkpoint
+2025-12-05 02:03:02,545 - src.callbacks - INFO - 🔄 Entering node: ask_user
+2025-12-05 02:03:02,546 - src.agents.user_interaction - INFO - ✅ ask_user: found pre-provided response for trigger 'material_checkpoint' (from interrupt handler), skipping CLI prompt
+2025-12-05 02:03:02,546 - src.agents.user_interaction - INFO - ❓ ask_user (pre-provided): trigger=material_checkpoint, 1 question(s)
+2025-12-05 02:03:02,547 - src.agents.user_interaction - INFO - 
+   ┌─── QUESTION 1 ───
+   │ ═══════════════════════════════════════════════════════════════════════
+   │ MANDATORY MATERIAL VALIDATION CHECKPOINT
+   │ ═══════════════════════════════════════════════════════════════════════
+   │ 
+   │ Stage 0 (Material Validation) has completed for paper: aluminum_nanoantenna_complexes
+   │ 
+   │ **Validated materials (will be used for all subsequent stages):**
+   │ - STAGE0 ALUMINUM EPSILON: source=stage0_output, file=stage0_aluminum_epsilon.csv
+   │ - STAGE0 GLASS EPSILON: source=stage0_output, file=stage0_glass_epsilon.csv
+   │ - STAGE0 ITO EPSILON: source=stage0_output, file=stage0_ito_epsilon.csv
+   │ - STAGE0 TDBC EPSILON: source=stage0_output, file=stage0_tdbc_epsilon.csv
+   │ 
+   │ **Generated plots:**
+   │ - stage0_aluminum_permittivity.png
+   │ - stage0_fig2a_tdbc_absorption.png
+   │ - stage0_materials_validation.png
+   │ 
+   │ Please review the material optical constants comparison plots above.
+   │ 
+   │ **Required confirmation:**
+   │ 
+   │ Do the simulated optical constants (n, k, ε) match the paper's data 
+   │ within acceptable tolerance?
+   │ 
+   │ Options:
+   │ 1. APPROVE - Material validation looks correct, proceed to Stage 1
+   │ 2. CHANGE_DATABASE - Use different material database (specify which)
+   │ 3. CHANGE_MATERIAL - Paper uses different material than assumed (specify which)
+   │ 4. NEED_HELP - Unclear how to validate, need guidance
+   │ 
+   │ Note: If you APPROVE, the validated_materials list above will be passed
+   │ to Code Generator for all subsequent stages.
+   │ 
+   │ Please respond with your choice and any notes.
+   │ ═══════════════════════════════════════════════════════════════════════
+   └────────────────
+2025-12-05 02:03:02,547 - src.agents.user_interaction - INFO - 
+   ┌─── PRE-PROVIDED RESPONSE ───
+   │ APPROVE
+   └───────────────────────────
+2025-12-05 02:03:02,548 - src.callbacks - INFO - 🔄 Entering node: route_after_ask_user
+2025-12-05 02:03:02,550 - src.callbacks - INFO - 🔄 Entering node: supervisor
+2025-12-05 02:03:02,552 - src.agents.supervision.supervisor - INFO - ✅ supervisor: stage=stage0_material_validation, verdict=ok_continue (Material validation approved by user....)
+2025-12-05 02:03:02,553 - src.callbacks - INFO - 🔄 Entering node: route_after_supervisor
+2025-12-05 02:03:02,559 - src.callbacks - INFO - 🔄 Entering node: material_checkpoint
+2025-12-05 02:03:03,584 - src.callbacks - INFO - 🔄 Entering node: ask_user
+2025-12-05 02:03:03,585 - src.agents.user_interaction - INFO - ✅ ask_user: found pre-provided response for trigger 'material_checkpoint' (from interrupt handler), skipping CLI prompt
+2025-12-05 02:03:03,585 - src.agents.user_interaction - INFO - ❓ ask_user (pre-provided): trigger=material_checkpoint, 1 question(s)
+2025-12-05 02:03:03,585 - src.agents.user_interaction - INFO - 
+   ┌─── QUESTION 1 ───
+   │ ═══════════════════════════════════════════════════════════════════════
+   │ MANDATORY MATERIAL VALIDATION CHECKPOINT
+   │ ═══════════════════════════════════════════════════════════════════════
+   │ 
+   │ Stage 0 (Material Validation) has completed for paper: aluminum_nanoantenna_complexes
+   │ 
+   │ **Validated materials (will be used for all subsequent stages):**
+   │ - STAGE0 ALUMINUM EPSILON: source=stage0_output, file=stage0_aluminum_epsilon.csv
+   │ - STAGE0 GLASS EPSILON: source=stage0_output, file=stage0_glass_epsilon.csv
+   │ - STAGE0 ITO EPSILON: source=stage0_output, file=stage0_ito_epsilon.csv
+   │ - STAGE0 TDBC EPSILON: source=stage0_output, file=stage0_tdbc_epsilon.csv
+   │ 
+   │ **Generated plots:**
+   │ - stage0_aluminum_permittivity.png
+   │ - stage0_fig2a_tdbc_absorption.png
+   │ - stage0_materials_validation.png
+   │ 
+   │ Please review the material optical constants comparison plots above.
+   │ 
+   │ **Required confirmation:**
+   │ 
+   │ Do the simulated optical constants (n, k, ε) match the paper's data 
+   │ within acceptable tolerance?
+   │ 
+   │ Options:
+   │ 1. APPROVE - Material validation looks correct, proceed to Stage 1
+   │ 2. CHANGE_DATABASE - Use different material database (specify which)
+   │ 3. CHANGE_MATERIAL - Paper uses different material than assumed (specify which)
+   │ 4. NEED_HELP - Unclear how to validate, need guidance
+   │ 
+   │ Note: If you APPROVE, the validated_materials list above will be passed
+   │ to Code Generator for all subsequent stages.
+   │ 
+   │ Please respond with your choice and any notes.
+   │ ═══════════════════════════════════════════════════════════════════════
+   └────────────────
+2025-12-05 02:03:03,585 - src.agents.user_interaction - INFO - 
+   ┌─── PRE-PROVIDED RESPONSE ───
+   │ APPROVE
+   └───────────────────────────
+2025-12-05 02:03:03,586 - src.callbacks - INFO - 🔄 Entering node: route_after_ask_user
+2025-12-05 02:03:03,587 - src.callbacks - INFO - 🔄 Entering node: supervisor
+2025-12-05 02:03:03,588 - src.agents.supervision.supervisor - INFO - ✅ supervisor: stage=stage0_material_validation, verdict=ok_continue (Material validation approved by user....)
+2025-12-05 02:03:03,588 - src.callbacks - INFO - 🔄 Entering node: route_after_supervisor
+2025-12-05 02:03:03,592 - src.callbacks - INFO - 🔄 Entering node: material_checkpoint
+2025-12-05 02:03:15,970 - src.callbacks - INFO - 🔄 Entering node: ask_user
+2025-12-05 02:03:15,971 - src.agents.user_interaction - INFO - ✅ ask_user: found pre-provided response for trigger 'material_checkpoint' (from interrupt handler), skipping CLI prompt
+2025-12-05 02:03:15,971 - src.agents.user_interaction - INFO - ❓ ask_user (pre-provided): trigger=material_checkpoint, 1 question(s)
+2025-12-05 02:03:15,971 - src.agents.user_interaction - INFO - 
+   ┌─── QUESTION 1 ───
+   │ ═══════════════════════════════════════════════════════════════════════
+   │ MANDATORY MATERIAL VALIDATION CHECKPOINT
+   │ ═══════════════════════════════════════════════════════════════════════
+   │ 
+   │ Stage 0 (Material Validation) has completed for paper: aluminum_nanoantenna_complexes
+   │ 
+   │ **Validated materials (will be used for all subsequent stages):**
+   │ - STAGE0 ALUMINUM EPSILON: source=stage0_output, file=stage0_aluminum_epsilon.csv
+   │ - STAGE0 GLASS EPSILON: source=stage0_output, file=stage0_glass_epsilon.csv
+   │ - STAGE0 ITO EPSILON: source=stage0_output, file=stage0_ito_epsilon.csv
+   │ - STAGE0 TDBC EPSILON: source=stage0_output, file=stage0_tdbc_epsilon.csv
+   │ 
+   │ **Generated plots:**
+   │ - stage0_aluminum_permittivity.png
+   │ - stage0_fig2a_tdbc_absorption.png
+   │ - stage0_materials_validation.png
+   │ 
+   │ Please review the material optical constants comparison plots above.
+   │ 
+   │ **Required confirmation:**
+   │ 
+   │ Do the simulated optical constants (n, k, ε) match the paper's data 
+   │ within acceptable tolerance?
+   │ 
+   │ Options:
+   │ 1. APPROVE - Material validation looks correct, proceed to Stage 1
+   │ 2. CHANGE_DATABASE - Use different material database (specify which)
+   │ 3. CHANGE_MATERIAL - Paper uses different material than assumed (specify which)
+   │ 4. NEED_HELP - Unclear how to validate, need guidance
+   │ 
+   │ Note: If you APPROVE, the validated_materials list above will be passed
+   │ to Code Generator for all subsequent stages.
+   │ 
+   │ Please respond with your choice and any notes.
+   │ ═══════════════════════════════════════════════════════════════════════
+   └────────────────
+2025-12-05 02:03:15,972 - src.agents.user_interaction - INFO - 
+   ┌─── PRE-PROVIDED RESPONSE ───
+   │ APPROVE
+   └───────────────────────────
+2025-12-05 02:03:15,973 - src.callbacks - INFO - 🔄 Entering node: route_after_ask_user
+2025-12-05 02:03:15,976 - src.callbacks - INFO - 🔄 Entering node: supervisor
+2025-12-05 02:03:15,978 - src.agents.supervision.supervisor - INFO - ✅ supervisor: stage=stage0_material_validation, verdict=ok_continue (Material validation approved by user....)
+2025-12-05 02:03:15,978 - src.callbacks - INFO - 🔄 Entering node: route_after_supervisor
+2025-12-05 02:03:15,985 - src.callbacks - INFO - 🔄 Entering node: material_checkpoint
+2025-12-05 02:03:27,942 - src.callbacks - INFO - 🔄 Entering node: ask_user
+2025-12-05 02:03:27,943 - src.agents.user_interaction - INFO - ✅ ask_user: found pre-provided response for trigger 'material_checkpoint' (from interrupt handler), skipping CLI prompt
+2025-12-05 02:03:27,944 - src.agents.user_interaction - INFO - ❓ ask_user (pre-provided): trigger=material_checkpoint, 1 question(s)
+2025-12-05 02:03:27,944 - src.agents.user_interaction - INFO - 
+   ┌─── QUESTION 1 ───
+   │ ═══════════════════════════════════════════════════════════════════════
+   │ MANDATORY MATERIAL VALIDATION CHECKPOINT
+   │ ═══════════════════════════════════════════════════════════════════════
+   │ 
+   │ Stage 0 (Material Validation) has completed for paper: aluminum_nanoantenna_complexes
+   │ 
+   │ **Validated materials (will be used for all subsequent stages):**
+   │ - STAGE0 ALUMINUM EPSILON: source=stage0_output, file=stage0_aluminum_epsilon.csv
+   │ - STAGE0 GLASS EPSILON: source=stage0_output, file=stage0_glass_epsilon.csv
+   │ - STAGE0 ITO EPSILON: source=stage0_output, file=stage0_ito_epsilon.csv
+   │ - STAGE0 TDBC EPSILON: source=stage0_output, file=stage0_tdbc_epsilon.csv
+   │ 
+   │ **Generated plots:**
+   │ - stage0_aluminum_permittivity.png
+   │ - stage0_fig2a_tdbc_absorption.png
+   │ - stage0_materials_validation.png
+   │ 
+   │ Please review the material optical constants comparison plots above.
+   │ 
+   │ **Required confirmation:**
+   │ 
+   │ Do the simulated optical constants (n, k, ε) match the paper's data 
+   │ within acceptable tolerance?
+   │ 
+   │ Options:
+   │ 1. APPROVE - Material validation looks correct, proceed to Stage 1
+   │ 2. CHANGE_DATABASE - Use different material database (specify which)
+   │ 3. CHANGE_MATERIAL - Paper uses different material than assumed (specify which)
+   │ 4. NEED_HELP - Unclear how to validate, need guidance
+   │ 
+   │ Note: If you APPROVE, the validated_materials list above will be passed
+   │ to Code Generator for all subsequent stages.
+   │ 
+   │ Please respond with your choice and any notes.
+   │ ═══════════════════════════════════════════════════════════════════════
+   └────────────────
+2025-12-05 02:03:27,944 - src.agents.user_interaction - INFO - 
+   ┌─── PRE-PROVIDED RESPONSE ───
+   │ APPROVE
+   └───────────────────────────
+2025-12-05 02:03:27,945 - src.callbacks - INFO - 🔄 Entering node: route_after_ask_user
+2025-12-05 02:03:27,947 - src.callbacks - INFO - 🔄 Entering node: supervisor
+2025-12-05 02:03:27,948 - src.agents.supervision.supervisor - INFO - ✅ supervisor: stage=stage0_material_validation, verdict=ok_continue (Material validation approved by user....)
+2025-12-05 02:03:27,949 - src.callbacks - INFO - 🔄 Entering node: route_after_supervisor
+2025-12-05 02:03:27,955 - src.callbacks - INFO - 🔄 Entering node: material_checkpoint
