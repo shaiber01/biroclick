@@ -72,17 +72,24 @@ def _derive_schema_filename(agent_name: str) -> str:
     return f"{agent_name}_output_schema.json"
 
 
-def build_agent_schema_mapping() -> Dict[str, Dict[str, str]]:
+@dataclass
+class AgentSchemaInfo:
+    """Info about an agent's LLM output variable and schema."""
+    variable_name: str  # The variable name used (e.g., "agent_output", "result", "llm_response")
+    schema_file: str  # The schema file (e.g., "planner_output_schema.json")
+
+
+def build_agent_schema_mapping() -> Dict[str, Dict[str, AgentSchemaInfo]]:
     """
     Dynamically build agent-to-schema mapping by scanning agent files.
     
-    Scans for `agent_output = call_agent_with_metrics(agent_name="xxx", ...)` patterns
-    and extracts the agent_name to determine the schema file.
+    Scans for `<var> = call_agent_with_metrics(agent_name="xxx", ...)` patterns
+    and extracts BOTH the variable name AND the agent_name to determine the schema.
     
     Returns:
-        Dict mapping relative file paths to {function_name: schema_file}
+        Dict mapping relative file paths to {function_name: AgentSchemaInfo}
     """
-    mapping: Dict[str, Dict[str, str]] = {}
+    mapping: Dict[str, Dict[str, AgentSchemaInfo]] = {}
     warnings: List[str] = []
     
     for agent_file in AGENTS_DIR.rglob("*.py"):
@@ -96,12 +103,13 @@ def build_agent_schema_mapping() -> Dict[str, Dict[str, str]]:
         rel_path = str(agent_file.relative_to(AGENTS_DIR))
         
         for node in ast.walk(tree):
-            # Look for: agent_output = call_agent_with_metrics(...)
+            # Look for: <any_var> = call_agent_with_metrics(...)
             if isinstance(node, ast.Assign):
-                # Check if assigning to 'agent_output'
+                # Check if single assignment to a simple variable
                 if (len(node.targets) == 1 and 
-                    isinstance(node.targets[0], ast.Name) and 
-                    node.targets[0].id == "agent_output"):
+                    isinstance(node.targets[0], ast.Name)):
+                    
+                    var_name = node.targets[0].id
                     
                     # Check if RHS is call_agent_with_metrics(...)
                     if (isinstance(node.value, ast.Call) and
@@ -125,7 +133,10 @@ def build_agent_schema_mapping() -> Dict[str, Dict[str, str]]:
                                 
                                 if rel_path not in mapping:
                                     mapping[rel_path] = {}
-                                mapping[rel_path][func_name] = schema_file
+                                mapping[rel_path][func_name] = AgentSchemaInfo(
+                                    variable_name=var_name,
+                                    schema_file=schema_file,
+                                )
     
     # Print warnings if any
     if warnings:
@@ -136,7 +147,7 @@ def build_agent_schema_mapping() -> Dict[str, Dict[str, str]]:
 
 
 # Build the mapping at module load time
-AGENT_OUTPUT_SCHEMA_MAPPING: Dict[str, Dict[str, str]] = build_agent_schema_mapping()
+AGENT_OUTPUT_SCHEMA_MAPPING: Dict[str, Dict[str, AgentSchemaInfo]] = build_agent_schema_mapping()
 
 # Maps derived variable names to their schema location
 # Format: "schema_file.json#json/pointer/path"
@@ -149,22 +160,27 @@ def get_base_tracked_variables() -> Dict[str, "TrackedVariable"]:
     """
     Build the base set of tracked variables dynamically.
     
-    This replaces the old static TRACKED_VARIABLES set with a dictionary
-    that includes schema context for each tracked variable.
+    Extracts all unique variable names from AGENT_OUTPUT_SCHEMA_MAPPING
+    (which detects the actual variable names used in each function, not
+    just hardcoded "agent_output").
     
     Returns:
         Dict mapping variable names to TrackedVariable with schema info.
     """
-    # Import here to avoid circular dependency (TrackedVariable defined later)
     result: Dict[str, TrackedVariable] = {}
     
-    # Add "agent_output" - schema is determined per-function by AGENT_OUTPUT_SCHEMA_MAPPING
-    # We use a placeholder schema that will be resolved dynamically during validation
-    result["agent_output"] = TrackedVariable(
-        name="agent_output",
-        schema_file="",  # Resolved dynamically per function
-        json_pointer="",
-    )
+    # Extract all unique variable names from the schema mapping
+    # These are the actual variable names used for LLM output (e.g., "agent_output", "result", etc.)
+    for file_funcs in AGENT_OUTPUT_SCHEMA_MAPPING.values():
+        for func_name, schema_info in file_funcs.items():
+            var_name = schema_info.variable_name
+            if var_name not in result:
+                # Schema is resolved dynamically per-function, so we use placeholder
+                result[var_name] = TrackedVariable(
+                    name=var_name,
+                    schema_file="",  # Resolved dynamically per function
+                    json_pointer="",
+                )
     
     # Add derived variables from DERIVED_VAR_SCHEMAS
     for var_name, schema_pointer in DERIVED_VAR_SCHEMAS.items():
@@ -401,7 +417,8 @@ class FieldAccessVisitor(ast.NodeVisitor):
     - Variable aliasing: out = agent_output; out.get("field")
     """
     
-    def __init__(self, source_lines: List[str], tracked_vars: Dict[str, TrackedVariable]):
+    def __init__(self, source_lines: List[str], tracked_vars: Dict[str, TrackedVariable], 
+                 rel_file_path: str = ""):
         self.source_lines = source_lines
         # Base tracked variables (e.g., agent_output)
         self.base_tracked_vars = tracked_vars.copy()
@@ -414,6 +431,8 @@ class FieldAccessVisitor(ast.NodeVisitor):
         self.violations: List[Violation] = []
         self.current_function: Optional[str] = None
         self.file_path: str = ""
+        # Relative file path (for schema lookup by function)
+        self.rel_file_path: str = rel_file_path
         # Track derived variables for verbose output
         self.derived_vars_log: List[str] = []
     
@@ -430,6 +449,20 @@ class FieldAccessVisitor(ast.NodeVisitor):
         self.function_derived_vars.clear()
         # Reset tracked_vars to base + any global derived vars
         self.tracked_vars = self.base_tracked_vars.copy()
+        
+        # Inject schema info for LLM output variable in this function
+        # This enables derived variable tracking (e.g., geometry_spec = agent_output.get("geometry"))
+        if self.rel_file_path:
+            schema_info = get_schema_info_for_function(self.rel_file_path, func_name)
+            if schema_info:
+                var_name = schema_info.variable_name
+                if var_name in self.tracked_vars:
+                    # Update the tracked variable with the actual schema for this function
+                    self.tracked_vars[var_name] = TrackedVariable(
+                        name=var_name,
+                        schema_file=schema_info.schema_file,
+                        json_pointer="",  # Top-level
+                    )
     
     def _exit_function(self, old_func: Optional[str]):
         """Exit a function scope."""
@@ -475,6 +508,18 @@ class FieldAccessVisitor(ast.NodeVisitor):
         return (isinstance(node, ast.Call) and
                 isinstance(node.func, ast.Attribute) and
                 node.func.attr == "get")
+    
+    def _is_array_tracked_var(self, var_name: str) -> bool:
+        """
+        Check if a tracked variable is an array/list type.
+        
+        Array-typed tracked variables have json_pointer ending with /items
+        (meaning they came from iterating over or extracting an array field).
+        """
+        tracked = self.tracked_vars.get(var_name)
+        if tracked and tracked.json_pointer:
+            return tracked.json_pointer.endswith("/items")
+        return False
     
     def _extract_get_call_info(self, node: ast.Call) -> Optional[tuple]:
         """
@@ -685,29 +730,38 @@ class FieldAccessVisitor(ast.NodeVisitor):
         self.generic_visit(node)
     
     def visit_Subscript(self, node: ast.Subscript):
-        """Handle subscript access like obj["field"].
+        """Handle subscript access like obj["field"] or list[0].
         
         Only flags READ access (ctx=Load). WRITE access (ctx=Store) is allowed
         since dict["key"] = value is the standard way to set values.
+        
+        Also allows numeric index access on array-typed tracked variables,
+        since list[0] is a valid pattern for accessing list elements.
         """
         var_name = self._get_var_name(node.value)
         if var_name in self.tracked_vars:
             # Only flag READ access, not WRITE (Store) or DELETE (Del)
             if isinstance(node.ctx, ast.Load):
-                snippet = self.get_snippet(node.lineno)
-                field = self._get_static_string(node.slice)
-                
-                # Subscript READ access is NOT in whitelist (only .get() is allowed for reads)
-                self.violations.append(Violation(
-                    file=self.file_path,
-                    line=node.lineno,
-                    col=node.col_offset,
-                    type=ViolationType.PATTERN_NOT_WHITELISTED,
-                    message=f"Subscript read access obj[key] not in whitelist for '{var_name}'. Use .get() instead.",
-                    code_snippet=snippet,
-                    field=field,
-                    variable=var_name,
-                ))
+                # Allow numeric index access on array-typed variables (e.g., adaptations[0])
+                is_numeric_index = isinstance(node.slice, ast.Constant) and isinstance(node.slice.value, int)
+                if is_numeric_index and self._is_array_tracked_var(var_name):
+                    # This is valid list index access, don't flag
+                    pass
+                else:
+                    snippet = self.get_snippet(node.lineno)
+                    field = self._get_static_string(node.slice)
+                    
+                    # Subscript READ access is NOT in whitelist (only .get() is allowed for reads)
+                    self.violations.append(Violation(
+                        file=self.file_path,
+                        line=node.lineno,
+                        col=node.col_offset,
+                        type=ViolationType.PATTERN_NOT_WHITELISTED,
+                        message=f"Subscript read access obj[key] not in whitelist for '{var_name}'. Use .get() instead.",
+                        code_snippet=snippet,
+                        field=field,
+                        variable=var_name,
+                    ))
         
         self.generic_visit(node)
     
@@ -750,22 +804,45 @@ class FieldAccessVisitor(ast.NodeVisitor):
         """
         Handle for-loop iteration.
         
-        - Direct iteration over tracked var: flag as violation
+        - Direct iteration over dict-typed tracked var: flag as violation
+        - Direct iteration over array-typed tracked var: allowed and track loop var
         - Iteration over tracked_var.get("array_field"): track loop variable
         """
-        # Direct iteration: for x in tracked_var (violation)
+        # Direct iteration: for x in tracked_var
         var_name = self._get_var_name(node.iter)
         if var_name in self.tracked_vars:
-            snippet = self.get_snippet(node.lineno)
-            self.violations.append(Violation(
-                file=self.file_path,
-                line=node.lineno,
-                col=node.col_offset,
-                type=ViolationType.PATTERN_NOT_WHITELISTED,
-                message=f"Direct iteration over '{var_name}' not in whitelist. Access fields explicitly.",
-                code_snippet=snippet,
-                variable=var_name,
-            ))
+            if self._is_array_tracked_var(var_name):
+                # Allowed: iteration over array-typed variable
+                # Track the loop variable with the same schema as the array items
+                if isinstance(node.target, ast.Name):
+                    loop_var_name = node.target.id
+                    tracked = self.tracked_vars[var_name]
+                    # The array variable already has /items pointer, use it for loop var
+                    derived = TrackedVariable(
+                        name=loop_var_name,
+                        schema_file=tracked.schema_file,
+                        json_pointer=tracked.json_pointer,  # Same as array's items pointer
+                        source_var=var_name,
+                        source_field=None,
+                    )
+                    self.tracked_vars[loop_var_name] = derived
+                    self.function_derived_vars[loop_var_name] = derived
+                    self.derived_vars_log.append(
+                        f"  {loop_var_name} <- for loop over {var_name} "
+                        f"[pointer: {tracked.json_pointer}]"
+                    )
+            else:
+                # Not allowed: direct iteration over dict-typed variable
+                snippet = self.get_snippet(node.lineno)
+                self.violations.append(Violation(
+                    file=self.file_path,
+                    line=node.lineno,
+                    col=node.col_offset,
+                    type=ViolationType.PATTERN_NOT_WHITELISTED,
+                    message=f"Direct iteration over '{var_name}' not in whitelist. Access fields explicitly.",
+                    code_snippet=snippet,
+                    variable=var_name,
+                ))
         
         # Iteration over .get() result: for item in tracked_var.get("items")
         # Track the loop variable with the items schema
@@ -783,9 +860,17 @@ def extract_field_accesses(
     file_path: str,
     tracked_vars: Optional[Dict[str, TrackedVariable]] = None,
     tracked_vars_set: Optional[Set[str]] = None,  # Legacy support
+    agents_rel_path: str = "",  # Path relative to AGENTS_DIR for schema lookup
 ) -> tuple:
     """
     Extract all field accesses from source code.
+    
+    Args:
+        source: The source code to parse
+        file_path: Path to the file (for error reporting)
+        tracked_vars: Dict of tracked variables with schema info
+        tracked_vars_set: Legacy Set[str] input (deprecated)
+        agents_rel_path: Path relative to AGENTS_DIR for per-function schema lookup
     
     Returns:
         Tuple of (ValidationResult, derived_vars_log) where derived_vars_log
@@ -820,7 +905,7 @@ def extract_field_accesses(
         ]), []
     
     lines = source.splitlines()
-    visitor = FieldAccessVisitor(lines, tracked_vars)
+    visitor = FieldAccessVisitor(lines, tracked_vars, agents_rel_path)
     visitor.file_path = file_path
     visitor.visit(tree)
     
@@ -884,9 +969,17 @@ def validate_file(
     
     rel_path = str(file_path.relative_to(PROJECT_ROOT) if file_path.is_relative_to(PROJECT_ROOT) else file_path)
     
+    # Compute agents-relative path for per-function schema lookup
+    agents_rel_path = ""
+    try:
+        if file_path.is_relative_to(AGENTS_DIR):
+            agents_rel_path = str(file_path.relative_to(AGENTS_DIR))
+    except (ValueError, TypeError):
+        pass
+    
     # Extract field accesses and whitelist violations
     result, derived_vars_log = extract_field_accesses(
-        source, rel_path, tracked_vars, tracked_vars_set
+        source, rel_path, tracked_vars, tracked_vars_set, agents_rel_path
     )
     
     # If schema fields provided, validate against schema
@@ -901,19 +994,30 @@ def validate_file(
     return result, derived_vars_log
 
 
-def get_schema_for_agent_output(file_name: str, function_name: str) -> Optional[Set[str]]:
-    """Get schema fields for agent_output based on file and function context."""
+def get_schema_info_for_function(file_name: str, function_name: str) -> Optional[AgentSchemaInfo]:
+    """Get schema info for a specific function in a file."""
     # Normalize file name
     for key in AGENT_OUTPUT_SCHEMA_MAPPING:
         if file_name.endswith(key):
-            agents = AGENT_OUTPUT_SCHEMA_MAPPING[key]
-            # Try to match function name to agent
-            for agent_name, schema_file in agents.items():
-                if agent_name in function_name.lower():
-                    try:
-                        return extract_schema_fields(load_schema(schema_file))
-                    except FileNotFoundError:
-                        return None
+            func_schemas = AGENT_OUTPUT_SCHEMA_MAPPING[key]
+            # Direct match on function name
+            if function_name in func_schemas:
+                return func_schemas[function_name]
+            # Try partial match (for flexibility)
+            for func_name, schema_info in func_schemas.items():
+                if func_name in function_name.lower() or function_name.lower() in func_name:
+                    return schema_info
+    return None
+
+
+def get_schema_fields_for_function(file_name: str, function_name: str) -> Optional[Set[str]]:
+    """Get schema fields for a specific function based on file and function context."""
+    schema_info = get_schema_info_for_function(file_name, function_name)
+    if schema_info:
+        try:
+            return extract_schema_fields(load_schema(schema_info.schema_file))
+        except FileNotFoundError:
+            return None
     return None
 
 
@@ -941,22 +1045,30 @@ def validate_agent_files(verbose: bool = False) -> tuple:
         result.merge(file_result)
         all_derived_vars_log.extend(derived_vars_log)
         
-        # For agent_output accesses, validate against appropriate schema
+        # Validate LLM output variable accesses against their schemas
         rel_path = str(file_path.relative_to(AGENTS_DIR))
         for access in file_result.field_accesses:
-            if access.variable == "agent_output" and access.in_function and access.is_static:
-                schema_fields = get_schema_for_agent_output(rel_path, access.in_function)
-                if schema_fields and access.field and access.field not in schema_fields:
-                    result.violations.append(Violation(
-                        file=str(file_path.relative_to(PROJECT_ROOT)),
-                        line=access.line,
-                        col=access.col,
-                        type=ViolationType.FIELD_NOT_IN_SCHEMA,
-                        message=f"Field '{access.field}' not in schema for agent in function '{access.in_function}'.",
-                        code_snippet=access.code_snippet,
-                        field=access.field,
-                        variable=access.variable,
-                    ))
+            if access.in_function and access.is_static:
+                # Get schema info for this function (includes variable name used)
+                schema_info = get_schema_info_for_function(rel_path, access.in_function)
+                if schema_info:
+                    # Check if this access is on the LLM output variable for this function
+                    if access.variable == schema_info.variable_name:
+                        try:
+                            schema_fields = extract_schema_fields(load_schema(schema_info.schema_file))
+                            if access.field and access.field not in schema_fields:
+                                result.violations.append(Violation(
+                                    file=str(file_path.relative_to(PROJECT_ROOT)),
+                                    line=access.line,
+                                    col=access.col,
+                                    type=ViolationType.FIELD_NOT_IN_SCHEMA,
+                                    message=f"Field '{access.field}' not in schema for agent in function '{access.in_function}'.",
+                                    code_snippet=access.code_snippet,
+                                    field=access.field,
+                                    variable=access.variable,
+                                ))
+                        except FileNotFoundError:
+                            pass  # Schema file not found, skip validation
     
     return result, all_derived_vars_log
 
@@ -1045,8 +1157,8 @@ def print_tracking_summary(verbose: bool = False):
     print(f"\n  Agent schema mappings (dynamically discovered):")
     for file_path, func_schemas in sorted(AGENT_OUTPUT_SCHEMA_MAPPING.items()):
         print(f"    {file_path}:")
-        for func_name, schema_file in sorted(func_schemas.items()):
-            print(f"      {func_name} -> {schema_file}")
+        for func_name, schema_info in sorted(func_schemas.items()):
+            print(f"      {func_name}: {schema_info.variable_name} -> {schema_info.schema_file}")
     
     print(f"\n  Derived variable schemas:")
     for var_name, schema_pointer in sorted(DERIVED_VAR_SCHEMAS.items()):

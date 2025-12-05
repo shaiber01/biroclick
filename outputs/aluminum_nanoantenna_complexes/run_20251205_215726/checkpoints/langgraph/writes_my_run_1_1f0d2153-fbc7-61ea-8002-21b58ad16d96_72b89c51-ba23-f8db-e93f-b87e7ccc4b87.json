@@ -1,0 +1,33 @@
+{
+  "writes": [
+    {
+      "channel": "workflow_phase",
+      "value_type": "msgpack",
+      "value_data": "q3BsYW5fcmV2aWV3"
+    },
+    {
+      "channel": "last_plan_review_verdict",
+      "value_type": "msgpack",
+      "value_data": "rm5lZWRzX3JldmlzaW9u"
+    },
+    {
+      "channel": "replan_count",
+      "value_type": "msgpack",
+      "value_data": "AQ=="
+    },
+    {
+      "channel": "planner_feedback",
+      "value_type": "msgpack",
+      "value_data": "2S9QbGFuIGhhcyAxIGJsb2NraW5nIGlzc3VlKHMpIHJlcXVpcmluZyByZXZpc2lvbg=="
+    },
+    {
+      "channel": "branch:to:planning",
+      "value_type": "null",
+      "value_data": ""
+    }
+  ],
+  "task_id": "72b89c51-ba23-f8db-e93f-b87e7ccc4b87",
+  "thread_id": "my_run_1",
+  "checkpoint_id": "1f0d2153-fbc7-61ea-8002-21b58ad16d96",
+  "saved_at": "2025-12-05T22:01:55.399077"
+}

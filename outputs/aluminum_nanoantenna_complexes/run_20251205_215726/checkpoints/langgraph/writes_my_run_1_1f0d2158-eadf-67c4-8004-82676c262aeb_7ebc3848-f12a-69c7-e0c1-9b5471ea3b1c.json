@@ -1,0 +1,53 @@
+{
+  "writes": [
+    {
+      "channel": "workflow_phase",
+      "value_type": "msgpack",
+      "value_data": "q3BsYW5fcmV2aWV3"
+    },
+    {
+      "channel": "last_plan_review_verdict",
+      "value_type": "msgpack",
+      "value_data": "rm5lZWRzX3JldmlzaW9u"
+    },
+    {
+      "channel": "replan_count",
+      "value_type": "msgpack",
+      "value_data": "Ag=="
+    },
+    {
+      "channel": "ask_user_trigger",
+      "value_type": "msgpack",
+      "value_data": "rHJlcGxhbl9saW1pdA=="
+    },
+    {
+      "channel": "pending_user_questions",
+      "value_type": "msgpack",
+      "value_data": "kdoBGVBsYW4gcmV2aWV3IHJlamVjdGVkIDIvMiB0aW1lcy4KCi0gTGF0ZXN0IGZlZWRiYWNrOiBQbGFuIGhhcyAxIGJsb2NraW5nIGlzc3VlKHMpIHJlcXVpcmluZyByZXZpc2lvbgoKT3B0aW9uczoKLSBBUFBST1ZFX1BMQU46IEZvcmNlLWFjY2VwdCB0aGUgY3VycmVudCBwbGFuIGRlc3BpdGUgaXNzdWVzCi0gR1VJREFOQ0U6IFByb3ZpZGUgc3BlY2lmaWMgZ3VpZGFuY2UgZm9yIHJlcGxhbm5pbmcgKGluY2x1ZGUgZ3VpZGFuY2UgYWZ0ZXIga2V5d29yZCkKLSBTVE9QOiBFbmQgdGhlIHdvcmtmbG93"
+    },
+    {
+      "channel": "awaiting_user_input",
+      "value_type": "msgpack",
+      "value_data": "ww=="
+    },
+    {
+      "channel": "last_node_before_ask_user",
+      "value_type": "msgpack",
+      "value_data": "q3BsYW5fcmV2aWV3"
+    },
+    {
+      "channel": "planner_feedback",
+      "value_type": "msgpack",
+      "value_data": "2S9QbGFuIGhhcyAxIGJsb2NraW5nIGlzc3VlKHMpIHJlcXVpcmluZyByZXZpc2lvbg=="
+    },
+    {
+      "channel": "branch:to:ask_user",
+      "value_type": "null",
+      "value_data": ""
+    }
+  ],
+  "task_id": "7ebc3848-f12a-69c7-e0c1-9b5471ea3b1c",
+  "thread_id": "my_run_1",
+  "checkpoint_id": "1f0d2158-eadf-67c4-8004-82676c262aeb",
+  "saved_at": "2025-12-05T22:04:07.843670"
+}

@@ -1,0 +1,38 @@
+{
+  "writes": [
+    {
+      "channel": "workflow_phase",
+      "value_type": "msgpack",
+      "value_data": "q3N1cGVydmlzaW9u"
+    },
+    {
+      "channel": "supervisor_verdict",
+      "value_type": "msgpack",
+      "value_data": "q29rX2NvbnRpbnVl"
+    },
+    {
+      "channel": "supervisor_feedback",
+      "value_type": "msgpack",
+      "value_data": "vFBsYW4gZm9yY2UtYWNjZXB0ZWQgYnkgdXNlci4="
+    },
+    {
+      "channel": "ask_user_trigger",
+      "value_type": "null",
+      "value_data": ""
+    },
+    {
+      "channel": "progress",
+      "value_type": "msgpack",
+      "value_data": "hahwYXBlcl9pZL5hbHVtaW51bV9uYW5vYW50ZW5uYV9jb21wbGV4ZXO1dG90YWxfcnVudGltZV9zZWNvbmRzAKZzdGFnZXOUjKhzdGFnZV9pZLpzdGFnZTBfbWF0ZXJpYWxfdmFsaWRhdGlvbqpzdGFnZV90eXBls01BVEVSSUFMX1ZBTElEQVRJT06mc3RhdHVzq25vdF9zdGFydGVks2ludmFsaWRhdGlvbl9yZWFzb27ArGxhc3RfdXBkYXRlZNkgMjAyNS0xMi0wNVQyMDowNDowNy44MzQ3OTYrMDA6MDCucmV2aXNpb25fY291bnQAr3J1bnRpbWVfc2Vjb25kcwCnc3VtbWFyedoBLlBsYW5uZWQ6IFZhbGlkYXRlIG9wdGljYWwgcHJvcGVydGllcyBvZiBhbGwgbWF0ZXJpYWxzOiAoMSkgQWx1bWludW0gZnJvbSBQYWxpayAtIGNoZWNrIGludGVyYmFuZCB0cmFuc2l0aW9uIH44MDBubS8xLjVlViwgKDIpIFREQkMgSi1hZ2dyZWdhdGUgTG9yZW50emlhbiAtIHZlcmlmeSBhYnNvcnB0aW9uIHBlYWsgYXQgNTkwbm0vMi4xZVYgYW5kIGxpbmV3aWR0aCwgKDMpIElUTyBvcHRpY2FsIHByb3BlcnRpZXMuIFBsb3QgzrUozrspLCBuKM67KSwgayjOuykgZm9yIGVhY2ggbWF0ZXJpYWwgb3ZlciA0MDAtOTAwbm0gcmFuZ2Uup291dHB1dHOQrWRpc2NyZXBhbmNpZXOQpmlzc3Vlc5CsbmV4dF9hY3Rpb25zkIyoc3RhZ2VfaWS0c3RhZ2UxX2JhcmVfbmFub2Rpc2uqc3RhZ2VfdHlwZbBTSU5HTEVfU1RSVUNUVVJFpnN0YXR1c6tub3Rfc3RhcnRlZLNpbnZhbGlkYXRpb25fcmVhc29uwKxsYXN0X3VwZGF0ZWTZIDIwMjUtMTItMDVUMjA6MDQ6MDcuODM0Nzk2KzAwOjAwrnJldmlzaW9uX2NvdW50AK9ydW50aW1lX3NlY29uZHMAp3N1bW1hcnnZ51BsYW5uZWQ6IFNpbXVsYXRlIHRyYW5zbWlzc2lvbiB0aHJvdWdoIGEgc2luZ2xlIGJhcmUgKG5vIEotYWdncmVnYXRlKSBhbHVtaW51bSBuYW5vZGlzayBhcnJheS4gVXNlIGRpYW1ldGVyIEQ9MTQwbm0gKG5lYXIgZXhwZWN0ZWQgYW50aWNyb3NzaW5nKSB0byB2ZXJpZnkgcGxhc21vbiByZXNvbmFuY2UgcG9zaXRpb24uIFRoaXMgZXN0YWJsaXNoZXMgdGhlIHVuY291cGxlZCBwbGFzbW9uIGJhc2VsaW5lLqdvdXRwdXRzkK1kaXNjcmVwYW5jaWVzkKZpc3N1ZXOQrG5leHRfYWN0aW9uc5CMqHN0YWdlX2lktXN0YWdlMl9jb3VwbGVkX3NpbmdsZapzdGFnZV90eXBlsFNJTkdMRV9TVFJVQ1RVUkWmc3RhdHVzq25vdF9zdGFydGVks2ludmFsaWRhdGlvbl9yZWFzb27ArGxhc3RfdXBkYXRlZNkgMjAyNS0xMi0wNVQyMDowNDowNy44MzQ3OTYrMDA6MDCucmV2aXNpb25fY291bnQAr3J1bnRpbWVfc2Vjb25kcwCnc3VtbWFyedoBDFBsYW5uZWQ6IFNpbXVsYXRlIHRyYW5zbWlzc2lvbiB0aHJvdWdoIGFsdW1pbnVtIG5hbm9kaXNrIGFycmF5IFdJVEggVERCQyBKLWFnZ3JlZ2F0ZSBjb2F0aW5nIGF0IEQ9MTQwbm0uIFRoaXMgZGlhbWV0ZXIgc2hvdWxkIGJlIG5lYXIgdGhlIGFudGljcm9zc2luZyBwb2ludC4gVGhlIGtleSB2YWxpZGF0aW9uIGlzIG9ic2VydmluZyBUV08gdHJhbnNtaXNzaW9uIGRpcHMgKHNwbGl0IHBlYWspIGluc3RlYWQgb2Ygb25lLCBpbmRpY2F0aW5nIHN0cm9uZyBjb3VwbGluZy6nb3V0cHV0c5CtZGlzY3JlcGFuY2llc5CmaXNzdWVzkKxuZXh0X2FjdGlvbnOQjKhzdGFnZV9pZLVzdGFnZTNfZGlhbWV0ZXJfc3dlZXCqc3RhZ2VfdHlwZa9QQVJBTUVURVJfU1dFRVCmc3RhdHVzq25vdF9zdGFydGVks2ludmFsaWRhdGlvbl9yZWFzb27ArGxhc3RfdXBkYXRlZNkgMjAyNS0xMi0wNVQyMDowNDowNy44MzQ3OTYrMDA6MDCucmV2aXNpb25fY291bnQAr3J1bnRpbWVfc2Vjb25kcwCnc3VtbWFyedoBElBsYW5uZWQ6IFN3ZWVwIGRpc2sgZGlhbWV0ZXIgZnJvbSA3NS0yMDVubSBhbmQgY29tcHV0ZSB0cmFuc21pc3Npb24gc3BlY3RyYSBmb3IgZWFjaC4gR2VuZXJhdGUgMkQgdHJhbnNtaXNzaW9uIG1hcCAod2F2ZWxlbmd0aCB2cyBkaWFtZXRlcikgc2hvd2luZyBhbnRpY3Jvc3NpbmcgYmVoYXZpb3IuIEV4dHJhY3QgdXBwZXIgYW5kIGxvd2VyIHBvbGFyaXRvbiBkaXNwZXJzaW9uIGJyYW5jaGVzIGFuZCBtZWFzdXJlIFJhYmkgc3BsaXR0aW5nIGF0IGFudGljcm9zc2luZyBwb2ludC6nb3V0cHV0c5CtZGlzY3JlcGFuY2llc5CmaXNzdWVzkKxuZXh0X2FjdGlvbnOQs2Rpc2NyZXBhbmN5X3N1bW1hcnmDs3RvdGFsX2Rpc2NyZXBhbmNpZXMAtmJsb2NraW5nX2Rpc2NyZXBhbmNpZXMAvHN5c3RlbWF0aWNfc2hpZnRzX2lkZW50aWZpZWSQsXVzZXJfaW50ZXJhY3Rpb25zkYiiaWSiVTGpdGltZXN0YW1w2SAyMDI1LTEyLTA1VDIwOjA1OjQ1Ljg5ODg4OCswMDowMLBpbnRlcmFjdGlvbl90eXBlrHJlcGxhbl9saW1pdKdjb250ZXh0g6hzdGFnZV9pZMClYWdlbnSvU3VwZXJ2aXNvckFnZW50pnJlYXNvbqxyZXBsYW5fbGltaXSocXVlc3Rpb26yKHF1ZXN0aW9uIGNsZWFyZWQprXVzZXJfcmVzcG9uc2WsQVBQUk9WRV9QTEFOpmltcGFjdLxQbGFuIGZvcmNlLWFjY2VwdGVkIGJ5IHVzZXIut2FsdGVybmF0aXZlc19jb25zaWRlcmVkkA=="
+    },
+    {
+      "channel": "branch:to:select_stage",
+      "value_type": "null",
+      "value_data": ""
+    }
+  ],
+  "task_id": "8a7e5bf6-e58c-e70e-6bb0-d94c9ad65aa7",
+  "thread_id": "my_run_1",
+  "checkpoint_id": "1f0d215c-91fe-6106-8006-a280bd7e57bd",
+  "saved_at": "2025-12-05T22:05:45.907413"
+}
