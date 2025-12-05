@@ -129,6 +129,7 @@ def code_reviewer_node(state: ReproState) -> dict:
         "last_code_review_verdict": verdict,
         "reviewer_issues": agent_output.get("issues", []),
         "code_revision_count": state.get("code_revision_count", 0),  # Always include current count
+        "reviewer_feedback": None,  # Clear stale feedback on approval (will be overwritten if needs_revision)
     }
     
     # Increment code revision counter if needs_revision
@@ -280,10 +281,23 @@ def code_generator_node(state: ReproState) -> dict:
     # Build user content for code generator
     user_content = build_user_content_for_code_generator(state)
     
-    # Add revision feedback if any
-    feedback = state.get("reviewer_feedback", "")
-    if feedback:
-        system_prompt += f"\n\nREVISION FEEDBACK: {feedback}"
+    # Collect feedback from all possible sources (physics, execution, code review)
+    # When physics_check or execution_check fails and routes to generate_code,
+    # the feedback is in physics_feedback or execution_feedback, not reviewer_feedback
+    physics_fb = state.get("physics_feedback", "")
+    execution_fb = state.get("execution_feedback", "")
+    reviewer_fb = state.get("reviewer_feedback", "")
+
+    feedback_parts = []
+    if physics_fb:
+        feedback_parts.append(f"PHYSICS VALIDATION FEEDBACK: {physics_fb}")
+    if execution_fb:
+        feedback_parts.append(f"EXECUTION FEEDBACK: {execution_fb}")
+    if reviewer_fb:
+        feedback_parts.append(f"CODE REVIEW FEEDBACK: {reviewer_fb}")
+
+    if feedback_parts:
+        system_prompt += "\n\nREVISION FEEDBACK:\n" + "\n\n".join(feedback_parts)
     
     # Call LLM for code generation
     try:

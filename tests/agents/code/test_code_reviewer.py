@@ -41,8 +41,9 @@ class TestCodeReviewerNode:
         assert result["code_revision_count"] == initial_revision_count
         assert result["reviewer_issues"] == []
         
-        # Critical: feedback should NOT be set on approval
-        assert "reviewer_feedback" not in result
+        # Critical: feedback should be explicitly cleared (None) on approval
+        assert "reviewer_feedback" in result
+        assert result["reviewer_feedback"] is None
         
         # Verify LLM was called with correct parameters
         mock_prompt.assert_called_once_with("code_reviewer", ANY)
@@ -60,6 +61,42 @@ class TestCodeReviewerNode:
         assert llm_state["paper_id"] == base_state["paper_id"]
         assert llm_state["code"] == base_state["code"]
         assert llm_state["current_stage_id"] == base_state["current_stage_id"]
+
+    @patch("src.agents.code.build_agent_prompt")
+    @patch("src.agents.code.call_agent_with_metrics")
+    def test_reviewer_approve_clears_stale_feedback(self, mock_llm, mock_prompt, base_state):
+        """Test that approval clears stale feedback from previous rejection.
+        
+        This tests the bug fix for issue 3: when code was previously rejected
+        and had reviewer_feedback set, approving it should clear that feedback
+        to None so it doesn't leak into subsequent code generation cycles.
+        """
+        mock_prompt.return_value = "Prompt"
+        mock_llm.return_value = {
+            "verdict": "approve",
+            "issues": []
+        }
+        
+        # Simulate state with stale feedback from a previous rejection
+        base_state["reviewer_feedback"] = "Old feedback: fix the import statement"
+        base_state["code_revision_count"] = 2  # Had multiple previous rejections
+        
+        result = code_reviewer_node(base_state)
+        
+        # Verify approval verdict
+        assert result["last_code_review_verdict"] == "approve"
+        
+        # Critical: stale feedback MUST be cleared to None on approval
+        # If this is not None, the code generator might receive confusing
+        # feedback from a previous iteration even though code was approved
+        assert "reviewer_feedback" in result, "reviewer_feedback key must be present"
+        assert result["reviewer_feedback"] is None, (
+            f"Stale feedback should be cleared to None on approval, "
+            f"but got: {result['reviewer_feedback']!r}"
+        )
+        
+        # Verify revision count is preserved (not reset, just not incremented)
+        assert result["code_revision_count"] == 2
 
     @patch("src.agents.code.build_agent_prompt")
     @patch("src.agents.code.call_agent_with_metrics")
@@ -569,7 +606,9 @@ class TestCodeReviewerNode:
         assert result["last_code_review_verdict"] == "approve"
         assert len(result["reviewer_issues"]) == 2
         assert result["reviewer_issues"][0]["severity"] == "minor"
-        assert "reviewer_feedback" not in result
+        # feedback should be cleared to None on approval (even with issues)
+        assert "reviewer_feedback" in result
+        assert result["reviewer_feedback"] is None
 
     @patch("src.agents.code.build_agent_prompt")
     @patch("src.agents.code.call_agent_with_metrics")

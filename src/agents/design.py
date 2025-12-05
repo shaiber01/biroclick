@@ -239,6 +239,7 @@ def design_reviewer_node(state: ReproState) -> dict:
         "last_design_review_verdict": verdict,
         "reviewer_issues": agent_output.get("issues") or [],
         "design_revision_count": state.get("design_revision_count", 0),  # Always include current count
+        "reviewer_feedback": None,  # Clear stale feedback on approval (will be overwritten if needs_revision)
     }
     
     # Increment design revision counter if needs_revision

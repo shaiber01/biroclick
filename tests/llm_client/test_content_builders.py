@@ -697,11 +697,11 @@ class TestBuildUserContentForCodeGenerator:
         assert "```json" in content
         assert '"mat1"' in content
         assert "## REVISION FEEDBACK" in content
-        assert "Fix code" in content
+        # Feedback is now labeled with source
+        assert "**Code review:** Fix code" in content
         
         # Verify exact format for string design (not JSON)
         parts = content.split("\n\n")
-        assert len(parts) == 6  # stage, design header, design content, materials block, feedback header, feedback content
         assert parts[0] == "# CURRENT STAGE: stage1"
         assert parts[1] == "## Design Specification"
         assert parts[2] == "A design spec"
@@ -775,10 +775,102 @@ class TestBuildUserContentForCodeGenerator:
             "current_stage_id": "stage1",
             "design_description": "Design",
             "reviewer_feedback": "",
+            "physics_feedback": "",
+            "execution_feedback": "",
         }
         content = build_user_content_for_code_generator(state)
         
         assert "## REVISION FEEDBACK" not in content
+
+    def test_physics_feedback_only(self):
+        """Test with only physics_feedback set - should include in feedback section.
+        
+        This is critical: when physics_check fails and routes to generate_code,
+        the physics_feedback must reach the code generator.
+        """
+        physics_fb = "Energy conservation violated: T+R+A = 1.15"
+        state = {
+            "current_stage_id": "stage1",
+            "design_description": "Design",
+            "physics_feedback": physics_fb,
+        }
+        content = build_user_content_for_code_generator(state)
+        
+        assert "## REVISION FEEDBACK" in content
+        assert f"**Physics validation:** {physics_fb}" in content
+        # Should NOT include other feedback types
+        assert "**Execution:**" not in content
+        assert "**Code review:**" not in content
+
+    def test_execution_feedback_only(self):
+        """Test with only execution_feedback set - should include in feedback section.
+        
+        This is critical: when execution_check fails and routes to generate_code,
+        the execution_feedback must reach the code generator.
+        """
+        execution_fb = "Simulation crashed with MemoryError"
+        state = {
+            "current_stage_id": "stage1",
+            "design_description": "Design",
+            "execution_feedback": execution_fb,
+        }
+        content = build_user_content_for_code_generator(state)
+        
+        assert "## REVISION FEEDBACK" in content
+        assert f"**Execution:** {execution_fb}" in content
+        # Should NOT include other feedback types
+        assert "**Physics validation:**" not in content
+        assert "**Code review:**" not in content
+
+    def test_all_feedback_types(self):
+        """Test with all feedback types set - all should appear in feedback section."""
+        physics_fb = "T > 1.0 detected"
+        execution_fb = "Exit code 0 but warnings"
+        reviewer_fb = "Fix normalization"
+        state = {
+            "current_stage_id": "stage1",
+            "design_description": "Design",
+            "physics_feedback": physics_fb,
+            "execution_feedback": execution_fb,
+            "reviewer_feedback": reviewer_fb,
+        }
+        content = build_user_content_for_code_generator(state)
+        
+        assert "## REVISION FEEDBACK" in content
+        assert f"**Physics validation:** {physics_fb}" in content
+        assert f"**Execution:** {execution_fb}" in content
+        assert f"**Code review:** {reviewer_fb}" in content
+
+    def test_feedback_none_values(self):
+        """Test with None feedback values - should not include section."""
+        state = {
+            "current_stage_id": "stage1",
+            "design_description": "Design",
+            "physics_feedback": None,
+            "execution_feedback": None,
+            "reviewer_feedback": None,
+        }
+        content = build_user_content_for_code_generator(state)
+        
+        assert "## REVISION FEEDBACK" not in content
+
+    def test_feedback_partial_none(self):
+        """Test with some feedback None and some set - only non-None included."""
+        physics_fb = "Resonance at wrong wavelength"
+        state = {
+            "current_stage_id": "stage1",
+            "design_description": "Design",
+            "physics_feedback": physics_fb,
+            "execution_feedback": None,
+            "reviewer_feedback": "",
+        }
+        content = build_user_content_for_code_generator(state)
+        
+        assert "## REVISION FEEDBACK" in content
+        assert f"**Physics validation:** {physics_fb}" in content
+        # None and empty should not appear
+        assert "**Execution:**" not in content
+        assert "**Code review:**" not in content
 
     def test_complex_materials_list(self):
         """Test with complex materials data - should serialize correctly."""

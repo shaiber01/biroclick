@@ -80,3 +80,4 @@ def setup_file_logging(run_output_dir: str):
     info_handler.setFormatter(file_format)
     root_logger.addHandler(info_handler)
 
+

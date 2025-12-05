@@ -71,3 +71,4 @@ class GraphProgressCallback(BaseCallbackHandler):
         """Called when a chain/node errors."""
         logger.error(f"❌ Node error: {error}")
 
+

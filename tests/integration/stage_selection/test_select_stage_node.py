@@ -912,6 +912,100 @@ class TestCounterResetBehavior:
         assert result.get("design_revision_count") == 0
         assert result.get("code_revision_count") == 0
 
+    def test_feedback_fields_cleared_on_stage_transition(self, base_state):
+        """Feedback fields should be cleared when transitioning to a new stage.
+        
+        This tests the bug fix for issue 4: feedback from Stage N should not
+        leak into Stage N+1. All feedback fields must be explicitly cleared
+        to None when selecting a different stage.
+        """
+        from src.agents.stage_selection import select_stage_node
+
+        plan_stages = [
+            make_stage("stage_0", "MATERIAL_VALIDATION", dependencies=[]),
+            make_stage("stage_1", "SINGLE_STRUCTURE", dependencies=["stage_0"]),
+        ]
+        progress_stages = [
+            make_stage("stage_0", "MATERIAL_VALIDATION", status="completed_success", dependencies=[]),
+            make_stage("stage_1", "SINGLE_STRUCTURE", status="not_started", dependencies=["stage_0"]),
+        ]
+        base_state["plan"] = make_plan(plan_stages)
+        base_state["progress"] = make_progress(progress_stages)
+        base_state["current_stage_id"] = "stage_0"  # Previous stage
+        
+        # Simulate stale feedback from Stage 0
+        base_state["reviewer_feedback"] = "Old feedback from stage 0 code review"
+        base_state["physics_feedback"] = "Old physics validation feedback"
+        base_state["execution_feedback"] = "Old execution error message"
+        base_state["analysis_feedback"] = "Old analysis revision feedback"
+        base_state["design_feedback"] = "Old design flaw feedback"
+        base_state["comparison_feedback"] = "Old comparison feedback"
+
+        result = select_stage_node(base_state)
+        
+        # Verify we selected the new stage
+        assert result["current_stage_id"] == "stage_1"
+        
+        # Critical: ALL feedback fields must be cleared to None
+        # If any of these are not None, feedback from Stage 0 could confuse
+        # agents working on Stage 1
+        assert result.get("reviewer_feedback") is None, (
+            f"reviewer_feedback should be None, got: {result.get('reviewer_feedback')!r}"
+        )
+        assert result.get("physics_feedback") is None, (
+            f"physics_feedback should be None, got: {result.get('physics_feedback')!r}"
+        )
+        assert result.get("execution_feedback") is None, (
+            f"execution_feedback should be None, got: {result.get('execution_feedback')!r}"
+        )
+        assert result.get("analysis_feedback") is None, (
+            f"analysis_feedback should be None, got: {result.get('analysis_feedback')!r}"
+        )
+        assert result.get("design_feedback") is None, (
+            f"design_feedback should be None, got: {result.get('design_feedback')!r}"
+        )
+        assert result.get("comparison_feedback") is None, (
+            f"comparison_feedback should be None, got: {result.get('comparison_feedback')!r}"
+        )
+
+    def test_planner_feedback_preserved_on_stage_transition(self, base_state):
+        """Planner feedback should NOT be cleared on stage transitions.
+        
+        Unlike other feedback fields, planner_feedback is used for replanning
+        which can span multiple stages. It should be preserved during stage
+        transitions so the planner can reference it if needed.
+        """
+        from src.agents.stage_selection import select_stage_node
+
+        plan_stages = [
+            make_stage("stage_0", "MATERIAL_VALIDATION", dependencies=[]),
+            make_stage("stage_1", "SINGLE_STRUCTURE", dependencies=["stage_0"]),
+        ]
+        progress_stages = [
+            make_stage("stage_0", "MATERIAL_VALIDATION", status="completed_success", dependencies=[]),
+            make_stage("stage_1", "SINGLE_STRUCTURE", status="not_started", dependencies=["stage_0"]),
+        ]
+        base_state["plan"] = make_plan(plan_stages)
+        base_state["progress"] = make_progress(progress_stages)
+        base_state["current_stage_id"] = "stage_0"
+        
+        # Set planner feedback that should be preserved
+        base_state["planner_feedback"] = "Important feedback for replanning"
+        base_state["supervisor_feedback"] = "Supervisor decision context"
+
+        result = select_stage_node(base_state)
+        
+        assert result["current_stage_id"] == "stage_1"
+        
+        # planner_feedback and supervisor_feedback should NOT be in result
+        # (meaning they are preserved from state, not overwritten)
+        assert "planner_feedback" not in result, (
+            "planner_feedback should not be cleared - it's used for replanning"
+        )
+        assert "supervisor_feedback" not in result, (
+            "supervisor_feedback should not be cleared - it's used for supervision"
+        )
+
 
 class TestProgressInitialization:
     """Tests for progress initialization from plan."""

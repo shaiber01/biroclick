@@ -2455,3 +2455,193 @@ class TestAskUserPathIntegrationContract:
             expected_trigger="replan_limit",
             context="INTEGRATION: plan_reviewer -> route_after_plan_review"
         )
+
+
+class TestFeedbackClearingOnTransitions:
+    """
+    Integration tests for feedback clearing behavior.
+    
+    These tests verify that stale feedback is properly cleared:
+    1. When code/design review approves (issue 3)
+    2. When transitioning between stages (issue 4)
+    
+    Without these fixes, agents receive confusing feedback from previous
+    iterations or stages, leading to incorrect behavior like empty code generation.
+    """
+
+    @patch("src.agents.code.build_agent_prompt")
+    @patch("src.agents.code.call_agent_with_metrics")
+    def test_stale_reviewer_feedback_cleared_on_code_review_approval(
+        self, mock_llm, mock_prompt
+    ):
+        """
+        Integration test: code_reviewer_node must clear reviewer_feedback on approval.
+        
+        Scenario: Code was rejected twice, then approved. The approval must clear
+        the stale feedback so subsequent code generation doesn't receive it.
+        """
+        from src.agents.code import code_reviewer_node
+        
+        mock_prompt.return_value = "Prompt"
+        mock_llm.return_value = {
+            "verdict": "approve",
+            "issues": []
+        }
+        
+        # State after two rejections
+        state = {
+            "paper_id": "test_paper",
+            "code": "import meep; # good code",
+            "current_stage_id": "stage_1",
+            "code_revision_count": 2,
+            "reviewer_feedback": "Previous rejection: missing flux monitors",
+        }
+        
+        result = code_reviewer_node(state)
+        
+        # Verify approval
+        assert result["last_code_review_verdict"] == "approve"
+        
+        # Critical: feedback must be cleared
+        assert "reviewer_feedback" in result, (
+            "reviewer_feedback key must be in result to clear it from state"
+        )
+        assert result["reviewer_feedback"] is None, (
+            f"Stale feedback must be None after approval, got: {result['reviewer_feedback']!r}"
+        )
+        
+        # Simulate state merge (as LangGraph would do)
+        merged_state = {**state, **result}
+        assert merged_state["reviewer_feedback"] is None, (
+            "After state merge, reviewer_feedback should be None"
+        )
+
+    @patch("src.agents.base.check_context_or_escalate")
+    @patch("src.agents.design.build_agent_prompt")
+    @patch("src.agents.design.call_agent_with_metrics")
+    def test_stale_reviewer_feedback_cleared_on_design_review_approval(
+        self, mock_llm, mock_prompt, mock_check
+    ):
+        """
+        Integration test: design_reviewer_node must clear reviewer_feedback on approval.
+        """
+        from src.agents.design import design_reviewer_node
+        
+        mock_check.return_value = None
+        mock_prompt.return_value = "Prompt"
+        mock_llm.return_value = {
+            "verdict": "approve",
+            "issues": []
+        }
+        
+        state = {
+            "paper_id": "test_paper",
+            "paper_text": "Test paper",
+            "design_description": {"geometry": "disk"},
+            "current_stage_id": "stage_1",
+            "design_revision_count": 1,
+            "reviewer_feedback": "Previous rejection: geometry dimensions unclear",
+        }
+        
+        result = design_reviewer_node(state)
+        
+        assert result["last_design_review_verdict"] == "approve"
+        assert "reviewer_feedback" in result
+        assert result["reviewer_feedback"] is None, (
+            f"Stale feedback must be None after design approval, got: {result['reviewer_feedback']!r}"
+        )
+
+    def test_feedback_cleared_on_stage_transition(self):
+        """
+        Integration test: select_stage_node must clear all feedback fields on stage transition.
+        
+        This prevents feedback from Stage N leaking into Stage N+1.
+        """
+        from src.agents.stage_selection import select_stage_node
+        from tests.integration.helpers.state_factories import make_plan, make_progress, make_stage
+        
+        plan_stages = [
+            make_stage("stage_0", "MATERIAL_VALIDATION", dependencies=[]),
+            make_stage("stage_1", "SINGLE_STRUCTURE", dependencies=["stage_0"]),
+        ]
+        progress_stages = [
+            make_stage("stage_0", "MATERIAL_VALIDATION", status="completed_success", dependencies=[]),
+            make_stage("stage_1", "SINGLE_STRUCTURE", status="not_started", dependencies=["stage_0"]),
+        ]
+        
+        state = {
+            "paper_id": "test_paper",
+            "paper_text": "Test paper",
+            "plan": make_plan(plan_stages),
+            "progress": make_progress(progress_stages),
+            "current_stage_id": "stage_0",
+            # Stale feedback from Stage 0
+            "reviewer_feedback": "Stage 0 code review feedback",
+            "physics_feedback": "Stage 0 physics feedback",
+            "execution_feedback": "Stage 0 execution feedback",
+            "analysis_feedback": "Stage 0 analysis feedback",
+            "design_feedback": "Stage 0 design feedback",
+            "comparison_feedback": "Stage 0 comparison feedback",
+        }
+        
+        result = select_stage_node(state)
+        
+        assert result["current_stage_id"] == "stage_1", "Should select Stage 1"
+        
+        # All feedback fields must be cleared
+        feedback_fields = [
+            "reviewer_feedback",
+            "physics_feedback",
+            "execution_feedback", 
+            "analysis_feedback",
+            "design_feedback",
+            "comparison_feedback",
+        ]
+        
+        for field in feedback_fields:
+            assert result.get(field) is None, (
+                f"{field} must be None on stage transition, got: {result.get(field)!r}"
+            )
+
+    def test_physics_feedback_not_leaked_to_next_stage(self):
+        """
+        Integration test: physics_feedback from Stage 0 must not appear in Stage 1.
+        
+        This is the specific bug that caused the empty code generation issue.
+        """
+        from src.agents.stage_selection import select_stage_node
+        from src.agents.code import code_generator_node
+        from tests.integration.helpers.state_factories import make_plan, make_progress, make_stage
+        
+        # Setup: Stage 0 completed with physics feedback, moving to Stage 1
+        plan_stages = [
+            make_stage("stage_0", "MATERIAL_VALIDATION", dependencies=[]),
+            make_stage("stage_1", "SINGLE_STRUCTURE", dependencies=["stage_0"]),
+        ]
+        progress_stages = [
+            make_stage("stage_0", "MATERIAL_VALIDATION", status="completed_success", dependencies=[]),
+            make_stage("stage_1", "SINGLE_STRUCTURE", status="not_started", dependencies=["stage_0"]),
+        ]
+        
+        state = {
+            "paper_id": "test_paper",
+            "paper_text": "Test paper",
+            "plan": make_plan(plan_stages),
+            "progress": make_progress(progress_stages),
+            "current_stage_id": "stage_0",
+            "physics_feedback": "Stage 0: T+R+A != 1, energy conservation violated",
+        }
+        
+        # Transition to Stage 1
+        select_result = select_stage_node(state)
+        merged_state = {**state, **select_result}
+        
+        # Verify physics_feedback was cleared
+        assert merged_state.get("physics_feedback") is None, (
+            f"physics_feedback should be None after stage transition, "
+            f"got: {merged_state.get('physics_feedback')!r}"
+        )
+        
+        # Now if code_generator_node runs, it shouldn't see any stale feedback
+        # (We don't call it directly here as it requires more mocking, but the
+        # state is now clean)

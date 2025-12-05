@@ -1,0 +1,74 @@
+---
+config:
+  flowchart:
+    curve: linear
+---
+graph TD;
+	__end__([<p>__end__</p>]):::last
+	__start__([<p>__start__</p>]):::first
+	adapt_prompts["🤖 adapt_prompts"]:::workflowNode
+	analyze["🤖 analyze"]:::workflowNode
+	ask_user["ask_user"]:::userNode
+	code_review["🤖 code_review"]:::reviewNode
+	comparison_check["comparison_check"]:::validationNode
+	design["🤖 design"]:::workflowNode
+	design_review["🤖 design_review"]:::reviewNode
+	execution_check["🤖 execution_check"]:::validationNode
+	generate_code["🤖 generate_code"]:::workflowNode
+	generate_report["generate_report"]:::workflowNode
+	handle_backtrack["handle_backtrack"]:::workflowNode
+	material_checkpoint["material_checkpoint"]:::checkpointNode
+	physics_check["🤖 physics_check"]:::validationNode
+	plan_review["🤖 plan_review"]:::reviewNode
+	planning["🤖 planning"]:::workflowNode
+	run_code["run_code"]:::workflowNode
+	select_stage["select_stage"]:::workflowNode
+	supervisor["🤖 supervisor"]:::supervisorNode
+	__start__ --> adapt_prompts;
+	adapt_prompts --> planning;
+	analyze --> comparison_check;
+	ask_user -.->|user response| supervisor;
+	code_review -.->|limit_reached / error| ask_user;
+	code_review -.->|needs_revision| generate_code;
+	code_review -.->|approve| run_code;
+	comparison_check -.->|needs_revision| analyze;
+	comparison_check -.->|limit_reached / error| ask_user;
+	comparison_check -.->|approve| supervisor;
+	design --> design_review;
+	design_review -.->|limit_reached / error| ask_user;
+	design_review -.->|needs_revision| design;
+	design_review -.->|approve| generate_code;
+	execution_check -.->|limit_reached / error| ask_user;
+	execution_check -.->|fail| generate_code;
+	execution_check -.->|pass / warning| physics_check;
+	generate_code --> code_review;
+	handle_backtrack --> select_stage;
+	material_checkpoint -.->|needs validation| ask_user;
+	material_checkpoint -.->|materials validated| select_stage;
+	physics_check -.->|pass / warning| analyze;
+	physics_check -.->|limit_reached / error| ask_user;
+	physics_check -.->|design_flaw| design;
+	physics_check -.->|fail| generate_code;
+	plan_review -.->|limit_reached / error| ask_user;
+	plan_review -.->|needs_revision| planning;
+	plan_review -.->|approve| select_stage;
+	planning -.->|always| plan_review;
+	run_code --> execution_check;
+	select_stage -.->|has next stage| design;
+	select_stage -.->|no more stages| generate_report;
+	supervisor -.->|ask_user / error| ask_user;
+	supervisor -.->|all_complete / should_stop| generate_report;
+	supervisor -.->|backtrack_to_stage| handle_backtrack;
+	supervisor -.->|ok_continue + Stage 0| material_checkpoint;
+	supervisor -.->|replan_needed / replan_with_guidance| planning;
+	supervisor -.->|ok_continue + other| select_stage;
+	generate_report --> __end__;
+	classDef default fill:#e9d5ff,stroke:#7c3aed,stroke-width:2px,color:#1e1b4b
+	classDef workflowNode fill:#e9d5ff,stroke:#7c3aed,stroke-width:2px,color:#1e1b4b
+	classDef reviewNode fill:#1e40af,stroke:#1e3a8a,stroke-width:2px,color:#ffffff
+	classDef userNode fill:#dc2626,stroke:#b91c1c,stroke-width:2px,color:#ffffff
+	classDef supervisorNode fill:#16a34a,stroke:#15803d,stroke-width:2px,color:#ffffff
+	classDef checkpointNode fill:#d97706,stroke:#b45309,stroke-width:2px,color:#ffffff
+	classDef validationNode fill:#ea580c,stroke:#c2410c,stroke-width:2px,color:#ffffff
+	classDef first fill-opacity:0,stroke:#666666,stroke-width:3px,color:#000000
+	classDef last fill:#7c3aed,stroke:#5b21b6,stroke-width:3px,color:#ffffff

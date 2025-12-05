@@ -201,6 +201,13 @@ def select_stage_node(state: ReproState) -> dict:
                     "execution_failure_count": 0,
                     "physics_failure_count": 0,
                     "analysis_revision_count": 0,
+                    # Clear all feedback fields to prevent stale feedback leaking between stages
+                    "reviewer_feedback": None,
+                    "physics_feedback": None,
+                    "execution_feedback": None,
+                    "analysis_feedback": None,
+                    "design_feedback": None,
+                    "comparison_feedback": None,
                 })
             
             # Log stage selection
@@ -505,6 +512,13 @@ def select_stage_node(state: ReproState) -> dict:
                 "execution_failure_count": 0,
                 "physics_failure_count": 0,
                 "analysis_revision_count": 0,
+                # Clear all feedback fields to prevent stale feedback leaking between stages
+                "reviewer_feedback": None,
+                "physics_feedback": None,
+                "execution_feedback": None,
+                "analysis_feedback": None,
+                "design_feedback": None,
+                "comparison_feedback": None,
             })
         
         # Log stage selection

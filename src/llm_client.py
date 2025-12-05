@@ -632,10 +632,23 @@ def build_user_content_for_code_generator(state: Dict[str, Any]) -> str:
     if materials:
         parts.append(f"## Validated Materials (use these paths!)\n```json\n{json.dumps(materials, indent=2, ensure_ascii=False)}\n```")
     
-    # Revision feedback if any
-    feedback = state.get("reviewer_feedback") or ""
-    if feedback:
-        parts.append(f"## REVISION FEEDBACK\n\n{feedback}")
+    # Collect feedback from all possible sources (physics, execution, code review)
+    # When physics_check or execution_check fails and routes to generate_code,
+    # the feedback is in physics_feedback or execution_feedback, not reviewer_feedback
+    physics_fb = state.get("physics_feedback") or ""
+    execution_fb = state.get("execution_feedback") or ""
+    reviewer_fb = state.get("reviewer_feedback") or ""
+
+    feedback_parts = []
+    if physics_fb:
+        feedback_parts.append(f"**Physics validation:** {physics_fb}")
+    if execution_fb:
+        feedback_parts.append(f"**Execution:** {execution_fb}")
+    if reviewer_fb:
+        feedback_parts.append(f"**Code review:** {reviewer_fb}")
+
+    if feedback_parts:
+        parts.append("## REVISION FEEDBACK\n\n" + "\n\n".join(feedback_parts))
     
     return "\n\n".join(parts)
 

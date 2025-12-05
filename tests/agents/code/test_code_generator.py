@@ -209,7 +209,7 @@ class TestCodeGeneratorNode:
     @patch("src.agents.code.call_agent_with_metrics")
     @patch("src.agents.code.build_user_content_for_code_generator")
     def test_generator_includes_feedback(self, mock_uc, mock_llm, mock_check, mock_prompt, base_state):
-        """Test that reviewer feedback is appended to the prompt."""
+        """Test that reviewer feedback is appended to the prompt with proper labeling."""
         expected_code = "code" * 20
         expected_outputs = ["field_map.h5"]
         feedback = "Fix the geometry."
@@ -227,10 +227,10 @@ class TestCodeGeneratorNode:
         assert result["code"] == expected_code
         assert result["expected_outputs"] == expected_outputs
         
-        # Verify feedback is appended to system prompt (not user content)
+        # Verify feedback is appended to system prompt with CODE REVIEW label
         call_args = mock_llm.call_args[1]
-        assert "REVISION FEEDBACK: Fix the geometry." in call_args["system_prompt"]
-        assert call_args["system_prompt"].endswith(f"\n\nREVISION FEEDBACK: {feedback}")
+        assert "REVISION FEEDBACK:" in call_args["system_prompt"]
+        assert f"CODE REVIEW FEEDBACK: {feedback}" in call_args["system_prompt"]
         # Verify base prompt is still present
         assert "Base Prompt" in call_args["system_prompt"]
         
@@ -239,20 +239,237 @@ class TestCodeGeneratorNode:
     @patch("src.agents.code.call_agent_with_metrics")
     @patch("src.agents.code.build_user_content_for_code_generator")
     def test_generator_no_feedback_when_empty(self, mock_uc, mock_llm, mock_check, mock_prompt, base_state):
-        """Test that feedback is not appended when reviewer_feedback is empty."""
+        """Test that feedback is not appended when all feedback fields are empty."""
         mock_check.return_value = None
         mock_prompt.return_value = "Base Prompt"
         mock_uc.return_value = "User Content"
         base_state["reviewer_feedback"] = ""
+        base_state["physics_feedback"] = ""
+        base_state["execution_feedback"] = ""
         mock_llm.return_value = {"code": "code" * 20, "expected_outputs": []}
         
         result = code_generator_node(base_state)
         
         assert result["workflow_phase"] == "code_generation"
-        # Verify feedback is NOT appended when empty
+        # Verify feedback is NOT appended when all fields are empty
         call_args = mock_llm.call_args[1]
         assert "REVISION FEEDBACK" not in call_args["system_prompt"]
         assert call_args["system_prompt"] == "Base Prompt"
+
+    @patch("src.agents.code.build_agent_prompt")
+    @patch("src.agents.code.check_context_or_escalate")
+    @patch("src.agents.code.call_agent_with_metrics")
+    @patch("src.agents.code.build_user_content_for_code_generator")
+    def test_generator_includes_physics_feedback(self, mock_uc, mock_llm, mock_check, mock_prompt, base_state):
+        """Test that physics_feedback is passed to LLM when present.
+        
+        This is critical: when physics_check fails and routes to generate_code,
+        the physics_feedback must reach the code generator so it knows what to fix.
+        """
+        expected_code = "code" * 20
+        physics_feedback = "Energy conservation violated: T+R+A = 1.15, expected 1.0"
+        
+        mock_check.return_value = None
+        mock_prompt.return_value = "Base Prompt"
+        mock_uc.return_value = "User Content"
+        base_state["physics_feedback"] = physics_feedback
+        base_state["reviewer_feedback"] = ""  # Empty - physics check routes directly to code gen
+        mock_llm.return_value = {"code": expected_code, "expected_outputs": []}
+        
+        result = code_generator_node(base_state)
+        
+        assert result["workflow_phase"] == "code_generation"
+        assert result["code"] == expected_code
+        
+        # Critical assertion: physics feedback MUST appear in system prompt
+        call_args = mock_llm.call_args[1]
+        assert "REVISION FEEDBACK:" in call_args["system_prompt"]
+        assert f"PHYSICS VALIDATION FEEDBACK: {physics_feedback}" in call_args["system_prompt"]
+        assert "Base Prompt" in call_args["system_prompt"]
+
+    @patch("src.agents.code.build_agent_prompt")
+    @patch("src.agents.code.check_context_or_escalate")
+    @patch("src.agents.code.call_agent_with_metrics")
+    @patch("src.agents.code.build_user_content_for_code_generator")
+    def test_generator_includes_execution_feedback(self, mock_uc, mock_llm, mock_check, mock_prompt, base_state):
+        """Test that execution_feedback is passed to LLM when present.
+        
+        This is critical: when execution_check fails and routes to generate_code,
+        the execution_feedback must reach the code generator so it knows what to fix.
+        """
+        expected_code = "code" * 20
+        execution_feedback = "Simulation crashed with MemoryError - reduce resolution or cell size"
+        
+        mock_check.return_value = None
+        mock_prompt.return_value = "Base Prompt"
+        mock_uc.return_value = "User Content"
+        base_state["execution_feedback"] = execution_feedback
+        base_state["reviewer_feedback"] = ""  # Empty - execution check routes directly to code gen
+        mock_llm.return_value = {"code": expected_code, "expected_outputs": []}
+        
+        result = code_generator_node(base_state)
+        
+        assert result["workflow_phase"] == "code_generation"
+        assert result["code"] == expected_code
+        
+        # Critical assertion: execution feedback MUST appear in system prompt
+        call_args = mock_llm.call_args[1]
+        assert "REVISION FEEDBACK:" in call_args["system_prompt"]
+        assert f"EXECUTION FEEDBACK: {execution_feedback}" in call_args["system_prompt"]
+        assert "Base Prompt" in call_args["system_prompt"]
+
+    @patch("src.agents.code.build_agent_prompt")
+    @patch("src.agents.code.check_context_or_escalate")
+    @patch("src.agents.code.call_agent_with_metrics")
+    @patch("src.agents.code.build_user_content_for_code_generator")
+    def test_generator_combines_multiple_feedback_sources(self, mock_uc, mock_llm, mock_check, mock_prompt, base_state):
+        """Test that when multiple feedback fields are set, all appear in the prompt.
+        
+        This can happen if there's stale feedback from a previous iteration, or if
+        multiple checks provide feedback before code regeneration.
+        """
+        expected_code = "code" * 20
+        physics_fb = "Conservation check warning: T+R+A = 1.08"
+        execution_fb = "Execution completed but with warnings"
+        reviewer_fb = "Minor style issue in flux calculation"
+        
+        mock_check.return_value = None
+        mock_prompt.return_value = "Base Prompt"
+        mock_uc.return_value = "User Content"
+        base_state["physics_feedback"] = physics_fb
+        base_state["execution_feedback"] = execution_fb
+        base_state["reviewer_feedback"] = reviewer_fb
+        mock_llm.return_value = {"code": expected_code, "expected_outputs": []}
+        
+        result = code_generator_node(base_state)
+        
+        assert result["workflow_phase"] == "code_generation"
+        assert result["code"] == expected_code
+        
+        # All three feedback sources MUST appear
+        call_args = mock_llm.call_args[1]
+        system_prompt = call_args["system_prompt"]
+        assert "REVISION FEEDBACK:" in system_prompt
+        assert f"PHYSICS VALIDATION FEEDBACK: {physics_fb}" in system_prompt
+        assert f"EXECUTION FEEDBACK: {execution_fb}" in system_prompt
+        assert f"CODE REVIEW FEEDBACK: {reviewer_fb}" in system_prompt
+        # Verify base prompt is still present
+        assert "Base Prompt" in system_prompt
+
+    @patch("src.agents.code.build_agent_prompt")
+    @patch("src.agents.code.check_context_or_escalate")
+    @patch("src.agents.code.call_agent_with_metrics")
+    @patch("src.agents.code.build_user_content_for_code_generator")
+    def test_generator_physics_feedback_alone_no_reviewer(self, mock_uc, mock_llm, mock_check, mock_prompt, base_state):
+        """Test that physics_feedback works even when reviewer_feedback is not set.
+        
+        Regression test for the original bug: physics_check → generate_code route
+        would not pass any feedback because code generator only read reviewer_feedback.
+        """
+        expected_code = "code" * 20
+        physics_feedback = "T > 1.0 detected at 550nm, unphysical transmission"
+        
+        mock_check.return_value = None
+        mock_prompt.return_value = "Base Prompt"
+        mock_uc.return_value = "User Content"
+        base_state["physics_feedback"] = physics_feedback
+        # Explicitly don't set reviewer_feedback - simulating physics_check → generate_code route
+        base_state.pop("reviewer_feedback", None)
+        mock_llm.return_value = {"code": expected_code, "expected_outputs": []}
+        
+        result = code_generator_node(base_state)
+        
+        assert result["workflow_phase"] == "code_generation"
+        
+        # Physics feedback should still appear even without reviewer_feedback
+        call_args = mock_llm.call_args[1]
+        assert "REVISION FEEDBACK:" in call_args["system_prompt"]
+        assert f"PHYSICS VALIDATION FEEDBACK: {physics_feedback}" in call_args["system_prompt"]
+        # Should NOT contain CODE REVIEW FEEDBACK since it wasn't set
+        assert "CODE REVIEW FEEDBACK:" not in call_args["system_prompt"]
+
+    @patch("src.agents.code.build_agent_prompt")
+    @patch("src.agents.code.check_context_or_escalate")
+    @patch("src.agents.code.call_agent_with_metrics")
+    @patch("src.agents.code.build_user_content_for_code_generator")
+    def test_generator_execution_feedback_alone_no_reviewer(self, mock_uc, mock_llm, mock_check, mock_prompt, base_state):
+        """Test that execution_feedback works even when reviewer_feedback is not set.
+        
+        Regression test for the original bug: execution_check → generate_code route
+        would not pass any feedback because code generator only read reviewer_feedback.
+        """
+        expected_code = "code" * 20
+        execution_feedback = "Exit code 1: ImportError - meep module not found"
+        
+        mock_check.return_value = None
+        mock_prompt.return_value = "Base Prompt"
+        mock_uc.return_value = "User Content"
+        base_state["execution_feedback"] = execution_feedback
+        # Explicitly don't set reviewer_feedback - simulating execution_check → generate_code route
+        base_state.pop("reviewer_feedback", None)
+        mock_llm.return_value = {"code": expected_code, "expected_outputs": []}
+        
+        result = code_generator_node(base_state)
+        
+        assert result["workflow_phase"] == "code_generation"
+        
+        # Execution feedback should still appear even without reviewer_feedback
+        call_args = mock_llm.call_args[1]
+        assert "REVISION FEEDBACK:" in call_args["system_prompt"]
+        assert f"EXECUTION FEEDBACK: {execution_feedback}" in call_args["system_prompt"]
+        # Should NOT contain CODE REVIEW FEEDBACK since it wasn't set
+        assert "CODE REVIEW FEEDBACK:" not in call_args["system_prompt"]
+
+    @patch("src.agents.code.build_agent_prompt")
+    @patch("src.agents.code.check_context_or_escalate")
+    @patch("src.agents.code.call_agent_with_metrics")
+    @patch("src.agents.code.build_user_content_for_code_generator")
+    def test_generator_no_feedback_when_all_none(self, mock_uc, mock_llm, mock_check, mock_prompt, base_state):
+        """Test that no feedback section when all fields are None (not just empty string)."""
+        mock_check.return_value = None
+        mock_prompt.return_value = "Base Prompt"
+        mock_uc.return_value = "User Content"
+        base_state["reviewer_feedback"] = None
+        base_state["physics_feedback"] = None
+        base_state["execution_feedback"] = None
+        mock_llm.return_value = {"code": "code" * 20, "expected_outputs": []}
+        
+        result = code_generator_node(base_state)
+        
+        assert result["workflow_phase"] == "code_generation"
+        # Verify feedback is NOT appended when all fields are None
+        call_args = mock_llm.call_args[1]
+        assert "REVISION FEEDBACK" not in call_args["system_prompt"]
+        assert call_args["system_prompt"] == "Base Prompt"
+
+    @patch("src.agents.code.build_agent_prompt")
+    @patch("src.agents.code.check_context_or_escalate")
+    @patch("src.agents.code.call_agent_with_metrics")
+    @patch("src.agents.code.build_user_content_for_code_generator")
+    def test_generator_feedback_partial_none_values(self, mock_uc, mock_llm, mock_check, mock_prompt, base_state):
+        """Test that only non-None/non-empty feedback fields are included."""
+        expected_code = "code" * 20
+        physics_feedback = "Resonance peak at wrong wavelength"
+        
+        mock_check.return_value = None
+        mock_prompt.return_value = "Base Prompt"
+        mock_uc.return_value = "User Content"
+        base_state["physics_feedback"] = physics_feedback
+        base_state["execution_feedback"] = None  # None should be skipped
+        base_state["reviewer_feedback"] = ""  # Empty string should be skipped
+        mock_llm.return_value = {"code": expected_code, "expected_outputs": []}
+        
+        result = code_generator_node(base_state)
+        
+        call_args = mock_llm.call_args[1]
+        system_prompt = call_args["system_prompt"]
+        
+        # Only physics feedback should appear
+        assert "REVISION FEEDBACK:" in system_prompt
+        assert f"PHYSICS VALIDATION FEEDBACK: {physics_feedback}" in system_prompt
+        # Others should NOT appear
+        assert "EXECUTION FEEDBACK:" not in system_prompt
+        assert "CODE REVIEW FEEDBACK:" not in system_prompt
 
     @pytest.mark.parametrize(
         "llm_output, expected_code, expected_outputs",

@@ -42,8 +42,9 @@ class TestDesignReviewerNode:
         assert result["reviewer_issues"] == []
         # Verify workflow phase is set correctly
         assert result["workflow_phase"] == "design_review"
-        # Verify feedback is NOT set for approve
-        assert "reviewer_feedback" not in result
+        # Verify feedback is explicitly cleared (None) on approval
+        assert "reviewer_feedback" in result
+        assert result["reviewer_feedback"] is None
         # Verify prompt was called with correct agent name
         mock_prompt.assert_called_once_with("design_reviewer", base_state)
         # Verify LLM was called exactly once
@@ -52,6 +53,45 @@ class TestDesignReviewerNode:
         assert mock_llm.call_args[1]["agent_name"] == "design_reviewer"
         # Verify system prompt was passed
         assert mock_llm.call_args[1]["system_prompt"] == "Prompt"
+
+    @patch("src.agents.base.check_context_or_escalate")
+    @patch("src.agents.design.build_agent_prompt")
+    @patch("src.agents.design.call_agent_with_metrics")
+    def test_reviewer_approve_clears_stale_feedback(self, mock_llm, mock_prompt, mock_check, base_state):
+        """Test that approval clears stale feedback from previous rejection.
+        
+        This tests the bug fix for issue 3: when design was previously rejected
+        and had reviewer_feedback set, approving it should clear that feedback
+        to None so it doesn't leak into subsequent design/code generation cycles.
+        """
+        mock_check.return_value = None
+        mock_prompt.return_value = "Prompt"
+        mock_llm.return_value = {
+            "verdict": "approve",
+            "issues": []
+        }
+        
+        # Simulate state with stale feedback from a previous rejection
+        base_state["design_description"] = {"some": "design"}
+        base_state["reviewer_feedback"] = "Old feedback: add more details to geometry spec"
+        base_state["design_revision_count"] = 2  # Had multiple previous rejections
+        
+        result = design_reviewer_node(base_state)
+        
+        # Verify approval verdict
+        assert result["last_design_review_verdict"] == "approve"
+        
+        # Critical: stale feedback MUST be cleared to None on approval
+        # If this is not None, the design/code generator might receive confusing
+        # feedback from a previous iteration even though design was approved
+        assert "reviewer_feedback" in result, "reviewer_feedback key must be present"
+        assert result["reviewer_feedback"] is None, (
+            f"Stale feedback should be cleared to None on approval, "
+            f"but got: {result['reviewer_feedback']!r}"
+        )
+        
+        # Verify revision count is preserved (not reset, just not incremented)
+        assert result["design_revision_count"] == 2
 
     @patch("src.agents.base.check_context_or_escalate")
     @patch("src.agents.design.build_agent_prompt")
