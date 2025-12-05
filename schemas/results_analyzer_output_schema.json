@@ -56,6 +56,10 @@
       "items": {
         "type": "object",
         "properties": {
+          "figure_id": { 
+            "type": "string",
+            "description": "Paper figure ID (e.g., 'Fig3a') - alias for paper_figure_id"
+          },
           "paper_figure_id": { "type": "string" },
           "simulated_figure_path": { "type": "string" },
           "comparison_type": {
@@ -73,6 +77,23 @@
           "key_features_missed": {
             "type": "array",
             "items": { "type": "string" }
+          },
+          "shape_comparison": {
+            "type": "array",
+            "description": "Detailed aspect-by-aspect shape comparison between paper and reproduction",
+            "items": {
+              "type": "object",
+              "properties": {
+                "aspect": { "type": "string", "description": "What aspect is being compared (e.g., 'Peak position', 'Line shape')" },
+                "paper": { "type": "string", "description": "Description of this aspect in the paper figure" },
+                "reproduction": { "type": "string", "description": "Description of this aspect in the reproduction" }
+              },
+              "required": ["aspect", "paper", "reproduction"]
+            }
+          },
+          "reason_for_difference": {
+            "type": "string",
+            "description": "Explanation of discrepancies between paper and reproduction figures"
           },
           "notes": { "type": "string" }
         },

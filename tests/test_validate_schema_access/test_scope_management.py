@@ -79,6 +79,8 @@ def func2():
         
         # Both should be valid - x has different schemas in each function
         assert_no_violations(result)
+        # Should have 4 accesses total (nested_obj, inner_field, array_field, item_id)
+        assert len(result.field_accesses) == 4
     
     def test_function_context_tracked_correctly(self, schema_file):
         """Each access should have correct function context."""
@@ -90,6 +92,10 @@ def second_function():
     value = agent_output.get("summary")
 '''
         result = validate_code_with_mock_schema(code, schema_file)
+        
+        # Should have exactly 2 accesses
+        assert len(result.field_accesses) == 2
+        assert_no_violations(result)
         
         # Verify function context is tracked
         assert_field_access_recorded(
@@ -132,6 +138,13 @@ def outer():
         
         # Both accesses should be valid
         assert_no_violations(result)
+        # Should have 4 accesses: nested_obj, inner_field (outer), array_field, item_id (inner)
+        assert len(result.field_accesses) == 4
+        # Verify function contexts - note: inner_field is on 'nested', item_id is on 'item'
+        assert_field_access_recorded(result, "nested_obj", variable="agent_output", in_function="outer")
+        assert_field_access_recorded(result, "inner_field", variable="nested", in_function="outer")
+        assert_field_access_recorded(result, "array_field", variable="agent_output", in_function="inner")
+        assert_field_access_recorded(result, "item_id", variable="item", in_function="inner")
     
     def test_lambda_has_own_scope(self, schema_file):
         """Lambda functions should have independent scope."""
@@ -180,6 +193,13 @@ async def async_func2():
         result = validate_code_with_mock_schema(code, schema_file)
         
         assert_no_violations(result)
+        # Should have 4 accesses total
+        assert len(result.field_accesses) == 4
+        # Verify function contexts for async functions - note derived variable names
+        assert_field_access_recorded(result, "nested_obj", variable="agent_output", in_function="async_func1")
+        assert_field_access_recorded(result, "inner_field", variable="nested", in_function="async_func1")
+        assert_field_access_recorded(result, "array_field", variable="agent_output", in_function="async_func2")
+        assert_field_access_recorded(result, "item_id", variable="item", in_function="async_func2")
     
     def test_mixed_sync_async_scopes(self, schema_file):
         """Sync and async functions should have separate scopes."""
@@ -227,6 +247,13 @@ class MyClass:
         result = validate_code_with_mock_schema(code, schema_file)
         
         assert_no_violations(result)
+        # Should have 4 accesses total across both methods
+        assert len(result.field_accesses) == 4
+        # Verify method context - note derived variable names
+        assert_field_access_recorded(result, "nested_obj", variable="agent_output", in_function="method1")
+        assert_field_access_recorded(result, "inner_field", variable="nested", in_function="method1")
+        assert_field_access_recorded(result, "array_field", variable="agent_output", in_function="method2")
+        assert_field_access_recorded(result, "item_id", variable="item", in_function="method2")
     
     def test_static_and_class_methods(self, schema_file):
         """Static and class methods should have proper scope."""

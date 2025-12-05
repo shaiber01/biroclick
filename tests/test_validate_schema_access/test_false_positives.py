@@ -74,6 +74,9 @@ def test_func():
         result = validate_code_with_mock_schema(code, schema_file)
         
         assert_no_violations(result)
+        # Verify the access was recorded
+        assert_field_access_recorded(result, "optional_field", variable="agent_output")
+        assert len(result.field_accesses) == 1
     
     def test_in_check_valid_field(self, schema_file):
         """Tool MUST NOT flag 'in' check with valid field."""
@@ -97,6 +100,10 @@ def test_func():
         result = validate_code_with_mock_schema(code, schema_file)
         
         assert_no_violations(result)
+        # Verify both accesses were recorded
+        assert_field_access_recorded(result, "nested_obj", variable="agent_output")
+        assert_field_access_recorded(result, "inner_field", variable="nested")
+        assert len(result.field_accesses) == 2
     
     def test_valid_loop_variable_access(self, schema_file):
         """Tool MUST NOT flag valid access on loop variable."""
@@ -108,6 +115,10 @@ def test_func():
         result = validate_code_with_mock_schema(code, schema_file)
         
         assert_no_violations(result)
+        # Verify both accesses were recorded
+        assert_field_access_recorded(result, "array_field", variable="agent_output")
+        assert_field_access_recorded(result, "item_id", variable="item")
+        assert len(result.field_accesses) == 2
     
     def test_valid_comprehension_variable_access(self, schema_file):
         """Tool MUST NOT flag valid access in comprehension."""
@@ -118,6 +129,10 @@ def test_func():
         result = validate_code_with_mock_schema(code, schema_file)
         
         assert_no_violations(result)
+        # Verify both accesses were recorded
+        assert_field_access_recorded(result, "array_field", variable="agent_output")
+        assert_field_access_recorded(result, "item_id", variable="x")
+        assert len(result.field_accesses) == 2
     
     def test_multiple_valid_accesses(self, schema_file):
         """Tool MUST NOT flag multiple valid accesses."""
@@ -183,6 +198,8 @@ def test_func():
         
         # Iteration over array variable should be allowed
         assert_no_violations_of_type(result, ViolationType.PATTERN_NOT_WHITELISTED)
+        # Should record the array_field access
+        assert_field_access_recorded(result, "array_field", variable="agent_output")
     
     def test_numeric_index_on_array_allowed(self, tmp_path):
         """Tool MUST NOT flag numeric index on array variable."""
@@ -199,6 +216,8 @@ def test_func():
         
         # Numeric index on array should be allowed
         assert_no_violations_of_type(result, ViolationType.PATTERN_NOT_WHITELISTED)
+        # Should record the array_field access
+        assert_field_access_recorded(result, "array_field", variable="agent_output")
     
     def test_negative_index_on_array_allowed(self, tmp_path):
         """Tool MUST NOT flag negative index on array variable."""
@@ -215,6 +234,8 @@ def test_func():
         
         # Negative index on array should be allowed
         assert_no_violations_of_type(result, ViolationType.PATTERN_NOT_WHITELISTED)
+        # Should record the array_field access
+        assert_field_access_recorded(result, "array_field", variable="agent_output")
 
 
 class TestNonTrackedVariablesIgnored:

@@ -13,7 +13,9 @@ NOTE: User options are defined in src/agents/user_options.py as the single
 source of truth for what options are shown to users and how they are matched.
 """
 
+import json
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional, Callable
 
@@ -28,6 +30,8 @@ from src.agents.user_options import (
     get_clarification_message,
     extract_guidance_text,
 )
+from src.prompts import build_agent_prompt
+from src.llm_client import call_agent_with_metrics
 
 logger = logging.getLogger(__name__)
 
@@ -886,6 +890,186 @@ def handle_unknown_escalation(
         result["should_stop"] = True
 
 
+def _build_routing_context(
+    state: ReproState,
+    user_responses: Dict[str, str],
+    current_stage_id: Optional[str],
+) -> str:
+    """
+    Build comprehensive context for LLM-based routing decision.
+    
+    Provides the supervisor LLM with all the information needed to decide
+    where to route after user provides guidance.
+    """
+    trigger = state.get("ask_user_trigger", "unknown")
+    last_node = state.get("last_node_before_ask_user", "unknown")
+    stage_type = state.get("current_stage_type", "unknown")
+    pending_questions = state.get("pending_user_questions", [])
+    response_text = parse_user_response(user_responses)
+    
+    # Get progress summary
+    progress = state.get("progress", {})
+    stages = progress.get("stages", [])
+    completed = [s.get("stage_id") for s in stages if s.get("status", "").startswith("completed")]
+    in_progress = [s.get("stage_id") for s in stages if s.get("status") == "in_progress"]
+    
+    context = f"""# USER RESPONSE ROUTING DECISION
+
+## Context
+- **Trigger:** {trigger}
+- **Source Node:** {last_node}
+- **Current Stage:** {current_stage_id or "None"}
+- **Stage Type:** {stage_type}
+
+## Progress
+- **Completed stages:** {", ".join(completed) if completed else "None"}
+- **In progress:** {", ".join(in_progress) if in_progress else "None"}
+
+## Original Question
+{pending_questions[0] if pending_questions else "N/A"}
+
+## User Response
+{response_text}
+
+## Available Routing Options
+
+Based on what the user's response REQUIRES (not where you came from), choose the appropriate verdict:
+
+| Verdict | Routes To | Use When |
+|---------|-----------|----------|
+| `ok_continue` | Next stage | User approves current state, no changes needed |
+| `retry_generate_code` | Code generator | User provides parameter fix, value correction, algorithm change |
+| `retry_design` | Designer | User requests design-level change (geometry, model type, simulation approach) |
+| `retry_code_review` | Code reviewer | User answers a code reviewer question (re-run review with answer) |
+| `retry_design_review` | Design reviewer | User answers a design reviewer question |
+| `retry_plan_review` | Plan reviewer | User answers a plan reviewer question |
+| `retry_analyze` | Analyzer | User provides analysis/comparison hint |
+| `replan_needed` | Planner | System decides replan needed (fundamental issue) |
+| `replan_with_guidance` | Planner | User explicitly requests plan changes with specific guidance |
+| `backtrack_to_stage` | Backtrack handler | Need to redo an earlier stage (set backtrack_decision.target_stage_id) |
+| `ask_user` | Ask user again | Response unclear, need clarification |
+| `all_complete` | End workflow | User wants to stop |
+
+## Key Insight
+The source node tells you CONTEXT, not DESTINATION. Route based on what the user's response REQUIRES.
+
+Examples:
+- physics_check + "fix gamma to 66 meV" -> `retry_generate_code` (code needs parameter change)
+- physics_check + "use Drude-Lorentz model" -> `retry_design` (design-level model change)
+- physics_check + "looks acceptable" -> `ok_continue` (user approves)
+- code_review + "reduce resolution to 10" -> `retry_generate_code` (code parameter)
+- any + "I'm not sure what to do" -> `ask_user` (need clarification)
+
+## Your Task
+Decide the best verdict and provide feedback for the target node.
+"""
+    return context
+
+
+def _route_with_llm(
+    state: ReproState,
+    result: Dict[str, Any],
+    user_responses: Dict[str, str],
+    current_stage_id: Optional[str],
+) -> None:
+    """
+    Use supervisor LLM to decide routing based on user response.
+    
+    The LLM has full flexibility to route to any node based on what
+    the user's response requires.
+    """
+    response_text = parse_user_response(user_responses)
+    guidance_text = extract_guidance_text(
+        list(user_responses.values())[-1] if user_responses else ""
+    )
+    
+    # Build context for LLM
+    user_content = _build_routing_context(state, user_responses, current_stage_id)
+    
+    try:
+        system_prompt = build_agent_prompt("supervisor", state)
+        agent_output = call_agent_with_metrics(
+            agent_name="supervisor",
+            system_prompt=system_prompt,
+            user_content=user_content,
+            state=state,
+        )
+        
+        verdict = agent_output.get("verdict", "ok_continue")
+        summary = agent_output.get("summary", "")
+        
+        result["supervisor_verdict"] = verdict
+        result["supervisor_feedback"] = summary
+        
+        # Map verdict to correct feedback field
+        # Different nodes read different feedback fields
+        if verdict in ["retry_generate_code", "retry_design", "retry_code_review", "retry_design_review"]:
+            result["reviewer_feedback"] = f"User guidance: {guidance_text}"
+        elif verdict in ["replan_needed", "replan_with_guidance", "retry_plan_review"]:
+            result["planner_feedback"] = f"User guidance: {guidance_text}"
+        elif verdict == "retry_analyze":
+            result["analysis_feedback"] = f"User guidance: {guidance_text}"
+        elif verdict == "backtrack_to_stage":
+            # LLM should have provided backtrack_decision with target_stage_id
+            backtrack_decision = agent_output.get("backtrack_decision", {})
+            target_stage = backtrack_decision.get("target_stage_id", "") if backtrack_decision else ""
+            
+            if target_stage:
+                # Valid backtrack decision
+                result["backtrack_decision"] = {
+                    "target_stage_id": target_stage,
+                    "reason": backtrack_decision.get("reason", guidance_text),
+                    "accepted": True,
+                }
+            else:
+                # LLM wants to backtrack but didn't specify target - ask user
+                logger.warning(
+                    "LLM returned backtrack_to_stage without target_stage_id. "
+                    "Asking user for clarification."
+                )
+                # Get list of completed stages for user reference
+                progress = state.get("progress", {})
+                stages = progress.get("stages", [])
+                completed_stages = [
+                    s.get("stage_id") for s in stages 
+                    if s.get("status", "").startswith("completed")
+                ]
+                stage_list = ", ".join(completed_stages) if completed_stages else "No stages completed yet"
+                
+                # Override verdict to ask_user
+                result["supervisor_verdict"] = "ask_user"
+                result["pending_user_questions"] = [
+                    f"You mentioned going back to an earlier stage. Which stage should we backtrack to?\n\n"
+                    f"**Completed stages:** {stage_list}\n\n"
+                    f"Please respond with the stage ID (e.g., 'stage0', 'stage1') or 'CANCEL' to continue without backtracking."
+                ]
+                result["awaiting_user_input"] = True
+        elif verdict == "ask_user":
+            # LLM needs clarification - set the question for the user
+            user_question = agent_output.get("user_question", "")
+            if user_question:
+                result["pending_user_questions"] = [user_question]
+            else:
+                # Fallback question if LLM didn't provide one
+                result["pending_user_questions"] = [
+                    f"Your response was unclear. Could you please clarify?\n\n"
+                    f"Original response: {guidance_text[:200]}{'...' if len(guidance_text) > 200 else ''}"
+                ]
+            result["awaiting_user_input"] = True
+        # For ok_continue, all_complete - no special feedback field needed
+        
+        logger.info(
+            f"LLM routing decision: verdict={verdict}, "
+            f"source={state.get('last_node_before_ask_user', 'unknown')}"
+        )
+        
+    except Exception as e:
+        logger.warning(f"LLM routing failed: {e}. Defaulting to ok_continue with guidance.")
+        result["supervisor_verdict"] = "ok_continue"
+        result["supervisor_feedback"] = f"LLM routing unavailable: {str(e)[:100]}"
+        result["reviewer_feedback"] = f"User guidance: {guidance_text}"
+
+
 def handle_reviewer_escalation(
     state: ReproState,
     result: Dict[str, Any],
@@ -895,21 +1079,30 @@ def handle_reviewer_escalation(
     """
     Handle reviewer_escalation trigger response.
     
-    This handles cases where a reviewer LLM explicitly requested user input
-    via the escalate_to_user field.
+    Uses a hybrid approach:
+    1. FAST PATH: Simple keyword matching for obvious choices (STOP, SKIP, APPROVE)
+    2. SMART PATH: LLM decides routing for everything else
     
-    SPECIAL BEHAVIOR: Unlike other triggers, reviewer_escalation accepts
-    free-form responses as guidance. This is because the question is domain-specific
-    (e.g., "Should we use FWHM or HWHM?") and users naturally answer directly.
-    
-    Only SKIP_STAGE and STOP require explicit keywords for safety.
-    Any other non-empty response is treated as guidance.
+    The LLM has full flexibility to route to any node based on what
+    the user's response requires, not restricted by the source node.
     """
     response_text = parse_user_response(user_responses)
     
-    # First check for explicit SKIP - user wants to skip this stage
+    # ═══════════════════════════════════════════════════════════════════════
+    # FAST PATH: Explicit keywords (no LLM needed)
+    # ═══════════════════════════════════════════════════════════════════════
+    
+    # STOP - user wants to end the workflow
+    if check_keywords(response_text, ["STOP", "QUIT", "EXIT", "ABORT", "END"]):
+        result["supervisor_verdict"] = "all_complete"
+        result["should_stop"] = True
+        result["supervisor_feedback"] = "User requested workflow stop."
+        return
+    
+    # SKIP - user wants to skip this stage
     if check_keywords(response_text, ["SKIP", "SKIP_STAGE"]):
         result["supervisor_verdict"] = "ok_continue"
+        result["supervisor_feedback"] = "User skipped stage."
         if current_stage_id:
             _update_progress_with_error_handling(
                 state, result, current_stage_id, "blocked",
@@ -917,45 +1110,28 @@ def handle_reviewer_escalation(
             )
         return
     
-    # Check for explicit STOP - user wants to end the workflow
-    if check_keywords(response_text, ["STOP", "QUIT", "EXIT", "ABORT", "END"]):
-        result["supervisor_verdict"] = "all_complete"
-        result["should_stop"] = True
+    # APPROVE - explicit approval, no changes needed
+    # Require keyword at START of response to avoid false matches like "I accept that..."
+    # Matches: "APPROVE", "APPROVE:", "APPROVE: some note", etc.
+    approval_pattern = r"^\s*(APPROVE|PROCEED|ACCEPT|LOOKS_GOOD|OK_CONTINUE)\s*:?"
+    if re.match(approval_pattern, response_text.strip(), re.IGNORECASE):
+        result["supervisor_verdict"] = "ok_continue"
+        result["supervisor_feedback"] = "User explicitly approved, continuing."
         return
     
-    # For reviewer_escalation, ANY other non-empty response is treated as guidance.
-    # This is different from other triggers because the question is domain-specific
-    # and users naturally respond with their answer, not with keywords.
-    if response_text.strip():
-        raw_response = list(user_responses.values())[-1] if user_responses else ""
-        # Use the full response as guidance (extract_guidance_text will strip any
-        # optional keyword prefixes like "GUIDANCE:" if present)
-        guidance_text = extract_guidance_text(raw_response)
-        result["reviewer_feedback"] = f"User guidance: {guidance_text}"
-        result["supervisor_feedback"] = "Continuing with user guidance for reviewer question."
-        
-        # Route back to the specific reviewer that escalated
-        last_node = state.get("last_node_before_ask_user", "")
-        if last_node == "code_review":
-            result["supervisor_verdict"] = "retry_code_review"
-        elif last_node == "design_review":
-            result["supervisor_verdict"] = "retry_design_review"
-        elif last_node == "plan_review":
-            result["supervisor_verdict"] = "retry_plan_review"
-        elif last_node == "physics_check":
-            # Physics check escalation should continue to analysis or next stage
-            result["supervisor_verdict"] = "ok_continue"
-        else:
-            # Fallback: continue to select_stage if we can't determine the reviewer
-            result["supervisor_verdict"] = "ok_continue"
+    # Empty response - ask for clarification
+    if not response_text.strip():
+        result["supervisor_verdict"] = "ask_user"
+        result["pending_user_questions"] = [
+            "Your response was empty. Please provide your answer to the question, "
+            "or type SKIP_STAGE to skip this stage, or STOP to end the workflow."
+        ]
         return
     
-    # Only ask for clarification if response is completely empty
-    result["supervisor_verdict"] = "ask_user"
-    result["pending_user_questions"] = [
-        "Your response was empty. Please provide your answer to the question, "
-        "or type SKIP_STAGE to skip this stage, or STOP to end the workflow."
-    ]
+    # ═══════════════════════════════════════════════════════════════════════
+    # SMART PATH: LLM decides routing (full flexibility)
+    # ═══════════════════════════════════════════════════════════════════════
+    _route_with_llm(state, result, user_responses, current_stage_id)
 
 
 # Registry of trigger handlers

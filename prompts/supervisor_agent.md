@@ -244,6 +244,47 @@ Your action:
 ```
 
 ═══════════════════════════════════════════════════════════════════════
+C3. ROUTING AFTER REVIEWER ESCALATION
+═══════════════════════════════════════════════════════════════════════
+
+When `ask_user_trigger` = "reviewer_escalation", you have FULL FLEXIBILITY to
+route to any node. The source node tells you CONTEXT, not DESTINATION.
+Route based on what the user's response REQUIRES.
+
+### Node Purposes (for routing decisions)
+
+| Node | Purpose | When to Route Here |
+|------|---------|-------------------|
+| `generate_code` | Creates/revises simulation code | User provides parameter fix, value correction, algorithm change |
+| `design` | Creates/revises simulation design | User requests structural change (geometry type, material model, simulation approach) |
+| `code_review` | Reviews code quality | User answered code reviewer's question, needs re-evaluation |
+| `design_review` | Reviews design validity | User answered design reviewer's question |
+| `planning` | Creates/revises the plan | User wants to add/remove/reorder stages |
+| `analyze` | Analyzes simulation outputs | User provides comparison hint or analysis guidance |
+
+### Routing Examples
+
+| Source Node | User Response | Best Verdict | Reasoning |
+|-------------|--------------|--------------|-----------|
+| `physics_check` | "fix gamma to 66 meV" | `retry_generate_code` | Code parameter needs to change |
+| `physics_check` | "use Drude-Lorentz model instead" | `retry_design` | Design-level model change |
+| `physics_check` | "looks acceptable, proceed" | `ok_continue` | User approves current state |
+| `code_review` | "reduce resolution to 10" | `retry_generate_code` | Code parameter change |
+| `code_review` | "that's actually a design flaw" | `retry_design` | Escalate to design level |
+| `design_review` | "use 2D instead of 3D" | `retry_design` | Design change needed |
+| any | "I'm confused, what should I do?" | `ask_user` | Need clarification |
+| any | "let's start the plan over" | `replan_needed` | Fundamental restart |
+| any | "go back to stage 0" | `backtrack_to_stage` | Redo earlier stage |
+
+### Key Insight
+
+Do NOT simply route back to the node that escalated. Consider:
+- If the user provides a **value/parameter fix** → route to `generate_code`
+- If the user requests a **model/approach change** → route to `design`
+- If the user just **approves** the current state → `ok_continue`
+- If the user **answers a reviewer question** → retry that specific reviewer
+
+═══════════════════════════════════════════════════════════════════════
 D. OUTPUT FORMAT
 ═══════════════════════════════════════════════════════════════════════
 
@@ -268,6 +309,12 @@ Return a JSON object with your supervisory decision. The system validates struct
 | `ask_user` | Need user input for decision |
 | `backtrack_to_stage` | Must redo earlier stage |
 | `all_complete` | All stages done, ready for report |
+| `retry_generate_code` | User provided code/parameter fix - regenerate code with guidance |
+| `retry_design` | User requests design-level change - redesign with guidance |
+| `retry_code_review` | User answered code reviewer question - re-run code review |
+| `retry_design_review` | User answered design reviewer question - re-run design review |
+| `retry_plan_review` | User answered plan reviewer question - re-run plan review |
+| `retry_analyze` | User provided analysis/comparison hint - re-run analysis |
 
 ### Field Details
 

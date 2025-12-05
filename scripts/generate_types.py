@@ -28,32 +28,6 @@ SCHEMA_DIR = PROJECT_ROOT / "schemas"
 OUTPUT_DIR = SCHEMA_DIR / "generated_types"
 OUTPUT_FILE_LEGACY = SCHEMA_DIR / "generated_types.py"
 
-# Schemas to include in generation
-# Order matters for dependency resolution? (Not for independent modules)
-SCHEMAS = [
-    # Core state artifacts
-    "plan_schema.json",
-    "progress_schema.json",
-    "metrics_schema.json",
-    "report_output_schema.json",
-    "assumptions_schema.json",
-    "prompt_adaptations_schema.json",
-    # Agent output schemas
-    "planner_output_schema.json",
-    "simulation_designer_output_schema.json",
-    "code_generator_output_schema.json",
-    "prompt_adaptor_output_schema.json",
-    "supervisor_output_schema.json",
-    "plan_reviewer_output_schema.json",
-    "design_reviewer_output_schema.json",
-    "code_reviewer_output_schema.json",
-    "execution_validator_output_schema.json",
-    "physics_sanity_output_schema.json",
-    "results_analyzer_output_schema.json",
-    "comparison_validator_output_schema.json",
-]
-
-
 def main():
     """Generate Python types from JSON schemas."""
     print("=" * 60)
@@ -69,28 +43,18 @@ def main():
     with tempfile.TemporaryDirectory() as temp_input_dir_str:
         temp_input_dir = Path(temp_input_dir_str)
         
-        # Collect and copy existing schemas
-        existing_schemas = []
-        missing_schemas = []
+        # Discover and copy all JSON schema files
+        schema_files = sorted(SCHEMA_DIR.glob("*.json"))
         
-        print("Collecting schemas...")
-        for schema in SCHEMAS:
-            src_path = SCHEMA_DIR / schema
-            if src_path.exists():
-                dst_path = temp_input_dir / schema
-                shutil.copy2(src_path, dst_path)
-                existing_schemas.append(dst_path)
-                print(f"  ✓ Found: {schema}")
-            else:
-                missing_schemas.append(schema)
-                print(f"  ✗ Missing: {schema}")
-        
-        if not existing_schemas:
+        if not schema_files:
             print("\nError: No schema files found!")
             sys.exit(1)
         
-        if missing_schemas:
-            print(f"\nWarning: {len(missing_schemas)} schema(s) not found, skipping them")
+        print(f"Discovered {len(schema_files)} schema files...")
+        for schema_path in schema_files:
+            dst_path = temp_input_dir / schema_path.name
+            shutil.copy2(schema_path, dst_path)
+            print(f"  ✓ {schema_path.name}")
         
         # Prepare output directory
         # Remove legacy file if it exists

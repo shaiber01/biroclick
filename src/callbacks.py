@@ -75,6 +75,14 @@ class GraphProgressCallback(BaseCallbackHandler):
         # Helper to extract trigger from Interrupt-like object
         def _extract_trigger(obj):
             """Try to extract trigger from an Interrupt object."""
+            # DEBUG: Log actual structure to diagnose extraction issues
+            logger.info(f"_extract_trigger: type={type(obj).__name__}, obj={obj}")
+            logger.info(f"_extract_trigger: attrs={[a for a in dir(obj) if not a.startswith('_')]}")
+            if hasattr(obj, 'args'):
+                logger.info(f"_extract_trigger: args={obj.args}, args_type={type(obj.args)}")
+            if hasattr(obj, 'value'):
+                logger.info(f"_extract_trigger: value={obj.value}")
+            
             try:
                 # LangGraph 1.x: GraphInterrupt stores interrupts in args[0]
                 # Structure: GraphInterrupt.args[0][0].value = {"trigger": "...", ...}
@@ -134,8 +142,12 @@ class GraphProgressCallback(BaseCallbackHandler):
         error_str = str(error)
         if "Interrupt(" in error_str or "GraphInterrupt" in error_str:
             # Try to extract trigger from string representation
+            # Handle both 'trigger': 'value' and "trigger": "value" formats
             import re
-            trigger_match = re.search(r"'trigger':\s*'([^']+)'", error_str)
+            trigger_match = re.search(r"['\"]trigger['\"]\s*:\s*['\"]([^'\"]+)['\"]", error_str)
+            if not trigger_match:
+                # Also try without quotes on value (in case it's an enum or similar)
+                trigger_match = re.search(r"['\"]trigger['\"]\s*:\s*(\w+)", error_str)
             trigger = trigger_match.group(1) if trigger_match else 'unknown'
             logger.info(f"⏸️  Graph paused for user input (trigger: {trigger})")
             return

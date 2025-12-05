@@ -8,8 +8,22 @@
   "properties": {
     "verdict": {
       "type": "string",
-      "enum": ["ok_continue", "replan_needed", "change_priority", "ask_user", "backtrack_to_stage", "all_complete"],
-      "description": "High-level decision on what to do next"
+      "enum": [
+        "ok_continue",
+        "replan_needed",
+        "replan_with_guidance",
+        "change_priority",
+        "ask_user",
+        "backtrack_to_stage",
+        "all_complete",
+        "retry_generate_code",
+        "retry_design",
+        "retry_code_review",
+        "retry_design_review",
+        "retry_plan_review",
+        "retry_analyze"
+      ],
+      "description": "High-level decision on what to do next. replan_with_guidance is used when user explicitly requests a replan with specific guidance. The retry_* verdicts are used when user provides guidance after a reviewer escalation."
     },
     "validation_hierarchy_status": {
       "type": "object",

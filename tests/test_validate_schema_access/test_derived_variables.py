@@ -53,7 +53,9 @@ def test_func():
 '''
         result = validate_code_with_mock_schema(code, schema_file)
         
-        # Should have access recorded for nested variable
+        # Should have 2 accesses recorded: nested_obj and inner_field
+        assert len(result.field_accesses) == 2
+        assert_field_access_recorded(result, "nested_obj", variable="agent_output")
         assert_field_access_recorded(result, "inner_field", variable="nested")
         assert_no_violations(result)
     
@@ -66,7 +68,8 @@ def test_func():
 '''
         result = validate_code_with_mock_schema(code, schema_file)
         
-        # Should track access on alias
+        # Should track access on alias with correct variable name
+        assert len(result.field_accesses) == 1
         assert_field_access_recorded(result, "verdict", variable="alias")
         assert_no_violations(result)
     
@@ -79,6 +82,9 @@ def test_func():
 '''
         result = validate_code_with_mock_schema(code, schema_file)
         
+        # Should have 2 accesses: array_field and item_id
+        assert len(result.field_accesses) == 2
+        assert_field_access_recorded(result, "array_field", variable="agent_output")
         # item should be tracked with array items schema
         assert_field_access_recorded(result, "item_id", variable="item")
         assert_no_violations(result)
@@ -91,7 +97,10 @@ def test_func():
 '''
         result = validate_code_with_mock_schema(code, schema_file)
         
-        # x should be tracked
+        # Should have 2 accesses: array_field and item_id
+        assert len(result.field_accesses) == 2
+        assert_field_access_recorded(result, "array_field", variable="agent_output")
+        # x should be tracked with array items schema
         assert_field_access_recorded(result, "item_id", variable="x")
         assert_no_violations(result)
     
@@ -106,6 +115,9 @@ def test_func():
 '''
         result = validate_code_with_mock_schema(code, schema_file)
         
+        # Should have 2 accesses: array_field and item_id
+        assert len(result.field_accesses) == 2
+        assert_field_access_recorded(result, "array_field", variable="agent_output")
         # first should be tracked with items schema
         assert_field_access_recorded(result, "item_id", variable="first")
         assert_no_violations(result)
@@ -120,7 +132,10 @@ def test_func():
 '''
         result = validate_code_with_mock_schema(code, schema_file)
         
-        # item should be tracked
+        # Should have 2 accesses: array_field and item_id
+        assert len(result.field_accesses) == 2
+        assert_field_access_recorded(result, "array_field", variable="agent_output")
+        # item should be tracked with items schema
         assert_field_access_recorded(result, "item_id", variable="item")
         assert_no_violations(result)
 
@@ -148,6 +163,10 @@ def test_func():
         result = validate_code_with_mock_schema(code, schema_file)
         
         assert_no_violations(result)
+        # Verify both accesses were recorded
+        assert len(result.field_accesses) == 2
+        assert_field_access_recorded(result, "nested_obj", variable="agent_output")
+        assert_field_access_recorded(result, "inner_field", variable="nested")
     
     def test_invalid_nested_field_fails(self, schema_file):
         """Invalid field on nested object MUST be caught."""
@@ -241,6 +260,11 @@ def test_func():
         result = validate_code_with_mock_schema(code, schema_file)
         
         assert_no_violations(result)
+        # Verify all 3 accesses were recorded in the derivation chain
+        assert len(result.field_accesses) == 3
+        assert_field_access_recorded(result, "nested_obj", variable="agent_output")
+        assert_field_access_recorded(result, "deep_nested", variable="nested")
+        assert_field_access_recorded(result, "deepest_field", variable="deep")
     
     def test_two_level_nesting_invalid_at_deepest(self, schema_file):
         """Invalid field at deepest level MUST be caught."""

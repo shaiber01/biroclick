@@ -521,6 +521,34 @@ class FieldAccessVisitor(ast.NodeVisitor):
             return tracked.json_pointer.endswith("/items")
         return False
     
+    def _validate_field_access(self, var_name: str, field: str, lineno: int, col: int, snippet: str):
+        """
+        Validate a field access against the tracked variable's schema.
+        
+        If the tracked variable has schema info (schema_file and json_pointer),
+        check that the accessed field exists in the schema. If not, record a violation.
+        """
+        tracked = self.tracked_vars.get(var_name)
+        if not tracked or not tracked.schema_file:
+            return  # No schema to validate against
+        
+        try:
+            valid_fields = get_schema_fields_for_pointer(tracked.schema_file, tracked.json_pointer)
+            if field not in valid_fields:
+                self.violations.append(Violation(
+                    file=self.file_path,
+                    line=lineno,
+                    col=col,
+                    type=ViolationType.FIELD_NOT_IN_SCHEMA,
+                    message=f"Field '{field}' not in schema for '{var_name}' (schema: {tracked.schema_file}, pointer: {tracked.json_pointer or 'root'}).",
+                    code_snippet=snippet,
+                    field=field,
+                    variable=var_name,
+                ))
+        except (FileNotFoundError, ValueError) as e:
+            # Schema file not found or invalid pointer - skip validation
+            pass
+    
     def _extract_get_call_info(self, node: ast.Call) -> Optional[tuple]:
         """
         Extract info from a .get() call.
@@ -714,6 +742,9 @@ class FieldAccessVisitor(ast.NodeVisitor):
                             code_snippet=snippet,
                             variable=var_name,
                         ))
+                    else:
+                        # Validate static field access against schema
+                        self._validate_field_access(var_name, field, node.lineno, node.col_offset, snippet)
         
         # Check for disallowed method calls: .keys(), .values(), .items(), .pop(), etc.
         if isinstance(node.func, ast.Attribute):
@@ -751,6 +782,22 @@ class FieldAccessVisitor(ast.NodeVisitor):
         
         self.generic_visit(node)
     
+    def _is_numeric_index(self, node: ast.AST) -> bool:
+        """Check if a subscript slice is a numeric index (positive or negative).
+        
+        Handles both:
+        - Positive indices: ast.Constant(value=0) for items[0]
+        - Negative indices: ast.UnaryOp(op=USub, operand=Constant(1)) for items[-1]
+        """
+        # Direct positive integer: items[0]
+        if isinstance(node, ast.Constant) and isinstance(node.value, int):
+            return True
+        # Negative integer: items[-1] is represented as UnaryOp(USub, Constant(1))
+        if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub):
+            if isinstance(node.operand, ast.Constant) and isinstance(node.operand.value, int):
+                return True
+        return False
+    
     def visit_Subscript(self, node: ast.Subscript):
         """Handle subscript access like obj["field"] or list[0].
         
@@ -758,15 +805,14 @@ class FieldAccessVisitor(ast.NodeVisitor):
         since dict["key"] = value is the standard way to set values.
         
         Also allows numeric index access on array-typed tracked variables,
-        since list[0] is a valid pattern for accessing list elements.
+        since list[0] or list[-1] is a valid pattern for accessing list elements.
         """
         var_name = self._get_var_name(node.value)
         if var_name in self.tracked_vars:
             # Only flag READ access, not WRITE (Store) or DELETE (Del)
             if isinstance(node.ctx, ast.Load):
-                # Allow numeric index access on array-typed variables (e.g., adaptations[0])
-                is_numeric_index = isinstance(node.slice, ast.Constant) and isinstance(node.slice.value, int)
-                if is_numeric_index and self._is_array_tracked_var(var_name):
+                # Allow numeric index access on array-typed variables (e.g., adaptations[0], items[-1])
+                if self._is_numeric_index(node.slice) and self._is_array_tracked_var(var_name):
                     # This is valid list index access, don't flag
                     pass
                 else:
@@ -819,6 +865,9 @@ class FieldAccessVisitor(ast.NodeVisitor):
                             code_snippet=snippet,
                             variable=var_name,
                         ))
+                    else:
+                        # Validate static field access against schema
+                        self._validate_field_access(var_name, field, node.lineno, node.col_offset, snippet)
         
         self.generic_visit(node)
     

@@ -4,6 +4,29 @@ from pathlib import Path
 
 from langgraph.types import Command
 
+
+def get_user_input_with_confirmation(prompt: str = "Your response (or 'quit' to exit): ") -> str:
+    """
+    Get user input with echo-back confirmation for longer responses.
+    
+    This helps catch terminal readline buffer corruption that can occur in some
+    IDE terminals when users edit their input with arrow keys or backspace.
+    The terminal may display one thing but Python's input() receives corrupted data.
+    """
+    user_input = input(prompt)
+    
+    # For longer responses (where corruption is more likely), echo back and offer re-entry
+    if len(user_input) > 30 and user_input.lower() != 'quit':
+        print(f"\n📝 Captured ({len(user_input)} chars): {user_input[:100]}{'...' if len(user_input) > 100 else ''}")
+        confirm = input("Press Enter to confirm, or 'r' to re-enter: ").strip().lower()
+        if confirm == 'r':
+            user_input = input("Re-enter your response: ")
+            # Show the re-entered response too for verification
+            if len(user_input) > 30:
+                print(f"📝 Captured: {user_input[:100]}{'...' if len(user_input) > 100 else ''}")
+    
+    return user_input
+
 # =============================================================================
 # FAIL-FAST: Check that meep is available in the current Python environment
 # =============================================================================
@@ -102,9 +125,9 @@ while True:
         for q in questions:
             print(f"\n{q}")
         
-        # Get user response
+        # Get user response with echo-back confirmation to catch terminal corruption
         print("-" * 60)
-        user_input = input("\nYour response (or 'quit' to exit): ")
+        user_input = get_user_input_with_confirmation("\nYour response (or 'quit' to exit): ")
         if user_input.lower() == 'quit':
             print("\n💾 State saved to checkpoint. Resume later with:")
             print(f"  python -m src --resume {checkpoint_dir}")

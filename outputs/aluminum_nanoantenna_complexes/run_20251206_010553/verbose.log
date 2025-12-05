@@ -1,0 +1,26 @@
+2025-12-06 01:06:08,522 - __main__ - INFO - 📁 Run output directory: outputs/aluminum_nanoantenna_complexes/run_20251206_010553
+2025-12-06 01:06:08,606 - __main__ - INFO - 💾 Checkpoints will be saved to: outputs/aluminum_nanoantenna_complexes/run_20251206_010553/checkpoints
+2025-12-06 01:06:08,677 - src.callbacks - INFO - 🔄 Entering node: adapt_prompts
+2025-12-06 01:07:31,242 - httpx - INFO - HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2025-12-06 01:07:31,267 - src.agents.planning - INFO - 📝 adapt_prompts: domain=plasmonics_strong_coupling, 7 adaptation(s) (e.g., Paper uses aluminum (not typical Au/Ag) and J-aggregates for strong coupling. Aluminum requires specific material handling (oxide, interband transitions, UV capability). J-aggregate Lorentzian parameters directly determine Rabi splitting magnitude - incorrect linewidth is the most common cause of splitting mismatch.)
+2025-12-06 01:07:31,269 - src.callbacks - INFO - 🔄 Entering node: planning
+2025-12-06 01:09:37,081 - httpx - INFO - HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2025-12-06 01:09:37,162 - src.agents.planning - INFO - 📋 planning: 5 stage(s) [stage0_material_validation, stage1_bare_disk, stage2_coupled_single, stage3_diameter_sweep, ... (+1 more)], 3 target(s) [GraphicalAbstract, Fig2b, Fig1c]
+2025-12-06 01:09:37,162 - src.callbacks - INFO - 🔄 Entering node: route_after_plan
+2025-12-06 01:09:37,166 - src.callbacks - INFO - 🔄 Entering node: plan_review
+2025-12-06 01:09:37,168 - src.agents.helpers.context - WARNING - State validation issue for plan_review: PLAN_WARNING: Target GraphicalAbstract has precision_requirement='good' (5%) without digitized_data_path
+  -> Fix: Digitized data is recommended for 'good' precision to enable quantitative metrics. Vision comparison may achieve this but with less certainty.
+2025-12-06 01:10:47,728 - httpx - INFO - HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2025-12-06 01:10:47,733 - src.callbacks - INFO - 🔄 Entering node: router
+2025-12-06 01:10:47,734 - src.routing - INFO - ✅ plan_review: verdict=approve → select_stage
+2025-12-06 01:10:47,735 - src.callbacks - INFO - 🔄 Entering node: select_stage
+2025-12-06 01:10:47,736 - src.agents.stage_selection - INFO - 🎯 select_stage: stage0_material_validation (MATERIAL_VALIDATION, ready)
+2025-12-06 01:10:47,736 - src.callbacks - INFO - 🔄 Entering node: route_after_select_stage
+2025-12-06 01:10:47,738 - src.callbacks - INFO - 🔄 Entering node: design
+2025-12-06 01:11:58,194 - httpx - INFO - HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2025-12-06 01:11:58,207 - src.agents.design - INFO - 🔧 design: stage=stage0_material_validation, geometry=2D, domain=0x0
+2025-12-06 01:11:58,211 - src.callbacks - INFO - 🔄 Entering node: design_review
+2025-12-06 01:12:52,755 - httpx - INFO - HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2025-12-06 01:12:52,893 - src.callbacks - INFO - 🔄 Entering node: router
+2025-12-06 01:12:52,894 - src.routing - INFO - ✅ design_review: verdict=approve → generate_code
+2025-12-06 01:12:52,896 - src.callbacks - INFO - 🔄 Entering node: generate_code

@@ -115,7 +115,9 @@ def adapt_prompts_node(state: ReproState) -> Dict[str, Any]:
             # Show first adaptation as example
             first_adaptation = adaptations[0]
             if isinstance(first_adaptation, dict):
-                adapt_preview = first_adaptation.get("description", first_adaptation.get("type", str(first_adaptation)))
+                # Use reasoning (descriptive) or fall back to modification_type + target_agent
+                adapt_preview = first_adaptation.get("reasoning", 
+                    f"{first_adaptation.get('modification_type', 'unknown')} for {first_adaptation.get('target_agent', 'unknown')}")
             else:
                 adapt_preview = str(first_adaptation)
             logger.info(f"📝 adapt_prompts: {domain_info}, {num_adaptations} adaptation(s) (e.g., {adapt_preview})")
