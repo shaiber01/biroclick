@@ -263,11 +263,18 @@ PASS (proceed_to_analysis = true):
 - All expected files exist and are valid
 - Data contains no NaN/Inf
 - Runtime was reasonable
+- NO caveats or concerns that require user attention
 
-WARNING (proceed_to_analysis = true, but flag):
+WARNING (proceed_to_analysis = true, but flag for user attention):
 - Runtime significantly different from estimate
 - Minor data issues (e.g., slightly fewer points)
 - Non-critical files missing (e.g., intermediate outputs)
+- ANY issue that "requires user attention" or "needs clarification"
+- Synthetic/fallback data was used instead of expected data
+- Discrepancies identified that should be noted
+
+IMPORTANT: If you identify issues that "require user attention" or 
+"need clarification before proceeding", use WARNING, not PASS.
 
 FAIL (proceed_to_analysis = false):
 - Simulation crashed
@@ -275,6 +282,32 @@ FAIL (proceed_to_analysis = false):
 - NaN/Inf in output data
 - Data shapes completely wrong
 - Zero-byte files
+
+═══════════════════════════════════════════════════════════════════════
+G2. WARNINGS ARRAY USAGE
+═══════════════════════════════════════════════════════════════════════
+
+When you identify non-blocking issues, populate the `warnings` array:
+
+```json
+{
+  "verdict": "warning",
+  "warnings": [
+    "Synthetic material data used for Al due to missing data file",
+    "Runtime 3x longer than estimate (may indicate inefficiency)",
+    "Minor discrepancy in column count: expected 5, got 4"
+  ],
+  "summary": "Execution completed with 3 minor issues noted in warnings."
+}
+```
+
+DO NOT embed warnings in the summary - use the structured warnings array.
+The summary should be a brief overall assessment, not a list of caveats.
+
+BAD summary: "PASSED. Key findings requiring user attention: (1) issue..."
+GOOD summary: "Execution completed with minor issues. See warnings for details."
+
+Note: Do NOT repeat the verdict word (PASS/FAIL/WARNING) in the summary.
 
 ═══════════════════════════════════════════════════════════════════════
 H. EXECUTION FAILURE TRACKING

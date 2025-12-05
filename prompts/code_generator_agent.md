@@ -370,6 +370,37 @@ except Exception as e:
     raise  # Re-raise for proper error tracking
 ```
 
+**CRITICAL: Validate results for NaN/Inf before saving**
+
+After computing final results, ALWAYS check for NaN/Inf and exit with error if found:
+
+```python
+import sys
+
+# After computing results, before saving:
+def validate_array(arr, name):
+    """Check array for NaN/Inf and exit with error if found."""
+    if np.any(np.isnan(arr)):
+        print(f"ERROR: NaN values detected in {name}")
+        print(f"  Shape: {arr.shape}, NaN count: {np.sum(np.isnan(arr))}")
+        sys.exit(1)
+    if np.any(np.isinf(arr)):
+        print(f"ERROR: Inf values detected in {name}")
+        print(f"  Shape: {arr.shape}, Inf count: {np.sum(np.isinf(arr))}")
+        sys.exit(1)
+
+# Example usage before saving:
+validate_array(transmission_data, "transmission spectrum")
+validate_array(field_data, "field array")
+np.savetxt('output.csv', data, ...)  # Only save after validation
+```
+
+WHY THIS MATTERS:
+- Meep simulations can produce NaN from numerical instability
+- Analytical calculations can produce NaN from division by zero, etc.
+- If NaN/Inf is in results, downstream analysis will be invalid
+- Explicit sys.exit(1) ensures the error is caught and not silently propagated
+
 ═══════════════════════════════════════════════════════════════════════
 F. FORBIDDEN PATTERNS
 ═══════════════════════════════════════════════════════════════════════
@@ -578,7 +609,7 @@ H. PRE-RUN SELF-CHECK
 
 Before submitting code, verify:
 
-□ All imports are present
+□ All imports are present (including sys for exit)
 □ All parameters match design specification
 □ File paths use relative paths or variables
 □ No plt.show() or input() calls
@@ -587,6 +618,7 @@ Before submitting code, verify:
 □ Error handling is in place
 □ Progress prints will show useful information
 □ Memory is managed for large simulations
+□ NaN/Inf validation before saving results (see section E)
 
 ═══════════════════════════════════════════════════════════════════════
 I. OUTPUT FORMAT

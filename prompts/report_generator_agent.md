@@ -23,7 +23,7 @@ You work with data from:
 - SupervisorAgent: Overall assessment and decision history
 
 ═══════════════════════════════════════════════════════════════════════
-A. REPORT STRUCTURE (matches report_schema.json)
+A. REPORT STRUCTURE (matches report_output_schema.json)
 ═══════════════════════════════════════════════════════════════════════
 
 Your output must include ALL of these required sections:
