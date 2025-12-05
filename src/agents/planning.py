@@ -113,10 +113,10 @@ def adapt_prompts_node(state: ReproState) -> Dict[str, Any]:
             # Show first adaptation as example
             first_adaptation = adaptations[0]
             if isinstance(first_adaptation, dict):
-                adapt_preview = first_adaptation.get("description", first_adaptation.get("type", str(first_adaptation)))[:60]
+                adapt_preview = first_adaptation.get("description", first_adaptation.get("type", str(first_adaptation)))
             else:
-                adapt_preview = str(first_adaptation)[:60]
-            logger.info(f"📝 adapt_prompts: {domain_info}, {num_adaptations} adaptation(s) (e.g., {adapt_preview}...)")
+                adapt_preview = str(first_adaptation)
+            logger.info(f"📝 adapt_prompts: {domain_info}, {num_adaptations} adaptation(s) (e.g., {adapt_preview})")
         else:
             logger.info(f"📝 adapt_prompts: {domain_info}, no adaptations needed")
             

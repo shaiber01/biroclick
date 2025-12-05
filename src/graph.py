@@ -25,9 +25,11 @@ The following routers are defined locally because they have unique logic:
 """
 
 import os
-from typing import Literal, Dict, Any
+from typing import Literal, Dict, Any, Optional
 from langgraph.graph import StateGraph, END, START
 from langgraph.checkpoint.memory import MemorySaver
+
+from src.persistence import JsonCheckpointSaver
 
 from schemas.state import (
     ReproState, 
@@ -203,7 +205,7 @@ def route_after_supervisor(state: ReproState) -> Literal["select_stage", "planni
 # Graph Construction
 # ═══════════════════════════════════════════════════════════════════════
 
-def create_repro_graph():
+def create_repro_graph(checkpoint_dir: Optional[str] = None):
     """
     Constructs the LangGraph state graph for ReproLab.
     
@@ -211,6 +213,12 @@ def create_repro_graph():
     - plan_review: Reviews reproduction plan before stage selection
     - design_review: Reviews simulation design before code generation
     - code_review: Reviews generated code before execution
+    
+    Args:
+        checkpoint_dir: Optional directory for persistent checkpoints.
+            If provided, uses JsonCheckpointSaver for disk persistence
+            (enables resume after process exit).
+            If None, uses MemorySaver (in-memory only, no resume after exit).
     """
     workflow = StateGraph(ReproState)
 
@@ -391,15 +399,16 @@ def create_repro_graph():
 
     workflow.add_edge("generate_report", END)
 
-    # Initialize memory checkpointer
-    checkpointer = MemorySaver()
+    # Initialize checkpointer based on checkpoint_dir parameter
+    # - JsonCheckpointSaver: Persists to disk, enables resume after process exit
+    # - MemorySaver: In-memory only, loses state on process exit (for testing/dev)
+    if checkpoint_dir:
+        checkpointer = JsonCheckpointSaver(checkpoint_dir)
+    else:
+        checkpointer = MemorySaver()
 
-    # Compile with interrupt_before for ask_user node
-    # This pauses the graph BEFORE ask_user executes, allowing external code to:
-    # 1. Inspect state["pending_user_questions"]
-    # 2. Collect user input
-    # 3. Resume with user_response in state
-    return workflow.compile(
-        checkpointer=checkpointer,
-        interrupt_before=["ask_user"]
-    )
+    # Compile with checkpointer for interrupt support
+    # The ask_user node uses interrupt() internally to pause for user input,
+    # so we don't need interrupt_before. The node runs once and pauses mid-execution
+    # when it calls interrupt(). Resume with Command(resume=user_response).
+    return workflow.compile(checkpointer=checkpointer)

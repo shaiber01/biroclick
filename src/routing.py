@@ -54,7 +54,7 @@ def _log_routing_decision(state: "ReproState", checkpoint_prefix: str, verdict: 
         
         if issues and verdict == "needs_revision":
             # Show actual issues if available
-            issues_str = "; ".join(str(i)[:60] for i in issues[:2])
+            issues_str = "; ".join(str(i) for i in issues[:3])
             context_parts.append(f"issues: [{issues_str}]")
         elif feedback_str and verdict == "needs_revision":
             # Extract the actual problem from feedback (skip praise)
@@ -74,21 +74,20 @@ def _log_routing_decision(state: "ReproState", checkpoint_prefix: str, verdict: 
     elif checkpoint_prefix == "design_review":
         issues = state.get("reviewer_issues", [])
         if issues and verdict == "needs_revision":
-            issues_preview = issues[:2] if isinstance(issues, list) else [str(issues)[:80]]
+            issues_preview = issues[:3] if isinstance(issues, list) else [str(issues)]
             context_parts.append(f"issues: {issues_preview}")
             
     elif checkpoint_prefix == "code_review":
         issues = state.get("reviewer_issues", [])
         if issues and verdict == "needs_revision":
-            issues_preview = issues[:2] if isinstance(issues, list) else [str(issues)[:80]]
+            issues_preview = issues[:3] if isinstance(issues, list) else [str(issues)]
             context_parts.append(f"issues: {issues_preview}")
             
     elif checkpoint_prefix == "execution":
         if verdict == "fail":
             error = state.get("execution_error")
             if error:
-                error_str = str(error)
-                context_parts.append(f"error: {error_str[:80]}{'...' if len(error_str) > 80 else ''}")
+                context_parts.append(f"error: {error}")
         elif verdict == "warning":
             warnings = state.get("execution_warnings", [])
             if warnings:
@@ -97,7 +96,7 @@ def _log_routing_decision(state: "ReproState", checkpoint_prefix: str, verdict: 
     elif checkpoint_prefix == "physics":
         issues = state.get("physics_issues", [])
         if issues and verdict in ["fail", "warning", "design_flaw"]:
-            issues_preview = issues[:2] if isinstance(issues, list) else [str(issues)[:80]]
+            issues_preview = issues[:3] if isinstance(issues, list) else [str(issues)]
             context_parts.append(f"issues: {issues_preview}")
     
     elif checkpoint_prefix == "comparison":
@@ -107,8 +106,7 @@ def _log_routing_decision(state: "ReproState", checkpoint_prefix: str, verdict: 
         if verdict == "needs_revision":
             feedback = state.get("comparison_feedback")
             if feedback:
-                feedback_str = str(feedback)
-                context_parts.append(f"feedback: {feedback_str[:60]}{'...' if len(feedback_str) > 60 else ''}")
+                context_parts.append(f"feedback: {feedback}")
     
     # Format the log message with emoji for quick scanning
     emoji = "✅" if verdict in ["approve", "pass"] else "🔄" if verdict == "needs_revision" else "⚠️" if verdict == "warning" else "❌"

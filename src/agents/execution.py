@@ -162,9 +162,9 @@ def execution_validator_node(state: ReproState) -> dict:
     # Log execution validation result
     verdict = agent_output["verdict"]
     stage_id = state.get("current_stage_id", "unknown")
-    summary = agent_output.get("summary", "")[:60]
+    summary = agent_output.get("summary", "")
     emoji = "✅" if verdict == "pass" else "⚠️" if verdict == "warning" else "❌"
-    logger.info(f"{emoji} execution_check: stage={stage_id}, verdict={verdict} ({summary}...)")
+    logger.info(f"{emoji} execution_check: stage={stage_id}, verdict={verdict} ({summary})")
     
     return result
 
@@ -281,9 +281,9 @@ def physics_sanity_node(state: ReproState) -> dict:
     
     # Log physics sanity result
     verdict = agent_output["verdict"]
-    summary = agent_output.get("summary", "")[:60]
+    summary = agent_output.get("summary", "")
     emoji = "✅" if verdict == "pass" else "⚠️" if verdict == "warning" else "🔧" if verdict == "design_flaw" else "❌"
-    logger.info(f"{emoji} physics_check: stage={stage_id}, verdict={verdict} ({summary}...)")
+    logger.info(f"{emoji} physics_check: stage={stage_id}, verdict={verdict} ({summary})")
     
     return result
 

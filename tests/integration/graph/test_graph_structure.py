@@ -323,14 +323,19 @@ class TestGraphEdgeConnectivity:
             f"handle_backtrack should connect only to select_stage, got: {targets}"
         )
 
-    def test_material_checkpoint_connects_to_ask_user(self, graph_definition):
-        """Test that material_checkpoint connects to ask_user via static edge."""
+    def test_material_checkpoint_connects_to_ask_user_or_select_stage(self, graph_definition):
+        """Test that material_checkpoint connects to ask_user or select_stage via conditional edge.
+        
+        material_checkpoint uses a conditional edge:
+        - If validated_materials is populated, routes to select_stage (skip ask_user)
+        - Otherwise, routes to ask_user for user confirmation
+        """
         edges = list(graph_definition.edges)
         mat_edges = [edge for edge in edges if edge[0] == "material_checkpoint"]
         targets = {edge[1] for edge in mat_edges}
         
-        assert targets == {"ask_user"}, (
-            f"material_checkpoint should connect only to ask_user, got: {targets}"
+        assert targets == {"ask_user", "select_stage"}, (
+            f"material_checkpoint should connect to ask_user and select_stage, got: {targets}"
         )
 
     def test_ask_user_routes_to_supervisor(self, graph_definition):
@@ -499,12 +504,16 @@ class TestRouteAfterSupervisor:
 
     @patch('src.graph.save_checkpoint')
     def test_material_validation_routes_to_select_stage_after_checkpoint(self, mock_checkpoint):
-        """Test MATERIAL_VALIDATION stage routes to select_stage after checkpoint completed."""
+        """Test MATERIAL_VALIDATION stage routes to select_stage after checkpoint completed.
+        
+        The check uses validated_materials (not user_responses) because ask_user_node
+        stores responses with question text as key, not trigger name.
+        """
         state = make_state(
             supervisor_verdict="ok_continue",
             should_stop=False,
             current_stage_type="MATERIAL_VALIDATION",
-            user_responses={"material_checkpoint": "approved"},  # Checkpoint done
+            validated_materials=[{"name": "aluminum", "source": "stage0_output"}],  # Checkpoint done
         )
         result = route_after_supervisor(state)
         assert result == "select_stage", (
@@ -996,12 +1005,17 @@ class TestCountLimitBoundaries:
 # ═══════════════════════════════════════════════════════════════════════
 
 class TestGraphInterruptConfiguration:
-    """Tests for graph interrupt (pause) configuration."""
+    """Tests for graph interrupt (pause) configuration.
+    
+    Note: We use LangGraph's interrupt() function inside ask_user_node for human-in-the-loop,
+    NOT interrupt_before. This means the node runs and pauses mid-execution when it calls
+    interrupt(), rather than pausing before the node executes.
+    """
 
     def test_graph_has_checkpointer(self, compiled_graph):
         """Test that the graph has a checkpointer for interrupt support."""
         assert compiled_graph.checkpointer is not None, (
-            "Graph must have a checkpointer for interrupt_before support"
+            "Graph must have a checkpointer for interrupt() support"
         )
 
     def test_checkpointer_is_memory_saver(self, compiled_graph):
@@ -1012,8 +1026,12 @@ class TestGraphInterruptConfiguration:
         )
 
     @patch.object(StateGraph, 'compile')
-    def test_compile_called_with_interrupt_before(self, mock_compile):
-        """Test that compile is called with the correct interrupt_before arguments."""
+    def test_compile_called_with_checkpointer(self, mock_compile):
+        """Test that compile is called with a checkpointer (required for interrupt()).
+        
+        Note: We no longer use interrupt_before - instead, ask_user_node calls
+        interrupt() internally to pause for user input.
+        """
         # We need to mock the graph construction since we are testing the compile call
         with patch('src.graph.StateGraph') as MockStateGraph:
             # Create mock instance
@@ -1025,9 +1043,9 @@ class TestGraphInterruptConfiguration:
             mock_workflow.compile.assert_called_once()
             call_kwargs = mock_workflow.compile.call_args.kwargs
             
-            assert "interrupt_before" in call_kwargs, "compile missing interrupt_before"
-            assert call_kwargs["interrupt_before"] == ["ask_user"], (
-                f"interrupt_before should be ['ask_user'], got {call_kwargs['interrupt_before']}"
+            # Should NOT have interrupt_before (we use interrupt() inside nodes now)
+            assert "interrupt_before" not in call_kwargs, (
+                "compile should NOT have interrupt_before - we use interrupt() inside nodes"
             )
             assert "checkpointer" in call_kwargs, "compile missing checkpointer"
 
@@ -2412,7 +2430,7 @@ class TestEdgeCountVerification:
             ("run_code", "execution_check"),
             ("analyze", "comparison_check"),
             ("handle_backtrack", "select_stage"),
-            ("material_checkpoint", "ask_user"),
+            # material_checkpoint now uses conditional edge (ask_user or select_stage)
             ("generate_report", "__end__"),
         ]
         

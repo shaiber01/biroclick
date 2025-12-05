@@ -660,7 +660,7 @@ class TestDesignPhase:
             print("\n--- Running graph ---", flush=True)
             nodes_visited = []
 
-            # Graph should pause at ask_user (interrupt_before)
+            # Graph should pause at ask_user (interrupt() inside the node)
             for event in graph.stream(initial_state, config):
                 for node_name, updates in event.items():
                     nodes_visited.append(node_name)

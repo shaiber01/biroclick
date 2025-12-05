@@ -676,7 +676,7 @@ Output (ONE WORD ONLY):"""
         words = raw_answer.split()
         answer = words[0].upper() if words else ""
         
-        logger.debug(f"Local LLM classified '{response}' as '{answer}' (raw: '{raw_answer[:50]}...')")
+        logger.debug(f"Local LLM classified '{response}' as '{answer}' (raw: '{raw_answer}')")
         
         # Find matching option
         for opt in options:
@@ -709,17 +709,17 @@ def match_user_response(trigger: str, response: str) -> Optional[UserOption]:
     # 1. Keyword matching (fast path)
     option = match_option_by_keywords(trigger, response)
     if option:
-        logger.debug(f"Matched '{response[:50]}...' to '{option.display}' via keywords")
+        logger.debug(f"Matched '{response}' to '{option.display}' via keywords")
         return option
     
     # 2. LLM fallback (slow path, optional)
     option = classify_with_local_llm(trigger, response)
     if option:
-        logger.info(f"Matched '{response[:50]}...' to '{option.display}' via local LLM")
+        logger.info(f"Matched '{response}' to '{option.display}' via local LLM")
         return option
     
     # 3. No match
-    logger.debug(f"No match for '{response[:50]}...' in trigger '{trigger}'")
+    logger.debug(f"No match for '{response}' in trigger '{trigger}'")
     return None
 
 

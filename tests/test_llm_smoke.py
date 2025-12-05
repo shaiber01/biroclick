@@ -19,7 +19,9 @@ These tests:
 1. Verify LLM integration is properly configured
 2. Validate real LLM outputs conform to schemas
 3. Test actual prompt → response flow
-"""
+
+Note: These tests are marked as 'smoke' and are excluded from normal test runs
+      to avoid wasting money on LLM calls. Run explicitly with: pytest -m smoke
 """
 import json
 import os
@@ -399,5 +401,3 @@ class TestLLMErrorHandling:
         except Exception as e:
             # Acceptable to fail on context limits
             assert "context" in str(e).lower() or "token" in str(e).lower()
-
-"""

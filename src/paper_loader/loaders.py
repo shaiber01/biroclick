@@ -117,11 +117,7 @@ def _process_figure_refs(
                     timeout=figure_timeout,
                     base_path=base_path
                 )
-                logger.info(
-                    "Downloaded %s: %s",
-                    fig_id,
-                    fig_ref['url'][:60] + ('...' if len(fig_ref['url']) > 60 else '')
-                )
+                logger.info("Downloaded %s: %s", fig_id, fig_ref['url'])
             except FigureDownloadError as e:
                 download_errors.append(f"{fig_id}: {e}")
                 logger.warning("Failed to download %s: %s", fig_id, e)
@@ -165,7 +161,7 @@ def _report_loading_results(
     
     logger.info("=" * 60)
     logger.info("Paper loaded from markdown:")
-    logger.info("  Title: %s", paper_title[:80] + ('...' if len(paper_title) > 80 else ''))
+    logger.info("  Title: %s", paper_title)
     logger.info("  ID: %s", paper_id)
     logger.info("  Main text: %s chars (~%s tokens)", f"{len(markdown_text):,}", f"{estimate_tokens(markdown_text):,}")
     if supplementary_text:
@@ -191,10 +187,8 @@ def _report_loading_results(
     # Log download errors
     if download_errors:
         logger.warning("%d figure(s) failed to download:", len(download_errors))
-        for err in download_errors[:5]:
+        for err in download_errors:
             logger.warning("  - %s", err)
-        if len(download_errors) > 5:
-            logger.warning("  ... and %d more", len(download_errors) - 5)
 
 
 # ═══════════════════════════════════════════════════════════════════════

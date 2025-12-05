@@ -839,7 +839,9 @@ class TestSupervisorRouting:
             test_state,
             supervisor_verdict="ok_continue",
             current_stage_type="MATERIAL_VALIDATION",
-            user_responses={"material_checkpoint": {"confirmed": True}},
+            # Use validated_materials (not user_responses) to indicate checkpoint complete
+            # because ask_user_node stores responses with question text as key, not trigger name
+            validated_materials=[{"name": "aluminum", "source": "stage0_output"}],
         )
 
         result = route_after_supervisor(test_state)
@@ -1947,14 +1949,15 @@ class TestSupervisorCombinedConditions:
             test_state,
             supervisor_verdict="ok_continue",
             current_stage_type="MATERIAL_VALIDATION",
-            user_responses={"material_checkpoint": {"confirmed": False}},
+            # Empty validated_materials means checkpoint not yet completed
+            validated_materials=[],
         )
 
         result = route_after_supervisor(test_state)
 
-        # The presence of material_checkpoint key should skip the checkpoint
-        # regardless of the confirmed value (the check is just for key presence)
-        assert result == "select_stage"
+        # Without validated_materials, should route to material_checkpoint
+        # (the old test was incorrect - it expected select_stage with empty materials)
+        assert result == "material_checkpoint"
 
     @patch("src.graph.save_checkpoint")
     def test_material_checkpoint_with_other_responses(self, mock_checkpoint, test_state: ReproState):

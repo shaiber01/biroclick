@@ -19,6 +19,8 @@ Each limit test verifies:
 import pytest
 from unittest.mock import patch
 
+from langgraph.types import Command
+
 from src.graph import create_repro_graph
 from schemas.state import (
     MAX_REPLANS,
@@ -63,40 +65,46 @@ def mock_ask_user():
 
 def run_until_interrupt(graph, state, config):
     """
-    Run graph until __interrupt__ event.
+    Run graph until interrupt (from interrupt() inside ask_user node).
+    
+    With the interrupt() pattern, the graph pauses when ask_user_node calls
+    interrupt(). The interrupt payload is available in snapshot.tasks[0].interrupts[0].value.
     
     Returns:
-        Tuple of (interrupt_event, graph_state_values)
+        Tuple of (interrupt_payload, graph_state_values)
+        interrupt_payload contains {trigger, questions, paper_id} from the interrupt() call
     """
-    interrupt_event = None
+    # Stream until we exhaust events (graph will pause at interrupt)
     for event in graph.stream(state, config):
-        if "__interrupt__" in event:
-            interrupt_event = event
-            break
+        pass  # Just consume events until interrupt
     
-    if interrupt_event is None:
-        return None, graph.get_state(config).values
-    return interrupt_event, graph.get_state(config).values
+    # Check if we're at an interrupt
+    snapshot = graph.get_state(config)
+    interrupt_payload = None
+    if snapshot.tasks:
+        for task in snapshot.tasks:
+            if hasattr(task, 'interrupts') and task.interrupts:
+                interrupt_payload = task.interrupts[0].value
+                break
+    
+    return interrupt_payload, snapshot.values
 
 
-def resume_with_response(graph, config, questions, response_text):
+def resume_with_response(graph, config, response_text):
     """
-    Resume graph with user response.
+    Resume graph with user response using Command(resume=...).
     
     Args:
         graph: The compiled graph
         config: Graph configuration
-        questions: List of pending questions
-        response_text: User response text
-    """
-    graph.update_state(
-        config,
-        {"user_responses": {questions[0]: response_text}},
-    )
+        response_text: User response text (passed directly to interrupt() return)
     
+    Returns:
+        Tuple of (resumed: bool, events: list)
+    """
     resumed = False
     events = []
-    for event in graph.stream(None, config):
+    for event in graph.stream(Command(resume=response_text), config):
         events.append(event)
         if "supervisor" in event:
             resumed = True
@@ -150,23 +158,20 @@ class TestCodeReviewLimit:
                 return MockLLMResponses.supervisor_continue()
             return {}
 
-        mock_ask_user = create_mock_ask_user_node()
-
+        # Don't mock ask_user - we want the real interrupt() to fire
         with MultiPatch(LLM_PATCH_LOCATIONS, side_effect=mock_llm), MultiPatch(
             CHECKPOINT_PATCH_LOCATIONS, return_value="/tmp/cp.json"
         ), patch(
             "src.code_runner.run_code_node",
             return_value={"workflow_phase": "running_code", "execution_output": "noop"},
-        ), patch("src.agents.user_interaction.ask_user_node", side_effect=mock_ask_user), patch(
-            "src.graph.ask_user_node", side_effect=mock_ask_user
         ):
             graph = create_repro_graph()
             config = {"configurable": {"thread_id": unique_thread_id("code_limit_exact")}}
 
-            interrupt_event, limit_state = run_until_interrupt(graph, state, config)
+            interrupt_payload, limit_state = run_until_interrupt(graph, state, config)
 
-            # Verify interrupt occurred
-            assert interrupt_event is not None, "Expected interrupt at code review limit"
+            # Verify interrupt occurred (payload from ask_user's interrupt() call)
+            assert interrupt_payload is not None, "Expected interrupt at code review limit"
             
             # Verify exactly one rejection occurred before escalation
             assert rejection_count == 1, f"Expected exactly 1 code review rejection, got {rejection_count}"
@@ -236,6 +241,8 @@ class TestCodeReviewLimit:
 
         mock_ask_user = create_mock_ask_user_node()
 
+        # Use mock_ask_user here since we're NOT testing interrupt behavior,
+        # just that ask_user is NOT triggered when below limit
         with MultiPatch(LLM_PATCH_LOCATIONS, side_effect=mock_llm), MultiPatch(
             CHECKPOINT_PATCH_LOCATIONS, return_value="/tmp/cp.json"
         ), patch(
@@ -304,31 +311,28 @@ class TestCodeReviewLimit:
                 return MockLLMResponses.supervisor_continue()
             return {}
 
-        mock_ask_user = create_mock_ask_user_node()
-
+        # Don't mock ask_user - we need real interrupt() for this test
         with MultiPatch(LLM_PATCH_LOCATIONS, side_effect=mock_llm), MultiPatch(
             CHECKPOINT_PATCH_LOCATIONS, return_value="/tmp/cp.json"
         ), patch(
             "src.code_runner.run_code_node",
             return_value={"workflow_phase": "running_code", "execution_output": "noop"},
-        ), patch("src.agents.user_interaction.ask_user_node", side_effect=mock_ask_user), patch(
-            "src.graph.ask_user_node", side_effect=mock_ask_user
         ):
             graph = create_repro_graph()
             config = {"configurable": {"thread_id": unique_thread_id("code_limit_resume")}}
 
             # Run until interrupt
-            interrupt_event, limit_state = run_until_interrupt(graph, state, config)
-            assert interrupt_event is not None
+            interrupt_payload, limit_state = run_until_interrupt(graph, state, config)
+            assert interrupt_payload is not None
 
             # Verify counter is at max before resumption
             assert limit_state.get("code_revision_count") == 1
 
-            questions = limit_state.get("pending_user_questions", [])
-            assert questions, "Expected pending questions"
+            questions = interrupt_payload.get("questions", [])
+            assert questions, "Expected pending questions in interrupt payload"
 
-            # Resume with hint
-            resumed, _ = resume_with_response(graph, config, questions, hint_message)
+            # Resume with hint using Command(resume=...)
+            resumed, _ = resume_with_response(graph, config, hint_message)
             assert resumed, "Expected workflow to resume to supervisor"
 
             # Check post-resumption state
@@ -389,23 +393,20 @@ class TestCodeReviewLimit:
                 return MockLLMResponses.supervisor_continue()
             return {}
 
-        mock_ask_user = create_mock_ask_user_node()
-
+        # Don't mock ask_user - we need real interrupt() for this test
         with MultiPatch(LLM_PATCH_LOCATIONS, side_effect=mock_llm), MultiPatch(
             CHECKPOINT_PATCH_LOCATIONS, return_value="/tmp/cp.json"
         ), patch(
             "src.code_runner.run_code_node",
             return_value={"workflow_phase": "running_code", "execution_output": "noop"},
-        ), patch("src.agents.user_interaction.ask_user_node", side_effect=mock_ask_user), patch(
-            "src.graph.ask_user_node", side_effect=mock_ask_user
         ):
             graph = create_repro_graph()
             config = {"configurable": {"thread_id": unique_thread_id("code_boundary")}}
 
-            interrupt_event, limit_state = run_until_interrupt(graph, state, config)
+            interrupt_payload, limit_state = run_until_interrupt(graph, state, config)
 
             # Verify interrupt occurred after hitting limit
-            assert interrupt_event is not None, "Expected interrupt at code review limit"
+            assert interrupt_payload is not None, "Expected interrupt at code review limit"
             
             # With max=2, should hit limit after 2 rejections
             # Note: The code_generator mock returns short code which triggers an
@@ -458,20 +459,17 @@ class TestDesignReviewLimit:
                 return MockLLMResponses.design_reviewer_reject()
             return {}
 
-        mock_ask_user = create_mock_ask_user_node()
-
+        # Don't mock ask_user - we need real interrupt() for this test
         with MultiPatch(LLM_PATCH_LOCATIONS, side_effect=mock_llm), MultiPatch(
             CHECKPOINT_PATCH_LOCATIONS, return_value="/tmp/cp.json"
-        ), patch("src.agents.user_interaction.ask_user_node", side_effect=mock_ask_user), patch(
-            "src.graph.ask_user_node", side_effect=mock_ask_user
         ):
             graph = create_repro_graph()
             config = {"configurable": {"thread_id": unique_thread_id("design_limit")}}
 
-            interrupt_event, limit_state = run_until_interrupt(graph, state, config)
+            interrupt_payload, limit_state = run_until_interrupt(graph, state, config)
 
             # Verify interrupt occurred
-            assert interrupt_event is not None, "Expected interrupt at design review limit"
+            assert interrupt_payload is not None, "Expected interrupt at design review limit"
             
             # Verify rejection count
             assert rejection_count == 1, f"Expected 1 design rejection, got {rejection_count}"
@@ -513,23 +511,20 @@ class TestDesignReviewLimit:
                 return MockLLMResponses.supervisor_continue()
             return {}
 
-        mock_ask_user = create_mock_ask_user_node()
-
+        # Don't mock ask_user - we need real interrupt() for this test
         with MultiPatch(LLM_PATCH_LOCATIONS, side_effect=mock_llm), MultiPatch(
             CHECKPOINT_PATCH_LOCATIONS, return_value="/tmp/cp.json"
-        ), patch("src.agents.user_interaction.ask_user_node", side_effect=mock_ask_user), patch(
-            "src.graph.ask_user_node", side_effect=mock_ask_user
         ):
             graph = create_repro_graph()
             config = {"configurable": {"thread_id": unique_thread_id("design_resume")}}
 
-            interrupt_event, limit_state = run_until_interrupt(graph, state, config)
-            assert interrupt_event is not None
+            interrupt_payload, limit_state = run_until_interrupt(graph, state, config)
+            assert interrupt_payload is not None
             assert limit_state.get("design_revision_count") == 1
 
-            questions = limit_state.get("pending_user_questions", [])
+            questions = interrupt_payload.get("questions", [])
             resumed, _ = resume_with_response(
-                graph, config, questions, "PROVIDE_HINT: Use finer mesh resolution"
+                graph, config, "PROVIDE_HINT: Use finer mesh resolution"
             )
             
             assert resumed
@@ -573,20 +568,17 @@ class TestPlanReviewLimit:
                 return MockLLMResponses.plan_reviewer_reject()
             return {}
 
-        mock_ask_user = create_mock_ask_user_node()
-
+        # Don't mock ask_user - we need real interrupt() for this test
         with MultiPatch(LLM_PATCH_LOCATIONS, side_effect=mock_llm), MultiPatch(
             CHECKPOINT_PATCH_LOCATIONS, return_value="/tmp/cp.json"
-        ), patch("src.agents.user_interaction.ask_user_node", side_effect=mock_ask_user), patch(
-            "src.graph.ask_user_node", side_effect=mock_ask_user
         ):
             graph = create_repro_graph()
             config = {"configurable": {"thread_id": unique_thread_id("plan_limit")}}
 
-            interrupt_event, limit_state = run_until_interrupt(graph, state, config)
+            interrupt_payload, limit_state = run_until_interrupt(graph, state, config)
 
             # Verify interrupt occurred
-            assert interrupt_event is not None, "Expected interrupt at plan review limit"
+            assert interrupt_payload is not None, "Expected interrupt at plan review limit"
             
             # Verify rejection count (should be 1 for max_replans=1)
             assert rejection_count == 1, f"Expected 1 plan rejection, got {rejection_count}"
@@ -699,8 +691,7 @@ class TestExecutionFailureLimit:
                 return MockLLMResponses.execution_validator_fail()
             return {}
 
-        mock_ask_user = create_mock_ask_user_node()
-
+        # Don't mock ask_user - we need real interrupt() for this test
         with MultiPatch(LLM_PATCH_LOCATIONS, side_effect=mock_llm), MultiPatch(
             CHECKPOINT_PATCH_LOCATIONS, return_value="/tmp/cp.json"
         ), patch(
@@ -710,16 +701,14 @@ class TestExecutionFailureLimit:
                 "execution_output": "Error: simulation failed",
                 "execution_result": {"success": False, "error": "out of memory"},
             },
-        ), patch("src.agents.user_interaction.ask_user_node", side_effect=mock_ask_user), patch(
-            "src.graph.ask_user_node", side_effect=mock_ask_user
         ):
             graph = create_repro_graph()
             config = {"configurable": {"thread_id": unique_thread_id("exec_limit")}}
 
-            interrupt_event, limit_state = run_until_interrupt(graph, state, config)
+            interrupt_payload, limit_state = run_until_interrupt(graph, state, config)
 
             # Verify interrupt occurred
-            assert interrupt_event is not None, "Expected interrupt at execution failure limit"
+            assert interrupt_payload is not None, "Expected interrupt at execution failure limit"
             
             # Verify failure count
             assert failure_count == 1, f"Expected 1 execution failure, got {failure_count}"
@@ -853,8 +842,7 @@ class TestPhysicsFailureLimit:
                 return MockLLMResponses.physics_sanity_fail()
             return {}
 
-        mock_ask_user = create_mock_ask_user_node()
-
+        # Don't mock ask_user - we need real interrupt() for this test
         with MultiPatch(LLM_PATCH_LOCATIONS, side_effect=mock_llm), MultiPatch(
             CHECKPOINT_PATCH_LOCATIONS, return_value="/tmp/cp.json"
         ), patch(
@@ -864,16 +852,14 @@ class TestPhysicsFailureLimit:
                 "execution_output": "output",
                 "execution_result": {"success": True},
             },
-        ), patch("src.agents.user_interaction.ask_user_node", side_effect=mock_ask_user), patch(
-            "src.graph.ask_user_node", side_effect=mock_ask_user
         ):
             graph = create_repro_graph()
             config = {"configurable": {"thread_id": unique_thread_id("physics_limit")}}
 
-            interrupt_event, limit_state = run_until_interrupt(graph, state, config)
+            interrupt_payload, limit_state = run_until_interrupt(graph, state, config)
 
             # Verify interrupt occurred
-            assert interrupt_event is not None, "Expected interrupt at physics failure limit"
+            assert interrupt_payload is not None, "Expected interrupt at physics failure limit"
             
             # Verify failure count
             assert failure_count == 1, f"Expected 1 physics failure, got {failure_count}"
@@ -1021,8 +1007,7 @@ class TestAnalysisRevisionLimit:
                 return MockLLMResponses.supervisor_continue()
             return {}
 
-        mock_ask_user = create_mock_ask_user_node()
-
+        # Don't mock ask_user - we need real interrupt() for this test
         with MultiPatch(LLM_PATCH_LOCATIONS, side_effect=mock_llm), MultiPatch(
             CHECKPOINT_PATCH_LOCATIONS, return_value="/tmp/cp.json"
         ), patch(
@@ -1032,39 +1017,23 @@ class TestAnalysisRevisionLimit:
                 "execution_output": "output",
                 "execution_result": {"success": True},
             },
-        ), patch("src.agents.user_interaction.ask_user_node", side_effect=mock_ask_user), patch(
-            "src.graph.ask_user_node", side_effect=mock_ask_user
         ):
             graph = create_repro_graph()
             config = {"configurable": {"thread_id": unique_thread_id("analysis_limit")}}
 
-            visited_nodes = []
-            for event in graph.stream(state, config):
-                for node_name in event.keys():
-                    visited_nodes.append(node_name)
-                    # Stop when we reach ask_user after comparison_check (now routes to ask_user at limit)
-                    if node_name == "__interrupt__" and "comparison_check" in visited_nodes:
-                        break
-                else:
-                    continue
-                break
+            interrupt_payload, final_state = run_until_interrupt(graph, state, config)
 
-            # Should route to ask_user (consistent with other limits)
-            # The __interrupt__ means we're paused before ask_user
-            assert "comparison_check" in visited_nodes, (
-                f"Expected comparison_check to be visited, got: {visited_nodes}"
-            )
-            
-            final_state = graph.get_state(config).values
+            # Should route to ask_user at limit (consistent with other limits)
+            assert interrupt_payload is not None, "Expected interrupt at analysis limit"
             
             # analysis_revision_count should be at max
             assert final_state.get("analysis_revision_count") == 1, (
                 f"analysis_revision_count should be 1, got {final_state.get('analysis_revision_count')}"
             )
             
-            # Should have ask_user_trigger set to analysis_limit (consistent with other limits)
-            assert final_state.get("ask_user_trigger") == "analysis_limit", (
-                f"Analysis limit should set ask_user_trigger='analysis_limit', got {final_state.get('ask_user_trigger')}"
+            # Interrupt payload should indicate analysis_limit trigger
+            assert interrupt_payload.get("trigger") == "analysis_limit", (
+                f"Analysis limit should set trigger='analysis_limit', got {interrupt_payload.get('trigger')}"
             )
 
 
@@ -1106,22 +1075,19 @@ class TestLimitEdgeCases:
                 return MockLLMResponses.code_reviewer_reject()
             return {}
 
-        mock_ask_user = create_mock_ask_user_node()
-
+        # Don't mock ask_user - we need real interrupt() for this test
         with MultiPatch(LLM_PATCH_LOCATIONS, side_effect=mock_llm), MultiPatch(
             CHECKPOINT_PATCH_LOCATIONS, return_value="/tmp/cp.json"
-        ), patch("src.agents.user_interaction.ask_user_node", side_effect=mock_ask_user), patch(
-            "src.graph.ask_user_node", side_effect=mock_ask_user
         ):
             graph = create_repro_graph()
             config = {"configurable": {"thread_id": unique_thread_id("multi_limit")}}
 
-            interrupt_event, limit_state = run_until_interrupt(graph, state, config)
+            interrupt_payload, limit_state = run_until_interrupt(graph, state, config)
 
             # Should hit design_review_limit first (before code_review)
-            assert interrupt_event is not None
-            assert limit_state.get("ask_user_trigger") == "design_review_limit", (
-                f"Expected design_review_limit (first limit hit), got '{limit_state.get('ask_user_trigger')}'"
+            assert interrupt_payload is not None
+            assert interrupt_payload.get("trigger") == "design_review_limit", (
+                f"Expected design_review_limit (first limit hit), got '{interrupt_payload.get('trigger')}'"
             )
 
     def test_zero_max_limit_triggers_immediately(self, initial_state):
@@ -1154,21 +1120,18 @@ class TestLimitEdgeCases:
                 return MockLLMResponses.code_reviewer_reject()
             return {}
 
-        mock_ask_user = create_mock_ask_user_node()
-
+        # Don't mock ask_user - we need real interrupt() for this test
         with MultiPatch(LLM_PATCH_LOCATIONS, side_effect=mock_llm), MultiPatch(
             CHECKPOINT_PATCH_LOCATIONS, return_value="/tmp/cp.json"
-        ), patch("src.agents.user_interaction.ask_user_node", side_effect=mock_ask_user), patch(
-            "src.graph.ask_user_node", side_effect=mock_ask_user
         ):
             graph = create_repro_graph()
             config = {"configurable": {"thread_id": unique_thread_id("zero_max")}}
 
-            interrupt_event, limit_state = run_until_interrupt(graph, state, config)
+            interrupt_payload, limit_state = run_until_interrupt(graph, state, config)
 
             # Should escalate immediately on first rejection
-            assert interrupt_event is not None
-            assert limit_state.get("ask_user_trigger") == "code_review_limit"
+            assert interrupt_payload is not None
+            assert interrupt_payload.get("trigger") == "code_review_limit"
             # Counter should be at 0 (couldn't increment because at/over max)
             # Actually the behavior depends on implementation - let's verify whatever happens
             count = limit_state.get("code_revision_count")
@@ -1203,28 +1166,23 @@ class TestLimitEdgeCases:
                 return MockLLMResponses.supervisor_continue()
             return {}
 
-        mock_ask_user = create_mock_ask_user_node()
-
+        # Don't mock ask_user - we need real interrupt() for this test
         with MultiPatch(LLM_PATCH_LOCATIONS, side_effect=mock_llm), MultiPatch(
             CHECKPOINT_PATCH_LOCATIONS, return_value="/tmp/cp.json"
         ), patch(
             "src.code_runner.run_code_node",
             return_value={"workflow_phase": "running_code", "execution_output": "noop"},
-        ), patch("src.agents.user_interaction.ask_user_node", side_effect=mock_ask_user), patch(
-            "src.graph.ask_user_node", side_effect=mock_ask_user
         ):
             graph = create_repro_graph()
             config = {"configurable": {"thread_id": unique_thread_id("skip_response")}}
 
             # Run until interrupt
-            interrupt_event, limit_state = run_until_interrupt(graph, state, config)
-            assert interrupt_event is not None
+            interrupt_payload, limit_state = run_until_interrupt(graph, state, config)
+            assert interrupt_payload is not None
             assert limit_state.get("code_revision_count") == 1
 
-            questions = limit_state.get("pending_user_questions", [])
-            
             # Resume with SKIP (not PROVIDE_HINT)
-            resumed, _ = resume_with_response(graph, config, questions, "SKIP")
+            resumed, _ = resume_with_response(graph, config, "SKIP")
             assert resumed
 
             post_state = graph.get_state(config).values

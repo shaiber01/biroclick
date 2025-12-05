@@ -668,19 +668,35 @@ class TestCodeGeneratorNode:
         assert result["code_revision_count"] == expected_count
         assert "Generated code is empty or contains stub" in result["reviewer_feedback"]
 
-    def test_generator_design_description_dict_format(self, base_state):
-        """Test handling when design_description is a dict (not string)."""
+    @patch("src.agents.code.build_agent_prompt")
+    @patch("src.agents.code.check_context_or_escalate")
+    @patch("src.agents.code.call_agent_with_metrics")
+    @patch("src.agents.code.build_user_content_for_code_generator")
+    def test_generator_design_description_dict_format(
+        self, mock_uc, mock_llm, mock_check, mock_prompt, base_state
+    ):
+        """Test handling when design_description is a dict (not string).
+        
+        When design_description is a dict with 2+ keys and no stub markers in the
+        main description fields, it should pass validation and proceed to LLM call.
+        """
+        # Dict with 2+ keys but no stub markers should pass validation
         base_state["design_description"] = {"geometry": "nanorod", "material": "gold"}
+        
+        mock_check.return_value = None
+        mock_prompt.return_value = "System Prompt"
+        mock_uc.return_value = "User Content"
+        expected_code = "import meep as mp\n# Valid simulation code" + "x" * 50
+        mock_llm.return_value = {"code": expected_code, "expected_outputs": ["output.csv"]}
         
         result = code_generator_node(base_state)
         
-        # Dict should be converted to string and checked
+        # Dict with valid structure should proceed to LLM call and succeed
         assert result["workflow_phase"] == "code_generation"
-        # Dict representation should be checked for stub markers and length
-        # If it's valid, should proceed; if stub/too short, should error
-        # Since dict string representation might be short, it might trigger error
-        # But we verify it doesn't crash
-        assert "design_revision_count" in result or "code" in result
+        assert result["code"] == expected_code
+        assert result["expected_outputs"] == ["output.csv"]
+        # Verify LLM was called (dict passed validation)
+        mock_llm.assert_called_once()
 
     @patch("src.agents.code.build_agent_prompt")
     @patch("src.agents.code.check_context_or_escalate")

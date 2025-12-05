@@ -32,26 +32,44 @@ def unique_thread_id(prefix: str = "test") -> str:
     return f"{prefix}_{uuid.uuid4().hex[:8]}"
 
 
-def create_mock_ask_user_node():
+def create_mock_ask_user_node(predefined_response: str = "APPROVE"):
     """
-    Create a mock ask_user_node that returns user_responses from state.
+    Create a mock ask_user_node that returns a predefined response.
 
-    This avoids interactive stdin reads in tests while still exercising
-    the graph routing logic.
+    This bypasses the interrupt() mechanism entirely, allowing tests to
+    exercise the graph routing logic without interactive input.
+    
+    The mock simulates what happens after a user provides input:
+    - Stores the response in user_responses keyed by the first question
+    - Clears pending_user_questions
+    - Sets awaiting_user_input to False
+    
+    Args:
+        predefined_response: The response to "provide" from the mock user
     """
 
     def mock_ask_user(state):
-        """Mock ask_user that returns already-injected user_responses."""
-        user_responses = state.get("user_responses", {})
+        """Mock ask_user that returns a predefined response without calling interrupt()."""
         trigger = state.get("ask_user_trigger", "unknown")
+        questions = state.get("pending_user_questions", [])
+        existing_responses = state.get("user_responses", {})
+        
         print(
-            f"    [MOCK ask_user] trigger={trigger}, responses={list(user_responses.keys())}",
+            f"    [MOCK ask_user] trigger={trigger}, questions={len(questions)}, "
+            f"response={predefined_response!r}",
             flush=True,
         )
+        
+        # Simulate user providing the predefined response
+        new_responses = dict(existing_responses)
+        if questions:
+            # Key by first question (matching real ask_user behavior)
+            new_responses[questions[0]] = predefined_response
 
         return {
             "awaiting_user_input": False,
             "pending_user_questions": [],
+            "user_responses": new_responses,
         }
 
     return mock_ask_user

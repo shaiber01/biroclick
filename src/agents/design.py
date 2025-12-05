@@ -144,7 +144,7 @@ def simulation_designer_node(state: ReproState) -> dict:
         if isinstance(domain_size, dict):
             size_info = f"{domain_size.get('x', '?')}x{domain_size.get('y', '?')}"
         else:
-            size_info = str(domain_size)[:20] if domain_size else "unspecified"
+            size_info = str(domain_size) if domain_size else "unspecified"
         logger.info(f"🔧 design: stage={current_stage_id}, geometry={geometry}, domain={size_info}")
     else:
         logger.info(f"🔧 design: stage={current_stage_id}, design created")

@@ -6,7 +6,7 @@ These nodes handle user interactions and mandatory checkpoints.
 State Keys
 ----------
 ask_user_node:
-    READS: pending_user_questions, ask_user_trigger, paper_id, user_responses
+    READS: pending_user_questions, ask_user_trigger, paper_id
     WRITES: workflow_phase, user_responses, pending_user_questions,
             awaiting_user_input, user_validation_attempts_*
 
@@ -14,12 +14,28 @@ material_checkpoint_node:
     READS: current_stage_id, stage_outputs, progress
     WRITES: workflow_phase, pending_validated_materials, pending_user_questions,
             awaiting_user_input, ask_user_trigger, last_node_before_ask_user
+
+Implementation Notes
+--------------------
+This module uses LangGraph's `interrupt()` function for human-in-the-loop workflows.
+When ask_user_node needs user input, it calls `interrupt(payload)` which:
+1. Pauses the graph execution
+2. Returns the payload to the caller (runner.py)
+3. When resumed with `Command(resume=user_response)`, the interrupt() call returns user_response
+4. The node continues execution with the user's response
+
+This is cleaner than the interrupt_before pattern because:
+- The node runs only once (not twice)
+- No "pre-provided response" handling needed
+- User response flows directly into the node via interrupt()'s return value
 """
 
 import os
 import signal
 import logging
 from typing import Dict, Any
+
+from langgraph.types import interrupt
 
 from schemas.state import ReproState, save_checkpoint
 
@@ -42,21 +58,24 @@ def _format_boxed_content(title: str, content: str, prefix: str = "   ") -> str:
 
 def ask_user_node(state: ReproState) -> Dict[str, Any]:
     """
-    CLI-based user interaction node.
+    User interaction node using LangGraph's interrupt() for human-in-the-loop.
     
-    Prompts user in terminal for input. If user doesn't respond within timeout
-    (Ctrl+C or timeout), saves checkpoint and exits gracefully.
+    This node uses the interrupt() function to pause execution and get user input.
+    When the graph is resumed with Command(resume=user_response), the interrupt()
+    call returns the user's response directly.
     
-    Environment variables:
-        REPROLAB_USER_TIMEOUT_SECONDS: Override default timeout (default: 86400 = 24h)
-        REPROLAB_NON_INTERACTIVE: If "1", immediately save checkpoint and exit
+    Flow:
+    1. Check if there are questions to ask
+    2. Call interrupt() with the questions and trigger info
+    3. Graph pauses, runner.py displays questions and gets user input
+    4. Runner resumes with Command(resume=user_response)
+    5. interrupt() returns the user response
+    6. Node validates and returns state update
         
     Returns:
         Dict with state updates (user_responses, cleared pending questions)
     """
     logger = logging.getLogger(__name__)
-    timeout_seconds = int(os.environ.get("REPROLAB_USER_TIMEOUT_SECONDS", "86400"))
-    non_interactive = os.environ.get("REPROLAB_NON_INTERACTIVE", "0") == "1"
     
     questions = state.get("pending_user_questions", [])
     trigger = state.get("ask_user_trigger")
@@ -71,10 +90,6 @@ def ask_user_node(state: ReproState) -> Dict[str, Any]:
     
     # ═══════════════════════════════════════════════════════════════════════
     # SAFETY NET: Ensure we always have a trigger when we have questions
-    # If trigger is missing but questions exist, it indicates a workflow bug 
-    # where routing went to ask_user without properly setting the trigger.
-    # We set a fallback trigger AND return it in the result so it gets merged
-    # into state, allowing supervisor to handle the response correctly.
     # ═══════════════════════════════════════════════════════════════════════
     safety_net_triggered = False
     if not trigger:
@@ -91,252 +106,33 @@ def ask_user_node(state: ReproState) -> Dict[str, Any]:
     if "original_user_questions" not in state:
         original_questions = questions.copy()
     
-    # ═══════════════════════════════════════════════════════════════════════
-    # CHECK FOR PRE-EXISTING RESPONSES (from interrupt handler like runner.py)
-    # When using LangGraph's interrupt_before pattern, the external runner
-    # may have already collected the user's response and stored it in
-    # user_responses[trigger]. If so, skip CLI prompting and just validate.
-    # ═══════════════════════════════════════════════════════════════════════
-    existing_responses = state.get("user_responses", {})
-    if trigger and trigger in existing_responses:
-        pre_provided_response = existing_responses[trigger]
-        logger.info(
-            f"✅ ask_user: found pre-provided response for trigger '{trigger}' "
-            f"(from interrupt handler), skipping CLI prompt"
-        )
-        
-        # Log the questions that were asked and the pre-provided response
-        logger.info(f"❓ ask_user (pre-provided): trigger={trigger}, {len(questions)} question(s)")
-        for i, q in enumerate(questions, 1):
-            logger.info(f"\n{_format_boxed_content(f'QUESTION {i}', q)}")
-        logger.info(f"\n{_format_boxed_content('PRE-PROVIDED RESPONSE', pre_provided_response)}")
-        
-        # Map the single response to all questions (typically there's just one)
-        # Use the first question as the key for the response
-        responses = {}
-        if questions:
-            responses[questions[0]] = pre_provided_response
-        
-        # Map to original questions for validation
-        mapped_responses = {}
-        if original_questions:
-            mapped_responses[original_questions[0]] = pre_provided_response
-        
-        # Clear the trigger from user_responses to prevent re-use on retry
-        # (we'll add the properly validated response back later)
-        updated_user_responses = {k: v for k, v in existing_responses.items() if k != trigger}
-        
-        # Jump to validation (same logic as after CLI input collection)
-        validation_errors = validate_user_responses(trigger, mapped_responses, original_questions)
-        if validation_errors:
-            validation_attempt_key = f"user_validation_attempts_{trigger}"
-            validation_attempts = state.get(validation_attempt_key, 0) + 1
-            max_validation_attempts = 3
-            
-            if validation_attempts >= max_validation_attempts:
-                logger.warning(
-                    f"User validation failed {validation_attempts} times for trigger '{trigger}'. "
-                    "Accepting response despite validation errors and escalating to supervisor."
-                )
-                result = {
-                    "user_responses": {**updated_user_responses, **mapped_responses},
-                    "pending_user_questions": [],
-                    "awaiting_user_input": False,
-                    "workflow_phase": "awaiting_user",
-                    validation_attempt_key: 0,
-                    "original_user_questions": None,
-                    "supervisor_feedback": (
-                        f"User response had validation errors but was accepted after {validation_attempts} attempts."
-                    ),
-                }
-                if safety_net_triggered:
-                    result["ask_user_trigger"] = trigger
-                return result
-            
-            error_msg = "\n".join(f"  - {err}" for err in validation_errors)
-            first_question = original_questions[0] if original_questions else 'Please provide a valid response.'
-            reask_questions = [
-                f"Your response had validation errors (attempt {validation_attempts}/{max_validation_attempts}):\n{error_msg}\n\n"
-                f"Please try again:\n{first_question}"
-            ]
-            
-            if len(original_questions) > 1:
-                reask_questions.extend(original_questions[1:])
-            
-            return {
-                "user_responses": updated_user_responses,  # Clear the invalid response
-                "pending_user_questions": reask_questions,
-                "awaiting_user_input": True,
-                "ask_user_trigger": trigger,
-                "last_node_before_ask_user": state.get("last_node_before_ask_user"),
-                validation_attempt_key: validation_attempts,
-                "original_user_questions": original_questions,
-            }
-        
-        # Validation passed - return success
-        validation_attempt_key = f"user_validation_attempts_{trigger}"
-        result = {
-            "user_responses": {**updated_user_responses, **mapped_responses},
-            "pending_user_questions": [],
-            "awaiting_user_input": False,
-            "workflow_phase": "awaiting_user",
-            validation_attempt_key: 0,
-            "original_user_questions": None,
-        }
-        if safety_net_triggered:
-            result["ask_user_trigger"] = trigger
-        return result
-    
-    # Non-interactive mode
-    if non_interactive:
-        print("\n" + "=" * 60)
-        print("USER INPUT REQUIRED (non-interactive mode)")
-        print("=" * 60)
-        print(f"\nPaper: {paper_id}")
-        print(f"Trigger: {trigger}")
-        for i, q in enumerate(questions, 1):
-            print(f"\nQuestion {i}:\n{q}")
-        
-        # Log the questions being asked (non-interactive)
-        logger.info(f"❓ ask_user (non-interactive): trigger={trigger}, {len(questions)} question(s)")
-        for i, q in enumerate(questions, 1):
-            logger.info(f"\n{_format_boxed_content(f'QUESTION {i}', q)}")
-        
-        checkpoint_path = save_checkpoint(state, f"awaiting_user_{trigger}")
-        print(f"\n✓ Checkpoint saved: {checkpoint_path}")
-        print("\nResume with:")
-        print(f"  python -m src.graph --resume {checkpoint_path}")
-        raise SystemExit(0)
-    
-    # Interactive mode
-    print("\n" + "=" * 60)
-    print("USER INPUT REQUIRED")
-    print("=" * 60)
-    print(f"Paper: {paper_id}")
-    print(f"Trigger: {trigger}")
-    print("(Press Ctrl+C to save checkpoint and exit)")
-    print("=" * 60)
-    
     # Log the questions being asked
     logger.info(f"❓ ask_user: trigger={trigger}, {len(questions)} question(s)")
     for i, q in enumerate(questions, 1):
         logger.info(f"\n{_format_boxed_content(f'QUESTION {i}', q)}")
     
-    responses = {}
+    # ═══════════════════════════════════════════════════════════════════════
+    # INTERRUPT: Pause execution and wait for user response
+    # The interrupt() call pauses the graph. When resumed with 
+    # Command(resume=user_response), interrupt() returns that value.
+    # ═══════════════════════════════════════════════════════════════════════
+    user_response = interrupt({
+        "trigger": trigger,
+        "questions": questions,
+        "paper_id": paper_id,
+    })
     
-    def timeout_handler(signum, frame):
-        raise TimeoutError("User response timeout")
+    # ═══════════════════════════════════════════════════════════════════════
+    # RESUMED: User has provided a response
+    # ═══════════════════════════════════════════════════════════════════════
+    logger.info(f"\n{_format_boxed_content('USER RESPONSE', str(user_response))}")
     
-    try:
-        if hasattr(signal, 'SIGALRM'):
-            old_handler = signal.signal(signal.SIGALRM, timeout_handler)
-            signal.alarm(timeout_seconds)
-        else:
-            print(f"NOTE: Timeout of {timeout_seconds}s disabled (Windows/non-Unix detected).")
-        
-        for i, question in enumerate(questions, 1):
-            print(f"\n--- Question {i}/{len(questions)} ---")
-            print(f"\n{question}")
-            print("-" * 40)
-            
-            print("(Enter your response, then press Enter twice to submit)")
-            lines = []
-            while True:
-                try:
-                    line = input()
-                    if line == "" and lines:
-                        break
-                    lines.append(line)
-                except EOFError:
-                    break
-            
-            response = "\n".join(lines).strip()
-            if not response:
-                response = input("Your response (single line): ").strip()
-            
-            responses[question] = response
-            print(f"✓ Response recorded")
-        
-        if hasattr(signal, 'SIGALRM'):
-            signal.alarm(0)
-            signal.signal(signal.SIGALRM, old_handler)
-        
-        print("\n" + "=" * 60)
-        print("✓ All responses collected")
-        print("=" * 60)
-        
-        # Log the user's responses
-        logger.info(f"✅ ask_user: collected {len(responses)} response(s)")
-        for i, (q, r) in enumerate(responses.items(), 1):
-            logger.info(f"\n{_format_boxed_content(f'Q{i}', q)}")
-            logger.info(f"\n{_format_boxed_content(f'RESPONSE {i}', r)}")
-            
-    except KeyboardInterrupt:
-        if hasattr(signal, 'SIGALRM'):
-            signal.alarm(0)
-            if 'old_handler' in locals():
-                signal.signal(signal.SIGALRM, old_handler)
-        print(f"\n\n⚠ Interrupted by user (Ctrl+C)")
-        checkpoint_path = save_checkpoint(state, f"interrupted_{trigger}")
-        print(f"✓ Checkpoint saved: {checkpoint_path}")
-        print("\nResume later with:")
-        print(f"  python -m src.graph --resume {checkpoint_path}")
-        raise SystemExit(0)
-        
-    except TimeoutError:
-        if hasattr(signal, 'SIGALRM'):
-            signal.alarm(0)
-            if 'old_handler' in locals():
-                signal.signal(signal.SIGALRM, old_handler)
-        print(f"\n\n⚠ User response timeout ({timeout_seconds}s)")
-        checkpoint_path = save_checkpoint(state, f"timeout_{trigger}")
-        print(f"✓ Checkpoint saved: {checkpoint_path}")
-        print("\nResume later with:")
-        print(f"  python -m src.graph --resume {checkpoint_path}")
-        raise SystemExit(0)
-        
-    except EOFError:
-        if hasattr(signal, 'SIGALRM'):
-            signal.alarm(0)
-            if 'old_handler' in locals():
-                signal.signal(signal.SIGALRM, old_handler)
-        print(f"\n\n⚠ End of input (EOF)")
-        checkpoint_path = save_checkpoint(state, f"eof_{trigger}")
-        print(f"✓ Checkpoint saved: {checkpoint_path}")
-        print("\nResume later with:")
-        print(f"  python -m src.graph --resume {checkpoint_path}")
-        raise SystemExit(0)
-    
-    # Map responses back to original questions if this is a retry
-    # (responses might be keyed by reask question text)
+    # Map the response to the first question (typically there's just one question)
     mapped_responses = {}
-    for i, orig_q in enumerate(original_questions):
-        # Try to find response by original question first
-        if orig_q in responses:
-            mapped_responses[orig_q] = responses[orig_q]
-        # If not found, try by index (for reask scenarios where question text was modified)
-        elif i < len(questions) and questions[i] in responses:
-            mapped_responses[orig_q] = responses[questions[i]]
-        # If still not found, check if any response key ends with the original question
-        # (for reask format: "error message\n\nPlease try again:\n{original_question}")
-        else:
-            for resp_key, resp_value in responses.items():
-                if resp_key.endswith(orig_q) or f"\n{orig_q}" in resp_key:
-                    mapped_responses[orig_q] = resp_value
-                    break
+    if original_questions:
+        mapped_responses[original_questions[0]] = user_response
     
-    # Fallback: if mapping failed but we have responses, use them as-is
-    # (this handles edge cases where mapping logic doesn't catch everything)
-    if not mapped_responses and responses:
-        # If we have the same number of responses as original questions, map by index
-        if len(responses) == len(original_questions):
-            response_values = list(responses.values())
-            mapped_responses = {orig_q: response_values[i] for i, orig_q in enumerate(original_questions)}
-        else:
-            # Last resort: use responses as-is (might cause validation issues, but better than empty)
-            mapped_responses = responses
-    
-    # Validate user responses using original questions
+    # Validate user response
     validation_errors = validate_user_responses(trigger, mapped_responses, original_questions)
     if validation_errors:
         validation_attempt_key = f"user_validation_attempts_{trigger}"
@@ -344,7 +140,6 @@ def ask_user_node(state: ReproState) -> Dict[str, Any]:
         max_validation_attempts = 3
         
         if validation_attempts >= max_validation_attempts:
-            logger = logging.getLogger(__name__)
             logger.warning(
                 f"User validation failed {validation_attempts} times for trigger '{trigger}'. "
                 "Accepting response despite validation errors and escalating to supervisor."
@@ -355,19 +150,16 @@ def ask_user_node(state: ReproState) -> Dict[str, Any]:
                 "awaiting_user_input": False,
                 "workflow_phase": "awaiting_user",
                 validation_attempt_key: 0,
-                "original_user_questions": None,  # Clear after success
+                "original_user_questions": None,
                 "supervisor_feedback": (
                     f"User response had validation errors but was accepted after {validation_attempts} attempts."
                 ),
             }
-            # If safety net triggered, include the trigger in result so supervisor knows
             if safety_net_triggered:
                 result["ask_user_trigger"] = trigger
             return result
         
         error_msg = "\n".join(f"  - {err}" for err in validation_errors)
-        
-        # Prepend error message to the first question, and keep all other questions
         first_question = original_questions[0] if original_questions else 'Please provide a valid response.'
         reask_questions = [
             f"Your response had validation errors (attempt {validation_attempts}/{max_validation_attempts}):\n{error_msg}\n\n"
@@ -383,9 +175,10 @@ def ask_user_node(state: ReproState) -> Dict[str, Any]:
             "ask_user_trigger": trigger,
             "last_node_before_ask_user": state.get("last_node_before_ask_user"),
             validation_attempt_key: validation_attempts,
-            "original_user_questions": original_questions,  # Preserve for mapping responses
+            "original_user_questions": original_questions,
         }
     
+    # Validation passed - return success
     validation_attempt_key = f"user_validation_attempts_{trigger}"
     result = {
         "user_responses": {**state.get("user_responses", {}), **mapped_responses},
@@ -393,9 +186,8 @@ def ask_user_node(state: ReproState) -> Dict[str, Any]:
         "awaiting_user_input": False,
         "workflow_phase": "awaiting_user",
         validation_attempt_key: 0,
-        "original_user_questions": None,  # Clear after successful validation
+        "original_user_questions": None,
     }
-    # If safety net triggered, include the trigger in result so supervisor knows
     if safety_net_triggered:
         result["ask_user_trigger"] = trigger
     return result

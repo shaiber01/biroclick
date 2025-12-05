@@ -808,7 +808,7 @@ def run_code_node(state: Dict[str, Any]) -> Dict[str, Any]:
     runtime_str = f"{result['runtime_seconds']:.1f}s"
     num_files = len(result['output_files'])
     if result['error']:
-        logger.info(f"⚡ run_code: stage={stage_id}, FAILED in {runtime_str} ({result['error'][:50]}...)")
+        logger.info(f"⚡ run_code: stage={stage_id}, FAILED in {runtime_str} ({result['error']})")
     else:
         logger.info(f"⚡ run_code: stage={stage_id}, SUCCESS in {runtime_str}, {num_files} output file(s)")
     

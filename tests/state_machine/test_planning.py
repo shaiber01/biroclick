@@ -20,6 +20,8 @@ BEFORE the current event's updates are applied. To get state AFTER a node runs:
 import pytest
 from unittest.mock import patch
 
+from langgraph.types import Command
+
 from src.graph import create_repro_graph
 from schemas.state import create_initial_state, MAX_REPLANS
 
@@ -364,16 +366,16 @@ class TestPlanningPhase:
         
         This is a CRITICAL test that verifies the interrupt-resume flow works correctly.
         
-        The bug this catches:
-        - If you call graph.invoke({"user_responses": ...}, config) instead of
-          graph.update_state() + graph.invoke(None, config), the graph RESTARTS
-          from START instead of resuming from the interrupt point.
+        With the interrupt() pattern (not interrupt_before):
+        - ask_user node runs and calls interrupt() to pause
+        - We resume with Command(resume=user_response)
+        - The interrupt() call returns the user_response
+        - ask_user completes and routes to supervisor
         
         Verifies:
-        - After interrupt at ask_user, resume with update_state + invoke(None)
-        - Flow continues: ask_user → supervisor (NOT adapt_prompts → planning)
+        - After interrupt inside ask_user, resume with Command(resume=...)
+        - Flow continues: ask_user completes → supervisor
         - Supervisor processes the user response correctly
-        - APPROVE_PLAN response sets supervisor_verdict to ok_continue
         """
         visited = []
 
@@ -392,27 +394,8 @@ class TestPlanningPhase:
             }
             return responses.get(agent, {})
 
-        def mock_ask_user_node(state):
-            """Mock ask_user_node that uses pre-existing user_responses instead of CLI input.
-            
-            This simulates what happens when user input is collected externally (via runner.py)
-            and injected via update_state before resuming the graph.
-            """
-            trigger = state.get("ask_user_trigger")
-            user_responses = state.get("user_responses", {})
-            
-            print(f"    [ask_user_node] trigger={trigger}, has_response={trigger in user_responses}")
-            
-            # Return state that clears pending questions and marks not awaiting
-            return {
-                "pending_user_questions": [],
-                "awaiting_user_input": False,
-                "workflow_phase": "awaiting_user",
-            }
-
         with MultiPatch(LLM_PATCH_LOCATIONS, side_effect=mock_llm), \
-             MultiPatch(CHECKPOINT_PATCH_LOCATIONS, return_value="/tmp/cp.json"), \
-             patch("src.graph.ask_user_node", mock_ask_user_node):
+             MultiPatch(CHECKPOINT_PATCH_LOCATIONS, return_value="/tmp/cp.json"):
             
             print("\n" + "=" * 60)
             print("TEST: Interrupt resume routes through supervisor")
@@ -424,31 +407,32 @@ class TestPlanningPhase:
             print("\n--- Phase 1: Run until interrupt ---")
             nodes_before_interrupt = []
 
-            # Stream until interrupt (ask_user is interrupt_before)
+            # Stream until interrupt (ask_user calls interrupt() internally)
             for event in graph.stream(initial_state, config):
                 for node_name, _ in event.items():
                     nodes_before_interrupt.append(node_name)
                     print(f"  → {node_name}")
 
-            # Verify we're paused at ask_user
-            state = graph.get_state(config)
-            assert "ask_user" in state.next, \
-                f"Should be paused at ask_user, got {state.next}"
+            # Verify we're paused with an interrupt payload
+            snapshot = graph.get_state(config)
+            interrupt_payload = None
+            if snapshot.tasks:
+                for task in snapshot.tasks:
+                    if hasattr(task, 'interrupts') and task.interrupts:
+                        interrupt_payload = task.interrupts[0].value
+                        break
             
-            print(f"\n  Paused at: {state.next}")
-            print(f"  ask_user_trigger: {state.values.get('ask_user_trigger')}")
+            assert interrupt_payload is not None, \
+                f"Should have interrupt payload, got snapshot.next={snapshot.next}"
+            
+            print(f"\n  Interrupt payload: {interrupt_payload}")
+            print(f"  Trigger: {interrupt_payload.get('trigger')}")
 
             print("\n--- Phase 2: Resume with user response ---")
             
-            # CORRECT WAY: update_state then invoke(None)
-            # This is what runner.py should do (and what we're testing)
-            graph.update_state(
-                config,
-                {"user_responses": {"replan_limit": "APPROVE_PLAN"}},
-            )
-            
+            # Resume with Command(resume=...) - this passes the value to interrupt()
             nodes_after_resume = []
-            for event in graph.stream(None, config):
+            for event in graph.stream(Command(resume="APPROVE_PLAN"), config):
                 for node_name, _ in event.items():
                     nodes_after_resume.append(node_name)
                     print(f"  → {node_name}")
@@ -463,9 +447,9 @@ class TestPlanningPhase:
             print(f"\n  Nodes after resume: {nodes_after_resume}")
             
             # CRITICAL ASSERTIONS:
-            # 1. ask_user should run (it's the interrupted node)
+            # 1. ask_user should complete (it was mid-interrupt, now resumes)
             assert "ask_user" in nodes_after_resume, \
-                f"ask_user should run after resume, got {nodes_after_resume}"
+                f"ask_user should complete after resume, got {nodes_after_resume}"
             
             # 2. supervisor should run (ask_user routes to supervisor)
             assert "supervisor" in nodes_after_resume, \

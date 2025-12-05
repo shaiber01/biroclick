@@ -1,5 +1,8 @@
 import logging
 import sys
+from pathlib import Path
+
+from langgraph.types import Command
 
 # =============================================================================
 # FAIL-FAST: Check that meep is available in the current Python environment
@@ -40,9 +43,6 @@ from src.paper_loader import load_paper_from_markdown, create_state_from_paper_i
 # Create callback instance for reuse
 progress_callback = GraphProgressCallback()
 
-# Initialize the graph
-app = create_repro_graph()
-
 # Load paper from markdown (auto-downloads figures)
 paper_input = load_paper_from_markdown(
     markdown_path="./papers/Aluminum Nanoantenna Complexes for Strong Coupling between Excitons and Localized Surface Plasmons - short.md",
@@ -55,6 +55,12 @@ paper_input = load_paper_from_markdown(
 setup_file_logging(paper_input["run_output_dir"])
 logger.info(f"📁 Run output directory: {paper_input['run_output_dir']}")
 
+# Initialize the graph with persistent checkpointing
+# This enables resume from interrupts after process exit
+checkpoint_dir = str(Path(paper_input["run_output_dir"]) / "checkpoints")
+app = create_repro_graph(checkpoint_dir=checkpoint_dir)
+logger.info(f"💾 Checkpoints will be saved to: {checkpoint_dir}")
+
 # Convert to initial state
 initial_state = create_state_from_paper_input(paper_input)
 
@@ -63,41 +69,50 @@ config = {"configurable": {"thread_id": "my_run_1"}, "callbacks": [progress_call
 result = app.invoke(initial_state, config)
 
 # Handle interrupts for user input
+# With the interrupt() pattern, the ask_user node pauses mid-execution via interrupt()
+# and provides a payload with questions. We resume with Command(resume=user_response).
 while True:
-    # Check if we're paused at ask_user
+    # Check if we're paused (interrupted)
     snapshot = app.get_state(config)
     if not snapshot.next:  # No next node = finished
         print("\n✅ Graph completed!")
         break
     
-    if "ask_user" in snapshot.next:
+    # Check for interrupt payload from ask_user node's interrupt() call
+    # The interrupt payload is in snapshot.tasks[0].interrupts[0].value
+    interrupt_payload = None
+    if snapshot.tasks:
+        for task in snapshot.tasks:
+            if hasattr(task, 'interrupts') and task.interrupts:
+                interrupt_payload = task.interrupts[0].value
+                break
+    
+    if interrupt_payload:
         # Show what the system is asking
         print("\n" + "="*60)
         print("🤖 SYSTEM NEEDS YOUR INPUT")
         print("="*60)
         
-        state = snapshot.values
-        questions = state.get("pending_user_questions", [])
-        trigger = state.get("ask_user_trigger", "unknown")
+        trigger = interrupt_payload.get("trigger", "unknown")
+        questions = interrupt_payload.get("questions", [])
+        paper_id = interrupt_payload.get("paper_id", "unknown")
         
+        print(f"Paper: {paper_id}")
         print(f"Trigger: {trigger}")
         for q in questions:
-            print(f"  - {q}")
+            print(f"\n{q}")
         
         # Get user response
+        print("-" * 60)
         user_input = input("\nYour response (or 'quit' to exit): ")
         if user_input.lower() == 'quit':
-            print("Exiting...")
+            print("\n💾 State saved to checkpoint. Resume later with:")
+            print(f"  python -m src --resume {checkpoint_dir}")
             break
         
-        # Resume with user response
-        # IMPORTANT: Use update_state() then invoke(None) to properly resume from interrupt.
-        # Calling invoke(input, config) would start a NEW run from START, not resume!
-        app.update_state(
-            config,
-            {"user_responses": {trigger: user_input}},
-        )
-        result = app.invoke(None, config)
+        # Resume with user response using Command(resume=...)
+        # This passes the response directly to the interrupt() call's return value
+        result = app.invoke(Command(resume=user_input), config)
     else:
         print(f"Unexpected pause at: {snapshot.next}")
         break

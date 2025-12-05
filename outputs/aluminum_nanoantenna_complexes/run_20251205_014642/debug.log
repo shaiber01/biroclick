@@ -752,3 +752,9 @@
 2025-12-05 02:03:27,955 - src.callbacks - INFO - 🔄 Entering node: material_checkpoint
 2025-12-05 02:03:28,500 - langsmith.client - DEBUG - Sending compressed multipart request with context: trace=d4d46f52-5db0-4fd7-b4d1-faba1d1ba409,id=d4d46f52-5db0-4fd7-b4d1-faba1d1ba409; trace=d4d46f52-5db0-4fd7-b4d1-faba1d1ba409,id=a045a317-d91a-405c-9250-a0819d414c3c; trace=d4d46f52-5db0-4fd7-b4d1-faba1d1ba409,id=4194a1ad-39af-4d7d-8887-00c99fd124b0; trace=d4d46f52-5db0-4fd7-b4d1-faba1d1ba409,id=4194a1ad-39af-4d7d-8887-00c99fd124b0; trace=d4d46f52-5db0-4fd7-b4d1-faba1d1ba409,id=a045a317-d91a-405c-9250-a0819d414c3c; trace=d4d46f52-5db0-4fd7-b4d1-faba1d1ba409,id=42a8330f-cfdd-4572-b6a0-2b214482cbbe; trace=d4d46f52-5db0-4fd7-b4d1-faba1d1ba409,id=7d33798a-d07f-45a8-920e-4b31281708c5; trace=d4d46f52-5db0-4fd7-b4d1-faba1d1ba409,id=7d33798a-d07f-45a8-920e-4b31281708c5; trace=d4d46f52-5db0-4fd7-b4d1-faba1d1ba409,id=42a8330f-cfdd-4572-b6a0-2b214482cbbe; trace=d4d46f52-5db0-4fd7-b4d1-faba1d1ba409,id=fca90e08-cd19-458e-b52c-c5685b2f13ee; trace=d4d46f52-5db0-4fd7-b4d1-faba1d1ba409,id=fca90e08-cd19-458e-b52c-c5685b2f13ee; trace=d4d46f52-5db0-4fd7-b4d1-faba1d1ba409,id=d4d46f52-5db0-4fd7-b4d1-faba1d1ba409
 2025-12-05 02:03:28,637 - urllib3.connectionpool - DEBUG - https://eu.api.smith.langchain.com:443 "POST /runs/multipart HTTP/11" 202 34
+2025-12-05 02:18:36,644 - langsmith.client - DEBUG - Main thread is dead, stopping compression thread
+2025-12-05 02:18:36,644 - langsmith.client - DEBUG - Compressed traces control thread is shutting down
+2025-12-05 02:18:36,704 - langsmith.client - DEBUG - Main thread is dead, stopping tracing thread
+2025-12-05 02:18:36,704 - langsmith.client - DEBUG - Tracing control thread is shutting down
+2025-12-05 02:18:36,704 - langsmith.client - DEBUG - Closing Client.session
+2025-12-05 02:18:36,704 - langsmith.client - DEBUG - Closing Client.session

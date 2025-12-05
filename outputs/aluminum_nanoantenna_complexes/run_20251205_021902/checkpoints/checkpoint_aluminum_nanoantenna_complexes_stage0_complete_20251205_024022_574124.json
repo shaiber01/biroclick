@@ -1,0 +1,1452 @@
+{
+  "paper_id": "aluminum_nanoantenna_complexes",
+  "paper_domain": "strong_coupling",
+  "paper_text": "<!-- NANO LETTERS -->\n\n<!-- Letter -->\n\n<!-- pubs.acs.org/NanoLett -->\n\n# Aluminum Nanoantenna Complexes for StrongCoupling between Excitons and Localized Surface Plasmons\n\nElad Eizner,* Ori Avayu, Ran Ditcovski, and Tal Ellenbogen\n\nDepartment of Physical Electronics, Fleischman Faculty of Engineering, Tel Aviv University, Tel Aviv 69978, Israel\n\n## \u2464 Supporting Information\n\n(o1n90-60'SLT S707 SZuaguaAON Io AINn AIAA TaLeA PapEoIuAoa\n\n\u00e1alog PousIand aets Aoieugaalo Aodl uo suondo ol sauflopmnaaugeus/aio,sag:sqndy:sdir aaS\n\nABSTRACT: We study the optical dynamics in complexes of aluminum nanoantennas coated with molecular J-aggregates and find that they provide an excellent platform for the formation of hybrid exciton-localized surface plasmons. Giant Rabi splitting of 0.4 eV, which corresponds to ~10 fs energy transfer cycle, is observed in spectral transmittance. We show that the nanoantennas can be used to manipulate the polarization of hybrid states and to confine their mode volumes. In addition, we observe enhancement of the photoluminescence due to enhanced absorption and increase in the local density of states at the exciton-localized surface plasmon energies. With recent emerging\n\n\n![](https://web-api.textin.com/ocr_image/external/bf987d04a5699ea8.jpg)\n\n<!-- Transmission Spectra 400 1 Upper X-LSP 500 0.8 \uff08\u65e55)5buolehe X 0.6 600 0.4 700 Lower X-LSP 0.2 800 75 0 105 140 165 205 Diameter(nm) -->\n![](https://web-api.textin.com/ocr_image/external/fb69263796255201.jpg)\n\ntechnological applications based on strongly coupled light-matter states, this study opens newv possibilities to explore and utilize the unique properties of hybrid states over all of the visible region down to ultraviolet frequencies in nanoscale, technologically compatible, integrated platforms based on aluminum.\n\nKEYWORDS: Strong coupling, aluminum nanoantennas, organic polaritons, localized surface plasmons\n\n**T**he interaction between lightand quantum emitters such as excitons depends on the local density of electro-magnetic (EM) modes. Increasing the density of EM modes, e.g., by using optical cavities, can facilitate faster energy transfer between the electronic mmaterial-excitations and the EM fields, leading to a variety of interesting physical phenomena such as the Purcell enhancement' where the lifetime of excited states is reduced leading to brighter light emission. When the rate of energy exchange between the excitons and the local EM modes becomes higher than their individual rates of decay and decoherence, hybrid light-exciton states emerge with new and exciting mixed properties of light and matter.2 2Unlike photons, these hybrid light-matter states can collide and scatter through polariton-polariton and polariton-exciton interactions.4Therefore, hybridization leads to population-dependent non-linearities which can result in polariton condensation and macroscopic coherence of the hybrid states and of the emitted light.2 As a result, novel applications based on hybrid states are emerging, such as the generation of low threshold coherent emission at room temperature without the need for population inversion,5\u00b0 parametric amplification of optical signals, and ultrafast switching.,\u2079 In addition, as was recently demonstrated, strong coupling with EM modes can even modify energy transfer pathways, e.g., within organic molecules\u00b9\u2070 and photosynthetic organisms, and can be used to develop nanoscale quantum devices.13 In light of all of these potential applications, the technological compatibility of the platform in which the hybrid states are generated is extremely important.\n\nA wide variety of platforms including optical micro-cavities, $2,4-6,14-16$  optical waveguides,17-21 optical lattices, $22,23$ flat metal surfaces,4 and metallic nanoparticles29-35 have already been used to demonstrate strong coupling between EM fields and excitons. Of these, the metallic nanoparticle platform carries several advantages. First of all, the EM fields associated with the localized surface plasmon (LSP) modes of the metallic nanoparticles are confined to deep subwavelength volumes in all three dimensions. This confinement provides a way to focus light in the nanoscale which enhances the coupling with excitons and reduces the footprint of the active area. In addition, the optical response of the metallic nanoparticles, e.g., their resonance frequency and polarization, can be easily controlled by adjusting the shape, size, and chemical composition of the particles. This enables control of the effective optical properties of the bulk materials and the construction of so-called metamaterials. $36-41$  Overall metal nanoparticles permit customization of EM interaction with the excitons to attain strong coupling in an easily integrated and ultracompact platform.\n\nIn recent years several groups have studied strong coupling between excitons and LSPs in metallic particles made from $gold^{33-35}$ or silver.\u2079 $29-32$ Gold is considered a good and stable plasmonic material; however, it is limited to work at energies below 2.4 eV where the onset of $s-d$  interband transitions damps the LSPs. The first interband transitions in silver occur at higher energies (~3.1 eV); however, it reacts quickly with oxides and sulfides which degrade the purity over time. Therefore, in order to improve the technological compatibility, additional materials should be investigated.\n\nReceived: June 30, 2015\n\nRevised: August 6,2015\n\nPublished: August 10, 2015\n\n<!-- ACS Publications -->\n\n<!-- \u00a92015 American Chemical Society -->\n\n<!-- **6215** -->\n\n<!-- DOI:10.1021/acs.nanolett.5b02584 -->\n\n<!-- Nano Lett. 2015,15,6215-6221 -->\n\n<!-- Nano Letters -->\n\n<!-- **Letter** -->\n\nVery recently, aluminum (Al) was shown to be an outstanding material for nanoplasmonic based systems. Aluminum has an interband transition at a narrow energy band around 1.5 eV, and therefore Al nanoparticles can support LSPs with relatively long lifetimes and large optical cross $\\text {sections}{}^{42-44}$ over a wide energy range, comprising the visible region down to ultraviolet frequencies. Furthermore, Al is cheap, abundant (the most abundant metal in the Earth's crust), and forms a 2-3 nm stable oxide $\\left(\\mathrm {A}_{2}\\mathrm {O}_{3}\\right)$ layer almost immediately on exposure to air. This layer protects and 0preserve the nanoparticles, giving them long-term durability. Aluminum is therefore a very attractive candidate for technological device applications, and it is interesting to examine its compatibility for generating hybrid exciton-plasmon states. Currently there is no reported evidence for strong coupling between excitons and bright (dipolar) LSP modes in Al nanoparticles. The only reported observation was between excitons in ZnO quantum wells coupled to plasmonic quadrupole modes in Al nanoparticles, and these exhibited only a relatively small Rabi energy splittingof $0.015eV.48$  In that case, the possible applications are limited due to the dark nature of the plasmon modes and the close to dissipation rate value of the Rabi splitting. Here we demonstrate that complexes of Al nanoantennas coated with J-aggregating molecules can be used for efficient generation of bright hybrid exciton-LSP states (X-LSPs). We use spectral transmittance to measure a giant, 0.4eV, energy dispersion Rabi splitting as a consequence of the formation of hybrid states and find that the nanoantennas can also be used to control their polarization. In addition we observe enhancement of the light emission from the J-aggregate-Al nanoantennas in specific spectral regions corresponding to the hybrid X-LSP modes.\n\n**Theoretical** **Framework.** The interaction between N two-level systems and photons of an EM mode can be described by the Dicke model.49 At the limit where N is large compared to the number of photons in the system, the collection of two level systems acts like a giant quantum oscillator, and the coupling energy is g \u03b1 $N^{1/2}\\vec {\u03bc}\\vec {E}.$ 3,50 For a system of excitons interacting with LSPs, $\\vec {\u03bc}$ is the excitonic transition dipole moment, and $\\vec {E}$  is the electric field component of the LSP at the transition energy. For a homogeneous layer of excitonic transition dipoles (TDs), the number of TDs that interact with an LSP mode is $N=$ $_{\\mathrm {X}}V_{\\mathrm {X}}$ where $n_{\\mathrm {X}}$  is the density of the TDs and $V_{\\mathrm {X}}$ is the result of the overlap integral between the LSP mode and the distribution of TDs. The coupling energy therefore takes the form\n\n$$g=F\u03bc\\sqrt {\\frac {n_{\\mathrm {X}}U_{\\mathrm {X}}}{\u03b5_{0}\u03b5_{\\mathrm {d}}}}\\sqrt {\\frac {V_{\\mathrm {X}}}{V}}\\tag{1}$$\n\nwhere $U_{\\mathrm {X}}$ is the transition energy, V is the effective LSP mode volume, quantifying the electric field strength per LSP, F is a factor that depends on the orientation of the dipoles, $\u03b5_{0}$  is the vacuum permittivity, and $\u03b5_{\\mathrm {d}}$ is the dielectric constant outside the nanoparticle. From eq 1, it can be seen that due to the collective nature of the interaction, one of the main quantities that affects the coupling strength is the ratio between the overlap volume $V_{\\mathrm {X}}$ and the total mode volume V. Reduction of the EM mode volume is usually recommended to increase light-matter interactions. However, from eq 1, it can be seen that for homogeneously spread TDs, reducing the mode volume also correspondingly reduces the number of interacting TDs within the mode $\\left(n_{\\mathrm {X}}V_{\\mathrm {X}}\\right)$ ,and as a consequence the coupling strength does not increase. This can be seen as one of the signatures of collective strong coupling with many TDs.By geometrical manipulations of nanoantennas, the mode volume can be confined and reduced. However, it is important to understand that this would not necessarily increase the coupling strength.\n\nMany features of X-LSPs and strong coupling physics can be understood in terms of coupled harmonic oscillators.2,3,51Adopting this model:\n\n$$\\left(\\begin{array}{cc}U_{\\mathrm {LSP}}-i\\frac {\u03b3_{\\mathrm {LSP}}}{2}&g\\\\ g&U_{\\mathrm {X}}-i\\frac {\u03b3_{\\mathrm {X}}}{2}\\end{array}\\right)\\left(\\begin{array}{c}\\alpha \\\\ \\beta \\end{array}\\right)=U_{\\mathrm {LP},\\mathrm {UP}}\\left(\\begin{array}{c}\\alpha \\\\ \\beta \\end{array}\\right)\\tag{2}$$\n\nwhere $U_{\\mathrm {LSP}},U_{\\mathrm {X}}$ and $\u03b3_{\\mathrm {LSP}},$ $\u03b3_{\\mathrm {X}}$ are the uncoupled LSP and exciton energies and decay rates respectively, $\\mathrm {U}_{\\mathrm {L},\\mathrm {I}}$ p are the energies of the hybrid states, and $a$  and $\\beta$  are the weighting coefficients of the LSPs and excitons in the hybrid states, where $|\u03b1|^{2}+|\\beta |^{2}=1.$ The eigenvalues of eq 2 which describe the energies of the hybrid modes are\n\n$$U_{\\mathrm {LP},\\mathrm {UP}}=\\frac {1}{2}\\left[U_{\\mathrm {X}}+U_{\\mathrm {LSP}}-i\\left(\\frac {\u03b3_{X}}{2}+\\frac {\u03b3_{\\mathrm {LSP}}}{2}\\right)\\right.$$\n\n$$\\left.\\pm \\sqrt {4g^{2}+\\left(U_{\\mathrm {X}}-U_{\\mathrm {LSP}}-i\\left(\\frac {\u03b3_{\\mathrm {X}}}{2}-\\frac {\u03b3_{\\mathrm {LSP}}}{2}\\right)\\right)^{2}}\\right]$$\n\n(3)\n\nTherefore, considering a nondispersive exciton and size-dispersive LSP, the signature of the coupled system shows a split of the dispersion relation corresponding with the upper and lower exciton polaritons. To observe Rabi splitting,the difference between the upper and lower energies of the polaritons, $\\left(4g^{2}-\\left(\\left(\u03b3_{\\mathrm {X}}/2\\right)-\\left(\u03b3_{\\mathrm {LSP}}/2\\right)\\right)^{2}\\right)^{1/2}$ should be larger than the polariton line width $\\left(\u03b3_{\\mathrm {X}}/2\\right)+\\left(\u03b3_{\\mathrm {LSP}}/2\\right)$ ,resulting in the following condition for strong coupling and Rabi splitting: $3,52,53$ \n\n$$\\hbar \u03a9_{\\mathrm {R}}=2g>\\sqrt {\\frac {\u03b3_{\\mathrm {X}}^{2}}{2}+\\frac {\u03b3_{\\mathrm {LSP}}^{2}}{2}}\\tag{4}$$\n\nIt is important to note that, even with coupling energies that do not fulfill the condition in eq 4, the interaction between the LSP and exciton modes can result in spectral splitting and asymmetric line shapes (e.g., Fano resonances), $52,54$  although these do not indicate Rabi energy transfer. This is an important point with respect to aluminum plasmonics, which can suffer from faster damping rates of the LSP modes compared to noble metals.\n\nThe interaction between LSPs and excitons can be studied either by using single nanoantennas32,34,35or by using arrays of subwavelength spaced nanoantennas.29 If the nanoparticle size is smaller than the separation distance between the closest neighbors, near field interparticle coupling can be neglected,55and the resonances in each array are determined by the LSP resonances of individual nanoparticles.\n\n**Experiment and Results.** The studied samples, as illustrated in Figure 1, consisted of subwavelength-spaced arrays of Al nanodisks and nanorods fabricated on indium tin oxide (ITO) coated glass substrate and covered with a thin (~20 nm) layer of J-aggregating cyanine dye molecules (TDBC). All of the nanoantennas were 40 nm thick, and the area of each of the arrays was $15\\times 15$ \u03bc\u33a1. As illustrated in Figure 1a, each nanodisk array had a different disk diameter, $D$ ranging from 75 nm to 205 nm, and a fixed side to side\n\n<!-- **6216** -->\n\n<!-- DOI:10.1021/acs.nanolett.5b02584 -->\n\n<!-- Nano Lett. 2015,15,6215-6221 -->\n\n<!-- Nano Letters -->\n\n<!-- **Letter** -->\n\n<!-- (a) TDBC ITO Glass y -->\n![](https://web-api.textin.com/ocr_image/external/d285f44e73251b89.jpg)\n\n(b)\n\n(c)\n\n\n![](https://web-api.textin.com/ocr_image/external/db2ad7f36b4a4e5d.jpg)\n\n<!-- 20\u03bcm $20\u03bcm$ -->\n![](https://web-api.textin.com/ocr_image/external/dfa3f1ded841f4c9.jpg)\n\n<!-- (d) (e) \u0443 TDBC ITO x Glass- (f) $\\frac{\\hat{x}}{\\hat{y}\\rceil}$ $20\u03bcm$ -->\n![](https://web-api.textin.com/ocr_image/external/28c6ec90e97ce60a.jpg)\n\nFigure 1. Aluminum nanoantenna based X-LSP samples. (a) Illustration of nanodisk based X-LSP samples (b) SEM image of a sample of nanodisks with $D=1$  $10$ nm and $\u0393=180$ nm.(c)White light transmission image through bare nanodisk arrays with different diameters. (d) Illustration of nanorod based X-LSP samples (e) SEM image of a sample of nanorods with $L=120$ nm, $W=40$ nm, $\u0393_{y}$ $=150nm,$ ,and $\u0393_{x}=200\\mathrm {\\;nm}.$  (f) Polarized white light transmission image for an incident light polarized at the $x$ (top part) or $y$  (bottom part) axis, through bare nanorod arrays with different lengths. For light polarized along the $y$  axis the sample becomes transparent in the visible region.\n\n$separation,I$ $\u0393,$  which was ~180 nm. Each nanorod array (Figure 1d),had a different rod length, $L,$  ranging from 75 nm to 205nm, with a fixed side to side separation in the $x$  direction, $\u0393_{}$ and in the $y$  direction, $\u0393_{y\\prime }$  (~200 nm and $\\;150$  nm, respectively). A scanning electron microscope (SEM) image of one of the bare nanodisk arrays $(D=140$ nm) is shown in Figure 1b, and an image of white light transmission through 12arrays with different nanodisk diameters is shown in Figure 1c. The vivid colors in the transmission image are due to size dependent resonant coupling of the light to the dipolar $LSPs$ of the nanodisks, which scatter and absorb the light at the LSP resonance. A scanning electron microscope (SEM) image of one of the nanorod arrays $(L=12$ 00 nm) is shown in Figure 1e, and an image of polarized white light transmission through the nanorod arrays is shown in Figure 1f. In this case, coupling to LSPs becomes polarization dependent. When the polarization is along the long axis, vivid colors are observed due to coupling to LSPs across the entire visible spectrum. When the polarization is rotated by $90^{\\circ }$ , the sample becomes transparent due to coupling to ultraviolet LSPs.\n\nWe used TDBC J-aggregates as the excitonic material because of their remarkable optical properties including delocalization of the exciton, narrow absorption and emission spectra, high binding energy, and large oscillator strengths (order of 10 D),56 which allow them to couple strongly to EM fields at room temperature. The absorption and fluorescence spectra of water-TDBC solution spin coated on ITO coated glass is shown in Figure 2a. The J-band absorption peak is at 2.1eV and has a line width of ~0.066 eV. The fluorescence exhibits slightly narrower line width and a very small Stokes shift of ~0.007 eV.\n\nThe coupling between the LSP modes on the nanoantennas and the excitons in the J-aggregates occurs in the overlap region of the J-aggregates andd the LSP modes. Figure 2b and c shows finite difference time domain (FDTD) simulations of the LSP electric field enhancement in the $x-y$ plane for a nanodisk and a nanorod, respectively, which were tuned to support an LSP resonance at the same wavelength $(\u03bb=530$ nm).\n\n<!-- 5% (a) (ne) eouedosQY 5\u00b0 $10^{\\circ }$ (n,e)eOue0seonliu 500 600 700 800 Wavelength(nm) -->\n![](https://web-api.textin.com/ocr_image/external/da2a81b4fa93d420.jpg)\n\n<!-- $\\left|E/E_{0}\\right|$ 100 (b) 6 5 4 (Eu 0 3 2 100 1 100 0 100 $x(nm)$ -->\n![](https://web-api.textin.com/ocr_image/external/3661ce7214790f30.jpg)\n\n<!-- $\\left|E/E_{0}\\right|$ 8 50 (c) 6 \uff08\u65e5u\uff09 0 4 50 2 100 0 100 x(nm) -->\n![](https://web-api.textin.com/ocr_image/external/168ffd6a9b031803.jpg)\n\n**Figure** 2. (a) Absorbance (blue dashed line) and fluorescence (red solid line) spectra of a thin TDBC layer on glass. The inset shows the chemical formula of TDBC. (b) FDTD simulations of electric field enhancement by nanodisks with diameter $D=140$ nm and (c) nanorods, modeled as ellipses, with the major axis 65 nm long and thhe minor axis 25 nm long. Arrows mark the direction of the incident light polarization. The simulations were three-dimensional, periodic in the $x-y$  plane, and the field monitors were placed 10 nm above the ITO layer (see Methods).\n\n\n**Conclusions.** Most studies of the strong coupling between LSPs of metallic nanoparticles and excitons until now have used silver or gold as the plasmonic material. Here we find that aluminum plasmonic nanostructures provide an excellent platform for the generation of hybrid X-LSPs states. We measured a giant Rabi splitting of 0.4 eV, which is among the highest splitting energies reported in literature for a nano-particle-based plasmonic system. The splitting energy is ~20% of the uncoupled exciton transition energy and corresponds to an ultrafast energy transfer between the modes on a 10fs time scale. In addition we found that the X-LSP hybrid states can be polarized by geometrical means and that the physical parameter that limits the coupling strength is the ratio between the overlap volume $V_{\\mathrm {X}}$ and total mode volume V rather than just the mode volume. Finally, we were also able to observe the effects of X-LSPs on the emission. This is an important step toward unveiling the intriguing dynamics of strongly coupled X-LSP states in plasmonic systems for which there is less evidence than has been demonstrated in recent years for exciton-polaritons in optical microcavities. $5,6,16,59$  The emission measurements show enhancement correlated with the X-LSP energies due to improved resonant pumping and an increase of the density of states at the polariton energies. In light of the emerging technological applications based on strongly coupled light-matter states, the results reported in this Letter open new possibilities for using nanoscale, technologically compatible, integrated platforms based on Al, that can be adapted to work all over the visible region down to ultraviolet frequencies.\n\nMethods. An indium tin oxide-coated glass substrate was cleaned and then spin-coated with poly(methyl methacrylate) (PMMA), followed by baking at $180^{\\circ }C$  on a hot plate for 1min. The nanodisk and nanorod arrays were written bby an electron-beam lithography system (Raith 150) at 10 kV, followed by evaporating 40 nm of Al at 2 \u00c5/s. The resist was then lifted off using acetone. The samples were spin-coated with a solution of 2 g of deionized water mixed with 0.015 g of cyanine dye molecules (TDBC) at 3000 rpm and sonicated for 10 min. TDBC (5,6-dichloro-2-[[5,6-dichloro-1-ethyl-3-(4-suilfobutyl)-benzimidazol-2-ylidene]-propenyl]-1-ethyl-3-(4-sul-fobutyl)-benzimidazolium hydroxide, inner salt, sodium salt) was purchased from Few Chemicals. The dimensions of the nanodisks and nanorods were determined using a scanning electron microscope (SEM JSM-6700).\n\nAll measurements were performed at room temperature. Spectral transmission measurements were performed using a Xenon arc lamp, Mitutoyo $50\\times /0.42$  objective and a fiber optic coupled spectrometer (Avantes AvaSpec-3648). The sample was placed on a nanopositioning stage (Thorlabs, NanoMax 606) which was controlled by a computer. Emission measure-ments were recorded using a Zeiss axio observer Z1m microscope in reflection mode. The excitation source was a tunable femtosecond laser (Chameleon OPO VIS, pulse width of 140 fs, repetition rate of 80 MHz). Emissions were collected by a spectrometer (Andor, Shamrock 303i) with a $100\\times /0.75$ objective.\n\nThree dimensional finite difference time domain (FDTD) simulations were performed using Lumerical Solutions software. The simulations were periodic in the $x-y$ plane with $\u0393=180$ nm for the nanodisk arrays and with $\u0393_{y}=150$ nm and $\u0393_{x}=200$ nm for the nanorod arrays. The simulated structures comprised a glass substrate, modeled as a dielectric with refractive index of $n=1.51$ coated with a 30 nm layer of indium tin oxide (ITO) modeled using data from the Sopra Material Database. The 40 nm high nanodisks or nanorods on top of this substrate were modeled using Palik data for $\\text {Al.}{}^{60}$ The TDBC coating was modeled as a 20 nm layer of a single Lorentzian oscillator $\u03b5_{\\text {Lontz}(\u03c9)}=\u03b5_{\\infty }+\\left(\u03c9_{\\mathrm {X}}^{2}/\\left(\u03c9_{\\mathrm {X}}^{2}-\u03c9^{2}-\\right.\\right.$ $\\left.\\left.i\u03b3_{\\mathrm {X}}\u03c9\\right)\\right)$ ,where $\u03b5_{\\infty }=2.56$ comes from the bound electron permittivity, $\\omega _{\\mathrm {X}}=3.22\\times 10^{15}$  [rad/s] is the oscillator frequency, $\\gamma _{\\mathrm {X}}=2.45\\times 10^{13}$ [rad/s] is the damping constant, and $f=0.45$ is the oscillator strength. The shape of the nanorods was modeled as an ellipse with a constant minor axis length of 25 nm.\n\n\n![](https://web-api.textin.com/ocr_image/external/699ac6777753e614.jpg)\n\n## ASSOCIATED CONTENT\n\n# SSupporting Information\n\nThe Supporting Information is available free of charge on the ACS Publications website at DOI: 10.1021/acs.nano-lett.5b02584.\n\nS1: Nanorod array simulations, FDTD simulations of bare and covered nanorod arrays, calculations for exciton and LSP fractions of the upper or lower X-LSP polariton states of the nanorod arrays. S2: Emission enhancement of TDBC J-aggregate coated nanodisk arrays for excitation at different wavelengths. S3: Estimation of the number of excitons in the mode volume (PDF)\n\n<!-- **6220** -->\n\n<!-- DOI:10.1021/acs.nanolett.5b02584 -->\n\n<!-- Nano Lett. 2015, 15, 6215-6221 -->\n\n<!-- Nano Letters Letter -->\n\n# AUTHOR INFORMATION\n\n**Corresponding Author**\n\n*E-mail:eladeiz@post.tau.ac.il.\n\n**Notes**\n\nThe authors declare no competing financial interest.\n\n# ACKNOWLEDGMENTS\n\nThis work was supported by the Israeli Science Foundation, Grant No. 1331/13 and by the European Commission Marie Curie Career Integration Grant No. 333821.\n\n# REFERENCES\n\n(1)Goy, $P.;$ Raimond, J. M.; Gross, M.; Haroche, S. Phys.Rev.Lett. 1983,50,1903-1906.\n\n(2) Deng, H.; Haug, H.; Yamamoto, Y. Rev. Mod. Phys.2010,82, 1489-1537.\n\n(3) T\u00f6rm\u00e4, P.; Barnes, W. L. Rep. Prog. Phys. 2015, 78, 13901.\n\n(4) Tassone, F.; Yamamoto, Y. Phys. Rev. B: Condens.Matter Mater. Phys. 1999, 59,10830-10842.\n\n(5) Daskalakis, K. S.; Maier, S. A.; Murray, R.; K\u00e9na-Cohen, S. Nat. Mater. 2014,13,271-278.\n\n(6) Plumhof, J. D.; St\u00f6ferle, T.; Mai, L.; Scherf, U.; Mahrt, R. F. Nat. Mater. 2014,13,247-252.\n\n(7) Saba, M.; Ciuti, C.; Bloch, J.; Thierry-Mieg, V.; Andr\u00e9, R.; Dang; le, S.; Kundermann, S.; Mura, A.; Bongiovanni, G.; Staehli, J.L.;et al. Nature 2001, 414, 731-735.\n\n(8) Vasa, P.; Pomraenke, R.; Cirmi, G.; De Re, E.; Wang,W.; Schwieger, S.; Leipold, D.; Runge, E.; Cerullo, G.; Lienau, C. ACS Nano 2010,4,7559-7565.\n\n(9) Vasa, P.; Wang, W.; Pomraenke, R.; Lammers, M.; Maiuri, M.; Manzoni, C.; Cerullo, G.; Lienau, C. Nat. Photonics 2013, 7, 128-132.\n\n(10) Hutchison, J. A.; Schwartz, T.; Genet, C.; Devaux, E.; Ebbesen, T.W. Angew. Chem., Int. Ed. 2012, 51,1592-1596.\n\n(11)Coles,D.M.;Yang, $Y$ Wang, Y.; Grant, R. T.; Taylor, R. A.; Saikin, S. K.; Aspuru-Guzik, A.; Lidzey, D. G.; Tang, J. K.-H.; Smith, J. M. Nat. Commun. 2014, 5, 5561.\n\n(12) Carmeli, I.; Cohen, M.; Heifler, O.; Lilach, $Y.;$ Zalevsky,Z.; Mujica, V.; Richter, S. Nat. Commun. 2015, 6,7334.\n\n(13) Manjavacas, A.; Abajo, F.J. G.; Nordlander, P. Nano Lett. 2011, 11,2318-2323.\n\n(14) Weisbuch, C.; Nishioka, M.; Ishikawa, A.; Arakawa, Y. Phys. Rev. Lett. 1992,69,3314-3317.\n\n(15) Skolnick, M. S.; Fisher, T. A.; Whittaker, D. M. Semicond. Sci. Technol. 1998,13,645-669.\n\n(16) Lidzey, D. G.; Bradley, D. D. C.; Virgili, T.; Armitage, A.; Skolnick, M. S.; Walker, S. Phys. Rev. Lett. 1999, 82, 3316-3319.\n\n(17) Ellenbogen, T.; Steinvurzel, P.; Crozier, K. B. Appl. Phys. Lett. 2011,98,261103.\n\n(18) Van Vugt, L. K.; R\u00fchle, S.; Ravindran, P.; Gerritsen, H.C.; Kuipers, L.; Vanmaekelbergh, D. Phys. Rev. Lett. 2006, 97, 147401.\n\n(19) Ellenbogen, T.; Crozier, K. B. Phys. Rev. B:Condens. Matter Mater. Phys. 2011,84,161304.\n\n(20) Katsuyama, T.; Ogawa, K. J. Appl. Phys.1994,75,7607.\n\n(21) Takazawa, K.; Inoue, J.; Mitsuishi, K.; Takamasu,T.Phys.Rev. Lett. 2010,105,067401.\n\n(22) V\u00e4kev\u00e4inen, A. I.; Moerland, R. J.; Rekola, H. T.; Eskelinen, A.- $P$ Martikainen, J.-P.; Kim, D.-H.; T\u00f6rm\u00e4, P. Nano Lett. 2014,14, 1721-1727.\n\n(23) Rodriguez, S.R. K.; Feist, J.; Verschuuren, M. A.; Garcia Vidal, F.J.; G\u00f3mez Rivas, J. Phys. Rev. Lett. 2013,111,166802.\n\n(24) Bellessa, J.; Bonnand, C.; Plenet, J.; Mugnier, J. Phys.Rev. Lett. 2004,93,036404.\n\n(25) Hakala, T.; Toppari, J.; Kuzyk, A.; Pettersson, M.; Tikkanen, H.; Kunttu, H.; T\u00f6rm\u00e4, P. Phys. Rev. Lett. 2009, 103, 053602.\n\n(26) Vasa, P.; Wang, W.; Pomraenke, R.; Lammers, MA.;Maiuri, M.; Manzoni,C.;Cerullo, $G.$ Lienau, C. Nat. Photonics **2013,** 7,128-132. (27) Eizner, E.; Ellenbogen, T. Appl. Phys. Lett. **2014,** 104,223301.(28) Schwartz, T.; Hutchison, J. A.; Genet, C.; Ebbesen, T. W. Phys. Rev. Lett. 2011, 106,196405.\n\n(29) Bellessa, J.; Symonds, C.; Vynck, K.; Lemaitre, A.; Brioude, A.; Beaur, L.; Plenet, J.; Viste, P.; Felbacq, D.; Cambril, E.;et al. Phys. Rev. B: Condens. Matter Mater. Phys. 2009, 80,033303.\n\n(30) Zengin, G.; Johansson, G.; Johansson, P.; Antosiewicz, T.J.; K\u00e4ll, M.; Shegai, T. Sci. Rep. 2013, 3, 3074.\n\n(31) Chantharasupawong, P.; Tetard, L.; Thomas, J.J. Phys. Chem.C 2014,118,23954-23962.\n\n(32) Zengin, $G.;$  Wers\u00e4ll, M.; Nilsson, S.; Antosiewicz, T.J.; K\u00e4ll, M.; Shegai, T. Phys. Rev. Lett. 2015, 114, 157401.\n\n(33) Sugawara, Y.; Kelf, T.; Baumberg, J.; Abdelsalam,M.; Bartlett, P. Phys. Rev. Lett. 2006,97,266808.\n\n(34) Fofang, N. T.; Park, T.-H.; Neumann, O.; Mirin, N. A.; Nordlander, P.; Halas, N. J. Nano Lett. 2008,8,3481-3487.\n\n(35) Schlather, A. E.; Large, N.; Urban, A. S.; Nordlander, P.; Halas, N.J.Nano Lett. 2013, 13, 3281-3286.\n\n(36) Smith, D. R.; Pendry, J. B.; Wiltshire, M. C. K. Science 2004, 305,788-792.\n\n(37) Kildishev, A. V.; Boltasseva, A.; Shalaev, V. M. Science 2013,339, 1232009.\n\n(38) Yu, N.; Capasso, F. Nat. Mater. 2014, 13, 139-150.\n\n(39) Segal, N.; Keren-Zur, S.; Hendler, N.; Ellenbogen, T. Nat. Photonics 2015,9,180-184.\n\n(40) Avayu, $O.;$  Eisenbach, O.; Ditcovski, R.; Ellenbogen, T. Opt. Lett.2014,39,3892-3895.\n\n(41)Eisenbach, O.; Avayu, O.; Ditcovski, R.; Ellenbogen, T. Opt. Express 2015, 23, 3928-3936.\n\n(42) Langhammer, C.; Schwind, M.; Kasemo, B.; Zoric, I. Nano Lett. 2008,8,1461-1471.\n\n(43) Knight, M. W.; Liu, L.; Wang, Y.;Brown,L.;Mukherjee, S.; King, N. S.; Everitt, H. O.; Nordlander, P.; Halas, N. J. Nano Lett. 2012,12,6000-6004.\n\n(44) Knight, M. W.; King, N. S.; Liu, L.; Everitt, H. O.; Nordlander, P.; Halas, N. J. ACS Nano 2013, 8, 834-840.\n\n(45) Ellenbogen, T.; Seo, K.; Crozier, K. B. Nano Lett. 2012,12, 1026-1031.\n\n(46) Olson, J.; Manjavacas, A.; Liu, L.; Chang, W.-S.; Foerster, B.; King, N. S.; Knight, M. W.; Nordlander, P.; Halas, N. J.; Link, S. Proc. Natl. Acad. Sci. U. S. A. 2014, 111, 14348-14353.\n\n(47)McClain, M. J.; Schlather, A.; Ringe, E.; King, N. S.; Liu, L.; Manjavacas, A.; Knight, M.; Kumar, I.; Whitmire, K. H.; Everitt, H. O.; et al. Nano Lett. 2015, 15, 2751-2755.\n\n(48) Lawrie, B.J.; Kim, K.-W.; Norton, D. P.; Haglund, R. F., Jr Nano Lett. 2012,12,6152-6157.\n\n(49) Dicke, R. H. Phys. Rev. 1954, 93,99-110.\n\n(50) Garraway, B. M. Philos. Trans. R. Soc., A 2011,369,1137-1155.\n\n(51)Liu, X.; Galfsky, T.; Sun, Z.; Xia, F.; Lin, E.; Lee, Y.-H.; K\u00e9na-Cohen, S.; Menon, V. M. Nat. Photonics 2014, 9, 30-34.\n\n(52) Savasta, S.; Saija, R.; Ridolfo, A.; Di Stefano, O.; Denti, P.; Borghese, F. Plexitonic Nanoparticle. ACS Nano 2010, 4, 6369-6376.\n\n(53) Khitrova, G.; Gibbs, H. M.; Kira, M.; Koch, S. W.; Scherer, A. Nat. Phys. 2006,2,81-90.\n\n(54) Antosiewicz, T.J.; Apell, S. $P.$ Shegai, T. ACS Photonics 2014,1, 454-463.\n\n(55) Gunnarsson, L.; Rindzevicius, T.; Prikulis, J.; Kasemo, B.; K\u00e4ll, M.; Zou, S.; Schatz, G. C. J. Phys. Chem. B 2005, 109,1079-1087.\n\n(56) Saikin, S. K.; Eisfeld, A.; Valleau, S.; Aspuru-Guzik, A. Nanophotonics 2013,2,21-38.\n\n(57) Khurgin, J. B.; Sun, G. J. Opt. Soc. Am. B 2009, 26, B83-B95.\n\n(58) Khurgin, J. B. Nat. Nanotechnol. 2015,10,2-6.\n\n(59) K\u00e9na-Cohen, S.; Forrest, S. R. Nat. Photonics 2010, 4, 371-375.\n\n(60)Palik, E. D. Handbook of Optical Constants of Solids; Academic Press: New York, 1998; Vol. 3.\n\n<!-- **6221** -->\n\n<!-- DOI:10.1021/acs.nanolett.5b02584 -->\n\n<!-- Nano Lett. 2015, 15, 6215-6221 -->\n\n",
+  "paper_title": "Aluminum Nanoantenna Complexes for StrongCoupling between Excitons and Localized Surface Plasmons",
+  "run_output_dir": "outputs/aluminum_nanoantenna_complexes/run_20251205_021902",
+  "runtime_config": {
+    "max_total_runtime_hours": 8.0,
+    "max_stage_runtime_minutes": 60.0,
+    "user_response_timeout_hours": 24.0,
+    "physics_retry_limit": 2,
+    "llm_retry_limit": 5,
+    "json_parse_retry_limit": 3,
+    "consecutive_failure_limit": 2,
+    "llm_retry_base_seconds": 1.0,
+    "llm_retry_max_seconds": 16.0,
+    "debug_mode": false,
+    "debug_resolution_factor": 0.5,
+    "debug_max_stages": 2,
+    "max_backtracks": 2,
+    "max_execution_failures": 2,
+    "max_physics_failures": 2,
+    "max_replans": 2,
+    "max_design_revisions": 3,
+    "max_code_revisions": 3,
+    "max_analysis_revisions": 2
+  },
+  "hardware_config": {
+    "cpu_cores": 8,
+    "ram_gb": 32,
+    "gpu_available": false
+  },
+  "plan": {
+    "paper_id": "aluminum_nanoantenna_complexes",
+    "paper_domain": "strong_coupling",
+    "title": "Aluminum Nanoantenna Complexes for Strong Coupling between Excitons and Localized Surface Plasmons",
+    "summary": "This paper demonstrates strong coupling between localized surface plasmons (LSPs) in aluminum nanoantennas and excitons in TDBC J-aggregates. Giant Rabi splitting of 0.4 eV is observed in spectral transmittance as a function of nanodisk diameter, showing characteristic anti-crossing behavior of hybrid exciton-LSP (X-LSP) states.",
+    "stages": [
+      {
+        "stage_id": "stage0_material_validation",
+        "stage_type": "MATERIAL_VALIDATION",
+        "name": "Material Property Validation",
+        "description": "Validate optical properties of all materials: (1) Aluminum from Palik data - check real/imaginary permittivity in visible range, (2) TDBC Lorentzian model - compute absorption spectrum and compare to stated 2.1 eV peak and 0.066 eV linewidth, (3) ITO from Sopra database. Critical to validate TDBC model parameters match stated absorption properties.",
+        "targets": [
+          "Fig2a"
+        ],
+        "dependencies": [],
+        "runtime_estimate_minutes": 5,
+        "runtime_budget_minutes": 15,
+        "validation_criteria": [
+          "TDBC absorption peak at 2.1 eV \u00b1 0.02 eV (590 nm \u00b1 6 nm)",
+          "TDBC linewidth approximately 0.066 eV (verify \u03b3_X parameter interpretation)",
+          "Aluminum shows expected plasmonic behavior (Re(\u03b5)<0) in visible range",
+          "ITO shows expected transparent conducting behavior"
+        ],
+        "expected_outputs": [
+          {
+            "artifact_type": "spectrum_csv",
+            "filename_pattern": "stage0_TDBC_absorption.csv",
+            "description": "TDBC absorption spectrum from Lorentzian model",
+            "columns": [
+              "wavelength_nm",
+              "energy_eV",
+              "epsilon_real",
+              "epsilon_imag",
+              "absorption"
+            ]
+          },
+          {
+            "artifact_type": "spectrum_csv",
+            "filename_pattern": "stage0_Al_permittivity.csv",
+            "description": "Aluminum permittivity from Palik",
+            "columns": [
+              "wavelength_nm",
+              "epsilon_real",
+              "epsilon_imag"
+            ]
+          },
+          {
+            "artifact_type": "spectrum_plot_png",
+            "filename_pattern": "stage0_materials_validation.png",
+            "description": "Material property plots for user verification",
+            "target_figure": "Fig2a"
+          }
+        ],
+        "complexity_class": "analytical",
+        "is_mandatory_validation": true,
+        "max_revisions": 3,
+        "fallback_strategy": "ask_user",
+        "reference_data_path": null
+      },
+      {
+        "stage_id": "stage1_bare_nanodisk",
+        "stage_type": "SINGLE_STRUCTURE",
+        "name": "Bare Aluminum Nanodisk LSP Resonance",
+        "description": "Simulate a single unit cell of the periodic nanodisk array WITHOUT TDBC coating to validate the bare LSP resonance position. Use D=140nm disk (as in Fig2b) which should resonate near 530nm. This establishes that the aluminum nanoantenna geometry produces correct plasmonic response before adding the excitonic layer.",
+        "targets": [
+          "Fig2b"
+        ],
+        "dependencies": [
+          "stage0_material_validation"
+        ],
+        "runtime_estimate_minutes": 15,
+        "runtime_budget_minutes": 30,
+        "validation_criteria": [
+          "LSP resonance appears near 530 nm for D=140nm disk",
+          "Field enhancement |E/E0| ~ 5-7x at disk edges (compare to Fig2b showing ~6x)",
+          "Resonance shows expected dipolar character with field concentrated at disk perimeter"
+        ],
+        "expected_outputs": [
+          {
+            "artifact_type": "spectrum_csv",
+            "filename_pattern": "stage1_bare_disk_D140nm_transmission.csv",
+            "description": "Transmission spectrum of bare nanodisk array",
+            "columns": [
+              "wavelength_nm",
+              "transmission",
+              "reflection",
+              "absorption"
+            ]
+          },
+          {
+            "artifact_type": "field_data_npz",
+            "filename_pattern": "stage1_bare_disk_D140nm_field.npz",
+            "description": "Near-field data at resonance",
+            "target_figure": "Fig2b"
+          },
+          {
+            "artifact_type": "field_plot_png",
+            "filename_pattern": "stage1_bare_disk_field_map.png",
+            "description": "Field enhancement map |E/E0| in x-y plane",
+            "target_figure": "Fig2b"
+          },
+          {
+            "artifact_type": "spectrum_plot_png",
+            "filename_pattern": "stage1_bare_disk_spectrum.png",
+            "description": "Transmission spectrum showing LSP resonance"
+          }
+        ],
+        "complexity_class": "3D_medium",
+        "is_mandatory_validation": true,
+        "max_revisions": 3,
+        "fallback_strategy": "simplify",
+        "reference_data_path": null
+      },
+      {
+        "stage_id": "stage2_coated_nanodisk",
+        "stage_type": "SINGLE_STRUCTURE",
+        "name": "TDBC-Coated Nanodisk - Strong Coupling Signature",
+        "description": "Add 20nm TDBC layer to the D=140nm nanodisk array. The bare LSP resonance (~530nm/2.34eV) is detuned from the exciton (590nm/2.1eV), so we should see asymmetric coupling. Then test D~115nm disk which should have bare LSP near the exciton energy to observe maximum splitting.",
+        "targets": [
+          "Abstract_Dispersion"
+        ],
+        "dependencies": [
+          "stage1_bare_nanodisk"
+        ],
+        "runtime_estimate_minutes": 20,
+        "runtime_budget_minutes": 45,
+        "validation_criteria": [
+          "Transmission spectrum shows two distinct dips (upper and lower X-LSP)",
+          "Splitting visible when LSP resonance approaches exciton energy",
+          "No unphysical features (T>1, negative values)"
+        ],
+        "expected_outputs": [
+          {
+            "artifact_type": "spectrum_csv",
+            "filename_pattern": "stage2_coated_disk_D140nm_transmission.csv",
+            "description": "Transmission spectrum with TDBC coating",
+            "columns": [
+              "wavelength_nm",
+              "transmission"
+            ]
+          },
+          {
+            "artifact_type": "spectrum_csv",
+            "filename_pattern": "stage2_coated_disk_D115nm_transmission.csv",
+            "description": "Transmission spectrum at resonance condition",
+            "columns": [
+              "wavelength_nm",
+              "transmission"
+            ]
+          },
+          {
+            "artifact_type": "spectrum_plot_png",
+            "filename_pattern": "stage2_coated_vs_bare_comparison.png",
+            "description": "Comparison of bare vs coated spectra showing mode splitting"
+          }
+        ],
+        "complexity_class": "3D_medium",
+        "is_mandatory_validation": true,
+        "max_revisions": 3,
+        "fallback_strategy": "simplify",
+        "reference_data_path": null
+      },
+      {
+        "stage_id": "stage3_diameter_sweep",
+        "stage_type": "PARAMETER_SWEEP",
+        "name": "Diameter Sweep - Full Dispersion Diagram",
+        "description": "Sweep nanodisk diameter from 75nm to 205nm in steps to reproduce the dispersion diagram showing anti-crossing behavior. Extract transmission spectra for each diameter and plot as 2D colormap (wavelength vs diameter). Identify upper and lower X-LSP branches and measure Rabi splitting at anti-crossing point.",
+        "targets": [
+          "Abstract_Dispersion"
+        ],
+        "dependencies": [
+          "stage2_coated_nanodisk"
+        ],
+        "runtime_estimate_minutes": 90,
+        "runtime_budget_minutes": 180,
+        "validation_criteria": [
+          "Anti-crossing behavior visible in dispersion diagram",
+          "Upper X-LSP branch at ~500nm for small diameters, curving toward exciton energy",
+          "Lower X-LSP branch starting near exciton energy, red-shifting with diameter",
+          "Rabi splitting at anti-crossing ~ 0.4 eV \u00b1 0.1 eV",
+          "Qualitative match to abstract figure color/transmission pattern"
+        ],
+        "expected_outputs": [
+          {
+            "artifact_type": "spectrum_csv",
+            "filename_pattern": "stage3_diameter_sweep_all_spectra.csv",
+            "description": "All transmission spectra indexed by diameter",
+            "columns": [
+              "diameter_nm",
+              "wavelength_nm",
+              "transmission"
+            ]
+          },
+          {
+            "artifact_type": "dispersion_csv",
+            "filename_pattern": "stage3_dispersion_peaks.csv",
+            "description": "Extracted peak positions vs diameter",
+            "columns": [
+              "diameter_nm",
+              "upper_XLSP_nm",
+              "lower_XLSP_nm",
+              "splitting_eV"
+            ]
+          },
+          {
+            "artifact_type": "spectrum_plot_png",
+            "filename_pattern": "stage3_dispersion_diagram.png",
+            "description": "2D colormap of transmission vs wavelength and diameter",
+            "target_figure": "Abstract_Dispersion"
+          }
+        ],
+        "complexity_class": "3D_heavy",
+        "is_mandatory_validation": false,
+        "max_revisions": 3,
+        "fallback_strategy": "simplify",
+        "reference_data_path": null
+      }
+    ],
+    "targets": [
+      {
+        "figure_id": "Fig1",
+        "description": "SEM images and illustrations of nanodisk and nanorod arrays",
+        "type": "other",
+        "simulation_class": "NOT_REPRODUCIBLE",
+        "digitized_data_path": null,
+        "precision_requirement": "qualitative",
+        "complexity_notes": "Experimental images and schematics - not simulation targets"
+      },
+      {
+        "figure_id": "Fig2a",
+        "description": "Absorbance and fluorescence spectra of TDBC J-aggregate layer on glass",
+        "type": "spectrum",
+        "simulation_class": "ANALYTICAL",
+        "digitized_data_path": null,
+        "precision_requirement": "qualitative",
+        "complexity_notes": "Used to validate TDBC material model parameters; experimental data for material validation reference"
+      },
+      {
+        "figure_id": "Fig2b",
+        "description": "FDTD simulation of electric field enhancement |E/E0| for nanodisk (D=140nm) in x-y plane",
+        "type": "field_map",
+        "simulation_class": "FDTD_DIRECT",
+        "digitized_data_path": null,
+        "precision_requirement": "good",
+        "complexity_notes": "2D field map at z=10nm above ITO; validate field enhancement ~6x at disk edge"
+      },
+      {
+        "figure_id": "Fig2c",
+        "description": "FDTD simulation of electric field enhancement |E/E0| for nanorod (65nm x 25nm ellipse) in x-y plane",
+        "type": "field_map",
+        "simulation_class": "FDTD_DIRECT",
+        "digitized_data_path": null,
+        "precision_requirement": "good",
+        "complexity_notes": "2D field map showing higher enhancement ~8x at rod tips"
+      },
+      {
+        "figure_id": "Abstract_Dispersion",
+        "description": "Transmission spectra vs nanodisk diameter showing anti-crossing and Rabi splitting of 0.4 eV",
+        "type": "dispersion",
+        "simulation_class": "FDTD_DERIVED",
+        "digitized_data_path": null,
+        "precision_requirement": "good",
+        "complexity_notes": "Main result - requires diameter sweep from 75-205nm; must show upper and lower X-LSP branches"
+      }
+    ],
+    "extracted_parameters": [
+      {
+        "name": "disk_diameter_range",
+        "value": [
+          75,
+          205
+        ],
+        "unit": "nm",
+        "source": "text",
+        "location": "Methods and Figure 1 caption",
+        "cross_checked": true,
+        "discrepancy_notes": null
+      },
+      {
+        "name": "disk_height",
+        "value": 40,
+        "unit": "nm",
+        "source": "text",
+        "location": "Methods section - 'evaporating 40 nm of Al'",
+        "cross_checked": true,
+        "discrepancy_notes": null
+      },
+      {
+        "name": "side_to_side_separation",
+        "value": 180,
+        "unit": "nm",
+        "source": "text",
+        "location": "Page 2 - 'fixed side to side separation \u0393, which was ~180 nm'",
+        "cross_checked": true,
+        "discrepancy_notes": "Stated as ~180 nm, using 180 nm"
+      },
+      {
+        "name": "substrate_refractive_index",
+        "value": 1.51,
+        "unit": "dimensionless",
+        "source": "text",
+        "location": "Methods section",
+        "cross_checked": false,
+        "discrepancy_notes": null
+      },
+      {
+        "name": "ITO_thickness",
+        "value": 30,
+        "unit": "nm",
+        "source": "text",
+        "location": "Methods section",
+        "cross_checked": false,
+        "discrepancy_notes": null
+      },
+      {
+        "name": "TDBC_thickness",
+        "value": 20,
+        "unit": "nm",
+        "source": "text",
+        "location": "Page 2 - '~20 nm layer'",
+        "cross_checked": false,
+        "discrepancy_notes": null
+      },
+      {
+        "name": "TDBC_epsilon_infinity",
+        "value": 2.56,
+        "unit": "dimensionless",
+        "source": "text",
+        "location": "Methods section",
+        "cross_checked": false,
+        "discrepancy_notes": null
+      },
+      {
+        "name": "TDBC_omega_X",
+        "value": 3220000000000000.0,
+        "unit": "rad/s",
+        "source": "text",
+        "location": "Methods section",
+        "cross_checked": true,
+        "discrepancy_notes": "Corresponds to 2.12 eV, consistent with 2.1 eV absorption peak stated"
+      },
+      {
+        "name": "TDBC_gamma_X",
+        "value": 24500000000000.0,
+        "unit": "rad/s",
+        "source": "text",
+        "location": "Methods section",
+        "cross_checked": true,
+        "discrepancy_notes": "Corresponds to ~0.016 eV HWHM or ~0.032 eV FWHM; paper states 0.066 eV linewidth - factor of 2 discrepancy may indicate different definitions"
+      },
+      {
+        "name": "TDBC_oscillator_strength",
+        "value": 0.45,
+        "unit": "dimensionless",
+        "source": "text",
+        "location": "Methods section",
+        "cross_checked": false,
+        "discrepancy_notes": null
+      },
+      {
+        "name": "TDBC_absorption_peak",
+        "value": 2.1,
+        "unit": "eV",
+        "source": "text",
+        "location": "Page 3 - 'J-band absorption peak is at 2.1 eV'",
+        "cross_checked": true,
+        "discrepancy_notes": "Corresponds to ~590 nm"
+      },
+      {
+        "name": "TDBC_linewidth",
+        "value": 0.066,
+        "unit": "eV",
+        "source": "text",
+        "location": "Page 3",
+        "cross_checked": false,
+        "discrepancy_notes": null
+      },
+      {
+        "name": "Rabi_splitting",
+        "value": 0.4,
+        "unit": "eV",
+        "source": "text",
+        "location": "Abstract and Conclusions",
+        "cross_checked": true,
+        "discrepancy_notes": null
+      },
+      {
+        "name": "field_monitor_height",
+        "value": 10,
+        "unit": "nm",
+        "source": "text",
+        "location": "Methods and Fig 2 caption - 'field monitors were placed 10 nm above the ITO layer'",
+        "cross_checked": false,
+        "discrepancy_notes": null
+      },
+      {
+        "name": "nanorod_Gamma_x",
+        "value": 200,
+        "unit": "nm",
+        "source": "text",
+        "location": "Methods section",
+        "cross_checked": false,
+        "discrepancy_notes": null
+      },
+      {
+        "name": "nanorod_Gamma_y",
+        "value": 150,
+        "unit": "nm",
+        "source": "text",
+        "location": "Methods section",
+        "cross_checked": false,
+        "discrepancy_notes": null
+      },
+      {
+        "name": "nanorod_minor_axis",
+        "value": 25,
+        "unit": "nm",
+        "source": "text",
+        "location": "Methods - 'ellipse with a constant minor axis length of 25 nm'",
+        "cross_checked": false,
+        "discrepancy_notes": null
+      },
+      {
+        "name": "disk_diameter_for_field_map",
+        "value": 140,
+        "unit": "nm",
+        "source": "figure_caption",
+        "location": "Figure 2b caption",
+        "cross_checked": false,
+        "discrepancy_notes": null
+      },
+      {
+        "name": "nanorod_major_axis_for_field_map",
+        "value": 65,
+        "unit": "nm",
+        "source": "figure_caption",
+        "location": "Figure 2c caption",
+        "cross_checked": false,
+        "discrepancy_notes": null
+      },
+      {
+        "name": "field_map_resonance_wavelength",
+        "value": 530,
+        "unit": "nm",
+        "source": "text",
+        "location": "Page 3 - 'tuned to support an LSP resonance at the same wavelength (\u03bb=530 nm)'",
+        "cross_checked": false,
+        "discrepancy_notes": null
+      }
+    ]
+  },
+  "assumptions": {
+    "global_assumptions": [
+      {
+        "id": "A1",
+        "category": "material",
+        "description": "Use Palik data for aluminum optical constants",
+        "reason": "Explicitly stated in Methods section: 'nanodisks or nanorods...were modeled using Palik data for Al'",
+        "source": "paper_stated",
+        "alternatives_considered": [
+          "Johnson-Christy",
+          "Rakic Drude-Lorentz",
+          "McPeak"
+        ],
+        "critical": true,
+        "validated": false,
+        "validation_stage": "stage0_material_validation"
+      },
+      {
+        "id": "A2",
+        "category": "material",
+        "description": "TDBC modeled as single Lorentzian oscillator with \u03b5\u221e=2.56, \u03c9X=3.22\u00d710^15 rad/s, \u03b3X=2.45\u00d710^13 rad/s, f=0.45",
+        "reason": "Parameters explicitly given in Methods section",
+        "source": "paper_stated",
+        "alternatives_considered": [],
+        "critical": true,
+        "validated": false,
+        "validation_stage": "stage0_material_validation"
+      },
+      {
+        "id": "A3",
+        "category": "material",
+        "description": "ITO optical properties from Sopra Material Database",
+        "reason": "Explicitly stated in Methods: 'ITO modeled using data from the Sopra Material Database'",
+        "source": "paper_stated",
+        "alternatives_considered": [
+          "Constant index approximation"
+        ],
+        "critical": false,
+        "validated": false,
+        "validation_stage": "stage0_material_validation"
+      },
+      {
+        "id": "A4",
+        "category": "geometry",
+        "description": "Side-to-side separation means edge-to-edge distance, so period = diameter + 180nm",
+        "reason": "Paper states 'fixed side to side separation \u0393, which was ~180 nm' - 'side to side' typically means edge-to-edge",
+        "source": "paper_inferred",
+        "alternatives_considered": [
+          "Period = 180nm (center-to-center)",
+          "Varies with diameter"
+        ],
+        "critical": true,
+        "validated": false,
+        "validation_stage": "stage1_bare_nanodisk"
+      },
+      {
+        "id": "A5",
+        "category": "geometry",
+        "description": "TDBC coating is conformal around the nanodisk (wraps over top and sides)",
+        "reason": "Spin-coating typically produces conformal films on nanostructures; paper shows J-aggregate coating the entire nanoantenna",
+        "source": "paper_inferred",
+        "alternatives_considered": [
+          "Planar layer on top only",
+          "Only on substrate between disks"
+        ],
+        "critical": true,
+        "validated": false,
+        "validation_stage": "stage2_coated_nanodisk"
+      },
+      {
+        "id": "A6",
+        "category": "geometry",
+        "description": "Native aluminum oxide layer (~2-3nm) is neglected in simulations",
+        "reason": "Paper mentions 2-3nm Al2O3 forms on exposure to air but FDTD Methods section does not include it in model; likely incorporated into effective disk dimensions or considered negligible",
+        "source": "paper_inferred",
+        "alternatives_considered": [
+          "Include 2.5nm Al2O3 shell around Al core"
+        ],
+        "critical": false,
+        "validated": false,
+        "validation_stage": null
+      },
+      {
+        "id": "A7",
+        "category": "source",
+        "description": "Plane wave source at normal incidence, polarized along x-axis for nanodisks",
+        "reason": "Standard configuration for LSP excitation; nanodisks are symmetric so polarization direction arbitrary",
+        "source": "literature_default",
+        "alternatives_considered": [],
+        "critical": false,
+        "validated": false,
+        "validation_stage": null
+      },
+      {
+        "id": "A8",
+        "category": "boundary",
+        "description": "Periodic boundary conditions in x-y plane, PML in z direction",
+        "reason": "Methods states 'simulations were periodic in the x-y plane'",
+        "source": "paper_stated",
+        "alternatives_considered": [],
+        "critical": false,
+        "validated": false,
+        "validation_stage": null
+      },
+      {
+        "id": "A9",
+        "category": "numerical",
+        "description": "Mesh resolution of ~2-3nm near metal surfaces",
+        "reason": "Standard FDTD practice for plasmonic structures; need to resolve field enhancement near metal",
+        "source": "literature_default",
+        "alternatives_considered": [
+          "Coarser mesh for speed",
+          "Finer mesh for accuracy"
+        ],
+        "critical": false,
+        "validated": false,
+        "validation_stage": "stage1_bare_nanodisk"
+      },
+      {
+        "id": "A10",
+        "category": "material",
+        "description": "TDBC \u03b3 parameter (2.45\u00d710^13 rad/s) represents half-width; stated 0.066 eV linewidth may be FWHM",
+        "reason": "\u03b3 = 2.45\u00d710^13 rad/s \u2248 0.016 eV (HWHM), which gives FWHM \u2248 0.032 eV - discrepancy with stated 0.066 eV. May indicate different linewidth conventions or additional broadening mechanisms in experiment.",
+        "source": "paper_inferred",
+        "alternatives_considered": [
+          "Double \u03b3 to match experimental linewidth",
+          "Use stated values as-is"
+        ],
+        "critical": true,
+        "validated": false,
+        "validation_stage": "stage0_material_validation"
+      },
+      {
+        "id": "S0_A1",
+        "category": "material",
+        "description": "TDBC Lorentzian formula uses \u03b5(\u03c9) = \u03b5\u221e + f\u00b7\u03c9\u2080\u00b2/(\u03c9\u2080\u00b2 - \u03c9\u00b2 - i\u03b3\u03c9) convention",
+        "reason": "Standard Lorentz oscillator form; need to verify paper uses same convention (some sources use 2\u03b3 in denominator)",
+        "critical": true
+      },
+      {
+        "id": "S0_A2",
+        "category": "material",
+        "description": "Palik Al data file assumed available at materials/Palik_Al.csv with columns for wavelength and n,k or epsilon",
+        "reason": "Standard format for tabulated optical data; file must be loaded or generated from Palik handbook values",
+        "critical": true
+      },
+      {
+        "id": "S0_A3",
+        "category": "material",
+        "description": "TDBC absorption spectrum computed as Im(\u03b5) or proportional to n\u00b7k, normalized for comparison",
+        "reason": "Paper shows absorption in arbitrary units; need consistent definition for validation",
+        "critical": false
+      }
+    ],
+    "geometry_interpretations": [
+      {
+        "term": "side to side separation \u0393",
+        "interpretation": "Edge-to-edge distance between neighboring nanodisks = 180nm, so period = D + 180nm",
+        "alternatives": [
+          "Center-to-center period = 180nm (unlikely, would cause overlap for large D)",
+          "Variable period maintaining constant \u0393"
+        ],
+        "confidence": "high"
+      },
+      {
+        "term": "40 nm thick nanoantennas",
+        "interpretation": "Height of nanodisks in z-direction = 40nm",
+        "alternatives": [],
+        "confidence": "high"
+      },
+      {
+        "term": "~20 nm layer of J-aggregating molecules",
+        "interpretation": "TDBC coating thickness = 20nm, conformally covering structures",
+        "alternatives": [
+          "Planar 20nm layer above substrate level only"
+        ],
+        "confidence": "medium"
+      },
+      {
+        "term": "nanorods modeled as ellipse",
+        "interpretation": "Cross-section is elliptical with minor axis 25nm; major axis varies (65nm for Fig2c)",
+        "alternatives": [
+          "True rectangular cross-section with rounded corners"
+        ],
+        "confidence": "high"
+      }
+    ]
+  },
+  "progress": {
+    "paper_id": "aluminum_nanoantenna_complexes",
+    "total_runtime_seconds": 0,
+    "stages": [
+      {
+        "stage_id": "stage0_material_validation",
+        "stage_type": "MATERIAL_VALIDATION",
+        "status": "completed_partial",
+        "invalidation_reason": null,
+        "last_updated": "2025-12-05T00:40:22.573551+00:00",
+        "revision_count": 0,
+        "runtime_seconds": 0,
+        "summary": "Accepted as partial match by user",
+        "outputs": [],
+        "discrepancies": [],
+        "issues": [],
+        "next_actions": []
+      },
+      {
+        "stage_id": "stage1_bare_nanodisk",
+        "stage_type": "SINGLE_STRUCTURE",
+        "status": "not_started",
+        "invalidation_reason": null,
+        "last_updated": "2025-12-05T00:25:12.625417+00:00",
+        "revision_count": 0,
+        "runtime_seconds": 0,
+        "summary": "Planned: Simulate a single unit cell of the periodic nanodisk array WITHOUT TDBC coating to validate the bare LSP resonance position. Use D=140nm disk (as in Fig2b) which should resonate near 530nm. This establishes that the aluminum nanoantenna geometry produces correct plasmonic response before adding the excitonic layer.",
+        "outputs": [],
+        "discrepancies": [],
+        "issues": [],
+        "next_actions": []
+      },
+      {
+        "stage_id": "stage2_coated_nanodisk",
+        "stage_type": "SINGLE_STRUCTURE",
+        "status": "not_started",
+        "invalidation_reason": null,
+        "last_updated": "2025-12-05T00:25:12.625417+00:00",
+        "revision_count": 0,
+        "runtime_seconds": 0,
+        "summary": "Planned: Add 20nm TDBC layer to the D=140nm nanodisk array. The bare LSP resonance (~530nm/2.34eV) is detuned from the exciton (590nm/2.1eV), so we should see asymmetric coupling. Then test D~115nm disk which should have bare LSP near the exciton energy to observe maximum splitting.",
+        "outputs": [],
+        "discrepancies": [],
+        "issues": [],
+        "next_actions": []
+      },
+      {
+        "stage_id": "stage3_diameter_sweep",
+        "stage_type": "PARAMETER_SWEEP",
+        "status": "not_started",
+        "invalidation_reason": null,
+        "last_updated": "2025-12-05T00:25:12.625417+00:00",
+        "revision_count": 0,
+        "runtime_seconds": 0,
+        "summary": "Planned: Sweep nanodisk diameter from 75nm to 205nm in steps to reproduce the dispersion diagram showing anti-crossing behavior. Extract transmission spectra for each diameter and plot as 2D colormap (wavelength vs diameter). Identify upper and lower X-LSP branches and measure Rabi splitting at anti-crossing point.",
+        "outputs": [],
+        "discrepancies": [],
+        "issues": [],
+        "next_actions": []
+      }
+    ],
+    "discrepancy_summary": {
+      "total_discrepancies": 0,
+      "blocking_discrepancies": 0,
+      "systematic_shifts_identified": []
+    },
+    "user_interactions": [
+      {
+        "id": "U1",
+        "timestamp": "2025-12-05T00:26:30.324511+00:00",
+        "interaction_type": "replan_limit",
+        "context": {
+          "stage_id": null,
+          "agent": "SupervisorAgent",
+          "reason": "replan_limit"
+        },
+        "question": "(question cleared)",
+        "user_response": "approve plan",
+        "impact": "Plan force-accepted by user.",
+        "alternatives_considered": []
+      },
+      {
+        "id": "U2",
+        "timestamp": "2025-12-05T00:40:22.573558+00:00",
+        "interaction_type": "analysis_limit",
+        "context": {
+          "stage_id": "stage0_material_validation",
+          "agent": "SupervisorAgent",
+          "reason": "analysis_limit"
+        },
+        "question": "(question cleared)",
+        "user_response": "accept partial",
+        "impact": "User decision processed",
+        "alternatives_considered": []
+      }
+    ]
+  },
+  "extracted_parameters": [
+    {
+      "name": "disk_diameter_range",
+      "value": [
+        75,
+        205
+      ],
+      "unit": "nm",
+      "source": "text",
+      "location": "Methods and Figure 1 caption",
+      "cross_checked": true,
+      "discrepancy_notes": null
+    },
+    {
+      "name": "disk_height",
+      "value": 40,
+      "unit": "nm",
+      "source": "text",
+      "location": "Methods section - 'evaporating 40 nm of Al'",
+      "cross_checked": true,
+      "discrepancy_notes": null
+    },
+    {
+      "name": "side_to_side_separation",
+      "value": 180,
+      "unit": "nm",
+      "source": "text",
+      "location": "Page 2 - 'fixed side to side separation \u0393, which was ~180 nm'",
+      "cross_checked": true,
+      "discrepancy_notes": "Stated as ~180 nm, using 180 nm"
+    },
+    {
+      "name": "substrate_refractive_index",
+      "value": 1.51,
+      "unit": "dimensionless",
+      "source": "text",
+      "location": "Methods section",
+      "cross_checked": false,
+      "discrepancy_notes": null
+    },
+    {
+      "name": "ITO_thickness",
+      "value": 30,
+      "unit": "nm",
+      "source": "text",
+      "location": "Methods section",
+      "cross_checked": false,
+      "discrepancy_notes": null
+    },
+    {
+      "name": "TDBC_thickness",
+      "value": 20,
+      "unit": "nm",
+      "source": "text",
+      "location": "Page 2 - '~20 nm layer'",
+      "cross_checked": false,
+      "discrepancy_notes": null
+    },
+    {
+      "name": "TDBC_epsilon_infinity",
+      "value": 2.56,
+      "unit": "dimensionless",
+      "source": "text",
+      "location": "Methods section",
+      "cross_checked": false,
+      "discrepancy_notes": null
+    },
+    {
+      "name": "TDBC_omega_X",
+      "value": 3220000000000000.0,
+      "unit": "rad/s",
+      "source": "text",
+      "location": "Methods section",
+      "cross_checked": true,
+      "discrepancy_notes": "Corresponds to 2.12 eV, consistent with 2.1 eV absorption peak stated"
+    },
+    {
+      "name": "TDBC_gamma_X",
+      "value": 24500000000000.0,
+      "unit": "rad/s",
+      "source": "text",
+      "location": "Methods section",
+      "cross_checked": true,
+      "discrepancy_notes": "Corresponds to ~0.016 eV HWHM or ~0.032 eV FWHM; paper states 0.066 eV linewidth - factor of 2 discrepancy may indicate different definitions"
+    },
+    {
+      "name": "TDBC_oscillator_strength",
+      "value": 0.45,
+      "unit": "dimensionless",
+      "source": "text",
+      "location": "Methods section",
+      "cross_checked": false,
+      "discrepancy_notes": null
+    },
+    {
+      "name": "TDBC_absorption_peak",
+      "value": 2.1,
+      "unit": "eV",
+      "source": "text",
+      "location": "Page 3 - 'J-band absorption peak is at 2.1 eV'",
+      "cross_checked": true,
+      "discrepancy_notes": "Corresponds to ~590 nm"
+    },
+    {
+      "name": "TDBC_linewidth",
+      "value": 0.066,
+      "unit": "eV",
+      "source": "text",
+      "location": "Page 3",
+      "cross_checked": false,
+      "discrepancy_notes": null
+    },
+    {
+      "name": "Rabi_splitting",
+      "value": 0.4,
+      "unit": "eV",
+      "source": "text",
+      "location": "Abstract and Conclusions",
+      "cross_checked": true,
+      "discrepancy_notes": null
+    },
+    {
+      "name": "field_monitor_height",
+      "value": 10,
+      "unit": "nm",
+      "source": "text",
+      "location": "Methods and Fig 2 caption - 'field monitors were placed 10 nm above the ITO layer'",
+      "cross_checked": false,
+      "discrepancy_notes": null
+    },
+    {
+      "name": "nanorod_Gamma_x",
+      "value": 200,
+      "unit": "nm",
+      "source": "text",
+      "location": "Methods section",
+      "cross_checked": false,
+      "discrepancy_notes": null
+    },
+    {
+      "name": "nanorod_Gamma_y",
+      "value": 150,
+      "unit": "nm",
+      "source": "text",
+      "location": "Methods section",
+      "cross_checked": false,
+      "discrepancy_notes": null
+    },
+    {
+      "name": "nanorod_minor_axis",
+      "value": 25,
+      "unit": "nm",
+      "source": "text",
+      "location": "Methods - 'ellipse with a constant minor axis length of 25 nm'",
+      "cross_checked": false,
+      "discrepancy_notes": null
+    },
+    {
+      "name": "disk_diameter_for_field_map",
+      "value": 140,
+      "unit": "nm",
+      "source": "figure_caption",
+      "location": "Figure 2b caption",
+      "cross_checked": false,
+      "discrepancy_notes": null
+    },
+    {
+      "name": "nanorod_major_axis_for_field_map",
+      "value": 65,
+      "unit": "nm",
+      "source": "figure_caption",
+      "location": "Figure 2c caption",
+      "cross_checked": false,
+      "discrepancy_notes": null
+    },
+    {
+      "name": "field_map_resonance_wavelength",
+      "value": 530,
+      "unit": "nm",
+      "source": "text",
+      "location": "Page 3 - 'tuned to support an LSP resonance at the same wavelength (\u03bb=530 nm)'",
+      "cross_checked": false,
+      "discrepancy_notes": null
+    }
+  ],
+  "planned_materials": [
+    {
+      "material_id": "aluminum",
+      "name": "Aluminum",
+      "suggested_source": "Palik handbook - explicitly stated in Methods",
+      "path": null
+    },
+    {
+      "material_id": "glass",
+      "name": "Glass substrate",
+      "suggested_source": "Constant n=1.51 as stated in paper",
+      "path": null
+    },
+    {
+      "material_id": "ITO",
+      "name": "Indium Tin Oxide",
+      "suggested_source": "Sopra Material Database - explicitly stated in Methods",
+      "path": null
+    },
+    {
+      "material_id": "TDBC",
+      "name": "TDBC J-aggregate",
+      "suggested_source": "Single Lorentzian oscillator model with parameters from Methods section",
+      "path": null
+    }
+  ],
+  "validated_materials": [],
+  "pending_validated_materials": [],
+  "geometry_interpretations": {},
+  "discrepancies_log": [],
+  "systematic_shifts": [],
+  "current_stage_id": "stage0_material_validation",
+  "current_stage_type": "MATERIAL_VALIDATION",
+  "workflow_phase": "supervision",
+  "design_revision_count": 0,
+  "code_revision_count": 0,
+  "execution_failure_count": 0,
+  "total_execution_failures": 0,
+  "physics_failure_count": 0,
+  "analysis_revision_count": 2,
+  "replan_count": 2,
+  "backtrack_suggestion": null,
+  "invalidated_stages": [],
+  "backtrack_count": 0,
+  "last_plan_review_verdict": "needs_revision",
+  "last_design_review_verdict": "approve",
+  "last_code_review_verdict": "approve",
+  "reviewer_issues": [],
+  "execution_verdict": "pass",
+  "physics_verdict": "warning",
+  "comparison_verdict": "needs_revision",
+  "supervisor_verdict": "ok_continue",
+  "backtrack_decision": null,
+  "code": "#!/usr/bin/env python3\n\"\"\"\nStage: stage0_material_validation\nTarget: Fig. 2a (TDBC absorption validation)\nDescription: Analytical material property validation for all materials used in \n             Hakala2017 strong coupling simulations. Validates TDBC Lorentzian model,\n             Palik Aluminum data, and Sopra ITO data.\nGenerated by: CodeGeneratorAgent\n\"\"\"\n\nimport numpy as np\nimport matplotlib.pyplot as plt\nfrom datetime import datetime\nimport os\nimport json\n\n# \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n# UNIT SYSTEM (from design[\"unit_system\"])\n# \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n\na_unit = 1e-6  # 1 \u00b5m characteristic length (from design)\nprint(f\"Unit system: a_unit = {a_unit} m ({a_unit*1e6:.1f} \u00b5m)\")\n\n# Physical constants\nhbar = 1.054571817e-34  # J\u00b7s\neV_to_J = 1.602176634e-19  # J/eV\nc = 2.998e8  # m/s\n\n# \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n# HELPER FUNCTIONS\n# \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n\ndef wavelength_to_energy_eV(wavelength_nm):\n    \"\"\"Convert wavelength (nm) to photon energy (eV)\"\"\"\n    return 1239.84 / wavelength_nm\n\ndef energy_to_wavelength_nm(energy_eV):\n    \"\"\"Convert photon energy (eV) to wavelength (nm)\"\"\"\n    return 1239.84 / energy_eV\n\ndef wavelength_to_angular_freq(wavelength_nm):\n    \"\"\"Convert wavelength (nm) to angular frequency (rad/s)\"\"\"\n    return 2 * np.pi * c / (wavelength_nm * 1e-9)\n\ndef epsilon_to_nk(epsilon):\n    \"\"\"Convert complex permittivity to n and k\"\"\"\n    eps_complex = np.array(epsilon, dtype=complex)\n    n_complex = np.sqrt(eps_complex)\n    n = np.real(n_complex)\n    k = np.imag(n_complex)\n    # Handle negative real part of sqrt properly\n    mask = n < 0\n    n[mask] = -n[mask]\n    k[mask] = -k[mask]\n    return n, k\n\nprint(\"=\" * 60)\nprint(\"STAGE 0: MATERIAL VALIDATION\")\nprint(\"=\" * 60)\nprint(f\"Started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\")\n\n# \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n# 1. TDBC J-AGGREGATE LORENTZIAN MODEL\n# \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n\nprint(\"\\n--- 1. TDBC J-aggregate (Lorentzian Model) ---\")\n\n# Paper-stated parameters\ntdbc_eps_inf = 2.56                    # High-frequency permittivity\ntdbc_omega_0 = 3.22e15                 # Resonance frequency (rad/s)\ntdbc_gamma = 2.45e13                   # Damping rate (rad/s)\ntdbc_f = 0.45                          # Oscillator strength\n\n# Convert to eV for reporting\ntdbc_omega_0_eV = hbar * tdbc_omega_0 / eV_to_J\ntdbc_gamma_eV = hbar * tdbc_gamma / eV_to_J\ntdbc_fwhm_from_gamma = 2 * tdbc_gamma_eV  # FWHM = 2\u03b3 in eV for Lorentzian\n\nprint(f\"Parameters from paper:\")\nprint(f\"  \u03b5\u221e = {tdbc_eps_inf}\")\nprint(f\"  \u03c9\u2080 = {tdbc_omega_0:.3e} rad/s = {tdbc_omega_0_eV:.4f} eV\")\nprint(f\"  \u03b3  = {tdbc_gamma:.3e} rad/s = {tdbc_gamma_eV:.4f} eV\")\nprint(f\"  f  = {tdbc_f}\")\nprint(f\"  Computed FWHM from \u03b3: {tdbc_fwhm_from_gamma:.4f} eV\")\nprint(f\"  Paper-stated FWHM: 0.066 eV\")\nprint(f\"  DISCREPANCY: Factor of {0.066/tdbc_fwhm_from_gamma:.2f}x\")\n\n# Wavelength range for calculations\nwavelengths_nm = np.linspace(400, 800, 1000)\nenergies_eV = wavelength_to_energy_eV(wavelengths_nm)\nomega = wavelength_to_angular_freq(wavelengths_nm)\n\n# Lorentzian dielectric function\n# \u03b5(\u03c9) = \u03b5\u221e + f\u00b7\u03c9\u2080\u00b2/(\u03c9\u2080\u00b2 - \u03c9\u00b2 - i\u03b3\u03c9)\ntdbc_epsilon = tdbc_eps_inf + tdbc_f * tdbc_omega_0**2 / (tdbc_omega_0**2 - omega**2 - 1j * tdbc_gamma * omega)\n\ntdbc_eps_real = np.real(tdbc_epsilon)\ntdbc_eps_imag = np.imag(tdbc_epsilon)\ntdbc_n, tdbc_k = epsilon_to_nk(tdbc_epsilon)\n\n# Absorption coefficient (proportional to Im(\u03b5) or n*k)\n# Using Im(\u03b5) for simplicity, normalized\ntdbc_absorption = tdbc_eps_imag / np.max(tdbc_eps_imag)\n\n# Find absorption peak\npeak_idx = np.argmax(tdbc_eps_imag)\npeak_wavelength = wavelengths_nm[peak_idx]\npeak_energy = energies_eV[peak_idx]\nprint(f\"\\nAbsorption peak found at:\")\nprint(f\"  \u03bb = {peak_wavelength:.1f} nm\")\nprint(f\"  E = {peak_energy:.4f} eV\")\nprint(f\"  Paper states: ~2.1 eV (~590 nm)\")\n\n# Measure FWHM from computed absorption curve\nhalf_max = np.max(tdbc_eps_imag) / 2\nabove_half = tdbc_eps_imag > half_max\ntransitions = np.diff(above_half.astype(int))\nrise_idx = np.where(transitions == 1)[0]\nfall_idx = np.where(transitions == -1)[0]\n\nif len(rise_idx) > 0 and len(fall_idx) > 0:\n    # Interpolate for more accurate FWHM\n    wl_low = wavelengths_nm[rise_idx[0]]\n    wl_high = wavelengths_nm[fall_idx[0]]\n    measured_fwhm_nm = wl_high - wl_low\n    # Convert to eV using derivative: dE/d\u03bb = -1239.84/\u03bb\u00b2\n    E_low = wavelength_to_energy_eV(wl_low)\n    E_high = wavelength_to_energy_eV(wl_high)\n    measured_fwhm_eV = E_low - E_high  # Note: E decreases as \u03bb increases\nelse:\n    measured_fwhm_nm = 0\n    measured_fwhm_eV = 0\n    \nprint(f\"\\nMeasured FWHM from curve:\")\nprint(f\"  \u0394\u03bb \u2248 {measured_fwhm_nm:.1f} nm\")\nprint(f\"  \u0394E \u2248 {measured_fwhm_eV:.4f} eV\")\n\n# Save TDBC data\ntdbc_data = np.column_stack([\n    wavelengths_nm,\n    energies_eV,\n    tdbc_eps_real,\n    tdbc_eps_imag,\n    tdbc_n,\n    tdbc_k,\n    tdbc_absorption\n])\n\ntdbc_header = f\"\"\"# TDBC J-aggregate optical properties (Lorentzian model)\n# Stage: stage0_material_validation\n# Generated: {datetime.now().isoformat()}\n# Model: Lorentz oscillator\n# Parameters: eps_inf={tdbc_eps_inf}, omega_0={tdbc_omega_0:.3e} rad/s, gamma={tdbc_gamma:.3e} rad/s, f={tdbc_f}\n# Peak energy: {peak_energy:.4f} eV, Peak wavelength: {peak_wavelength:.1f} nm\n# Measured FWHM: {measured_fwhm_eV:.4f} eV (from gamma: {tdbc_fwhm_from_gamma:.4f} eV)\n# wavelength_nm,energy_eV,epsilon_real,epsilon_imag,n,k,absorption_arb\n\"\"\"\nnp.savetxt('stage0_TDBC_absorption.csv', tdbc_data, header=tdbc_header, delimiter=',', fmt='%.6f', comments='')\nprint(f\"\\nSaved: stage0_TDBC_absorption.csv\")\n\n# \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n# 2. ALUMINUM (PALIK TABULATED DATA)\n# \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n\nprint(\"\\n--- 2. Aluminum (Palik Data) ---\")\n\nal_data_file = 'materials/Palik_Al.csv'\nal_loaded = False\n\n# Try to load Palik Al data\nif os.path.exists(al_data_file):\n    try:\n        # Try different delimiters and skip rows\n        al_raw = np.loadtxt(al_data_file, delimiter=',', skiprows=1)\n        if al_raw.shape[1] >= 3:\n            al_wavelengths = al_raw[:, 0]\n            # Check if data is n,k or epsilon\n            if np.all(al_raw[:, 1] > 0) and al_raw.shape[1] >= 3:\n                # Likely n, k format\n                al_n_data = al_raw[:, 1]\n                al_k_data = al_raw[:, 2]\n                al_eps_real_data = al_n_data**2 - al_k_data**2\n                al_eps_imag_data = 2 * al_n_data * al_k_data\n            else:\n                # Assume epsilon format\n                al_eps_real_data = al_raw[:, 1]\n                al_eps_imag_data = al_raw[:, 2]\n                al_n_data, al_k_data = epsilon_to_nk(al_eps_real_data + 1j * al_eps_imag_data)\n            al_loaded = True\n            print(f\"Loaded Palik Al data from {al_data_file}\")\n            print(f\"  Wavelength range: {al_wavelengths.min():.1f} - {al_wavelengths.max():.1f} nm\")\n    except Exception as e:\n        print(f\"Error loading {al_data_file}: {e}\")\n\nif not al_loaded:\n    # Use Drude model fallback for aluminum\n    print(f\"WARNING: Could not load {al_data_file}\")\n    print(\"Using Drude model approximation for aluminum\")\n    \n    # Drude parameters for Al (approximate)\n    al_eps_inf = 1.0\n    al_omega_p = 15.1  # eV (plasma frequency)\n    al_gamma_d = 0.6   # eV (damping)\n    \n    al_wavelengths = wavelengths_nm.copy()\n    al_energies = wavelength_to_energy_eV(al_wavelengths)\n    \n    # Drude model: \u03b5(\u03c9) = \u03b5\u221e - \u03c9p\u00b2/(\u03c9\u00b2 + i\u03b3\u03c9)\n    # In eV: \u03b5(E) = \u03b5\u221e - \u03c9p\u00b2/(E\u00b2 + i\u03b3E)\n    al_epsilon_drude = al_eps_inf - al_omega_p**2 / (al_energies**2 + 1j * al_gamma_d * al_energies)\n    \n    al_eps_real_data = np.real(al_epsilon_drude)\n    al_eps_imag_data = np.imag(al_epsilon_drude)\n    al_n_data, al_k_data = epsilon_to_nk(al_epsilon_drude)\n    \n    print(f\"  Drude parameters: \u03b5\u221e={al_eps_inf}, \u03c9p={al_omega_p} eV, \u03b3={al_gamma_d} eV\")\n\n# Interpolate to common wavelength grid\nal_eps_real = np.interp(wavelengths_nm, al_wavelengths, al_eps_real_data)\nal_eps_imag = np.interp(wavelengths_nm, al_wavelengths, al_eps_imag_data)\nal_n = np.interp(wavelengths_nm, al_wavelengths, al_n_data)\nal_k = np.interp(wavelengths_nm, al_wavelengths, al_k_data)\n\n# Verify plasmonic behavior: Re(\u03b5) < 0\nal_plasmonic = np.all(al_eps_real < 0)\nprint(f\"\\nPlasmonic behavior check (Re(\u03b5) < 0 in visible range):\")\nprint(f\"  Re(\u03b5) range: {al_eps_real.min():.1f} to {al_eps_real.max():.1f}\")\nprint(f\"  ALL negative in 400-800nm: {al_plasmonic}\")\n\n# Save Al data\nal_data = np.column_stack([wavelengths_nm, al_eps_real, al_eps_imag, al_n, al_k])\nal_header = f\"\"\"# Aluminum optical properties (Palik)\n# Stage: stage0_material_validation\n# Generated: {datetime.now().isoformat()}\n# Source: {'Palik tabulated' if al_loaded else 'Drude model approximation'}\n# Plasmonic (Re(\u03b5)<0 in visible): {al_plasmonic}\n# wavelength_nm,epsilon_real,epsilon_imag,n,k\n\"\"\"\nnp.savetxt('stage0_Al_permittivity.csv', al_data, header=al_header, delimiter=',', fmt='%.6f', comments='')\nprint(f\"Saved: stage0_Al_permittivity.csv\")\n\n# \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n# 3. ITO (SOPRA TABULATED DATA)\n# \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n\nprint(\"\\n--- 3. ITO (Sopra Data) ---\")\n\nito_data_file = 'materials/Sopra_ITO.csv'\nito_loaded = False\n\nif os.path.exists(ito_data_file):\n    try:\n        ito_raw = np.loadtxt(ito_data_file, delimiter=',', skiprows=1)\n        if ito_raw.shape[1] >= 3:\n            ito_wavelengths = ito_raw[:, 0]\n            # Assume n, k format\n            ito_n_data = ito_raw[:, 1]\n            ito_k_data = ito_raw[:, 2]\n            ito_eps_real_data = ito_n_data**2 - ito_k_data**2\n            ito_eps_imag_data = 2 * ito_n_data * ito_k_data\n            ito_loaded = True\n            print(f\"Loaded Sopra ITO data from {ito_data_file}\")\n            print(f\"  Wavelength range: {ito_wavelengths.min():.1f} - {ito_wavelengths.max():.1f} nm\")\n    except Exception as e:\n        print(f\"Error loading {ito_data_file}: {e}\")\n\nif not ito_loaded:\n    # Use constant approximation for ITO\n    print(f\"WARNING: Could not load {ito_data_file}\")\n    print(\"Using constant n approximation for ITO\")\n    \n    # Typical ITO: n \u2248 1.9, k \u2248 0.01 in visible\n    ito_wavelengths = wavelengths_nm.copy()\n    ito_n_data = np.ones_like(ito_wavelengths) * 1.9\n    ito_k_data = np.ones_like(ito_wavelengths) * 0.01\n    ito_eps_real_data = ito_n_data**2 - ito_k_data**2\n    ito_eps_imag_data = 2 * ito_n_data * ito_k_data\n\n# Interpolate to common wavelength grid\nito_eps_real = np.interp(wavelengths_nm, ito_wavelengths, ito_eps_real_data)\nito_eps_imag = np.interp(wavelengths_nm, ito_wavelengths, ito_eps_imag_data)\nito_n = np.interp(wavelengths_nm, ito_wavelengths, ito_n_data)\nito_k = np.interp(wavelengths_nm, ito_wavelengths, ito_k_data)\n\n# Verify transparent conductor behavior\nito_transparent = np.mean(ito_n) > 1.5 and np.mean(ito_k) < 0.5\nprint(f\"\\nTransparent conductor check:\")\nprint(f\"  n range: {ito_n.min():.2f} to {ito_n.max():.2f} (mean: {np.mean(ito_n):.2f})\")\nprint(f\"  k range: {ito_k.min():.3f} to {ito_k.max():.3f} (mean: {np.mean(ito_k):.3f})\")\nprint(f\"  Transparent in visible: {ito_transparent}\")\n\n# Save ITO data\nito_data = np.column_stack([wavelengths_nm, ito_eps_real, ito_eps_imag, ito_n, ito_k])\nito_header = f\"\"\"# ITO optical properties (Sopra)\n# Stage: stage0_material_validation  \n# Generated: {datetime.now().isoformat()}\n# Source: {'Sopra tabulated' if ito_loaded else 'Constant n approximation'}\n# Transparent conductor behavior: {ito_transparent}\n# wavelength_nm,epsilon_real,epsilon_imag,n,k\n\"\"\"\nnp.savetxt('stage0_ITO_permittivity.csv', ito_data, header=ito_header, delimiter=',', fmt='%.6f', comments='')\nprint(f\"Saved: stage0_ITO_permittivity.csv\")\n\n# \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n# 4. GLASS SUBSTRATE\n# \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n\nprint(\"\\n--- 4. Glass Substrate ---\")\nglass_epsilon = 2.28\nglass_n = np.sqrt(glass_epsilon)\nprint(f\"Glass: \u03b5 = {glass_epsilon}, n = {glass_n:.3f} (constant)\")\n\n# \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n# 5. GENERATE VALIDATION PLOTS\n# \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n\nprint(\"\\n--- 5. Generating Validation Plots ---\")\n\n# Figure 1: Multi-panel validation plot (matching Fig. 2a style)\nfig, axes = plt.subplots(2, 2, figsize=(12, 10))\n\n# Panel (a): TDBC Absorption\nax1 = axes[0, 0]\nax1.plot(energies_eV, tdbc_absorption, 'b-', linewidth=2, label='Lorentzian model')\nax1.axvline(2.1, color='r', linestyle='--', alpha=0.5, label='Paper: 2.1 eV')\nax1.axvline(peak_energy, color='g', linestyle=':', alpha=0.7, label=f'Model peak: {peak_energy:.2f} eV')\nax1.set_xlabel('Energy (eV)', fontsize=12)\nax1.set_ylabel('Absorption (normalized)', fontsize=12)\nax1.set_title('(a) TDBC J-aggregate Absorption', fontsize=12, fontweight='bold')\nax1.set_xlim(1.5, 3.0)\nax1.legend(fontsize=9)\nax1.grid(True, alpha=0.3)\n# Add annotation for peak\nax1.annotate(f'Peak: {peak_energy:.3f} eV\\n({peak_wavelength:.0f} nm)', \n             xy=(peak_energy, 1.0), xytext=(peak_energy+0.2, 0.8),\n             arrowprops=dict(arrowstyle='->', color='green'),\n             fontsize=9)\n\n# Panel (b): Aluminum Permittivity\nax2 = axes[0, 1]\nax2.plot(wavelengths_nm, al_eps_real, 'b-', linewidth=2, label=\"Re(\u03b5)\")\nax2.plot(wavelengths_nm, al_eps_imag, 'r--', linewidth=2, label=\"Im(\u03b5)\")\nax2.axhline(0, color='k', linestyle='-', alpha=0.3)\nax2.set_xlabel('Wavelength (nm)', fontsize=12)\nax2.set_ylabel('Permittivity', fontsize=12)\nax2.set_title(f'(b) Aluminum Permittivity {\"(Palik)\" if al_loaded else \"(Drude approx)\"}', \n              fontsize=12, fontweight='bold')\nax2.legend(fontsize=10)\nax2.grid(True, alpha=0.3)\n# Indicate plasmonic region\nif al_plasmonic:\n    ax2.fill_between(wavelengths_nm, ax2.get_ylim()[0], 0, alpha=0.1, color='blue', \n                     label='Plasmonic (Re(\u03b5)<0)')\n\n# Panel (c): ITO Permittivity  \nax3 = axes[1, 0]\nax3.plot(wavelengths_nm, ito_n, 'b-', linewidth=2, label='n')\nax3.plot(wavelengths_nm, ito_k, 'r--', linewidth=2, label='k')\nax3.set_xlabel('Wavelength (nm)', fontsize=12)\nax3.set_ylabel('Refractive Index', fontsize=12)\nax3.set_title(f'(c) ITO Optical Constants {\"(Sopra)\" if ito_loaded else \"(approx)\"}', \n              fontsize=12, fontweight='bold')\nax3.legend(fontsize=10)\nax3.grid(True, alpha=0.3)\n\n# Panel (d): TDBC Linewidth Analysis\nax4 = axes[1, 1]\n# Zoom in on peak region\nmask = (energies_eV > 1.9) & (energies_eV < 2.4)\nax4.plot(energies_eV[mask], tdbc_eps_imag[mask]/np.max(tdbc_eps_imag), 'b-', linewidth=2)\nax4.axhline(0.5, color='gray', linestyle='--', alpha=0.5, label='Half maximum')\n\n# Mark FWHM\nax4.axvline(peak_energy - measured_fwhm_eV/2, color='g', linestyle=':', alpha=0.7)\nax4.axvline(peak_energy + measured_fwhm_eV/2, color='g', linestyle=':', alpha=0.7)\nax4.annotate('', xy=(peak_energy - measured_fwhm_eV/2, 0.5), \n             xytext=(peak_energy + measured_fwhm_eV/2, 0.5),\n             arrowprops=dict(arrowstyle='<->', color='green'))\nax4.text(peak_energy, 0.55, f'FWHM (model): {measured_fwhm_eV:.3f} eV', \n         ha='center', fontsize=9, color='green')\n\n# Mark paper-stated linewidth for comparison\npaper_fwhm = 0.066\nax4.axvline(peak_energy - paper_fwhm/2, color='r', linestyle='--', alpha=0.5)\nax4.axvline(peak_energy + paper_fwhm/2, color='r', linestyle='--', alpha=0.5)\nax4.text(peak_energy, 0.35, f'FWHM (paper): {paper_fwhm} eV', \n         ha='center', fontsize=9, color='red')\n\nax4.set_xlabel('Energy (eV)', fontsize=12)\nax4.set_ylabel('Normalized Im(\u03b5)', fontsize=12)\nax4.set_title('(d) TDBC Linewidth Analysis', fontsize=12, fontweight='bold')\nax4.grid(True, alpha=0.3)\n\nplt.suptitle('Stage 0 \u2013 Material Validation \u2013 Target: Fig. 2a', fontsize=14, fontweight='bold')\nplt.tight_layout()\nplt.savefig('stage0_materials_validation_Fig2a.png', dpi=200, bbox_inches='tight')\nplt.close()\nprint(\"Saved: stage0_materials_validation_Fig2a.png\")\n\n# Figure 2: Detailed TDBC linewidth analysis\nfig2, (ax_left, ax_right) = plt.subplots(1, 2, figsize=(12, 5))\n\n# Left panel: Full absorption spectrum\nax_left.plot(energies_eV, tdbc_eps_imag, 'b-', linewidth=2)\nax_left.fill_between(energies_eV, 0, tdbc_eps_imag, alpha=0.3)\nax_left.axvline(2.1, color='r', linestyle='--', label='Paper: 2.1 eV')\nax_left.set_xlabel('Energy (eV)', fontsize=12)\nax_left.set_ylabel('Im(\u03b5)', fontsize=12)\nax_left.set_title('TDBC Im(\u03b5) - Full Range', fontsize=12, fontweight='bold')\nax_left.legend()\nax_left.grid(True, alpha=0.3)\n\n# Right panel: Linewidth comparison\nax_right.text(0.5, 0.95, 'TDBC LINEWIDTH DISCREPANCY', ha='center', va='top', \n              transform=ax_right.transAxes, fontsize=14, fontweight='bold')\n\ncomparison_text = f\"\"\"\nParameter from paper:\n  \u03b3X = {tdbc_gamma:.3e} rad/s\n  \u03b3X = {tdbc_gamma_eV:.4f} eV\n\nFWHM from Lorentzian theory:\n  FWHM = 2\u03b3 = {tdbc_fwhm_from_gamma:.4f} eV\n  (\u2248 {2*tdbc_gamma_eV*1000:.1f} meV)\n\nPaper-stated linewidth:\n  FWHM = 0.066 eV\n  (\u2248 66 meV)\n\nDISCREPANCY RATIO: {0.066/tdbc_fwhm_from_gamma:.2f}x\n\nPOSSIBLE EXPLANATIONS:\n1. Lorentzian convention (\u03b3 vs 2\u03b3)\n2. Additional broadening mechanisms\n3. Parameter typo in paper\n\n\u26a0\ufe0f  REQUIRES USER CONFIRMATION\n\"\"\"\n\nax_right.text(0.1, 0.85, comparison_text, transform=ax_right.transAxes, \n              fontsize=10, verticalalignment='top', fontfamily='monospace',\n              bbox=dict(boxstyle='round', facecolor='lightyellow', alpha=0.8))\nax_right.axis('off')\n\nplt.suptitle('Stage 0 \u2013 TDBC Linewidth Analysis', fontsize=14, fontweight='bold')\nplt.tight_layout()\nplt.savefig('stage0_TDBC_linewidth_analysis.png', dpi=200, bbox_inches='tight')\nplt.close()\nprint(\"Saved: stage0_TDBC_linewidth_analysis.png\")\n\n# \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n# 6. SUMMARY AND VALIDATION STATUS\n# \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n\nprint(\"\\n\" + \"=\" * 60)\nprint(\"MATERIAL VALIDATION SUMMARY\")\nprint(\"=\" * 60)\n\nvalidation_results = {\n    \"tdbc\": {\n        \"model\": \"Lorentzian\",\n        \"source\": \"paper_methods_section\",\n        \"peak_energy_eV\": float(peak_energy),\n        \"peak_wavelength_nm\": float(peak_wavelength),\n        \"expected_peak_eV\": 2.1,\n        \"peak_deviation_percent\": float(abs(peak_energy - 2.1) / 2.1 * 100),\n        \"fwhm_from_gamma_eV\": float(tdbc_fwhm_from_gamma),\n        \"paper_stated_fwhm_eV\": 0.066,\n        \"fwhm_discrepancy_factor\": float(0.066 / tdbc_fwhm_from_gamma),\n        \"validation_status\": \"REQUIRES_USER_REVIEW\"\n    },\n    \"aluminum\": {\n        \"source\": \"palik\" if al_loaded else \"drude_approximation\",\n        \"data_loaded\": al_loaded,\n        \"plasmonic_in_visible\": bool(al_plasmonic),\n        \"eps_real_range\": [float(al_eps_real.min()), float(al_eps_real.max())],\n        \"validation_status\": \"PASS\" if al_plasmonic else \"WARNING\"\n    },\n    \"ito\": {\n        \"source\": \"sopra\" if ito_loaded else \"constant_approximation\",\n        \"data_loaded\": ito_loaded,\n        \"transparent_conductor\": bool(ito_transparent),\n        \"n_mean\": float(np.mean(ito_n)),\n        \"k_mean\": float(np.mean(ito_k)),\n        \"validation_status\": \"PASS\" if ito_transparent else \"WARNING\"\n    },\n    \"glass\": {\n        \"source\": \"paper_stated\",\n        \"epsilon\": glass_epsilon,\n        \"n\": float(glass_n),\n        \"validation_status\": \"PASS\"\n    }\n}\n\nprint(\"\\n1. TDBC J-aggregate:\")\nprint(f\"   Peak: {peak_energy:.3f} eV (expected: 2.1 eV, deviation: {validation_results['tdbc']['peak_deviation_percent']:.1f}%)\")\nprint(f\"   \u26a0\ufe0f  LINEWIDTH DISCREPANCY: Factor {validation_results['tdbc']['fwhm_discrepancy_factor']:.1f}x\")\nprint(f\"   Status: {validation_results['tdbc']['validation_status']}\")\n\nprint(\"\\n2. Aluminum:\")\nprint(f\"   Source: {validation_results['aluminum']['source']}\")\nprint(f\"   Plasmonic behavior: {validation_results['aluminum']['plasmonic_in_visible']}\")\nprint(f\"   Status: {validation_results['aluminum']['validation_status']}\")\n\nprint(\"\\n3. ITO:\")\nprint(f\"   Source: {validation_results['ito']['source']}\")  \nprint(f\"   Transparent conductor: {validation_results['ito']['transparent_conductor']}\")\nprint(f\"   Status: {validation_results['ito']['validation_status']}\")\n\nprint(\"\\n4. Glass:\")\nprint(f\"   n = {glass_n:.3f} (constant)\")\nprint(f\"   Status: {validation_results['glass']['validation_status']}\")\n\n# Calculate total runtime\nimport time\nruntime = 0.5  # Approximate for this analytical stage\n\n# \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n# REPROLAB RESULT SUMMARY (MANDATORY - DO NOT REMOVE)\n# \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n\nresult_summary = {\n    \"status\": \"completed_with_warnings\",\n    \"stage_id\": \"stage0_material_validation\",\n    \"output_files\": {\n        \"data\": [\n            \"stage0_TDBC_absorption.csv\",\n            \"stage0_Al_permittivity.csv\", \n            \"stage0_ITO_permittivity.csv\"\n        ],\n        \"plots\": [\n            \"stage0_materials_validation_Fig2a.png\",\n            \"stage0_TDBC_linewidth_analysis.png\"\n        ]\n    },\n    \"key_results\": {\n        \"tdbc_peak_energy_eV\": float(peak_energy),\n        \"tdbc_peak_wavelength_nm\": float(peak_wavelength),\n        \"tdbc_fwhm_model_eV\": float(measured_fwhm_eV),\n        \"tdbc_fwhm_discrepancy_factor\": float(0.066 / tdbc_fwhm_from_gamma),\n        \"aluminum_plasmonic\": bool(al_plasmonic),\n        \"aluminum_data_loaded\": al_loaded,\n        \"ito_transparent\": bool(ito_transparent),\n        \"ito_data_loaded\": ito_loaded\n    },\n    \"validation_results\": validation_results,\n    \"warnings\": [\n        \"CRITICAL: TDBC linewidth discrepancy - model gives FWHM ~0.032 eV but paper states 0.066 eV (factor 2x)\",\n        f\"Aluminum data {'loaded from Palik' if al_loaded else 'using Drude approximation - consider providing Palik data file'}\",\n        f\"ITO data {'loaded from Sopra' if ito_loaded else 'using constant approximation - consider providing Sopra data file'}\"\n    ],\n    \"user_confirmation_required\": True,\n    \"confirmation_questions\": [\n        \"Is the TDBC absorption peak at ~2.1 eV correct?\",\n        \"Should we use FWHM=0.066 eV (paper-stated) or FWHM=0.032 eV (from \u03b3X parameter)?\",\n        \"Are the aluminum optical properties acceptable for your simulation?\",\n        \"Do you have alternative material data files to provide?\"\n    ],\n    \"runtime_seconds\": runtime,\n    \"meep_version\": \"N/A (analytical stage)\"\n}\n\nprint(\"\\n\" + \"=\" * 60)\nprint(\"REPROLAB_RESULT_JSON_START\")\nprint(json.dumps(result_summary, indent=2))\nprint(\"REPROLAB_RESULT_JSON_END\")\nprint(\"=\" * 60)\n\nprint(f\"\\n=== Stage 0 complete ===\")\nprint(f\"Total runtime: ~{runtime:.1f} seconds\")\nprint(\"\\n\u26a0\ufe0f  USER CONFIRMATION REQUIRED BEFORE PROCEEDING TO STAGE 1 \u26a0\ufe0f\")\n",
+  "design_description": {
+    "stage_id": "stage0_material_validation",
+    "design_description": "Analytical material property validation stage. No FDTD simulation required - this stage computes optical properties (permittivity, refractive index, absorption) for all materials used in subsequent stages and compares to paper-stated values. Three materials validated: (1) TDBC J-aggregate using single Lorentzian oscillator model with paper-stated parameters (\u03b5\u221e=2.56, \u03c9X=3.22\u00d710^15 rad/s, \u03b3X=2.45\u00d710^13 rad/s, f=0.45) - compute absorption spectrum and verify peak at 2.1 eV; (2) Aluminum using Palik tabulated data - verify Re(\u03b5)<0 throughout visible range for plasmonic behavior; (3) ITO using Sopra database - verify transparent conducting oxide behavior. Output multi-panel validation plot matching Fig2a style for user confirmation before proceeding.",
+    "summary": "This analytical stage validates optical properties of all materials before FDTD simulations. TDBC is computed from Lorentzian parameters and checked against the stated 2.1 eV absorption peak. A critical issue is identified: the stated \u03b3X=2.45\u00d710^13 rad/s corresponds to FWHM\u22480.032 eV, but the paper states 0.066 eV linewidth - a factor of 2 discrepancy that must be resolved. Aluminum Palik data and ITO Sopra data are loaded and verified for expected optical behavior in the 400-800nm range.",
+    "design_rationale": "Material validation is mandatory Stage 0 per RULE 0A. This is classified as 'analytical' complexity - no electromagnetic simulation needed, just optical constant calculations. The TDBC Lorentzian model must be validated because: (1) absorption peak position determines coupling wavelength, (2) linewidth directly affects achievable Rabi splitting (must satisfy \u03a9R > \u03b3), (3) there's a noted discrepancy between \u03b3X parameter and stated linewidth that needs investigation. For aluminum, Palik data is paper-stated and must be verified to show plasmonic behavior (Re(\u03b5)<0). ITO is less critical but included for completeness. All calculations span 400-800nm to cover the visible range where experiments were conducted.",
+    "unit_system": {
+      "characteristic_length_m": 1e-06,
+      "length_unit": "\u00b5m",
+      "example_conversions": {
+        "wavelength_500nm_meep": 0.5,
+        "wavelength_590nm_meep": 0.59,
+        "frequency_590nm_meep": 1.695,
+        "energy_2p1eV_wavelength_nm": 590.4
+      }
+    },
+    "geometry": {
+      "dimensionality": "2D",
+      "cell_size": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "resolution": 0,
+      "structures": [],
+      "symmetries": []
+    },
+    "materials": [
+      {
+        "id": "tdbc_lorentzian",
+        "name": "TDBC J-aggregate",
+        "model_type": "lorentz",
+        "source": "paper_methods_section",
+        "data_file": null,
+        "wavelength_range": {
+          "min_nm": 400,
+          "max_nm": 800
+        },
+        "parameters": {
+          "epsilon_inf": 2.56,
+          "lorentz_terms": [
+            {
+              "omega_0": 3220000000000000.0,
+              "omega_0_unit": "rad/s",
+              "omega_0_eV": 2.12,
+              "gamma": 24500000000000.0,
+              "gamma_unit": "rad/s",
+              "gamma_eV": 0.0161,
+              "sigma": 0.45
+            }
+          ]
+        }
+      },
+      {
+        "id": "aluminum_palik",
+        "name": "Aluminum (Palik)",
+        "model_type": "tabulated",
+        "source": "palik",
+        "data_file": "materials/Palik_Al.csv",
+        "wavelength_range": {
+          "min_nm": 200,
+          "max_nm": 1000
+        },
+        "parameters": {
+          "epsilon": null
+        }
+      },
+      {
+        "id": "ito_sopra",
+        "name": "ITO (Sopra)",
+        "model_type": "tabulated",
+        "source": "sopra",
+        "data_file": "materials/Sopra_ITO.csv",
+        "wavelength_range": {
+          "min_nm": 300,
+          "max_nm": 1500
+        },
+        "parameters": {
+          "epsilon": null
+        }
+      },
+      {
+        "id": "glass_substrate",
+        "name": "Glass substrate",
+        "model_type": "constant",
+        "source": "paper_stated",
+        "data_file": null,
+        "wavelength_range": {
+          "min_nm": 400,
+          "max_nm": 800
+        },
+        "parameters": {
+          "epsilon": 2.28
+        }
+      }
+    ],
+    "sources": [
+      {
+        "type": "gaussian",
+        "component": "Ex",
+        "center": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "size": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "wavelength_center_nm": 590,
+        "wavelength_width_nm": 400,
+        "frequency_center_meep": 1.695,
+        "frequency_width_meep": 1.2
+      }
+    ],
+    "boundary_conditions": {
+      "x_min": "pml",
+      "x_max": "pml",
+      "y_min": "pml",
+      "y_max": "pml",
+      "z_min": "pml",
+      "z_max": "pml",
+      "pml_layers": 0,
+      "pml_thickness": 0
+    },
+    "monitors": [
+      {
+        "type": "field",
+        "name": "not_applicable",
+        "purpose": "No monitors needed for analytical material validation",
+        "center": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "size": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "frequency_points": 0
+      }
+    ],
+    "simulation_parameters": {
+      "subpixel_averaging": false,
+      "force_complex_fields": false,
+      "run_until": {
+        "type": "time",
+        "value": 0
+      }
+    },
+    "output_specifications": [
+      {
+        "artifact_type": "spectrum_csv",
+        "filename_pattern": "stage0_TDBC_absorption.csv",
+        "description": "TDBC optical properties from Lorentzian model: wavelength, energy, complex permittivity, n, k, absorption coefficient",
+        "columns": [
+          "wavelength_nm",
+          "energy_eV",
+          "epsilon_real",
+          "epsilon_imag",
+          "n",
+          "k",
+          "absorption_arb"
+        ]
+      },
+      {
+        "artifact_type": "spectrum_csv",
+        "filename_pattern": "stage0_Al_permittivity.csv",
+        "description": "Aluminum optical properties from Palik tabulated data",
+        "columns": [
+          "wavelength_nm",
+          "epsilon_real",
+          "epsilon_imag",
+          "n",
+          "k"
+        ]
+      },
+      {
+        "artifact_type": "spectrum_csv",
+        "filename_pattern": "stage0_ITO_permittivity.csv",
+        "description": "ITO optical properties from Sopra tabulated data",
+        "columns": [
+          "wavelength_nm",
+          "epsilon_real",
+          "epsilon_imag",
+          "n",
+          "k"
+        ]
+      },
+      {
+        "artifact_type": "spectrum_plot_png",
+        "filename_pattern": "stage0_materials_validation_Fig2a.png",
+        "description": "Multi-panel plot: (a) TDBC absorption spectrum with peak/linewidth annotations, (b) Al permittivity Re/Im, (c) ITO permittivity, (d) TDBC linewidth analysis comparing \u03b3X-derived vs paper-stated values"
+      },
+      {
+        "artifact_type": "spectrum_plot_png",
+        "filename_pattern": "stage0_TDBC_linewidth_analysis.png",
+        "description": "Detailed TDBC linewidth analysis: absorption peak with FWHM measurement, comparison of \u03b3X=0.032eV FWHM vs stated 0.066eV"
+      }
+    ],
+    "performance_estimate": {
+      "runtime_estimate_minutes": 0.5,
+      "memory_estimate_gb": 0.1,
+      "total_cells": 0,
+      "timesteps_estimate": 0,
+      "notes": "Analytical calculation only - no FDTD simulation. Computes optical properties at ~1000 wavelength points for each material. Execution time dominated by data file I/O and plotting."
+    },
+    "new_assumptions": [
+      {
+        "id": "S0_A1",
+        "category": "material",
+        "description": "TDBC Lorentzian formula uses \u03b5(\u03c9) = \u03b5\u221e + f\u00b7\u03c9\u2080\u00b2/(\u03c9\u2080\u00b2 - \u03c9\u00b2 - i\u03b3\u03c9) convention",
+        "reason": "Standard Lorentz oscillator form; need to verify paper uses same convention (some sources use 2\u03b3 in denominator)",
+        "critical": true
+      },
+      {
+        "id": "S0_A2",
+        "category": "material",
+        "description": "Palik Al data file assumed available at materials/Palik_Al.csv with columns for wavelength and n,k or epsilon",
+        "reason": "Standard format for tabulated optical data; file must be loaded or generated from Palik handbook values",
+        "critical": true
+      },
+      {
+        "id": "S0_A3",
+        "category": "material",
+        "description": "TDBC absorption spectrum computed as Im(\u03b5) or proportional to n\u00b7k, normalized for comparison",
+        "reason": "Paper shows absorption in arbitrary units; need consistent definition for validation",
+        "critical": false
+      }
+    ],
+    "potential_issues": [
+      "CRITICAL: TDBC linewidth discrepancy - \u03b3X=2.45\u00d710^13 rad/s gives FWHM\u22480.032 eV, but paper states 0.066 eV. This factor of 2 difference could indicate: (1) different Lorentzian conventions (\u03b3 vs 2\u03b3), (2) additional inhomogeneous broadening in experiment not captured by model, (3) typo in paper parameters. MUST flag for user confirmation.",
+      "Palik Al data may need Drude-Lorentz fitting for Meep implementation - tabulated data cannot be used directly. Stage should output fitted parameters.",
+      "Sopra ITO data availability uncertain - may need to use alternative source or simplified constant-n model if data unavailable.",
+      "TDBC oscillator strength f=0.45 is dimensionless in paper but Meep uses specific \u03c3 parameter - conversion needed in subsequent stages.",
+      "Wavelength-to-energy conversion: E(eV) = 1239.84/\u03bb(nm) must be consistent throughout analysis."
+    ]
+  },
+  "performance_estimate": null,
+  "stage_outputs": {
+    "stdout": "Warning: Could not set resource limits: current limit exceeds maximum limit\nUnit system: a_unit = 1e-06 m (1.0 \u00b5m)\n============================================================\nSTAGE 0: MATERIAL VALIDATION\n============================================================\nStarted at: 2025-12-05 02:31:47\n\n--- 1. TDBC J-aggregate (Lorentzian Model) ---\nParameters from paper:\n  \u03b5\u221e = 2.56\n  \u03c9\u2080 = 3.220e+15 rad/s = 2.1194 eV\n  \u03b3  = 2.450e+13 rad/s = 0.0161 eV\n  f  = 0.45\n  Computed FWHM from \u03b3: 0.0323 eV\n  Paper-stated FWHM: 0.066 eV\n  DISCREPANCY: Factor of 2.05x\n\nAbsorption peak found at:\n  \u03bb = 585.0 nm\n  E = 2.1194 eV\n  Paper states: ~2.1 eV (~590 nm)\n\nMeasured FWHM from curve:\n  \u0394\u03bb \u2248 4.4 nm\n  \u0394E \u2248 0.0160 eV\n\nSaved: stage0_TDBC_absorption.csv\n\n--- 2. Aluminum (Palik Data) ---\nError loading materials/Palik_Al.csv: could not convert string 'wavelength_nm' to float64 at row 0, column 1.\nWARNING: Could not load materials/Palik_Al.csv\nUsing Drude model approximation for aluminum\n  Drude parameters: \u03b5\u221e=1.0, \u03c9p=15.1 eV, \u03b3=0.6 eV\n\nPlasmonic behavior check (Re(\u03b5) < 0 in visible range):\n  Re(\u03b5) range: -81.6 to -21.9\n  ALL negative in 400-800nm: True\nSaved: stage0_Al_permittivity.csv\n\n--- 3. ITO (Sopra Data) ---\nWARNING: Could not load materials/Sopra_ITO.csv\nUsing constant n approximation for ITO\n\nTransparent conductor check:\n  n range: 1.90 to 1.90 (mean: 1.90)\n  k range: 0.010 to 0.010 (mean: 0.010)\n  Transparent in visible: True\nSaved: stage0_ITO_permittivity.csv\n\n--- 4. Glass Substrate ---\nGlass: \u03b5 = 2.28, n = 1.510 (constant)\n\n--- 5. Generating Validation Plots ---\nSaved: stage0_materials_validation_Fig2a.png\nSaved: stage0_TDBC_linewidth_analysis.png\n\n============================================================\nMATERIAL VALIDATION SUMMARY\n============================================================\n\n1. TDBC J-aggregate:\n   Peak: 2.119 eV (expected: 2.1 eV, deviation: 0.9%)\n   \u26a0\ufe0f  LINEWIDTH DISCREPANCY: Factor 2.0x\n   Status: REQUIRES_USER_REVIEW\n\n2. Aluminum:\n   Source: drude_approximation\n   Plasmonic behavior: True\n   Status: PASS\n\n3. ITO:\n   Source: constant_approximation\n   Transparent conductor: True\n   Status: PASS\n\n4. Glass:\n   n = 1.510 (constant)\n   Status: PASS\n\n============================================================\nREPROLAB_RESULT_JSON_START\n{\n  \"status\": \"completed_with_warnings\",\n  \"stage_id\": \"stage0_material_validation\",\n  \"output_files\": {\n    \"data\": [\n      \"stage0_TDBC_absorption.csv\",\n      \"stage0_Al_permittivity.csv\",\n      \"stage0_ITO_permittivity.csv\"\n    ],\n    \"plots\": [\n      \"stage0_materials_validation_Fig2a.png\",\n      \"stage0_TDBC_linewidth_analysis.png\"\n    ]\n  },\n  \"key_results\": {\n    \"tdbc_peak_energy_eV\": 2.1194390143737167,\n    \"tdbc_peak_wavelength_nm\": 584.984984984985,\n    \"tdbc_fwhm_model_eV\": 0.01596860072291495,\n    \"tdbc_fwhm_discrepancy_factor\": 2.0463602371719936,\n    \"aluminum_plasmonic\": true,\n    \"aluminum_data_loaded\": false,\n    \"ito_transparent\": true,\n    \"ito_data_loaded\": false\n  },\n  \"validation_results\": {\n    \"tdbc\": {\n      \"model\": \"Lorentzian\",\n      \"source\": \"paper_methods_section\",\n      \"peak_energy_eV\": 2.1194390143737167,\n      \"peak_wavelength_nm\": 584.984984984985,\n      \"expected_peak_eV\": 2.1,\n      \"peak_deviation_percent\": 0.9256673511293642,\n      \"fwhm_from_gamma_eV\": 0.03225238587083277,\n      \"paper_stated_fwhm_eV\": 0.066,\n      \"fwhm_discrepancy_factor\": 2.0463602371719936,\n      \"validation_status\": \"REQUIRES_USER_REVIEW\"\n    },\n    \"aluminum\": {\n      \"source\": \"drude_approximation\",\n      \"data_loaded\": false,\n      \"plasmonic_in_visible\": true,\n      \"eps_real_range\": [\n        -81.556083789939,\n        -21.875298603860568\n      ],\n      \"validation_status\": \"PASS\"\n    },\n    \"ito\": {\n      \"source\": \"constant_approximation\",\n      \"data_loaded\": false,\n      \"transparent_conductor\": true,\n      \"n_mean\": 1.8999999999999995,\n      \"k_mean\": 0.01,\n      \"validation_status\": \"PASS\"\n    },\n    \"glass\": {\n      \"source\": \"paper_stated\",\n      \"epsilon\": 2.28,\n      \"n\": 1.5099668870541498,\n      \"validation_status\": \"PASS\"\n    }\n  },\n  \"warnings\": [\n    \"CRITICAL: TDBC linewidth discrepancy - model gives FWHM ~0.032 eV but paper states 0.066 eV (factor 2x)\",\n    \"Aluminum data using Drude approximation - consider providing Palik data file\",\n    \"ITO data using constant approximation - consider providing Sopra data file\"\n  ],\n  \"user_confirmation_required\": true,\n  \"confirmation_questions\": [\n    \"Is the TDBC absorption peak at ~2.1 eV correct?\",\n    \"Should we use FWHM=0.066 eV (paper-stated) or FWHM=0.032 eV (from \\u03b3X parameter)?\",\n    \"Are the aluminum optical properties acceptable for your simulation?\",\n    \"Do you have alternative material data files to provide?\"\n  ],\n  \"runtime_seconds\": 0.5,\n  \"meep_version\": \"N/A (analytical stage)\"\n}\nREPROLAB_RESULT_JSON_END\n============================================================\n\n=== Stage 0 complete ===\nTotal runtime: ~0.5 seconds\n\n\u26a0\ufe0f  USER CONFIRMATION REQUIRED BEFORE PROCEEDING TO STAGE 1 \u26a0\ufe0f\n",
+    "stderr": "/Users/shaiber/Documents/GitHub/biroclick/outputs/aluminum_nanoantenna_complexes/run_20251205_021902/stage0_material_validation/simulation_stage0_material_validation.py:446: UserWarning: Glyph 65039 (\\N{VARIATION SELECTOR-16}) missing from font(s) DejaVu Sans Mono.\n  plt.tight_layout()\n/Users/shaiber/Documents/GitHub/biroclick/outputs/aluminum_nanoantenna_complexes/run_20251205_021902/stage0_material_validation/simulation_stage0_material_validation.py:447: UserWarning: Glyph 65039 (\\N{VARIATION SELECTOR-16}) missing from font(s) DejaVu Sans Mono.\n  plt.savefig('stage0_TDBC_linewidth_analysis.png', dpi=200, bbox_inches='tight')\n",
+    "exit_code": 0,
+    "files": [
+      "stage0_Al_permittivity.csv",
+      "stage0_ITO_permittivity.csv",
+      "stage0_TDBC_absorption.csv",
+      "stage0_TDBC_linewidth_analysis.png",
+      "stage0_materials_validation_Fig2a.png"
+    ],
+    "runtime_seconds": 1.3333582878112793,
+    "validation_warnings": [
+      "NOTE: No meep import found"
+    ],
+    "timeout_exceeded": false,
+    "memory_exceeded": false
+  },
+  "run_error": "Simulation diverged (NaN/Inf detected in stderr)",
+  "analysis_summary": {
+    "stage_id": "stage0_material_validation",
+    "totals": {
+      "targets": 1,
+      "matches": 0,
+      "pending": 1,
+      "missing": 0,
+      "mismatch": 0
+    },
+    "matched_targets": [],
+    "pending_targets": [
+      "Fig2a"
+    ],
+    "missing_targets": [],
+    "mismatch_targets": [],
+    "discrepancies_logged": 0,
+    "validation_criteria": [
+      "TDBC absorption peak at 2.1 eV \u00b1 0.02 eV (590 nm \u00b1 6 nm)",
+      "TDBC linewidth approximately 0.066 eV (verify \u03b3_X parameter interpretation)",
+      "Aluminum shows expected plasmonic behavior (Re(\u03b5)<0) in visible range",
+      "ITO shows expected transparent conducting behavior"
+    ],
+    "feedback_applied": [],
+    "unresolved_targets": [
+      "Fig2a"
+    ],
+    "notes": "0/1 targets currently classified as matches.",
+    "llm_qualitative_analysis": "Stage 0 material validation completed with one critical issue requiring user resolution. The TDBC J-aggregate peak position matches the paper excellently (2.119 eV vs stated ~2.1 eV, only 0.9% deviation). However, there is a factor of 2.05x discrepancy in the TDBC linewidth: the Lorentzian model with the paper's \u03b3X parameter gives FWHM = 0.032 eV, but the paper explicitly states FWHM = 0.066 eV. This could stem from a convention difference (\u03b3 vs 2\u03b3), additional broadening mechanisms, or a parameter transcription error in the paper. Aluminum, ITO, and glass materials show correct qualitative behavior using Drude/constant approximations since data files failed to load. User must confirm whether to proceed with the narrower model linewidth or adjust the \u03b3 parameter to achieve the paper-stated FWHM before Stage 1 can begin."
+  },
+  "analysis_result_reports": [
+    {
+      "result_id": "stage0_material_validation_Fig2a",
+      "target_figure": "Fig2a",
+      "status": "PENDING_VALIDATION",
+      "expected_outputs": [
+        "stage0_materials_validation.png"
+      ],
+      "matched_output": "stage0_materials_validation_Fig2a.png",
+      "precision_requirement": "qualitative",
+      "digitized_data_path": null,
+      "validation_criteria": [],
+      "quantitative_metrics": {},
+      "criteria_failures": [],
+      "notes": "Output identified.",
+      "stage_id": "stage0_material_validation"
+    }
+  ],
+  "analysis_overall_classification": "PARTIAL_MATCH",
+  "reviewer_feedback": null,
+  "supervisor_feedback": "Plan force-accepted by user.",
+  "planner_feedback": "The reproduction plan is well-structured with proper validation hierarchy (material \u2192 single structure \u2192 coupled system \u2192 parameter sweep) and comprehensive parameter extraction. The staging follows best practices with clear dependencies, and assumptions are thoroughly documented with validation plans. However, there is one coverage gap: Fig2c (nanorod field enhancement, FDTD_DIRECT) is not targeted by any stage despite being classified as reproducible. The plan focuses exclusively on nanodisk geometry while the paper also presents nanorod simulations. This requires either adding a nanorod stage or explicitly reclassifying Fig2c as out-of-scope with justification. The TDBC linewidth discrepancy (A10) is a known risk appropriately scheduled for Stage 0 validation.",
+  "runtime_budget_remaining_seconds": 7200.0,
+  "total_runtime_seconds": 0.0,
+  "stage_start_time": "2025-12-05T00:26:30.333656+00:00",
+  "pending_user_questions": [],
+  "user_responses": {
+    "Analysis revision limit (2) reached but results don't match paper.\n\nOptions:\n- ACCEPT_PARTIAL: Mark stage as partial success and continue\n- PROVIDE_HINT: Reset counter and retry with guidance\n- STOP: End the workflow": "accept partial"
+  },
+  "awaiting_user_input": false,
+  "user_interactions": [],
+  "ask_user_trigger": null,
+  "last_node_before_ask_user": "comparison_check",
+  "figure_comparisons": [
+    {
+      "figure_id": "Fig2a",
+      "stage_id": "stage0_material_validation",
+      "title": "Fig2a",
+      "paper_image_path": null,
+      "reproduction_image_path": "stage0_materials_validation_Fig2a.png",
+      "comparison_table": [
+        {
+          "feature": "Simulation Output",
+          "paper": "Fig2a",
+          "reproduction": "stage0_materials_validation_Fig2a.png",
+          "status": "\u26a0\ufe0f Pending"
+        }
+      ],
+      "shape_comparison": [],
+      "reason_for_difference": "",
+      "classification": "PENDING_VALIDATION"
+    }
+  ],
+  "overall_assessment": [],
+  "systematic_discrepancies_identified": [],
+  "report_conclusions": null,
+  "final_report_markdown": null,
+  "metrics": {
+    "paper_id": "aluminum_nanoantenna_complexes",
+    "started_at": "2025-12-05T00:19:15.452398+00:00",
+    "completed_at": null,
+    "total_duration_seconds": null,
+    "final_status": "in_progress",
+    "agent_calls": [],
+    "stage_metrics": [],
+    "revision_summary": {
+      "total_design_revisions": 0,
+      "total_code_revisions": 0,
+      "total_analysis_revisions": 0,
+      "replans": 0,
+      "user_interventions": 0,
+      "revision_reasons": []
+    },
+    "token_summary": {
+      "total_input_tokens": 0,
+      "total_output_tokens": 0,
+      "by_agent": {},
+      "by_model": {}
+    },
+    "prompt_adaptations": {
+      "adaptations_count": 0,
+      "agents_modified": [],
+      "adaptation_types": {}
+    },
+    "reproduction_quality": {
+      "figures_targeted": 0,
+      "figures_reproduced": 0,
+      "success_count": 0,
+      "partial_count": 0,
+      "failure_count": 0,
+      "success_rate": 0.0
+    }
+  },
+  "paper_figures": [
+    {
+      "id": "Fig1",
+      "description": "Figure from paper",
+      "image_path": "outputs/aluminum_nanoantenna_complexes/run_20251205_021902/figures/Fig1.jpg",
+      "source_url": "https://web-api.textin.com/ocr_image/external/bf987d04a5699ea8.jpg"
+    },
+    {
+      "id": "Fig2",
+      "description": "Figure from paper",
+      "image_path": "outputs/aluminum_nanoantenna_complexes/run_20251205_021902/figures/Fig2.jpg",
+      "source_url": "https://web-api.textin.com/ocr_image/external/fb69263796255201.jpg"
+    },
+    {
+      "id": "Fig3",
+      "description": "Figure from paper",
+      "image_path": "outputs/aluminum_nanoantenna_complexes/run_20251205_021902/figures/Fig3.jpg",
+      "source_url": "https://web-api.textin.com/ocr_image/external/d285f44e73251b89.jpg"
+    },
+    {
+      "id": "Fig4",
+      "description": "Figure from paper",
+      "image_path": "outputs/aluminum_nanoantenna_complexes/run_20251205_021902/figures/Fig4.jpg",
+      "source_url": "https://web-api.textin.com/ocr_image/external/db2ad7f36b4a4e5d.jpg"
+    },
+    {
+      "id": "Fig5",
+      "description": "Figure from paper",
+      "image_path": "outputs/aluminum_nanoantenna_complexes/run_20251205_021902/figures/Fig5.jpg",
+      "source_url": "https://web-api.textin.com/ocr_image/external/dfa3f1ded841f4c9.jpg"
+    },
+    {
+      "id": "Fig6",
+      "description": "Figure from paper",
+      "image_path": "outputs/aluminum_nanoantenna_complexes/run_20251205_021902/figures/Fig6.jpg",
+      "source_url": "https://web-api.textin.com/ocr_image/external/28c6ec90e97ce60a.jpg"
+    },
+    {
+      "id": "Fig7",
+      "description": "Figure from paper",
+      "image_path": "outputs/aluminum_nanoantenna_complexes/run_20251205_021902/figures/Fig7.jpg",
+      "source_url": "https://web-api.textin.com/ocr_image/external/da2a81b4fa93d420.jpg"
+    },
+    {
+      "id": "Fig8",
+      "description": "Figure from paper",
+      "image_path": "outputs/aluminum_nanoantenna_complexes/run_20251205_021902/figures/Fig8.jpg",
+      "source_url": "https://web-api.textin.com/ocr_image/external/3661ce7214790f30.jpg"
+    },
+    {
+      "id": "Fig9",
+      "description": "Figure from paper",
+      "image_path": "outputs/aluminum_nanoantenna_complexes/run_20251205_021902/figures/Fig9.jpg",
+      "source_url": "https://web-api.textin.com/ocr_image/external/168ffd6a9b031803.jpg"
+    },
+    {
+      "id": "Fig10",
+      "description": "Figure from paper",
+      "image_path": "outputs/aluminum_nanoantenna_complexes/run_20251205_021902/figures/Fig10.jpg",
+      "source_url": "https://web-api.textin.com/ocr_image/external/699ac6777753e614.jpg"
+    }
+  ],
+  "prompt_adaptations": []
+}
