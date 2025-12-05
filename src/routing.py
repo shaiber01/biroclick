@@ -225,6 +225,19 @@ def create_verdict_router(
     pass_through = set(pass_through_verdicts or [])
     
     def router(state: ReproState) -> RouteType:
+        # ═══════════════════════════════════════════════════════════════════════
+        # CHECK FOR PENDING USER INTERACTION
+        # If ask_user_trigger is set, a node has already decided we need user input.
+        # Route to ask_user directly to process any pending/pre-provided response.
+        # This prevents re-evaluation of count limits when resuming from interrupt.
+        # The trigger is cleared by supervisor after processing the response.
+        # ═══════════════════════════════════════════════════════════════════════
+        if state.get("ask_user_trigger"):
+            logger.info(
+                f"{checkpoint_prefix}: ask_user_trigger is set, routing to ask_user"
+            )
+            return "ask_user"
+        
         verdict = state.get(verdict_field)
         
         # ═══════════════════════════════════════════════════════════════════════
