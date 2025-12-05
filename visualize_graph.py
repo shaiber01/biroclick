@@ -26,13 +26,14 @@ def detect_llm_nodes(app) -> Set[str]:
     Dynamically detect which nodes make LLM calls by analyzing source code.
     
     This function inspects each node's implementation to check if it (or any
-    helper function it calls within the same module) calls 'call_agent_with_metrics'.
+    helper function it calls) calls 'call_agent_with_metrics'.
     
     The detection works by:
     1. Getting the source file of each node function
     2. Building a call graph of all functions in that module
     3. Checking if the node function transitively calls any function that
        invokes 'call_agent_with_metrics'
+    4. Following imported function calls to check their modules too
     
     Returns:
         Set of node names that make LLM calls
@@ -41,7 +42,11 @@ def detect_llm_nodes(app) -> Set[str]:
     llm_nodes = set()
     
     # Cache analyzed modules to avoid re-parsing
-    module_cache = {}  # module_file -> (functions_with_llm_calls, call_graph)
+    module_cache = {}  # module_file -> (functions_with_llm_calls, call_graph, imports)
+    
+    # First pass: analyze all modules and build a global picture
+    # Collect all modules involved in the workflow
+    func_to_module = {}  # func_name -> source_file
     
     for node_name, node_data in graph.nodes.items():
         # Skip special nodes
@@ -62,6 +67,9 @@ def detect_llm_nodes(app) -> Set[str]:
         if func is None:
             continue
         
+        # Store original func before unwrapping for later use
+        original_func = func
+        
         # Unwrap decorated functions to get the original
         while hasattr(func, '__wrapped__'):
             func = func.__wrapped__
@@ -75,10 +83,12 @@ def detect_llm_nodes(app) -> Set[str]:
             if source_file not in module_cache:
                 module_cache[source_file] = _analyze_module_for_llm_calls(source_file)
             
-            direct_llm_funcs, call_graph = module_cache[source_file]
+            direct_llm_funcs, call_graph, imports = module_cache[source_file]
             
             # Check if this function or any function it calls (transitively) makes LLM calls
-            if _function_uses_llm(func_name, direct_llm_funcs, call_graph):
+            if _function_uses_llm_with_imports(
+                func_name, direct_llm_funcs, call_graph, imports, module_cache
+            ):
                 llm_nodes.add(node_name)
                 
         except (OSError, TypeError):
@@ -90,17 +100,31 @@ def detect_llm_nodes(app) -> Set[str]:
 
 def _analyze_module_for_llm_calls(source_file: str) -> tuple:
     """
-    Analyze a Python source file to find LLM call patterns.
+    Analyze a Python source file to find LLM call patterns and imports.
     
     Returns:
-        Tuple of (functions_with_direct_llm_calls, call_graph)
+        Tuple of (functions_with_direct_llm_calls, call_graph, imports)
         - functions_with_direct_llm_calls: Set of function names that directly call call_agent_with_metrics
         - call_graph: Dict mapping function names to sets of functions they call
+        - imports: Dict mapping imported names to their source module paths
     """
     with open(source_file, 'r') as f:
         source = f.read()
     
     tree = ast.parse(source)
+    
+    # Find imports
+    imports = {}  # local_name -> (module, original_name)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                name = alias.asname if alias.asname else alias.name
+                imports[name] = (alias.name, alias.name)
+        elif isinstance(node, ast.ImportFrom):
+            module = node.module or ''
+            for alias in node.names:
+                name = alias.asname if alias.asname else alias.name
+                imports[name] = (module, alias.name)
     
     # Find all function definitions and analyze them
     direct_llm_funcs = set()
@@ -128,17 +152,26 @@ def _analyze_module_for_llm_calls(source_file: str) -> tuple:
             if has_direct_llm_call:
                 direct_llm_funcs.add(func_name)
     
-    return direct_llm_funcs, call_graph
+    return direct_llm_funcs, call_graph, imports
 
 
-def _function_uses_llm(func_name: str, direct_llm_funcs: Set[str], call_graph: dict, visited: Set[str] = None) -> bool:
+def _function_uses_llm_with_imports(
+    func_name: str,
+    direct_llm_funcs: Set[str],
+    call_graph: dict,
+    imports: dict,
+    module_cache: dict,
+    visited: Set[str] = None
+) -> bool:
     """
-    Check if a function uses LLM (directly or transitively through called functions).
+    Check if a function uses LLM (directly, through local helpers, or through imports).
     
     Args:
         func_name: Name of function to check
         direct_llm_funcs: Set of functions that directly call call_agent_with_metrics
         call_graph: Dict mapping function names to functions they call
+        imports: Dict mapping imported names to (module, original_name)
+        module_cache: Cache of analyzed modules
         visited: Set of already visited functions (to prevent infinite loops)
         
     Returns:
@@ -159,8 +192,39 @@ def _function_uses_llm(func_name: str, direct_llm_funcs: Set[str], call_graph: d
     # Check called functions
     called_funcs = call_graph.get(func_name, set())
     for called_func in called_funcs:
-        if _function_uses_llm(called_func, direct_llm_funcs, call_graph, visited):
-            return True
+        # Check if it's a local function
+        if called_func in call_graph:
+            if _function_uses_llm_with_imports(
+                called_func, direct_llm_funcs, call_graph, imports, module_cache, visited
+            ):
+                return True
+        
+        # Check if it's an imported function
+        if called_func in imports:
+            module_name, original_name = imports[called_func]
+            # Try to resolve the import and check that module
+            try:
+                imported_module = __import__(module_name, fromlist=[original_name])
+                imported_func = getattr(imported_module, original_name, None)
+                if imported_func and callable(imported_func):
+                    # Unwrap if decorated
+                    while hasattr(imported_func, '__wrapped__'):
+                        imported_func = imported_func.__wrapped__
+                    
+                    imported_file = inspect.getfile(imported_func)
+                    if imported_file not in module_cache:
+                        module_cache[imported_file] = _analyze_module_for_llm_calls(imported_file)
+                    
+                    imp_llm_funcs, imp_call_graph, imp_imports = module_cache[imported_file]
+                    
+                    # Check if the imported function uses LLM
+                    if _function_uses_llm_with_imports(
+                        original_name, imp_llm_funcs, imp_call_graph, imp_imports, module_cache, visited
+                    ):
+                        return True
+            except (ImportError, OSError, TypeError, AttributeError):
+                # Could not resolve import, skip
+                pass
     
     return False
 

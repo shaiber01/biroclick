@@ -27,7 +27,7 @@ graph TD;
 	design_review["🤖 design_review"]:::reviewNode
 	execution_check["🤖 execution_check"]:::validationNode
 	generate_code["🤖 generate_code"]:::workflowNode
-	generate_report["generate_report"]:::workflowNode
+	generate_report["🤖 generate_report"]:::workflowNode
 	handle_backtrack["handle_backtrack"]:::workflowNode
 	material_checkpoint["material_checkpoint"]:::checkpointNode
 	physics_check["🤖 physics_check"]:::validationNode
@@ -134,12 +134,11 @@ Nodes marked with 🤖 make LLM (Language Model) calls. Nodes without this indic
 
 > **Note**: LLM nodes are detected automatically by analyzing the source code for calls to `call_agent_with_metrics`.
 
-**Nodes with LLM calls (🤖)**: adapt_prompts, analyze, code_review, design, design_review, execution_check, generate_code, physics_check, plan_review, planning, supervisor
+**Nodes with LLM calls (🤖)**: adapt_prompts, analyze, code_review, design, design_review, execution_check, generate_code, generate_report, physics_check, plan_review, planning, supervisor
 
 **Nodes without LLM calls**:
 - ask_user
 - comparison_check
-- generate_report
 - handle_backtrack
 - material_checkpoint
 - run_code
