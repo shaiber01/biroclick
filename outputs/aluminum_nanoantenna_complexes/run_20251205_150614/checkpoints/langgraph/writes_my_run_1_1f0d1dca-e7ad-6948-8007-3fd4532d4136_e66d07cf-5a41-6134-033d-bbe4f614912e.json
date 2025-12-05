@@ -1,0 +1,38 @@
+{
+  "writes": [
+    {
+      "channel": "workflow_phase",
+      "value_type": "msgpack",
+      "value_data": "q2NvZGVfcmV2aWV3"
+    },
+    {
+      "channel": "last_code_review_verdict",
+      "value_type": "msgpack",
+      "value_data": "p2FwcHJvdmU="
+    },
+    {
+      "channel": "reviewer_issues",
+      "value_type": "msgpack",
+      "value_data": "koWoc2V2ZXJpdHmlbWlub3KoY2F0ZWdvcnmsY29kZV9xdWFsaXR5q2Rlc2NyaXB0aW9u2apDU1YgZmlsZXMgdXNlIG11bHRpLWxpbmUgY29tbWVudCBoZWFkZXJzIHJhdGhlciB0aGFuIGEgc2luZ2xlLWxpbmUgY29sdW1uIGhlYWRlciByb3cuIEZvcm1hdDogJyMgQ29sdW1uczogY29sMSwgY29sMiwgLi4uJyByYXRoZXIgdGhhbiAnY29sMSxjb2wyLC4uLicgYXMgZmlyc3QgZGF0YSBsaW5lLq1zdWdnZXN0ZWRfZml42cRDb25zaWRlciBhZGRpbmcgYSBjbGVhbiBoZWFkZXIgbGluZSBhZnRlciBjb21tZW50czogaGVhZGVyPSd3YXZlbGVuZ3RoX25tLGVuZXJneV9lVixuLGssZXBzX3JlYWwsZXBzX2ltYWcnIG9yIHVzZSBucC5zYXZldHh0IHdpdGggZXhwbGljaXQgY29sdW1uIG5hbWVzLiBDdXJyZW50IGZvcm1hdCBpcyB1c2FibGUgYnV0IGxlc3Mgc3RhbmRhcmQurWNvZGVfbG9jYXRpb27ZLW5wLnNhdmV0eHQoKSBjYWxscyBhcm91bmQgbGluZXMgMTQ4LCAyOTAsIDM4MIWoc2V2ZXJpdHmlbWlub3KoY2F0ZWdvcnmsY29kZV9xdWFsaXR5q2Rlc2NyaXB0aW9u2W1GV0hNIG1lYXN1cmVtZW50IGZ1bmN0aW9uIHJldHVybnMgTmFOIGlmIHBlYWsgaXMgYXQgZWRnZSBvZiB3YXZlbGVuZ3RoIHJhbmdlLCByZWx5aW5nIG9uIGRvd25zdHJlYW0gaGFuZGxpbmcurXN1Z2dlc3RlZF9maXjZf1RoZSBjb2RlIGFscmVhZHkgaGFuZGxlcyB0aGlzIHdpdGggZmFsbGJhY2sgdmFsdWVzIChlLmcuLCAnaWYgbm90IG5wLmlzbmFuKGZ3aG1fcGFwZXJfZVYpJykuIE5vIGNoYW5nZSBuZWVkZWQgYnV0IHdvcnRoIG5vdGluZy6tY29kZV9sb2NhdGlvbtknbWVhc3VyZV9md2htKCkgZnVuY3Rpb24gYXJvdW5kIGxpbmUgMjE1"
+    },
+    {
+      "channel": "code_revision_count",
+      "value_type": "msgpack",
+      "value_data": "AA=="
+    },
+    {
+      "channel": "reviewer_feedback",
+      "value_type": "null",
+      "value_data": ""
+    },
+    {
+      "channel": "branch:to:run_code",
+      "value_type": "null",
+      "value_data": ""
+    }
+  ],
+  "task_id": "e66d07cf-5a41-6134-033d-bbe4f614912e",
+  "thread_id": "my_run_1",
+  "checkpoint_id": "1f0d1dca-e7ad-6948-8007-3fd4532d4136",
+  "saved_at": "2025-12-05T15:17:56.529110"
+}

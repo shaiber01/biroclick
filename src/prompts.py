@@ -155,14 +155,16 @@ def apply_prompt_adaptations(
     Returns:
         Modified prompt with adaptations applied
         
-    Adaptation dict format:
+    Adaptation dict format (from prompt_adaptor_output_schema.json):
         {
+            "id": "MOD_001",
             "target_agent": "SimulationDesignerAgent",
-            "modification_type": "append" | "prepend" | "replace" | "disable",
-            "content": "... additional content ...",
-            "section_marker": "optional marker for replace/disable",
+            "modification_type": "append" | "modify" | "disable",
+            "new_content": "... additional content ...",
+            "section": "optional section header for modify/disable",
             "confidence": 0.85,
-            "reason": "why this adaptation is needed"
+            "reasoning": "why this adaptation is needed",
+            "impact": "high" | "medium" | "low"
         }
     """
     if not adaptations:
@@ -194,7 +196,8 @@ def apply_prompt_adaptations(
             continue
         
         mod_type = adaptation.get("modification_type", "")
-        content = adaptation.get("content", "")
+        # Note: Schema uses "new_content" as the field name
+        content = adaptation.get("new_content", "")
         
         if mod_type == "append":
             # Add content at the end
@@ -204,15 +207,17 @@ def apply_prompt_adaptations(
             # Add content at the beginning (after global rules if present)
             result = f"# Paper-Specific Adaptation\n{content}\n\n{result}"
             
-        elif mod_type == "replace":
-            # Replace a specific section (identified by marker)
-            marker = adaptation.get("section_marker", "")
+        elif mod_type == "modify":
+            # Replace a specific section (identified by section header)
+            # Note: Schema uses "section" as the field name
+            marker = adaptation.get("section", "")
             if marker and marker in result:
                 result = result.replace(marker, content)
                 
         elif mod_type == "disable":
             # Comment out a section
-            marker = adaptation.get("section_marker", "")
+            # Note: Schema uses "section" as the field name
+            marker = adaptation.get("section", "")
             if marker and marker in result:
                 # Find and comment out the section
                 result = result.replace(marker, f"[DISABLED: {marker}]")

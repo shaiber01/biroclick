@@ -1,0 +1,23 @@
+{
+  "writes": [
+    {
+      "channel": "workflow_phase",
+      "value_type": "msgpack",
+      "value_data": "tGV4ZWN1dGlvbl92YWxpZGF0aW9u"
+    },
+    {
+      "channel": "execution_verdict",
+      "value_type": "msgpack",
+      "value_data": "pHBhc3M="
+    },
+    {
+      "channel": "branch:to:physics_check",
+      "value_type": "null",
+      "value_data": ""
+    }
+  ],
+  "task_id": "424d837c-318a-e737-dcb5-1d4a2af87fe4",
+  "thread_id": "my_run_1",
+  "checkpoint_id": "1f0d1dcd-1dde-6c86-8009-e8beab5fc156",
+  "saved_at": "2025-12-05T15:18:43.351374"
+}

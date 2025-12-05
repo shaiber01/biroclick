@@ -92,7 +92,8 @@ def adapt_prompts_node(state: ReproState) -> Dict[str, Any]:
         
         # Extract adaptations from agent output
         # Handle None explicitly - get() returns None if key exists with None value
-        adaptations = agent_output.get("adaptations")
+        # Note: Schema uses "prompt_modifications" as the key name
+        adaptations = agent_output.get("prompt_modifications")
         if adaptations is None:
             adaptations = []
         elif not isinstance(adaptations, list):
@@ -256,13 +257,20 @@ def plan_node(state: ReproState) -> dict:
     # Log planning summary
     stages = plan_data.get("stages", [])
     num_stages = len(stages)
-    stage_ids = [s.get("id", "?") for s in stages[:4]] if stages else []
+    stage_ids = [s.get("stage_id", "?") for s in stages[:4]] if stages else []
     stages_preview = ", ".join(stage_ids)
     if num_stages > 4:
         stages_preview += f", ... (+{num_stages - 4} more)"
-    num_targets = len(plan_data.get("targets", []))
+    
+    targets = plan_data.get("targets", [])
+    num_targets = len(targets)
+    target_ids = [t.get("figure_id", "?") for t in targets[:4]] if targets else []
+    targets_preview = ", ".join(target_ids)
+    if num_targets > 4:
+        targets_preview += f", ... (+{num_targets - 4} more)"
+    
     replan_info = f" (replan #{replan_count})" if replan_count > 0 else ""
-    logger.info(f"📋 planning: {num_stages} stage(s) [{stages_preview}], {num_targets} target(s){replan_info}")
+    logger.info(f"📋 planning: {num_stages} stage(s) [{stages_preview}], {num_targets} target(s) [{targets_preview}]{replan_info}")
     
     return result
 

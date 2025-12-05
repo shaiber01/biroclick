@@ -1,0 +1,23 @@
+{
+  "writes": [
+    {
+      "channel": "workflow_phase",
+      "value_type": "msgpack",
+      "value_data": "q3BsYW5fcmV2aWV3"
+    },
+    {
+      "channel": "last_plan_review_verdict",
+      "value_type": "msgpack",
+      "value_data": "p2FwcHJvdmU="
+    },
+    {
+      "channel": "branch:to:select_stage",
+      "value_type": "null",
+      "value_data": ""
+    }
+  ],
+  "task_id": "03e8256c-146e-a41e-3196-00ef5a343093",
+  "thread_id": "my_run_1",
+  "checkpoint_id": "1f0d1dbc-57dd-6916-8002-ebdd0f3d16be",
+  "saved_at": "2025-12-05T15:11:42.661639"
+}

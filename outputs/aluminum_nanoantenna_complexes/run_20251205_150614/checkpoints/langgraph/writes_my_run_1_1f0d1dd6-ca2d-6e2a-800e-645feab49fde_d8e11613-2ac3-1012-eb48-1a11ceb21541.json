@@ -1,0 +1,48 @@
+{
+  "writes": [
+    {
+      "channel": "workflow_phase",
+      "value_type": "msgpack",
+      "value_data": "tWNvbXBhcmlzb25fdmFsaWRhdGlvbg=="
+    },
+    {
+      "channel": "comparison_verdict",
+      "value_type": "msgpack",
+      "value_data": "rm5lZWRzX3JldmlzaW9u"
+    },
+    {
+      "channel": "analysis_revision_count",
+      "value_type": "msgpack",
+      "value_data": "Ag=="
+    },
+    {
+      "channel": "ask_user_trigger",
+      "value_type": "msgpack",
+      "value_data": "rmFuYWx5c2lzX2xpbWl0"
+    },
+    {
+      "channel": "pending_user_questions",
+      "value_type": "msgpack",
+      "value_data": "kdnYQW5hbHlzaXMgcmV2aXNpb24gbGltaXQgKDIpIHJlYWNoZWQgYnV0IHJlc3VsdHMgZG9uJ3QgbWF0Y2ggcGFwZXIuCgpPcHRpb25zOgotIEFDQ0VQVF9QQVJUSUFMOiBNYXJrIHN0YWdlIGFzIHBhcnRpYWwgc3VjY2VzcyBhbmQgY29udGludWUKLSBQUk9WSURFX0hJTlQ6IFJlc2V0IGNvdW50ZXIgYW5kIHJldHJ5IHdpdGggZ3VpZGFuY2UKLSBTVE9QOiBFbmQgdGhlIHdvcmtmbG93"
+    },
+    {
+      "channel": "awaiting_user_input",
+      "value_type": "msgpack",
+      "value_data": "ww=="
+    },
+    {
+      "channel": "last_node_before_ask_user",
+      "value_type": "msgpack",
+      "value_data": "sGNvbXBhcmlzb25fY2hlY2s="
+    },
+    {
+      "channel": "branch:to:ask_user",
+      "value_type": "null",
+      "value_data": ""
+    }
+  ],
+  "task_id": "d8e11613-2ac3-1012-eb48-1a11ceb21541",
+  "thread_id": "my_run_1",
+  "checkpoint_id": "1f0d1dd6-ca2d-6e2a-800e-645feab49fde",
+  "saved_at": "2025-12-05T15:22:18.911080"
+}

@@ -1,0 +1,28 @@
+{
+  "writes": [
+    {
+      "channel": "workflow_phase",
+      "value_type": "msgpack",
+      "value_data": "tWNvbXBhcmlzb25fdmFsaWRhdGlvbg=="
+    },
+    {
+      "channel": "comparison_verdict",
+      "value_type": "msgpack",
+      "value_data": "rm5lZWRzX3JldmlzaW9u"
+    },
+    {
+      "channel": "analysis_revision_count",
+      "value_type": "msgpack",
+      "value_data": "AQ=="
+    },
+    {
+      "channel": "branch:to:analyze",
+      "value_type": "null",
+      "value_data": ""
+    }
+  ],
+  "task_id": "a13cb7f2-634e-a7d1-f268-9b690cea8d23",
+  "thread_id": "my_run_1",
+  "checkpoint_id": "1f0d1dd4-166f-6728-800c-4cc8fdfd1c41",
+  "saved_at": "2025-12-05T15:21:06.380961"
+}

@@ -1,0 +1,73 @@
+{
+  "writes": [
+    {
+      "channel": "workflow_phase",
+      "value_type": "msgpack",
+      "value_data": "r3N0YWdlX3NlbGVjdGlvbg=="
+    },
+    {
+      "channel": "current_stage_id",
+      "value_type": "msgpack",
+      "value_data": "unN0YWdlMF9tYXRlcmlhbF92YWxpZGF0aW9u"
+    },
+    {
+      "channel": "current_stage_type",
+      "value_type": "msgpack",
+      "value_data": "s01BVEVSSUFMX1ZBTElEQVRJT04="
+    },
+    {
+      "channel": "stage_start_time",
+      "value_type": "msgpack",
+      "value_data": "2SAyMDI1LTEyLTA1VDEzOjExOjQyLjY2Mjk1MiswMDowMA=="
+    },
+    {
+      "channel": "stage_outputs",
+      "value_type": "msgpack",
+      "value_data": "gA=="
+    },
+    {
+      "channel": "run_error",
+      "value_type": "null",
+      "value_data": ""
+    },
+    {
+      "channel": "design_revision_count",
+      "value_type": "msgpack",
+      "value_data": "AA=="
+    },
+    {
+      "channel": "code_revision_count",
+      "value_type": "msgpack",
+      "value_data": "AA=="
+    },
+    {
+      "channel": "execution_failure_count",
+      "value_type": "msgpack",
+      "value_data": "AA=="
+    },
+    {
+      "channel": "physics_failure_count",
+      "value_type": "msgpack",
+      "value_data": "AA=="
+    },
+    {
+      "channel": "analysis_revision_count",
+      "value_type": "msgpack",
+      "value_data": "AA=="
+    },
+    {
+      "channel": "reviewer_feedback",
+      "value_type": "null",
+      "value_data": ""
+    },
+    {
+      "channel": "branch:to:design",
+      "value_type": "null",
+      "value_data": ""
+    }
+  ],
+  "task_id": "1c64dc95-82fe-419f-33ad-423513c5938e",
+  "thread_id": "my_run_1",
+  "checkpoint_id": "1f0d1dbf-1675-6e1c-8003-ec5bd5124cc0",
+  "saved_at": "2025-12-05T15:11:42.666104"
+}

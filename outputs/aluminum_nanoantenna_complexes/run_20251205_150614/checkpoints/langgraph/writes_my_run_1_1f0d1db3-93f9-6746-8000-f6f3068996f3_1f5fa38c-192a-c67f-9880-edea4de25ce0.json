@@ -1,0 +1,23 @@
+{
+  "writes": [
+    {
+      "channel": "workflow_phase",
+      "value_type": "msgpack",
+      "value_data": "sGFkYXB0aW5nX3Byb21wdHM="
+    },
+    {
+      "channel": "prompt_adaptations",
+      "value_type": "msgpack",
+      "value_data": "kA=="
+    },
+    {
+      "channel": "branch:to:planning",
+      "value_type": "null",
+      "value_data": ""
+    }
+  ],
+  "task_id": "1f5fa38c-192a-c67f-9880-edea4de25ce0",
+  "thread_id": "my_run_1",
+  "checkpoint_id": "1f0d1db3-93f9-6746-8000-f6f3068996f3",
+  "saved_at": "2025-12-05T15:07:47.541599"
+}

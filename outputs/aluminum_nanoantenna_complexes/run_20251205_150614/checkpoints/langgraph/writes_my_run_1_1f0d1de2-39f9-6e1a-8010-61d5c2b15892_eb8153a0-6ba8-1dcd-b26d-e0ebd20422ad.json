@@ -1,0 +1,38 @@
+{
+  "writes": [
+    {
+      "channel": "workflow_phase",
+      "value_type": "msgpack",
+      "value_data": "q3N1cGVydmlzaW9u"
+    },
+    {
+      "channel": "ask_user_trigger",
+      "value_type": "null",
+      "value_data": ""
+    },
+    {
+      "channel": "analysis_revision_count",
+      "value_type": "msgpack",
+      "value_data": "AA=="
+    },
+    {
+      "channel": "supervisor_verdict",
+      "value_type": "msgpack",
+      "value_data": "q29rX2NvbnRpbnVl"
+    },
+    {
+      "channel": "progress",
+      "value_type": "msgpack",
+      "value_data": "hahwYXBlcl9pZL5hbHVtaW51bV9uYW5vYW50ZW5uYV9jb21wbGV4ZXO1dG90YWxfcnVudGltZV9zZWNvbmRzAKZzdGFnZXOUjKhzdGFnZV9pZLpzdGFnZTBfbWF0ZXJpYWxfdmFsaWRhdGlvbqpzdGFnZV90eXBls01BVEVSSUFMX1ZBTElEQVRJT06mc3RhdHVzq25vdF9zdGFydGVks2ludmFsaWRhdGlvbl9yZWFzb27ArGxhc3RfdXBkYXRlZNkgMjAyNS0xMi0wNVQxMzoxMDoyOC45NzI0ODUrMDA6MDCucmV2aXNpb25fY291bnQAr3J1bnRpbWVfc2Vjb25kcwCnc3VtbWFyedoBdVBsYW5uZWQ6IFZhbGlkYXRlIG9wdGljYWwgcHJvcGVydGllcyBvZiBhbGwgbWF0ZXJpYWxzOiAoMSkgQWwgZnJvbSBQYWxpayBkYXRhIC0gY2hlY2sgZm9yIGludGVyYmFuZCB0cmFuc2l0aW9uIGZlYXR1cmVzLCAoMikgVERCQyBMb3JlbnR6aWFuIG1vZGVsIC0gdmVyaWZ5IGFic29ycHRpb24gcGVhayBhdCAyLjEgZVYgYW5kIGxpbmV3aWR0aCB+MC4wNjYgZVYgbWF0Y2hlcyBwYXBlciBGaWcgMmEsICgzKSBJVE8gZnJvbSBTb3ByYSBkYXRhYmFzZSwgKDQpIEdsYXNzIG49MS41MS4gQ3JpdGljYWw6IFREQkMgzrNYPTIuNDVlMTMgcmFkL3Mgc2hvdWxkIGdpdmUgRldITSBsaW5ld2lkdGggLSB2ZXJpZnkgdGhpcyBtYXRjaGVzIHN0YXRlZCAwLjA2NiBlVi6nb3V0cHV0c5CtZGlzY3JlcGFuY2llc5CmaXNzdWVzkKxuZXh0X2FjdGlvbnOQjKhzdGFnZV9pZLRzdGFnZTFfYmFyZV9uYW5vZGlza6pzdGFnZV90eXBlsFNJTkdMRV9TVFJVQ1RVUkWmc3RhdHVzq25vdF9zdGFydGVks2ludmFsaWRhdGlvbl9yZWFzb27ArGxhc3RfdXBkYXRlZNkgMjAyNS0xMi0wNVQxMzoxMDoyOC45NzI0ODUrMDA6MDCucmV2aXNpb25fY291bnQAr3J1bnRpbWVfc2Vjb25kcwCnc3VtbWFyedoBHlBsYW5uZWQ6IFNpbXVsYXRlIHNpbmdsZSBiYXJlIEFsIG5hbm9kaXNrIChEPTE0MCBubSwgaD00MCBubSkgaW4gcGVyaW9kaWMgYXJyYXkgKHBlcmlvZCA9IEQgKyAxODAgbm0gPSAzMjAgbm0pIG9uIElUTy9nbGFzcyB3aXRob3V0IFREQkMgY29hdGluZy4gVmFsaWRhdGUgTFNQIHJlc29uYW5jZSBwb3NpdGlvbiBhbmQgZmllbGQgZW5oYW5jZW1lbnQgcGF0dGVybiBhZ2FpbnN0IEZpZyAyYi4gVGhlIHBhcGVyIHNob3dzIGZpZWxkIGVuaGFuY2VtZW50IGF0IDUzMCBubSBmb3IgdGhpcyBkaWFtZXRlci6nb3V0cHV0c5CtZGlzY3JlcGFuY2llc5CmaXNzdWVzkKxuZXh0X2FjdGlvbnOQjKhzdGFnZV9pZLZzdGFnZTJfY29hdGVkX25hbm9kaXNrqnN0YWdlX3R5cGWwU0lOR0xFX1NUUlVDVFVSRaZzdGF0dXOrbm90X3N0YXJ0ZWSzaW52YWxpZGF0aW9uX3JlYXNvbsCsbGFzdF91cGRhdGVk2SAyMDI1LTEyLTA1VDEzOjEwOjI4Ljk3MjQ4NSswMDowMK5yZXZpc2lvbl9jb3VudACvcnVudGltZV9zZWNvbmRzAKdzdW1tYXJ52fhQbGFubmVkOiBBZGQgMjAgbm0gVERCQyBsYXllciB0byBEPTE0MCBubSBuYW5vZGlzay4gVGhpcyBkaWFtZXRlciBoYXMgTFNQIG5lYXIgZXhjaXRvbiBlbmVyZ3ksIHNvIHNob3VsZCBzaG93IG1vZGUgc3BsaXR0aW5nLiBWYWxpZGF0ZSB0aGF0IGNvYXRpbmcgcHJvZHVjZXMgc3BlY3RyYWwgbW9kaWZpY2F0aW9uIC0gZWl0aGVyIGNsZWFyIHNwbGl0dGluZyBvciBhc3ltbWV0cmljIGxpbmVzaGFwZSBpbmRpY2F0aW5nIGNvdXBsaW5nLqdvdXRwdXRzkK1kaXNjcmVwYW5jaWVzkKZpc3N1ZXOQrG5leHRfYWN0aW9uc5CMqHN0YWdlX2lktXN0YWdlM19kaWFtZXRlcl9zd2VlcKpzdGFnZV90eXBlr1BBUkFNRVRFUl9TV0VFUKZzdGF0dXOrbm90X3N0YXJ0ZWSzaW52YWxpZGF0aW9uX3JlYXNvbsCsbGFzdF91cGRhdGVk2SAyMDI1LTEyLTA1VDEzOjEwOjI4Ljk3MjQ4NSswMDowMK5yZXZpc2lvbl9jb3VudACvcnVudGltZV9zZWNvbmRzAKdzdW1tYXJ52elQbGFubmVkOiBTd2VlcCBuYW5vZGlzayBkaWFtZXRlciBmcm9tIDc1LTIwNSBubSAobWF0Y2hpbmcgcGFwZXIgcmFuZ2UpIHdpdGggVERCQyBjb2F0aW5nLiBHZW5lcmF0ZSB0cmFuc21pc3Npb24gZGlzcGVyc2lvbiBkaWFncmFtIHNob3dpbmcgYW50aS1jcm9zc2luZy4gVXNlIH4xMC0xNSBkaWFtZXRlciB2YWx1ZXMuIFRoaXMgaXMgdGhlIG1haW4gcmVzdWx0IHJlcHJvZHVjaW5nIHRoZSBUT0MgZmlndXJlLqdvdXRwdXRzkK1kaXNjcmVwYW5jaWVzkKZpc3N1ZXOQrG5leHRfYWN0aW9uc5CzZGlzY3JlcGFuY3lfc3VtbWFyeYOzdG90YWxfZGlzY3JlcGFuY2llcwC2YmxvY2tpbmdfZGlzY3JlcGFuY2llcwC8c3lzdGVtYXRpY19zaGlmdHNfaWRlbnRpZmllZJCxdXNlcl9pbnRlcmFjdGlvbnORiKJpZKJVMal0aW1lc3RhbXDZIDIwMjUtMTItMDVUMTM6Mjc6MjUuOTEzNTAzKzAwOjAwsGludGVyYWN0aW9uX3R5cGWuYW5hbHlzaXNfbGltaXSnY29udGV4dIOoc3RhZ2VfaWS6c3RhZ2UwX21hdGVyaWFsX3ZhbGlkYXRpb26lYWdlbnSvU3VwZXJ2aXNvckFnZW50pnJlYXNvbq5hbmFseXNpc19saW1pdKhxdWVzdGlvbrIocXVlc3Rpb24gY2xlYXJlZCmtdXNlcl9yZXNwb25zZdlRUFJPVklERV9ISU5UOiBub3RlIHRoYXQgaHdobSBpcyBub3QgZndobS4gdGhpcyBzb3VsZCBpbXByb3ZlIHlvdSBieSBhIGZhY3RvciBvZiAypmltcGFjdLdVc2VyIGRlY2lzaW9uIHByb2Nlc3NlZLdhbHRlcm5hdGl2ZXNfY29uc2lkZXJlZJA="
+    },
+    {
+      "channel": "branch:to:material_checkpoint",
+      "value_type": "null",
+      "value_data": ""
+    }
+  ],
+  "task_id": "eb8153a0-6ba8-1dcd-b26d-e0ebd20422ad",
+  "thread_id": "my_run_1",
+  "checkpoint_id": "1f0d1de2-39f9-6e1a-8010-61d5c2b15892",
+  "saved_at": "2025-12-05T15:27:25.920022"
+}
