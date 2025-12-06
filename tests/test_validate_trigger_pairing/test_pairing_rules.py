@@ -63,8 +63,9 @@ class TestValidPairings:
         result = analyze_source(clearing_trigger, "test.py")
         violations = check_pairing_violations(result)
         
-        # Should have no violations at all
-        assert len(violations) == 0
+        # Should have no ERRORS (warnings for empty questions list are OK in clearing scenario)
+        errors = [v for v in violations if v.severity == "error"]
+        assert len(errors) == 0, f"Clearing should have no errors: {errors}"
     
     def test_clearing_none_alone_is_valid(self, clearing_trigger_alone):
         """Clearing trigger with None alone should be valid."""
@@ -478,9 +479,6 @@ def another_bug():
         """
         A dict with trigger and EMPTY questions list should be detected.
         Empty questions = no questions to show user = still a bug.
-        
-        NOTE: Current implementation may not catch this. If this test fails,
-        it reveals a limitation in the tool that should be fixed.
         """
         code = '''
 def empty_questions_bug():
@@ -491,23 +489,116 @@ def empty_questions_bug():
 '''
         result = analyze_source(code, "test.py")
         
-        # First verify the assignment is detected
+        # Verify the trigger is detected and marked as NOT paired (empty questions don't count)
         assert len(result.trigger_assignments) == 1, "Should detect the trigger"
         assignment = result.trigger_assignments[0]
+        assert assignment.paired_in_dict is False, (
+            "Empty questions list should NOT count as paired"
+        )
         
-        # The dict HAS the questions key, so it's marked as "paired"
-        # But the questions are EMPTY, which is semantically wrong
-        # If paired_in_dict is True, the tool considers it valid
-        # This is a KNOWN LIMITATION - document it here
-        if assignment.paired_in_dict:
-            pytest.skip(
-                "KNOWN LIMITATION: Tool marks empty questions list as paired. "
-                "A stricter check for non-empty questions should be added."
-            )
-        else:
-            violations = check_pairing_violations(result)
-            errors = [v for v in violations if v.severity == "error"]
-            assert len(errors) == 1, "Should detect empty questions as violation"
+        violations = check_pairing_violations(result)
+        
+        # Should have UNPAIRED_IN_DICT error for the trigger
+        errors = [v for v in violations if v.severity == "error"]
+        assert len(errors) == 1, f"Should detect unpaired trigger, got: {errors}"
+        assert errors[0].type == ViolationType.UNPAIRED_IN_DICT
+        
+        # Should also have EMPTY_QUESTIONS warning
+        warnings = [v for v in violations if v.severity == "warning"]
+        empty_warnings = [v for v in warnings if v.type == ViolationType.EMPTY_QUESTIONS]
+        assert len(empty_warnings) == 1, "Should warn about empty questions list"
+
+
+class TestCrossFunctionBoundary:
+    """
+    Tests that verify the tool respects function boundaries.
+    
+    A trigger in function A should NOT be "paired" with questions in function B,
+    even if they happen to be within 10 lines of each other.
+    """
+    
+    def test_cross_function_not_paired(self):
+        """
+        Questions in one function should NOT pair with trigger in another function.
+        
+        This was a bug: the tool used to check ALL questions in the file,
+        not just questions in the same function.
+        """
+        code = '''
+def func_a():
+    result = {}
+    result["pending_user_questions"] = ["Question from A"]
+    return result
+
+def func_b():
+    result = {}
+    result["ask_user_trigger"] = "orphan_trigger"
+    return result
+'''
+        result = analyze_source(code, "test.py")
+        violations = check_pairing_violations(result)
+        
+        # The trigger in func_b should be flagged as unpaired
+        # even though questions in func_a are nearby
+        errors = [v for v in violations if v.severity == "error"]
+        assert len(errors) == 1, (
+            f"Trigger in func_b should be unpaired (questions are in func_a). Got: {errors}"
+        )
+        assert errors[0].type == ViolationType.UNPAIRED_SUBSCRIPT
+        assert "func_b" in errors[0].message, "Error should mention the function name"
+    
+    def test_same_function_still_pairs(self):
+        """Questions in same function should still pair correctly."""
+        code = '''
+def func_a():
+    result = {}
+    result["pending_user_questions"] = ["Question"]
+    return result
+
+def func_b():
+    result = {}
+    result["ask_user_trigger"] = "trigger"
+    result["pending_user_questions"] = ["Proper question"]
+    return result
+'''
+        result = analyze_source(code, "test.py")
+        violations = check_pairing_violations(result)
+        
+        # func_b trigger should be paired with func_b questions
+        errors = [v for v in violations if v.severity == "error"]
+        assert len(errors) == 0, f"func_b trigger should be properly paired. Got: {errors}"
+    
+    def test_global_scope_pairing(self):
+        """Global scope triggers should pair with global scope questions."""
+        code = '''
+result = {}
+result["ask_user_trigger"] = "global_trigger"
+result["pending_user_questions"] = ["Global question"]
+'''
+        result = analyze_source(code, "test.py")
+        violations = check_pairing_violations(result)
+        
+        errors = [v for v in violations if v.severity == "error"]
+        assert len(errors) == 0, f"Global trigger should pair with global questions. Got: {errors}"
+    
+    def test_global_trigger_not_paired_with_function_questions(self):
+        """Global scope trigger should NOT pair with questions inside a function."""
+        code = '''
+def some_func():
+    result = {}
+    result["pending_user_questions"] = ["Question in function"]
+    return result
+
+result = {}
+result["ask_user_trigger"] = "global_orphan"
+'''
+        result = analyze_source(code, "test.py")
+        violations = check_pairing_violations(result)
+        
+        errors = [v for v in violations if v.severity == "error"]
+        assert len(errors) == 1, (
+            f"Global trigger should NOT pair with function questions. Got: {errors}"
+        )
 
 
 class TestValueTypeClassification:

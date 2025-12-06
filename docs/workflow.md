@@ -1041,6 +1041,43 @@ This table summarizes when each agent can propose backtracking and what typicall
 
 **Note**: The `ask_user_trigger` field is the **single mechanism** for routing to ask_user. All routers check this field first via the `with_trigger_check` wrapper. See GRAPH.md for details on the routing mechanism.
 
+#### Safety Net: Error Context Inference
+
+When `ask_user_node` receives questions but no `ask_user_trigger` (indicating a workflow bug), 
+it uses a safety net to infer the error context and generate appropriate recovery questions.
+
+The inference uses a priority-based lookup:
+
+1. **`last_node_before_ask_user`** - Most specific. Set when nodes escalate to user.
+   Maps directly to error context (e.g., `"physics_check"` → `"physics_error"`).
+
+2. **`workflow_phase`** - Fallback. Indicates current pipeline position.
+   Maps phase to likely error (e.g., `"physics_validation"` → `"physics_error"`).
+
+3. **`ask_user_trigger`** - Detects stuck state from previous interaction.
+
+4. **Unknown** - Returns `"unknown_error"` if no context available.
+
+**Supported Error Contexts**:
+| Context | Source Nodes/Phases |
+|---------|---------------------|
+| `physics_error` | physics_check, physics_validation |
+| `execution_error` | execution_check, execution_validation |
+| `comparison_error` | comparison_check, analysis, comparison_validation |
+| `code_review_error` | code_review, code_generation |
+| `design_review_error` | design_review, design |
+| `plan_review_error` | plan_review, planning |
+| `supervisor_error` | supervisor |
+| `backtrack_error` | handle_backtrack |
+| `material_checkpoint_error` | material_checkpoint |
+| `stuck_awaiting_input` | (when ask_user_trigger is set) |
+| `unknown_error` | (fallback) |
+
+This approach is more reliable than verdict-based heuristics because:
+- `last_node_before_ask_user` is explicitly set by the failing node
+- `workflow_phase` is always set and tracks current position
+- No dependency on verdict field order or stale values
+
 **User Interaction Logging**:
 ```python
 def log_user_interaction(state, question, response, interaction_type):

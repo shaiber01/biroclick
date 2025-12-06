@@ -17,7 +17,12 @@ import pytest
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from tools.validate_trigger_pairing import analyze_source, AnalysisResult
+from tools.validate_trigger_pairing import (
+    analyze_source,
+    AnalysisResult,
+    check_pairing_violations,
+    ViolationType,
+)
 
 
 class TestDictLiteralDetection:
@@ -165,6 +170,95 @@ class TestMultipleAssignments:
         assert "error_a_trigger" in values
         assert "error_b_trigger" in values
         assert None in values  # The clearing assignment
+
+
+class TestDictUpdatePatterns:
+    """Tests for state.update() and |= dict merge patterns."""
+    
+    def test_detects_trigger_in_update_call(self):
+        """state.update({"ask_user_trigger": ...}) should be detected."""
+        code = '''
+def func():
+    state.update({"ask_user_trigger": "trigger_value", "pending_user_questions": ["q"]})
+'''
+        result = analyze_source(code, "test.py")
+        
+        assert len(result.trigger_assignments) == 1
+        assert result.trigger_assignments[0].value == "trigger_value"
+        assert result.trigger_assignments[0].in_dict_literal is True
+        assert result.trigger_assignments[0].paired_in_dict is True
+    
+    def test_detects_unpaired_trigger_in_update_call(self):
+        """Unpaired trigger in update() should be flagged."""
+        code = '''
+def func():
+    state.update({"ask_user_trigger": "orphan_trigger"})
+'''
+        result = analyze_source(code, "test.py")
+        violations = check_pairing_violations(result)
+        
+        errors = [v for v in violations if v.severity == "error"]
+        assert len(errors) == 1
+        assert errors[0].type == ViolationType.UNPAIRED_IN_DICT
+    
+    def test_detects_trigger_in_augmented_assign(self):
+        """result |= {"ask_user_trigger": ...} should be detected."""
+        code = '''
+def func():
+    result |= {"ask_user_trigger": "trigger_value", "pending_user_questions": ["q"]}
+'''
+        result = analyze_source(code, "test.py")
+        
+        assert len(result.trigger_assignments) == 1
+        assert result.trigger_assignments[0].value == "trigger_value"
+        assert result.trigger_assignments[0].paired_in_dict is True
+    
+    def test_detects_unpaired_trigger_in_augmented_assign(self):
+        """Unpaired trigger in |= should be flagged."""
+        code = '''
+def func():
+    result |= {"ask_user_trigger": "orphan_trigger"}
+'''
+        result = analyze_source(code, "test.py")
+        violations = check_pairing_violations(result)
+        
+        errors = [v for v in violations if v.severity == "error"]
+        assert len(errors) == 1
+        assert errors[0].type == ViolationType.UNPAIRED_IN_DICT
+    
+    def test_detects_questions_in_update_call(self):
+        """Questions in update() should be tracked."""
+        code = '''
+def func():
+    state.update({"pending_user_questions": ["question"]})
+'''
+        result = analyze_source(code, "test.py")
+        
+        assert len(result.questions_assignments) == 1
+        assert result.questions_assignments[0].is_empty_list is False
+    
+    def test_update_with_non_dict_arg_ignored(self):
+        """update() with variable arg should be ignored (not a dict literal)."""
+        code = '''
+def func():
+    data = {"ask_user_trigger": "x"}
+    state.update(data)
+'''
+        result = analyze_source(code, "test.py")
+        
+        # Should detect the dict literal assignment, but not the update() call
+        assert len(result.trigger_assignments) == 1  # From the dict literal
+    
+    def test_regular_function_update_ignored(self):
+        """update() that's not a method call should be handled gracefully."""
+        code = '''
+def func():
+    update({"ask_user_trigger": "x"})  # Regular function, not method
+'''
+        result = analyze_source(code, "test.py")
+        
+        # The dict inside is still a dict literal, so it should be detected
+        assert len(result.trigger_assignments) == 1
 
 
 class TestEdgeCases:

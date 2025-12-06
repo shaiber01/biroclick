@@ -58,30 +58,55 @@ def _format_boxed_content(title: str, content: str, prefix: str = "   ") -> str:
 
 def _infer_error_context(state: "ReproState") -> str:
     """
-    Infer what went wrong by checking which verdict fields are None/invalid.
+    Infer what went wrong using available state information.
     
     When ask_user is called without a trigger (safety net), this helps
-    generate a more contextual error message by determining which
-    validation step likely failed.
+    generate a more contextual error message.
+    
+    Priority order:
+    1. last_node_before_ask_user - most specific, set when nodes escalate
+    2. workflow_phase - indicates current pipeline position
+    3. ask_user_trigger - detects stuck state
+    4. Falls back to "unknown_error"
     
     Returns a context string like "physics_error", "execution_error", etc.
     """
-    # Check verdict fields in order of the pipeline
-    # A None verdict typically means the node was skipped or failed silently
-    if state.get("physics_verdict") is None and state.get("execution_verdict") is not None:
-        return "physics_error"
-    if state.get("execution_verdict") is None:
-        return "execution_error"
-    if state.get("comparison_verdict") is None:
-        return "comparison_error"
-    if state.get("last_code_review_verdict") is None:
-        return "code_review_error"
-    if state.get("last_design_review_verdict") is None:
-        return "design_review_error"
-    if state.get("last_plan_review_verdict") is None:
-        return "plan_review_error"
+    # Priority 1: Use last_node_before_ask_user if available (most specific)
+    last_node = state.get("last_node_before_ask_user")
+    if last_node:
+        node_to_context = {
+            "plan_review": "plan_review_error",
+            "design_review": "design_review_error",
+            "code_review": "code_review_error",
+            "execution_check": "execution_error",
+            "physics_check": "physics_error",
+            "comparison_check": "comparison_error",
+            "supervisor": "supervisor_error",
+            "handle_backtrack": "backtrack_error",
+            "material_checkpoint": "material_checkpoint_error",
+        }
+        if last_node in node_to_context:
+            return node_to_context[last_node]
     
-    # Check if ask_user_trigger is stuck (indicates previous interaction wasn't completed)
+    # Priority 2: Use workflow_phase as fallback
+    phase = state.get("workflow_phase")
+    if phase:
+        phase_to_context = {
+            "planning": "plan_review_error",
+            "plan_review": "plan_review_error",
+            "design": "design_review_error",
+            "design_review": "design_review_error",
+            "code_generation": "code_review_error",
+            "code_review": "code_review_error",
+            "execution_validation": "execution_error",
+            "physics_validation": "physics_error",
+            "analysis": "comparison_error",
+            "comparison_validation": "comparison_error",
+        }
+        if phase in phase_to_context:
+            return phase_to_context[phase]
+    
+    # Priority 3: Check if ask_user_trigger is stuck
     if state.get("ask_user_trigger"):
         return "stuck_awaiting_input"
     
@@ -94,6 +119,17 @@ def _generate_error_question(context: str, state: "ReproState") -> str:
     
     Provides a more helpful message to the user than a generic
     "unexpected error" when we can determine what likely went wrong.
+    
+    Args:
+        context: Error context from _infer_error_context. Supported values:
+            - physics_error, execution_error, comparison_error
+            - code_review_error, design_review_error, plan_review_error
+            - supervisor_error, backtrack_error, material_checkpoint_error
+            - stuck_awaiting_input, unknown_error
+        state: Current workflow state (uses current_stage_id for messages)
+    
+    Returns:
+        A formatted error message starting with "WORKFLOW RECOVERY NEEDED"
     """
     stage_id = state.get("current_stage_id", "unknown")
     
@@ -127,6 +163,18 @@ def _generate_error_question(context: str, state: "ReproState") -> str:
             "Workflow appears to have an unprocessed ask_user_trigger.\n\n"
             "This indicates a previous user interaction wasn't properly completed.\n"
             "The system will attempt to recover."
+        ),
+        "supervisor_error": (
+            "The supervisor node encountered an issue.\n\n"
+            "This may indicate a problem with workflow orchestration."
+        ),
+        "backtrack_error": (
+            "Backtracking encountered an issue.\n\n"
+            "The system may have trouble returning to a previous stage."
+        ),
+        "material_checkpoint_error": (
+            f"Material checkpoint validation encountered an issue for stage '{stage_id}'.\n\n"
+            "Material validation results may need user review."
         ),
         "unknown_error": (
             "An unexpected workflow error occurred.\n\n"

@@ -295,131 +295,242 @@ class TestInterruptPayload:
 
 
 class TestErrorContextHelpers:
-    """Tests for _infer_error_context and _generate_error_question helper functions."""
+    """Tests for _infer_error_context and _generate_error_question helper functions.
+    
+    The inference uses a priority-based lookup:
+    1. last_node_before_ask_user - most specific, set when nodes escalate
+    2. workflow_phase - indicates current pipeline position
+    3. ask_user_trigger - detects stuck state
+    4. Falls back to "unknown_error"
+    """
 
-    def test_infer_error_context_physics_error(self):
-        """Should return 'physics_error' when physics_verdict is None but execution_verdict exists."""
+    # ═══════════════════════════════════════════════════════════════════════
+    # Priority 1: last_node_before_ask_user tests
+    # ═══════════════════════════════════════════════════════════════════════
+
+    def test_infer_from_last_node_plan_review(self):
+        """Should return 'plan_review_error' when last_node is plan_review."""
         from src.agents.user_interaction import _infer_error_context
         
-        state = {
-            "physics_verdict": None,
-            "execution_verdict": "pass",  # Execution ran but physics didn't
-        }
-        
-        result = _infer_error_context(state)
-        assert result == "physics_error"
+        state = {"last_node_before_ask_user": "plan_review"}
+        assert _infer_error_context(state) == "plan_review_error"
 
-    def test_infer_error_context_execution_error(self):
-        """Should return 'execution_error' when execution_verdict is None."""
+    def test_infer_from_last_node_design_review(self):
+        """Should return 'design_review_error' when last_node is design_review."""
         from src.agents.user_interaction import _infer_error_context
         
-        state = {
-            "execution_verdict": None,
-        }
-        
-        result = _infer_error_context(state)
-        assert result == "execution_error"
+        state = {"last_node_before_ask_user": "design_review"}
+        assert _infer_error_context(state) == "design_review_error"
 
-    def test_infer_error_context_comparison_error(self):
-        """Should return 'comparison_error' when comparison_verdict is None."""
+    def test_infer_from_last_node_code_review(self):
+        """Should return 'code_review_error' when last_node is code_review."""
         from src.agents.user_interaction import _infer_error_context
         
-        state = {
-            "execution_verdict": "pass",
-            "physics_verdict": "pass",
-            "comparison_verdict": None,
-        }
-        
-        result = _infer_error_context(state)
-        assert result == "comparison_error"
+        state = {"last_node_before_ask_user": "code_review"}
+        assert _infer_error_context(state) == "code_review_error"
 
-    def test_infer_error_context_code_review_error(self):
-        """Should return 'code_review_error' when last_code_review_verdict is None."""
+    def test_infer_from_last_node_execution_check(self):
+        """Should return 'execution_error' when last_node is execution_check."""
         from src.agents.user_interaction import _infer_error_context
         
-        state = {
-            "execution_verdict": "pass",
-            "physics_verdict": "pass",
-            "comparison_verdict": "pass",
-            "last_code_review_verdict": None,
-        }
-        
-        result = _infer_error_context(state)
-        assert result == "code_review_error"
+        state = {"last_node_before_ask_user": "execution_check"}
+        assert _infer_error_context(state) == "execution_error"
 
-    def test_infer_error_context_design_review_error(self):
-        """Should return 'design_review_error' when last_design_review_verdict is None."""
+    def test_infer_from_last_node_physics_check(self):
+        """Should return 'physics_error' when last_node is physics_check."""
         from src.agents.user_interaction import _infer_error_context
         
-        state = {
-            "execution_verdict": "pass",
-            "physics_verdict": "pass",
-            "comparison_verdict": "pass",
-            "last_code_review_verdict": "approve",
-            "last_design_review_verdict": None,
-        }
-        
-        result = _infer_error_context(state)
-        assert result == "design_review_error"
+        state = {"last_node_before_ask_user": "physics_check"}
+        assert _infer_error_context(state) == "physics_error"
 
-    def test_infer_error_context_plan_review_error(self):
-        """Should return 'plan_review_error' when last_plan_review_verdict is None."""
+    def test_infer_from_last_node_comparison_check(self):
+        """Should return 'comparison_error' when last_node is comparison_check."""
         from src.agents.user_interaction import _infer_error_context
         
-        state = {
-            "execution_verdict": "pass",
-            "physics_verdict": "pass",
-            "comparison_verdict": "pass",
-            "last_code_review_verdict": "approve",
-            "last_design_review_verdict": "approve",
-            "last_plan_review_verdict": None,
-        }
-        
-        result = _infer_error_context(state)
-        assert result == "plan_review_error"
+        state = {"last_node_before_ask_user": "comparison_check"}
+        assert _infer_error_context(state) == "comparison_error"
 
-    def test_infer_error_context_stuck_awaiting_input(self):
+    def test_infer_from_last_node_supervisor(self):
+        """Should return 'supervisor_error' when last_node is supervisor."""
+        from src.agents.user_interaction import _infer_error_context
+        
+        state = {"last_node_before_ask_user": "supervisor"}
+        assert _infer_error_context(state) == "supervisor_error"
+
+    def test_infer_from_last_node_handle_backtrack(self):
+        """Should return 'backtrack_error' when last_node is handle_backtrack."""
+        from src.agents.user_interaction import _infer_error_context
+        
+        state = {"last_node_before_ask_user": "handle_backtrack"}
+        assert _infer_error_context(state) == "backtrack_error"
+
+    def test_infer_from_last_node_material_checkpoint(self):
+        """Should return 'material_checkpoint_error' when last_node is material_checkpoint."""
+        from src.agents.user_interaction import _infer_error_context
+        
+        state = {"last_node_before_ask_user": "material_checkpoint"}
+        assert _infer_error_context(state) == "material_checkpoint_error"
+
+    def test_infer_from_last_node_unknown_node(self):
+        """Should fall through to next priority when last_node is not recognized."""
+        from src.agents.user_interaction import _infer_error_context
+        
+        state = {"last_node_before_ask_user": "some_unknown_node"}
+        # No workflow_phase or trigger, so should return unknown_error
+        assert _infer_error_context(state) == "unknown_error"
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # Priority 2: workflow_phase fallback tests
+    # ═══════════════════════════════════════════════════════════════════════
+
+    def test_infer_from_phase_planning(self):
+        """Should return 'plan_review_error' when phase is planning."""
+        from src.agents.user_interaction import _infer_error_context
+        
+        state = {"workflow_phase": "planning"}
+        assert _infer_error_context(state) == "plan_review_error"
+
+    def test_infer_from_phase_plan_review(self):
+        """Should return 'plan_review_error' when phase is plan_review."""
+        from src.agents.user_interaction import _infer_error_context
+        
+        state = {"workflow_phase": "plan_review"}
+        assert _infer_error_context(state) == "plan_review_error"
+
+    def test_infer_from_phase_design(self):
+        """Should return 'design_review_error' when phase is design."""
+        from src.agents.user_interaction import _infer_error_context
+        
+        state = {"workflow_phase": "design"}
+        assert _infer_error_context(state) == "design_review_error"
+
+    def test_infer_from_phase_design_review(self):
+        """Should return 'design_review_error' when phase is design_review."""
+        from src.agents.user_interaction import _infer_error_context
+        
+        state = {"workflow_phase": "design_review"}
+        assert _infer_error_context(state) == "design_review_error"
+
+    def test_infer_from_phase_code_generation(self):
+        """Should return 'code_review_error' when phase is code_generation."""
+        from src.agents.user_interaction import _infer_error_context
+        
+        state = {"workflow_phase": "code_generation"}
+        assert _infer_error_context(state) == "code_review_error"
+
+    def test_infer_from_phase_code_review(self):
+        """Should return 'code_review_error' when phase is code_review."""
+        from src.agents.user_interaction import _infer_error_context
+        
+        state = {"workflow_phase": "code_review"}
+        assert _infer_error_context(state) == "code_review_error"
+
+    def test_infer_from_phase_execution_validation(self):
+        """Should return 'execution_error' when phase is execution_validation."""
+        from src.agents.user_interaction import _infer_error_context
+        
+        state = {"workflow_phase": "execution_validation"}
+        assert _infer_error_context(state) == "execution_error"
+
+    def test_infer_from_phase_physics_validation(self):
+        """Should return 'physics_error' when phase is physics_validation."""
+        from src.agents.user_interaction import _infer_error_context
+        
+        state = {"workflow_phase": "physics_validation"}
+        assert _infer_error_context(state) == "physics_error"
+
+    def test_infer_from_phase_analysis(self):
+        """Should return 'comparison_error' when phase is analysis."""
+        from src.agents.user_interaction import _infer_error_context
+        
+        state = {"workflow_phase": "analysis"}
+        assert _infer_error_context(state) == "comparison_error"
+
+    def test_infer_from_phase_comparison_validation(self):
+        """Should return 'comparison_error' when phase is comparison_validation."""
+        from src.agents.user_interaction import _infer_error_context
+        
+        state = {"workflow_phase": "comparison_validation"}
+        assert _infer_error_context(state) == "comparison_error"
+
+    def test_infer_from_phase_unknown_phase(self):
+        """Should fall through to next priority when phase is not recognized."""
+        from src.agents.user_interaction import _infer_error_context
+        
+        state = {"workflow_phase": "some_unknown_phase"}
+        # No trigger, so should return unknown_error
+        assert _infer_error_context(state) == "unknown_error"
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # Priority 3: stuck trigger test
+    # ═══════════════════════════════════════════════════════════════════════
+
+    def test_infer_stuck_when_trigger_set(self):
         """Should return 'stuck_awaiting_input' when ask_user_trigger is set."""
         from src.agents.user_interaction import _infer_error_context
         
-        state = {
-            "execution_verdict": "pass",
-            "physics_verdict": "pass",
-            "comparison_verdict": "pass",
-            "last_code_review_verdict": "approve",
-            "last_design_review_verdict": "approve",
-            "last_plan_review_verdict": "approve",
-            "ask_user_trigger": "context_overflow",
-        }
-        
-        result = _infer_error_context(state)
-        assert result == "stuck_awaiting_input"
+        state = {"ask_user_trigger": "some_trigger"}
+        assert _infer_error_context(state) == "stuck_awaiting_input"
 
-    def test_infer_error_context_unknown_error(self):
-        """Should return 'unknown_error' when no specific error is detected."""
-        from src.agents.user_interaction import _infer_error_context
-        
-        state = {
-            "execution_verdict": "pass",
-            "physics_verdict": "pass",
-            "comparison_verdict": "pass",
-            "last_code_review_verdict": "approve",
-            "last_design_review_verdict": "approve",
-            "last_plan_review_verdict": "approve",
-            # No ask_user_trigger set, so should be unknown_error
-        }
-        
-        result = _infer_error_context(state)
-        assert result == "unknown_error"
+    # ═══════════════════════════════════════════════════════════════════════
+    # Fallback test
+    # ═══════════════════════════════════════════════════════════════════════
 
-    def test_infer_error_context_empty_state(self):
-        """Should return 'execution_error' for empty state (execution_verdict is None)."""
+    def test_infer_unknown_when_no_info(self):
+        """Should return 'unknown_error' when no useful state information."""
         from src.agents.user_interaction import _infer_error_context
         
         state = {}
+        assert _infer_error_context(state) == "unknown_error"
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # Priority order tests
+    # ═══════════════════════════════════════════════════════════════════════
+
+    def test_last_node_takes_priority_over_phase(self):
+        """last_node_before_ask_user should take priority over workflow_phase."""
+        from src.agents.user_interaction import _infer_error_context
         
-        result = _infer_error_context(state)
-        assert result == "execution_error"
+        state = {
+            "last_node_before_ask_user": "physics_check",
+            "workflow_phase": "design",  # Would return design_review_error
+        }
+        assert _infer_error_context(state) == "physics_error"
+
+    def test_last_node_takes_priority_over_trigger(self):
+        """last_node_before_ask_user should take priority over ask_user_trigger."""
+        from src.agents.user_interaction import _infer_error_context
+        
+        state = {
+            "last_node_before_ask_user": "code_review",
+            "ask_user_trigger": "some_trigger",  # Would return stuck_awaiting_input
+        }
+        assert _infer_error_context(state) == "code_review_error"
+
+    def test_phase_takes_priority_over_trigger(self):
+        """workflow_phase should take priority over ask_user_trigger."""
+        from src.agents.user_interaction import _infer_error_context
+        
+        state = {
+            "workflow_phase": "code_review",
+            "ask_user_trigger": "some_trigger",  # Would return stuck_awaiting_input
+        }
+        assert _infer_error_context(state) == "code_review_error"
+
+    def test_all_three_priorities_last_node_wins(self):
+        """When all three are set, last_node_before_ask_user should win."""
+        from src.agents.user_interaction import _infer_error_context
+        
+        state = {
+            "last_node_before_ask_user": "supervisor",
+            "workflow_phase": "physics_validation",
+            "ask_user_trigger": "context_overflow",
+        }
+        assert _infer_error_context(state) == "supervisor_error"
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # _generate_error_question tests
+    # ═══════════════════════════════════════════════════════════════════════
 
     def test_generate_error_question_physics_error(self):
         """Should generate appropriate message for physics_error."""
@@ -455,6 +566,39 @@ class TestErrorContextHelpers:
         
         assert "WORKFLOW RECOVERY" in result
         assert "stuck" in result.lower() or "ask_user_trigger" in result
+
+    def test_generate_error_question_supervisor_error(self):
+        """Should generate appropriate message for supervisor_error."""
+        from src.agents.user_interaction import _generate_error_question
+        
+        state = {}
+        
+        result = _generate_error_question("supervisor_error", state)
+        
+        assert "WORKFLOW RECOVERY" in result
+        assert "supervisor" in result.lower()
+
+    def test_generate_error_question_backtrack_error(self):
+        """Should generate appropriate message for backtrack_error."""
+        from src.agents.user_interaction import _generate_error_question
+        
+        state = {}
+        
+        result = _generate_error_question("backtrack_error", state)
+        
+        assert "WORKFLOW RECOVERY" in result
+        assert "backtrack" in result.lower()
+
+    def test_generate_error_question_material_checkpoint_error(self):
+        """Should generate appropriate message for material_checkpoint_error."""
+        from src.agents.user_interaction import _generate_error_question
+        
+        state = {"current_stage_id": "stage_0"}
+        
+        result = _generate_error_question("material_checkpoint_error", state)
+        
+        assert "WORKFLOW RECOVERY" in result
+        assert "material" in result.lower()
 
     def test_generate_error_question_unknown_error(self):
         """Should generate generic message for unknown_error."""
@@ -504,14 +648,14 @@ class TestSafetyNetEmptyQuestions:
     """
 
     @patch("src.agents.user_interaction.interrupt")
-    def test_infers_execution_error_for_none_verdict(self, mock_interrupt):
-        """Should infer execution_error when execution_verdict is None."""
+    def test_infers_execution_error_from_workflow_phase(self, mock_interrupt):
+        """Should infer execution_error when workflow_phase is execution_validation."""
         mock_interrupt.return_value = "RETRY"
         
         state = {
             "pending_user_questions": [],
             "ask_user_trigger": "some_trigger",
-            "execution_verdict": None,  # This is the error condition
+            "workflow_phase": "execution_validation",  # Priority 2: workflow_phase
             "current_stage_id": "stage_1",
         }
         
@@ -527,15 +671,14 @@ class TestSafetyNetEmptyQuestions:
         assert "stage_1" in questions
 
     @patch("src.agents.user_interaction.interrupt")
-    def test_infers_physics_error_when_execution_passed(self, mock_interrupt):
-        """Should infer physics_error when physics_verdict is None but execution passed."""
+    def test_infers_physics_error_from_last_node(self, mock_interrupt):
+        """Should infer physics_error when last_node_before_ask_user is physics_check."""
         mock_interrupt.return_value = "RETRY"
         
         state = {
             "pending_user_questions": [],
             "ask_user_trigger": "some_trigger",
-            "execution_verdict": "pass",
-            "physics_verdict": None,  # Execution ran but physics didn't
+            "last_node_before_ask_user": "physics_check",  # Priority 1: last_node
             "current_stage_id": "stage_2",
         }
         

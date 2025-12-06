@@ -19,7 +19,7 @@ import sys
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Dict, List, Literal, Optional, Set
+from typing import List, Literal, Optional, Set
 
 
 # Project root
@@ -66,6 +66,7 @@ class Violation:
 @dataclass
 class QuestionsAssignment:
     """Represents a pending_user_questions assignment."""
+    filepath: str
     line: int
     function_name: Optional[str] = None
     is_empty_list: bool = False  # True if assigned to empty list []
@@ -116,6 +117,7 @@ class TriggerPairingAnalyzer(ast.NodeVisitor):
         self.filepath = filepath
         self.result = AnalysisResult(filepath=filepath)
         self.current_function: Optional[str] = None
+        self._processed_dicts: Set[int] = set()  # Track already-processed dict node ids
     
     def visit_FunctionDef(self, node: ast.FunctionDef):
         """Track which function we're in."""
@@ -141,12 +143,76 @@ class TriggerPairingAnalyzer(ast.NodeVisitor):
                 "pending_user_questions": [...],
             }
         """
+        # Skip if already processed by visit_Call or visit_AugAssign
+        if id(node) not in self._processed_dicts:
+            self._process_dict_for_triggers(node)
+        self.generic_visit(node)
+    
+    def visit_Call(self, node: ast.Call):
+        """
+        Check for dict update patterns like state.update({...}).
+        
+        This catches patterns like:
+            state.update({"ask_user_trigger": "foo", "pending_user_questions": [...]})
+            result |= {"ask_user_trigger": "bar"}  # Handled in visit_BinOp
+        """
+        # Check for .update() calls with dict argument
+        if (isinstance(node.func, ast.Attribute) and 
+            node.func.attr == "update" and 
+            len(node.args) >= 1 and 
+            isinstance(node.args[0], ast.Dict)):
+            dict_node = node.args[0]
+            # Mark as processed so visit_Dict skips it
+            self._processed_dicts.add(id(dict_node))
+            # Process the dict argument as if it were a dict literal
+            self._process_dict_for_triggers(dict_node, node.lineno)
+        
+        self.generic_visit(node)
+    
+    def visit_BinOp(self, node: ast.BinOp):
+        """
+        Check for dict merge patterns like a | b where b is a dict.
+        
+        This catches patterns like:
+            result = base | {"ask_user_trigger": "foo"}
+        """
+        # Check for | with dict on right side (Python 3.9+)
+        if isinstance(node.op, ast.BitOr) and isinstance(node.right, ast.Dict):
+            dict_node = node.right
+            # Mark as processed so visit_Dict skips it
+            self._processed_dicts.add(id(dict_node))
+            self._process_dict_for_triggers(dict_node, node.lineno)
+        
+        self.generic_visit(node)
+    
+    def visit_AugAssign(self, node: ast.AugAssign):
+        """
+        Check for augmented assignment with dict merge: result |= {...}
+        
+        This catches patterns like:
+            result |= {"ask_user_trigger": "foo"}
+        """
+        if isinstance(node.op, ast.BitOr) and isinstance(node.value, ast.Dict):
+            dict_node = node.value
+            # Mark as processed so visit_Dict skips it
+            self._processed_dicts.add(id(dict_node))
+            self._process_dict_for_triggers(dict_node, node.lineno)
+        
+        self.generic_visit(node)
+    
+    def _process_dict_for_triggers(self, dict_node: ast.Dict, line_override: Optional[int] = None):
+        """
+        Process a dict node for trigger/questions assignments.
+        
+        This is a helper used by visit_Dict, visit_Call (for .update()),
+        and visit_AugAssign (for |=).
+        """
         keys: Set[str] = set()
         trigger_value_type: Optional[str] = None
         trigger_value: Optional[str] = None
         questions_value: Optional[ast.AST] = None
         
-        for key, value in zip(node.keys, node.values):
+        for key, value in zip(dict_node.keys, dict_node.values):
             if isinstance(key, ast.Constant) and isinstance(key.value, str):
                 keys.add(key.value)
                 
@@ -155,15 +221,16 @@ class TriggerPairingAnalyzer(ast.NodeVisitor):
                 elif key.value == "pending_user_questions":
                     questions_value = value
         
+        line = line_override or dict_node.lineno
+        
         if "ask_user_trigger" in keys:
-            # Check if questions exist AND are non-empty
             has_questions = "pending_user_questions" in keys
             is_empty_questions = has_questions and self._is_empty_list(questions_value)
             
             assignment = TriggerAssignment(
                 filepath=self.filepath,
-                line=node.lineno,
-                col=node.col_offset,
+                line=line,
+                col=dict_node.col_offset,
                 value_type=trigger_value_type or "other",
                 value=trigger_value,
                 in_dict_literal=True,
@@ -175,12 +242,11 @@ class TriggerPairingAnalyzer(ast.NodeVisitor):
         if "pending_user_questions" in keys:
             is_empty = self._is_empty_list(questions_value)
             self.result.questions_assignments.append(QuestionsAssignment(
-                line=node.lineno,
+                filepath=self.filepath,
+                line=line,
                 function_name=self.current_function,
                 is_empty_list=is_empty,
             ))
-        
-        self.generic_visit(node)
     
     def visit_Assign(self, node: ast.Assign):
         """
@@ -210,6 +276,7 @@ class TriggerPairingAnalyzer(ast.NodeVisitor):
             elif key_name == "pending_user_questions":
                 is_empty = self._is_empty_list(node.value)
                 self.result.questions_assignments.append(QuestionsAssignment(
+                    filepath=self.filepath,
                     line=node.lineno,
                     function_name=self.current_function,
                     is_empty_list=is_empty,
@@ -286,6 +353,10 @@ def analyze_source(source: str, filepath: str = "<string>") -> AnalysisResult:
     except SyntaxError as e:
         result = AnalysisResult(filepath=filepath)
         result.parse_errors.append(f"Syntax error: {e}")
+        return result
+    except Exception as e:
+        result = AnalysisResult(filepath=filepath)
+        result.parse_errors.append(f"Error analyzing source: {e}")
         return result
 
 
@@ -375,7 +446,7 @@ def check_pairing_violations(result: AnalysisResult) -> List[Violation]:
         if q.is_empty_list:
             violations.append(Violation(
                 type=ViolationType.EMPTY_QUESTIONS,
-                filepath=result.filepath,
+                filepath=q.filepath,
                 line=q.line,
                 message="pending_user_questions is empty [] - users will see no prompt",
                 function_name=q.function_name,
@@ -473,6 +544,9 @@ def validate_files(filepaths: List[Path]) -> ValidationResult:
         result.questions_count += file_result.questions_count
         result.violations.extend(file_result.violations)
         result.parse_errors.extend(file_result.parse_errors)
+        # Copy verbose mode data
+        result.all_trigger_assignments.extend(file_result.all_trigger_assignments)
+        result.all_questions_assignments.extend(file_result.all_questions_assignments)
     
     return result
 
@@ -584,9 +658,19 @@ Examples:
                 print(f"  • {err}")
         
         if args.verbose:
+            # Build set of violation locations to determine status
+            error_locations = {(v.filepath, v.line) for v in errors}
+            warning_locations = {(v.filepath, v.line) for v in warnings}
+            
             print(f"\n📋 All Trigger Assignments ({len(result.all_trigger_assignments)}):")
             for t in result.all_trigger_assignments:
-                status = "✓" if t.value_type == "none" or t.paired_in_dict else "?"
+                loc = (t.filepath, t.line)
+                if loc in error_locations:
+                    status = "❌"
+                elif loc in warning_locations:
+                    status = "⚠️"
+                else:
+                    status = "✓"
                 func = f" [{t.function_name}]" if t.function_name else " [global]"
                 print(f"  {status} {t.filepath}:{t.line}{func} = {t.value_type}:{t.value}")
             
@@ -595,7 +679,7 @@ Examples:
                 status = "⚠️" if q.is_empty_list else "✓"
                 func = f" [{q.function_name}]" if q.function_name else " [global]"
                 empty_note = " (EMPTY)" if q.is_empty_list else ""
-                print(f"  {status} Line {q.line}{func}{empty_note}")
+                print(f"  {status} {q.filepath}:{q.line}{func}{empty_note}")
         
         if errors:
             print(f"\n❌ ERRORS ({len(errors)}):")
