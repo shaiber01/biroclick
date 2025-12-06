@@ -529,89 +529,248 @@ class TestErrorContextHelpers:
         assert _infer_error_context(state) == "supervisor_error"
 
     # ═══════════════════════════════════════════════════════════════════════
+    # Edge cases: Empty strings, None values, case sensitivity
+    # ═══════════════════════════════════════════════════════════════════════
+
+    def test_empty_string_last_node_falls_through(self):
+        """Empty string last_node should fall through to workflow_phase."""
+        from src.agents.user_interaction import _infer_error_context
+        
+        state = {
+            "last_node_before_ask_user": "",  # Empty string is truthy but not in mapping
+            "workflow_phase": "physics_validation",
+        }
+        # Empty string should NOT match any node, so should fall through to phase
+        assert _infer_error_context(state) == "physics_error"
+
+    def test_empty_string_workflow_phase_falls_through(self):
+        """Empty string workflow_phase should fall through to trigger check."""
+        from src.agents.user_interaction import _infer_error_context
+        
+        state = {
+            "workflow_phase": "",  # Empty string is truthy but not in mapping
+            "ask_user_trigger": "some_trigger",
+        }
+        # Empty string should NOT match any phase, so should fall through to trigger
+        assert _infer_error_context(state) == "stuck_awaiting_input"
+
+    def test_none_last_node_falls_through(self):
+        """Explicit None last_node should fall through to workflow_phase."""
+        from src.agents.user_interaction import _infer_error_context
+        
+        state = {
+            "last_node_before_ask_user": None,
+            "workflow_phase": "execution_validation",
+        }
+        assert _infer_error_context(state) == "execution_error"
+
+    def test_none_workflow_phase_falls_through(self):
+        """Explicit None workflow_phase should fall through to trigger check."""
+        from src.agents.user_interaction import _infer_error_context
+        
+        state = {
+            "last_node_before_ask_user": None,
+            "workflow_phase": None,
+            "ask_user_trigger": "context_overflow",
+        }
+        assert _infer_error_context(state) == "stuck_awaiting_input"
+
+    def test_case_sensitive_last_node_no_match(self):
+        """Node names are case-sensitive - wrong case should not match."""
+        from src.agents.user_interaction import _infer_error_context
+        
+        # These should NOT match because case is wrong
+        test_cases = [
+            ("Physics_check", "unknown_error"),  # Capital P
+            ("PHYSICS_CHECK", "unknown_error"),  # All caps
+            ("PhysicsCheck", "unknown_error"),   # CamelCase
+            ("physics_Check", "unknown_error"),  # Mixed case
+        ]
+        for wrong_case_node, expected in test_cases:
+            state = {"last_node_before_ask_user": wrong_case_node}
+            result = _infer_error_context(state)
+            assert result == expected, f"'{wrong_case_node}' should return '{expected}', got '{result}'"
+
+    def test_case_sensitive_workflow_phase_no_match(self):
+        """Workflow phases are case-sensitive - wrong case should not match."""
+        from src.agents.user_interaction import _infer_error_context
+        
+        # These should NOT match because case is wrong
+        test_cases = [
+            ("Physics_validation", "unknown_error"),  # Capital P
+            ("PHYSICS_VALIDATION", "unknown_error"),  # All caps
+            ("PhysicsValidation", "unknown_error"),   # CamelCase
+        ]
+        for wrong_case_phase, expected in test_cases:
+            state = {"workflow_phase": wrong_case_phase}
+            result = _infer_error_context(state)
+            assert result == expected, f"'{wrong_case_phase}' should return '{expected}', got '{result}'"
+
+    def test_whitespace_in_last_node_no_match(self):
+        """Whitespace in node name should not match."""
+        from src.agents.user_interaction import _infer_error_context
+        
+        test_cases = [
+            " physics_check",    # Leading space
+            "physics_check ",    # Trailing space
+            " physics_check ",   # Both
+            "physics _check",    # Internal space
+        ]
+        for bad_node in test_cases:
+            state = {"last_node_before_ask_user": bad_node}
+            result = _infer_error_context(state)
+            assert result == "unknown_error", f"'{bad_node}' should return 'unknown_error', got '{result}'"
+
+    # ═══════════════════════════════════════════════════════════════════════
     # _generate_error_question tests
     # ═══════════════════════════════════════════════════════════════════════
 
     def test_generate_error_question_physics_error(self):
-        """Should generate appropriate message for physics_error."""
+        """Should generate appropriate message for physics_error with exact content."""
         from src.agents.user_interaction import _generate_error_question
         
         state = {"current_stage_id": "stage_1"}
         
         result = _generate_error_question("physics_error", state)
         
-        assert "WORKFLOW RECOVERY" in result
-        assert "Physics validation failed" in result
-        assert "stage_1" in result
+        # Check message structure
+        assert result.startswith("WORKFLOW RECOVERY NEEDED\n\n")
+        # Check specific content from the error message
+        assert "Physics validation failed to run for stage 'stage_1'" in result
+        assert "validation node was skipped or encountered an error" in result
+        assert "physics checks were not performed" in result
 
     def test_generate_error_question_execution_error(self):
-        """Should generate appropriate message for execution_error."""
+        """Should generate appropriate message for execution_error with exact content."""
         from src.agents.user_interaction import _generate_error_question
         
         state = {"current_stage_id": "stage_2"}
         
         result = _generate_error_question("execution_error", state)
         
-        assert "WORKFLOW RECOVERY" in result
-        assert "Execution validation failed" in result
-        assert "stage_2" in result
+        # Check message structure
+        assert result.startswith("WORKFLOW RECOVERY NEEDED\n\n")
+        # Check specific content from the error message
+        assert "Execution validation failed to run for stage 'stage_2'" in result
+        assert "simulation may not have completed properly" in result
+
+    def test_generate_error_question_comparison_error(self):
+        """Should generate appropriate message for comparison_error."""
+        from src.agents.user_interaction import _generate_error_question
+        
+        state = {"current_stage_id": "stage_3"}
+        
+        result = _generate_error_question("comparison_error", state)
+        
+        assert result.startswith("WORKFLOW RECOVERY NEEDED\n\n")
+        assert "Comparison check failed to run for stage 'stage_3'" in result
+        assert "Results analysis may not have completed" in result
+
+    def test_generate_error_question_code_review_error(self):
+        """Should generate appropriate message for code_review_error."""
+        from src.agents.user_interaction import _generate_error_question
+        
+        state = {"current_stage_id": "stage_1"}
+        
+        result = _generate_error_question("code_review_error", state)
+        
+        assert result.startswith("WORKFLOW RECOVERY NEEDED\n\n")
+        assert "Code review failed to run for stage 'stage_1'" in result
+        assert "generated code may not have been reviewed" in result
+
+    def test_generate_error_question_design_review_error(self):
+        """Should generate appropriate message for design_review_error."""
+        from src.agents.user_interaction import _generate_error_question
+        
+        state = {"current_stage_id": "stage_1"}
+        
+        result = _generate_error_question("design_review_error", state)
+        
+        assert result.startswith("WORKFLOW RECOVERY NEEDED\n\n")
+        assert "Design review failed to run for stage 'stage_1'" in result
+        assert "simulation design may not have been validated" in result
+
+    def test_generate_error_question_plan_review_error(self):
+        """Should generate appropriate message for plan_review_error (no stage_id)."""
+        from src.agents.user_interaction import _generate_error_question
+        
+        state = {"current_stage_id": "stage_1"}  # Should NOT appear in message
+        
+        result = _generate_error_question("plan_review_error", state)
+        
+        assert result.startswith("WORKFLOW RECOVERY NEEDED\n\n")
+        assert "Plan review failed to run" in result
+        assert "reproduction plan may not have been validated" in result
+        # plan_review_error message does NOT include stage_id
+        assert "stage_1" not in result
 
     def test_generate_error_question_stuck_awaiting_input(self):
-        """Should generate appropriate message for stuck_awaiting_input."""
+        """Should generate appropriate message for stuck_awaiting_input with exact content."""
         from src.agents.user_interaction import _generate_error_question
         
         state = {}
         
         result = _generate_error_question("stuck_awaiting_input", state)
         
-        assert "WORKFLOW RECOVERY" in result
-        assert "stuck" in result.lower() or "ask_user_trigger" in result
+        assert result.startswith("WORKFLOW RECOVERY NEEDED\n\n")
+        # Check specific content - must match the actual message
+        assert "unprocessed ask_user_trigger" in result
+        assert "previous user interaction wasn't properly completed" in result
+        assert "system will attempt to recover" in result
 
     def test_generate_error_question_supervisor_error(self):
-        """Should generate appropriate message for supervisor_error."""
+        """Should generate appropriate message for supervisor_error with exact content."""
         from src.agents.user_interaction import _generate_error_question
         
         state = {}
         
         result = _generate_error_question("supervisor_error", state)
         
-        assert "WORKFLOW RECOVERY" in result
-        assert "supervisor" in result.lower()
+        assert result.startswith("WORKFLOW RECOVERY NEEDED\n\n")
+        # Check specific content - must match the actual message
+        assert "supervisor node encountered an issue" in result
+        assert "problem with workflow orchestration" in result
 
     def test_generate_error_question_backtrack_error(self):
-        """Should generate appropriate message for backtrack_error."""
+        """Should generate appropriate message for backtrack_error with exact content."""
         from src.agents.user_interaction import _generate_error_question
         
         state = {}
         
         result = _generate_error_question("backtrack_error", state)
         
-        assert "WORKFLOW RECOVERY" in result
-        assert "backtrack" in result.lower()
+        assert result.startswith("WORKFLOW RECOVERY NEEDED\n\n")
+        # Check specific content - must match the actual message
+        assert "Backtracking encountered an issue" in result
+        assert "trouble returning to a previous stage" in result
 
     def test_generate_error_question_material_checkpoint_error(self):
-        """Should generate appropriate message for material_checkpoint_error."""
+        """Should generate appropriate message for material_checkpoint_error with exact content."""
         from src.agents.user_interaction import _generate_error_question
         
         state = {"current_stage_id": "stage_0"}
         
         result = _generate_error_question("material_checkpoint_error", state)
         
-        assert "WORKFLOW RECOVERY" in result
-        assert "material" in result.lower()
+        assert result.startswith("WORKFLOW RECOVERY NEEDED\n\n")
+        # Check specific content - must match the actual message
+        assert "Material checkpoint validation encountered an issue for stage 'stage_0'" in result
+        assert "Material validation results may need user review" in result
 
     def test_generate_error_question_unknown_error(self):
-        """Should generate generic message for unknown_error."""
+        """Should generate generic message for unknown_error with exact content."""
         from src.agents.user_interaction import _generate_error_question
         
         state = {}
         
         result = _generate_error_question("unknown_error", state)
         
-        assert "WORKFLOW RECOVERY" in result
-        assert "unexpected" in result.lower()
+        assert result.startswith("WORKFLOW RECOVERY NEEDED\n\n")
+        # Check specific content - must match the actual message
+        assert "unexpected workflow error occurred" in result
+        assert "Unable to determine the specific cause" in result
 
-    def test_generate_error_question_unknown_context(self):
+    def test_generate_error_question_unknown_context_falls_back(self):
         """Should fall back to unknown_error message for unrecognized context."""
         from src.agents.user_interaction import _generate_error_question
         
@@ -619,8 +778,9 @@ class TestErrorContextHelpers:
         
         result = _generate_error_question("some_unrecognized_context", state)
         
-        assert "WORKFLOW RECOVERY" in result
-        assert "unexpected" in result.lower()
+        # Should get the SAME message as unknown_error
+        expected = _generate_error_question("unknown_error", state)
+        assert result == expected, f"Unrecognized context should produce same message as 'unknown_error'"
 
     def test_generate_error_question_uses_default_stage_id(self):
         """Should use 'unknown' as default stage_id when not in state."""
@@ -630,7 +790,39 @@ class TestErrorContextHelpers:
         
         result = _generate_error_question("physics_error", state)
         
-        assert "unknown" in result
+        # Should interpolate 'unknown' into the message
+        assert "for stage 'unknown'" in result
+
+    def test_generate_error_question_stage_id_in_all_relevant_messages(self):
+        """Messages that should include stage_id must interpolate it correctly."""
+        from src.agents.user_interaction import _generate_error_question
+        
+        state = {"current_stage_id": "test_stage_xyz"}
+        
+        # These contexts should include the stage_id in the message
+        contexts_with_stage_id = [
+            "physics_error",
+            "execution_error", 
+            "comparison_error",
+            "code_review_error",
+            "design_review_error",
+            "material_checkpoint_error",
+        ]
+        
+        for context in contexts_with_stage_id:
+            result = _generate_error_question(context, state)
+            assert "test_stage_xyz" in result, f"Context '{context}' should include stage_id in message"
+
+    def test_generate_error_question_stage_id_not_in_plan_review(self):
+        """plan_review_error message should NOT include stage_id."""
+        from src.agents.user_interaction import _generate_error_question
+        
+        state = {"current_stage_id": "test_stage_xyz"}
+        
+        result = _generate_error_question("plan_review_error", state)
+        
+        # plan_review is about the overall plan, not a specific stage
+        assert "test_stage_xyz" not in result, "plan_review_error should not include stage_id"
 
 
 class TestSafetyNetEmptyQuestions:

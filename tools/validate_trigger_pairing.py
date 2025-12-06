@@ -19,7 +19,7 @@ import sys
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import List, Literal, Optional, Set
+from typing import List, Literal, Optional, Set, Tuple
 
 
 # Project root
@@ -70,6 +70,7 @@ class QuestionsAssignment:
     line: int
     function_name: Optional[str] = None
     is_empty_list: bool = False  # True if assigned to empty list []
+    is_clearing_pattern: bool = False  # True if part of a clearing dict (trigger=None + questions=[])
 
 
 @dataclass
@@ -82,7 +83,7 @@ class AnalysisResult:
     
     @property
     def questions_lines(self) -> Set[int]:
-        """Backward compatibility: return set of all question lines."""
+        """Backward compatibility: return set of all question lines (includes empty lists)."""
         return {q.line for q in self.questions_assignments}
 
 
@@ -93,10 +94,14 @@ class ValidationResult:
     files_analyzed: int = 0
     trigger_count: int = 0  # Non-clearing trigger assignments
     questions_count: int = 0  # Non-empty questions assignments
+    clearing_count: int = 0  # Clearing patterns (trigger=None)
     parse_errors: List[str] = field(default_factory=list)
     # For verbose mode
     all_trigger_assignments: List[TriggerAssignment] = field(default_factory=list)
     all_questions_assignments: List[QuestionsAssignment] = field(default_factory=list)
+    files_with_triggers: Set[str] = field(default_factory=set)  # Files containing trigger assignments
+    files_with_questions: Set[str] = field(default_factory=set)  # Files containing questions assignments
+    analyzed_files: List[str] = field(default_factory=list)  # All files that were analyzed
 
 
 # =============================================================================
@@ -241,11 +246,18 @@ class TriggerPairingAnalyzer(ast.NodeVisitor):
         
         if "pending_user_questions" in keys:
             is_empty = self._is_empty_list(questions_value)
+            # Detect clearing pattern: trigger=None + questions=[] in same dict
+            is_clearing = (
+                is_empty and 
+                "ask_user_trigger" in keys and 
+                trigger_value_type == "none"
+            )
             self.result.questions_assignments.append(QuestionsAssignment(
                 filepath=self.filepath,
                 line=line,
                 function_name=self.current_function,
                 is_empty_list=is_empty,
+                is_clearing_pattern=is_clearing,
             ))
     
     def visit_Assign(self, node: ast.Assign):
@@ -291,7 +303,7 @@ class TriggerPairingAnalyzer(ast.NodeVisitor):
                 return node.slice.value
         return None
     
-    def _classify_value(self, node: ast.AST) -> tuple:
+    def _classify_value(self, node: ast.AST) -> Tuple[str, Optional[str]]:
         """
         Classify what kind of value is being assigned.
         
@@ -388,7 +400,7 @@ def check_pairing_violations(result: AnalysisResult) -> List[Violation]:
             # Flag for manual review (warning, not error)
             violations.append(Violation(
                 type=ViolationType.SUSPICIOUS_VARIABLE,
-                filepath=result.filepath,
+                filepath=assignment.filepath,
                 line=assignment.line,
                 message=(
                     f"ask_user_trigger assigned from variable '{assignment.value}' - "
@@ -404,7 +416,7 @@ def check_pairing_violations(result: AnalysisResult) -> List[Violation]:
             if not assignment.paired_in_dict:
                 violations.append(Violation(
                     type=ViolationType.UNPAIRED_IN_DICT,
-                    filepath=result.filepath,
+                    filepath=assignment.filepath,
                     line=assignment.line,
                     message=(
                         f"ask_user_trigger='{assignment.value}' in dict literal "
@@ -431,7 +443,7 @@ def check_pairing_violations(result: AnalysisResult) -> List[Violation]:
             func_context = f" in function '{assignment.function_name}'" if assignment.function_name else ""
             violations.append(Violation(
                 type=ViolationType.UNPAIRED_SUBSCRIPT,
-                filepath=result.filepath,
+                filepath=assignment.filepath,
                 line=assignment.line,
                 message=(
                     f"ask_user_trigger='{assignment.value}' set but no "
@@ -442,8 +454,28 @@ def check_pairing_violations(result: AnalysisResult) -> List[Violation]:
             ))
     
     # Rule 5: Check for empty questions lists (warning)
+    # Skip if it's a clearing pattern (trigger=None + questions=[] together)
+    # Also check for SUBSCRIPT clearing patterns: trigger=None nearby on separate lines
+    
+    # Get all clearing trigger assignments (trigger=None) for subscript clearing detection
+    clearing_triggers = [
+        t for t in result.trigger_assignments 
+        if t.value_type == "none" and not t.in_dict_literal
+    ]
+    
     for q in result.questions_assignments:
-        if q.is_empty_list:
+        if q.is_empty_list and not q.is_clearing_pattern:
+            # Check for subscript clearing pattern:
+            # Is there a trigger=None assignment within ±5 lines in the same function?
+            is_subscript_clearing = any(
+                t.function_name == q.function_name and abs(t.line - q.line) <= 5
+                for t in clearing_triggers
+            )
+            
+            if is_subscript_clearing:
+                # This is a subscript clearing pattern - skip warning
+                continue
+            
             violations.append(Violation(
                 type=ViolationType.EMPTY_QUESTIONS,
                 filepath=q.filepath,
@@ -466,15 +498,24 @@ def validate_file(filepath: Path) -> ValidationResult:
     
     analysis = analyze_file(filepath)
     result.files_analyzed = 1
+    result.analyzed_files.append(str(filepath))
     result.parse_errors.extend(analysis.parse_errors)
     
     # Store all assignments for verbose mode
     result.all_trigger_assignments.extend(analysis.trigger_assignments)
     result.all_questions_assignments.extend(analysis.questions_assignments)
     
-    # Count non-clearing trigger assignments
+    # Track files with triggers/questions
+    if analysis.trigger_assignments:
+        result.files_with_triggers.add(str(filepath))
+    if analysis.questions_assignments:
+        result.files_with_questions.add(str(filepath))
+    
+    # Count trigger assignments by type
     for assignment in analysis.trigger_assignments:
-        if assignment.value_type != "none":
+        if assignment.value_type == "none":
+            result.clearing_count += 1
+        else:
             result.trigger_count += 1
     
     # Count non-empty questions assignments
@@ -506,18 +547,27 @@ def validate_src_directory(src_dir: Optional[Path] = None) -> ValidationResult:
     
     result = ValidationResult()
     
-    for filepath in src_dir.rglob("*.py"):
+    for filepath in sorted(src_dir.rglob("*.py")):
         analysis = analyze_file(filepath)
         result.files_analyzed += 1
+        result.analyzed_files.append(str(filepath))
         result.parse_errors.extend(analysis.parse_errors)
         
         # Store all assignments for verbose mode
         result.all_trigger_assignments.extend(analysis.trigger_assignments)
         result.all_questions_assignments.extend(analysis.questions_assignments)
         
-        # Count non-clearing trigger assignments
+        # Track files with triggers/questions
+        if analysis.trigger_assignments:
+            result.files_with_triggers.add(str(filepath))
+        if analysis.questions_assignments:
+            result.files_with_questions.add(str(filepath))
+        
+        # Count trigger assignments by type
         for assignment in analysis.trigger_assignments:
-            if assignment.value_type != "none":
+            if assignment.value_type == "none":
+                result.clearing_count += 1
+            else:
                 result.trigger_count += 1
         
         # Count non-empty questions assignments
@@ -542,11 +592,15 @@ def validate_files(filepaths: List[Path]) -> ValidationResult:
         result.files_analyzed += file_result.files_analyzed
         result.trigger_count += file_result.trigger_count
         result.questions_count += file_result.questions_count
+        result.clearing_count += file_result.clearing_count
         result.violations.extend(file_result.violations)
         result.parse_errors.extend(file_result.parse_errors)
         # Copy verbose mode data
         result.all_trigger_assignments.extend(file_result.all_trigger_assignments)
         result.all_questions_assignments.extend(file_result.all_questions_assignments)
+        result.files_with_triggers.update(file_result.files_with_triggers)
+        result.files_with_questions.update(file_result.files_with_questions)
+        result.analyzed_files.extend(file_result.analyzed_files)
     
     return result
 
@@ -630,6 +684,9 @@ Examples:
             "files_analyzed": result.files_analyzed,
             "trigger_count": result.trigger_count,
             "questions_count": result.questions_count,
+            "clearing_count": result.clearing_count,
+            "files_with_triggers": sorted(result.files_with_triggers),
+            "files_with_questions": sorted(result.files_with_questions),
             "violations": [
                 {
                     "type": v.type.value,
@@ -642,44 +699,124 @@ Examples:
                 for v in result.violations
             ],
             "parse_errors": result.parse_errors,
+            "all_trigger_assignments": [
+                {
+                    "filepath": t.filepath,
+                    "line": t.line,
+                    "function_name": t.function_name,
+                    "value_type": t.value_type,
+                    "value": t.value,
+                    "in_dict_literal": t.in_dict_literal,
+                    "paired_in_dict": t.paired_in_dict,
+                }
+                for t in result.all_trigger_assignments
+            ],
+            "all_questions_assignments": [
+                {
+                    "filepath": q.filepath,
+                    "line": q.line,
+                    "function_name": q.function_name,
+                    "is_empty_list": q.is_empty_list,
+                    "is_clearing_pattern": q.is_clearing_pattern,
+                }
+                for q in result.all_questions_assignments
+            ],
         }
         print(json.dumps(output, indent=2))
     else:
         # Human-readable output
         print(f"\nTrigger Pairing Validation")
         print(f"{'=' * 50}")
-        print(f"Files analyzed: {result.files_analyzed}")
-        print(f"Trigger assignments (non-clearing): {result.trigger_count}")
-        print(f"Questions assignments: {result.questions_count}")
+        
+        # Summary stats
+        print(f"\n📊 Summary:")
+        print(f"  Files analyzed: {result.files_analyzed}")
+        print(f"  Files with triggers: {len(result.files_with_triggers)}")
+        print(f"  Files with questions: {len(result.files_with_questions)}")
+        print(f"  Trigger assignments (non-clearing): {result.trigger_count}")
+        print(f"  Questions assignments (non-empty): {result.questions_count}")
+        print(f"  Clearing assignments (trigger=None): {result.clearing_count}")
         
         if result.parse_errors:
-            print(f"\nParse errors:")
+            print(f"\n🔴 Parse errors:")
             for err in result.parse_errors:
                 print(f"  • {err}")
         
+        # Build set of violation locations to determine status
+        error_locations = {(v.filepath, v.line) for v in errors}
+        warning_locations = {(v.filepath, v.line) for v in warnings}
+        
+        # Group assignments by file for display
+        triggers_by_file: dict = {}
+        for t in result.all_trigger_assignments:
+            if t.filepath not in triggers_by_file:
+                triggers_by_file[t.filepath] = []
+            triggers_by_file[t.filepath].append(t)
+        
+        questions_by_file: dict = {}
+        for q in result.all_questions_assignments:
+            if q.filepath not in questions_by_file:
+                questions_by_file[q.filepath] = []
+            questions_by_file[q.filepath].append(q)
+        
+        # Show files with triggers
+        print(f"\n📁 Files with trigger assignments ({len(triggers_by_file)}):")
+        for filepath in sorted(triggers_by_file.keys()):
+            assignments = triggers_by_file[filepath]
+            non_clearing = [t for t in assignments if t.value_type != "none"]
+            clearing = [t for t in assignments if t.value_type == "none"]
+            short_path = filepath.replace(str(PROJECT_ROOT) + "/", "")
+            print(f"  • {short_path}: {len(non_clearing)} trigger(s), {len(clearing)} clearing")
+        
+        # Show files with questions
+        print(f"\n📁 Files with questions assignments ({len(questions_by_file)}):")
+        for filepath in sorted(questions_by_file.keys()):
+            assignments = questions_by_file[filepath]
+            non_empty = [q for q in assignments if not q.is_empty_list]
+            empty = [q for q in assignments if q.is_empty_list]
+            clearing = [q for q in assignments if q.is_clearing_pattern]
+            short_path = filepath.replace(str(PROJECT_ROOT) + "/", "")
+            print(f"  • {short_path}: {len(non_empty)} question(s), {len(empty)} empty ({len(clearing)} clearing)")
+        
         if args.verbose:
-            # Build set of violation locations to determine status
-            error_locations = {(v.filepath, v.line) for v in errors}
-            warning_locations = {(v.filepath, v.line) for v in warnings}
+            print(f"\n{'=' * 50}")
+            print(f"📋 Detailed Trigger Assignments ({len(result.all_trigger_assignments)}):")
+            for filepath in sorted(triggers_by_file.keys()):
+                short_path = filepath.replace(str(PROJECT_ROOT) + "/", "")
+                print(f"\n  {short_path}:")
+                for t in sorted(triggers_by_file[filepath], key=lambda x: x.line):
+                    loc = (t.filepath, t.line)
+                    if loc in error_locations:
+                        status = "❌"
+                    elif loc in warning_locations:
+                        status = "⚠️"
+                    elif t.value_type == "none":
+                        status = "🧹"  # Clearing
+                    else:
+                        status = "✓"
+                    func = f" [{t.function_name}]" if t.function_name else " [global]"
+                    value_display = f"{t.value_type}" if t.value_type == "none" else f"{t.value_type}:'{t.value}'"
+                    print(f"    {status} Line {t.line}{func} = {value_display}")
             
-            print(f"\n📋 All Trigger Assignments ({len(result.all_trigger_assignments)}):")
-            for t in result.all_trigger_assignments:
-                loc = (t.filepath, t.line)
-                if loc in error_locations:
-                    status = "❌"
-                elif loc in warning_locations:
-                    status = "⚠️"
-                else:
-                    status = "✓"
-                func = f" [{t.function_name}]" if t.function_name else " [global]"
-                print(f"  {status} {t.filepath}:{t.line}{func} = {t.value_type}:{t.value}")
-            
-            print(f"\n📋 All Questions Assignments ({len(result.all_questions_assignments)}):")
-            for q in result.all_questions_assignments:
-                status = "⚠️" if q.is_empty_list else "✓"
-                func = f" [{q.function_name}]" if q.function_name else " [global]"
-                empty_note = " (EMPTY)" if q.is_empty_list else ""
-                print(f"  {status} {q.filepath}:{q.line}{func}{empty_note}")
+            print(f"\n📋 Detailed Questions Assignments ({len(result.all_questions_assignments)}):")
+            for filepath in sorted(questions_by_file.keys()):
+                short_path = filepath.replace(str(PROJECT_ROOT) + "/", "")
+                print(f"\n  {short_path}:")
+                for q in sorted(questions_by_file[filepath], key=lambda x: x.line):
+                    if q.is_clearing_pattern:
+                        status = "🧹"  # Clearing pattern
+                    elif q.is_empty_list:
+                        status = "⚠️"
+                    else:
+                        status = "✓"
+                    func = f" [{q.function_name}]" if q.function_name else " [global]"
+                    notes = []
+                    if q.is_empty_list:
+                        notes.append("EMPTY")
+                    if q.is_clearing_pattern:
+                        notes.append("clearing")
+                    note_str = f" ({', '.join(notes)})" if notes else ""
+                    print(f"    {status} Line {q.line}{func}{note_str}")
         
         if errors:
             print(f"\n❌ ERRORS ({len(errors)}):")

@@ -336,10 +336,12 @@ def ask_user_node(state: ReproState) -> Dict[str, Any]:
             "original_user_questions": original_questions,
         }
     
-    # Store response and pass to supervisor for validation/routing
+    # Store response and pass to supervisor for validation/routing.
+    # Empty questions is intentional: user already answered, we're forwarding their
+    # response to supervisor. Trigger is only re-set if safety_net_triggered.
     result = {
         "user_responses": {**(state.get("user_responses") or {}), **mapped_responses},
-        "pending_user_questions": [],
+        "pending_user_questions": [],  # Cleared - user responded, no new questions needed
         "workflow_phase": "awaiting_user",
         "original_user_questions": None,
     }

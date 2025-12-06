@@ -601,6 +601,313 @@ result["ask_user_trigger"] = "global_orphan"
         )
 
 
+class TestClearingPatternSuppression:
+    """
+    Tests that verify clearing patterns (trigger=None + questions=[]) suppress warnings.
+    
+    A clearing pattern is when BOTH:
+    - ask_user_trigger is set to None
+    - pending_user_questions is set to []
+    IN THE SAME DICT LITERAL.
+    
+    This is a legitimate pattern for resetting state, not a bug.
+    """
+    
+    def test_clearing_pattern_in_dict_suppresses_warning(self):
+        """
+        Dict with trigger=None AND questions=[] should NOT produce a warning.
+        This is the canonical clearing pattern used in supervisor_node.
+        """
+        code = '''
+def clear_user_state():
+    return {
+        "ask_user_trigger": None,
+        "pending_user_questions": [],
+        "user_responses": {},
+    }
+'''
+        result = analyze_source(code, "test.py")
+        violations = check_pairing_violations(result)
+        
+        # Should have NO violations at all - this is intentional clearing
+        assert len(violations) == 0, (
+            f"Clearing pattern should not produce warnings. Got: {violations}"
+        )
+        
+        # Verify the questions assignment was detected as clearing pattern
+        assert len(result.questions_assignments) == 1
+        assert result.questions_assignments[0].is_clearing_pattern is True, (
+            "Questions assignment should be marked as clearing pattern"
+        )
+    
+    def test_empty_questions_without_trigger_none_still_warns(self):
+        """
+        Dict with ONLY questions=[] (no trigger) should still warn.
+        This is NOT a clearing pattern.
+        """
+        code = '''
+def suspicious_empty():
+    return {
+        "workflow_phase": "somewhere",
+        "pending_user_questions": [],  # No trigger in this dict!
+    }
+'''
+        result = analyze_source(code, "test.py")
+        violations = check_pairing_violations(result)
+        
+        # Should have a warning for empty questions
+        warnings = [v for v in violations if v.severity == "warning"]
+        assert len(warnings) == 1, (
+            f"Empty questions without trigger=None should warn. Got: {warnings}"
+        )
+        assert warnings[0].type == ViolationType.EMPTY_QUESTIONS
+        
+        # Verify NOT marked as clearing pattern
+        assert result.questions_assignments[0].is_clearing_pattern is False
+    
+    def test_empty_questions_with_non_none_trigger_still_warns(self):
+        """
+        Dict with trigger="value" AND questions=[] should warn.
+        Setting a real trigger with no questions is a BUG, not clearing.
+        """
+        code = '''
+def buggy_trigger():
+    return {
+        "ask_user_trigger": "some_trigger",
+        "pending_user_questions": [],  # BUG: trigger set but no questions!
+    }
+'''
+        result = analyze_source(code, "test.py")
+        violations = check_pairing_violations(result)
+        
+        # Should have BOTH:
+        # 1. Error for unpaired trigger in dict
+        # 2. Warning for empty questions
+        errors = [v for v in violations if v.severity == "error"]
+        warnings = [v for v in violations if v.severity == "warning"]
+        
+        assert len(errors) == 1, (
+            f"Trigger with empty questions should be an error. Got: {errors}"
+        )
+        assert errors[0].type == ViolationType.UNPAIRED_IN_DICT
+        
+        assert len(warnings) == 1, (
+            f"Empty questions should also warn. Got: {warnings}"
+        )
+        assert warnings[0].type == ViolationType.EMPTY_QUESTIONS
+        
+        # NOT a clearing pattern
+        assert result.questions_assignments[0].is_clearing_pattern is False
+    
+    def test_subscript_clearing_within_5_lines_suppresses(self):
+        """
+        Subscript assignments with trigger=None nearby (within ±5 lines)
+        should be detected as a clearing pattern and NOT warn.
+        
+        This handles code like:
+            result["ask_user_trigger"] = None
+            result["pending_user_questions"] = []
+        """
+        code = '''
+def subscript_clearing():
+    result = {}
+    result["ask_user_trigger"] = None
+    result["pending_user_questions"] = []
+    return result
+'''
+        result = analyze_source(code, "test.py")
+        violations = check_pairing_violations(result)
+        
+        # Subscript clearing pattern should NOT warn
+        warnings = [v for v in violations if v.severity == "warning"]
+        assert len(warnings) == 0, (
+            f"Subscript clearing pattern should not warn. Got: {warnings}"
+        )
+    
+    def test_subscript_clearing_beyond_5_lines_still_warns(self):
+        """
+        Subscript assignments with trigger=None too far away (>5 lines)
+        should still warn - not a recognized clearing pattern.
+        """
+        code = '''
+def not_clearing():
+    result = {}
+    result["ask_user_trigger"] = None
+    # Line 1
+    # Line 2
+    # Line 3
+    # Line 4
+    # Line 5
+    # Line 6 - now trigger is more than 5 lines away
+    result["pending_user_questions"] = []
+    return result
+'''
+        result = analyze_source(code, "test.py")
+        violations = check_pairing_violations(result)
+        
+        # Should still warn - trigger=None is too far away
+        warnings = [v for v in violations if v.severity == "warning"]
+        assert len(warnings) == 1, (
+            f"Subscript empty questions far from trigger=None should warn. Got: {warnings}"
+        )
+    
+    def test_subscript_clearing_different_function_still_warns(self):
+        """
+        trigger=None in one function should NOT suppress questions=[] in another.
+        """
+        code = '''
+def func_a():
+    result = {}
+    result["ask_user_trigger"] = None
+    return result
+
+def func_b():
+    result = {}
+    result["pending_user_questions"] = []  # Should warn
+    return result
+'''
+        result = analyze_source(code, "test.py")
+        violations = check_pairing_violations(result)
+        
+        # Should warn - trigger=None is in different function
+        warnings = [v for v in violations if v.severity == "warning"]
+        assert len(warnings) == 1, (
+            f"Empty questions with trigger=None in different function should warn. Got: {warnings}"
+        )
+    
+    def test_multiple_dicts_only_suppresses_clearing_ones(self):
+        """
+        When file has multiple dicts, only the clearing patterns suppress.
+        Non-clearing empty questions should still warn.
+        """
+        code = '''
+def mixed_patterns():
+    # This is a clearing pattern - should NOT warn
+    clearing = {
+        "ask_user_trigger": None,
+        "pending_user_questions": [],
+    }
+    
+    # This is NOT clearing - should warn
+    suspicious = {
+        "workflow_phase": "test",
+        "pending_user_questions": [],
+    }
+    
+    return clearing, suspicious
+'''
+        result = analyze_source(code, "test.py")
+        violations = check_pairing_violations(result)
+        
+        # Should have exactly 1 warning (for suspicious, not clearing)
+        warnings = [v for v in violations if v.severity == "warning"]
+        assert len(warnings) == 1, (
+            f"Should have exactly 1 warning for non-clearing empty questions. Got: {warnings}"
+        )
+        
+        # Verify we have 2 questions assignments, one clearing, one not
+        assert len(result.questions_assignments) == 2
+        clearing_count = sum(1 for q in result.questions_assignments if q.is_clearing_pattern)
+        assert clearing_count == 1, (
+            f"Should have exactly 1 clearing pattern. Got: {clearing_count}"
+        )
+    
+    def test_clearing_with_additional_keys_still_suppresses(self):
+        """
+        Clearing pattern with many other keys should still suppress.
+        Real-world clearing dicts often have other fields.
+        """
+        code = '''
+def full_clearing():
+    return {
+        "workflow_phase": "supervision",
+        "ask_user_trigger": None,
+        "pending_user_questions": [],
+        "user_responses": {},
+        "supervisor_verdict": "ok_continue",
+        "supervisor_feedback": "Auto-recovered",
+    }
+'''
+        result = analyze_source(code, "test.py")
+        violations = check_pairing_violations(result)
+        
+        # Should have no violations
+        assert len(violations) == 0, (
+            f"Full clearing dict should not warn. Got: {violations}"
+        )
+        assert result.questions_assignments[0].is_clearing_pattern is True
+    
+    def test_clearing_pattern_detection_is_per_dict(self):
+        """
+        Clearing detection must be per-dict, not per-function.
+        trigger=None in one dict doesn't suppress questions=[] in another.
+        """
+        code = '''
+def two_returns(flag):
+    if flag:
+        # This dict has trigger=None but NO questions
+        return {"ask_user_trigger": None}
+    else:
+        # This dict has questions=[] but NO trigger
+        return {"pending_user_questions": []}  # Should warn!
+'''
+        result = analyze_source(code, "test.py")
+        violations = check_pairing_violations(result)
+        
+        # The second dict should warn (empty questions, not a clearing pattern)
+        warnings = [v for v in violations if v.severity == "warning"]
+        assert len(warnings) == 1, (
+            f"Second dict should warn. Got: {warnings}"
+        )
+        
+        # First questions assignment is NOT a clearing pattern
+        # (it's in a different dict than trigger=None)
+        for q in result.questions_assignments:
+            assert q.is_clearing_pattern is False, (
+                "Questions in separate dict from trigger should not be clearing pattern"
+            )
+    
+    def test_trigger_none_alone_without_questions_is_valid(self):
+        """
+        trigger=None alone (no questions key at all) is valid.
+        This is clearing the trigger without touching questions.
+        """
+        code = '''
+def clear_trigger_only():
+    return {
+        "ask_user_trigger": None,
+        # No questions key - this is fine
+    }
+'''
+        result = analyze_source(code, "test.py")
+        violations = check_pairing_violations(result)
+        
+        # Should have no violations
+        assert len(violations) == 0, (
+            f"trigger=None alone should be valid. Got: {violations}"
+        )
+    
+    def test_update_call_clearing_pattern_suppresses(self):
+        """
+        Clearing pattern via state.update() should also suppress.
+        """
+        code = '''
+def update_clearing():
+    state.update({
+        "ask_user_trigger": None,
+        "pending_user_questions": [],
+    })
+'''
+        result = analyze_source(code, "test.py")
+        violations = check_pairing_violations(result)
+        
+        # Should have no violations (clearing pattern via update)
+        assert len(violations) == 0, (
+            f"Clearing via update() should not warn. Got: {violations}"
+        )
+        assert result.questions_assignments[0].is_clearing_pattern is True
+
+
 class TestValueTypeClassification:
     """
     Tests that verify different value types are correctly classified.
