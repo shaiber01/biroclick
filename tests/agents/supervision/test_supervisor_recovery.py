@@ -851,11 +851,13 @@ class TestUserInteractionLogging:
         interaction = result["progress"]["user_interactions"][0]
         assert interaction["user_response"] == ""
 
+    @patch("src.agents.supervision.supervisor.call_agent_with_metrics")
     @patch("src.agents.supervision.supervisor.handle_trigger")
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
-    def test_does_not_log_when_no_trigger(self, mock_context, mock_handle_trigger):
+    def test_does_not_log_when_no_trigger(self, mock_context, mock_handle_trigger, mock_call):
         """Should not log interaction when ask_user_trigger is None."""
         mock_context.return_value = None
+        mock_call.return_value = {"verdict": "ok_continue", "reasoning": "test"}
         
         state = {
             "ask_user_trigger": None,

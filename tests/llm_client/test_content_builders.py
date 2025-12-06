@@ -12,6 +12,7 @@ from src.llm_client import (
     build_user_content_for_designer,
     build_user_content_for_planner,
     get_images_for_analyzer,
+    MAX_ANALYZER_IMAGES,
 )
 
 
@@ -2944,3 +2945,619 @@ class TestGetImagesForAnalyzer:
         # Should NOT include figures from other stages
         assert str(fig2b) not in image_paths
         assert str(fig3a) not in image_paths
+
+
+# =============================================================================
+# Tests for Analyzer Image Flow - Fallback, Consistency, and Limits
+# =============================================================================
+
+class TestGetImagesForAnalyzerFallback:
+    """Tests for fallback behavior when targets don't match paper figures."""
+    
+    def test_fallback_includes_all_figures_when_no_targets_match(self, tmp_path):
+        """
+        Test that when stage has targets but NONE match paper figure IDs,
+        ALL paper figures are included as fallback.
+        
+        This is critical for handling legacy plans with mismatched IDs.
+        """
+        fig1 = tmp_path / "fig1.png"
+        fig2 = tmp_path / "fig2.png"
+        for f in [fig1, fig2]:
+            f.write_bytes(b"fake image data")
+        
+        state = {
+            "current_stage_id": "stage1",
+            "plan": {
+                "stages": [
+                    {"stage_id": "stage1", "targets": ["Fig_nonexistent", "Fig_also_missing"]},
+                ]
+            },
+            "paper_figures": [
+                {"id": "fig1", "image_path": str(fig1)},
+                {"id": "fig2", "image_path": str(fig2)},
+            ],
+        }
+        images = get_images_for_analyzer(state)
+        
+        # Fallback: ALL paper figures should be included when no targets match
+        assert len(images) == 2, (
+            f"Expected 2 images (fallback to all), got {len(images)}. "
+            "Fallback should trigger when no targets match any paper figure IDs."
+        )
+        image_paths = [str(img) for img in images]
+        assert str(fig1) in image_paths
+        assert str(fig2) in image_paths
+
+    def test_partial_target_match_only_includes_matching(self, tmp_path):
+        """
+        Test that when SOME targets match, only matching figures are included (no fallback).
+        """
+        fig1 = tmp_path / "fig1.png"
+        fig2 = tmp_path / "fig2.png"
+        for f in [fig1, fig2]:
+            f.write_bytes(b"fake image data")
+        
+        state = {
+            "current_stage_id": "stage1",
+            "plan": {
+                "stages": [
+                    {"stage_id": "stage1", "targets": ["fig1", "Fig_nonexistent"]},
+                ]
+            },
+            "paper_figures": [
+                {"id": "fig1", "image_path": str(fig1)},
+                {"id": "fig2", "image_path": str(fig2)},
+            ],
+        }
+        images = get_images_for_analyzer(state)
+        
+        # Only fig1 should be included (it matches), NOT all figures
+        assert len(images) == 1, (
+            f"Expected 1 image (only matching target), got {len(images)}. "
+            "Partial match should NOT trigger fallback."
+        )
+        assert str(images[0]) == str(fig1)
+
+    def test_image_order_paper_figures_before_simulation_outputs(self, tmp_path):
+        """
+        Test that paper figures always come before simulation outputs in the list.
+        
+        This order is critical for the metadata in build_user_content_for_analyzer
+        to match the actual image positions.
+        """
+        # Create paper figure
+        paper_fig = tmp_path / "paper.png"
+        paper_fig.write_bytes(b"paper")
+        
+        # Create stage output directory
+        run_dir = tmp_path / "run"
+        stage_dir = run_dir / "stage1"
+        stage_dir.mkdir(parents=True)
+        sim_out = stage_dir / "simulation.png"
+        sim_out.write_bytes(b"simulation")
+        
+        state = {
+            "current_stage_id": "stage1",
+            "run_output_dir": str(run_dir),
+            "paper_figures": [
+                {"id": "fig1", "image_path": str(paper_fig)},
+            ],
+            "stage_outputs": {
+                "files": ["simulation.png"],
+            },
+        }
+        images = get_images_for_analyzer(state)
+        
+        assert len(images) == 2
+        # Paper figure MUST be first
+        assert str(images[0]) == str(paper_fig), (
+            f"Paper figure should be first, but got {images[0]}"
+        )
+        assert str(images[1]) == str(sim_out), (
+            f"Simulation output should be second, but got {images[1]}"
+        )
+
+
+class TestBuildUserContentForAnalyzerAttachedImages:
+    """Tests for the ATTACHED IMAGES section in build_user_content_for_analyzer."""
+    
+    def test_attached_images_section_with_paper_figures(self, tmp_path):
+        """
+        Test that ATTACHED IMAGES section lists paper figures with IDs and descriptions.
+        """
+        fig1 = tmp_path / "fig1.png"
+        fig1.write_bytes(b"image")
+        
+        state = {
+            "current_stage_id": "stage1",
+            "paper_figures": [
+                {"id": "Fig1", "image_path": str(fig1), "description": "Test figure"},
+            ],
+        }
+        content = build_user_content_for_analyzer(state)
+        
+        assert "## ATTACHED IMAGES" in content, "Missing ATTACHED IMAGES section"
+        assert "### Paper Figures" in content, "Missing Paper Figures subsection"
+        assert "**Fig1**" in content, "Missing figure ID in bold"
+        assert "Test figure" in content, "Missing figure description"
+
+    def test_attached_images_section_with_simulation_outputs(self, tmp_path):
+        """
+        Test that ATTACHED IMAGES section lists simulation outputs with filenames.
+        """
+        run_dir = tmp_path / "run"
+        stage_dir = run_dir / "stage1"
+        stage_dir.mkdir(parents=True)
+        sim_out = stage_dir / "sim_output.png"
+        sim_out.write_bytes(b"sim")
+        
+        state = {
+            "current_stage_id": "stage1",
+            "run_output_dir": str(run_dir),
+            "stage_outputs": {
+                "files": ["sim_output.png"],
+            },
+        }
+        content = build_user_content_for_analyzer(state)
+        
+        assert "### Simulation Outputs" in content, "Missing Simulation Outputs subsection"
+        assert "**sim_output.png**" in content, "Missing simulation filename in bold"
+
+    def test_image_numbering_continues_after_paper_figures(self, tmp_path):
+        """
+        Test that simulation output numbering continues after paper figures.
+        """
+        fig1 = tmp_path / "fig1.png"
+        fig1.write_bytes(b"paper")
+        
+        run_dir = tmp_path / "run"
+        stage_dir = run_dir / "stage1"
+        stage_dir.mkdir(parents=True)
+        sim_out = stage_dir / "sim.png"
+        sim_out.write_bytes(b"sim")
+        
+        state = {
+            "current_stage_id": "stage1",
+            "run_output_dir": str(run_dir),
+            "paper_figures": [
+                {"id": "Fig1", "image_path": str(fig1), "description": "Paper figure"},
+            ],
+            "stage_outputs": {
+                "files": ["sim.png"],
+            },
+        }
+        content = build_user_content_for_analyzer(state)
+        
+        # Paper figure should be Image 1
+        assert "Image 1:" in content and "Fig1" in content, (
+            "Paper figure should be listed as Image 1"
+        )
+        # Simulation output should be Image 2 (continues numbering)
+        assert "Image 2:" in content and "sim.png" in content, (
+            "Simulation output should be listed as Image 2"
+        )
+
+    def test_paper_figures_filtered_by_targets_in_content(self, tmp_path):
+        """
+        Test that build_user_content_for_analyzer uses same target filtering as get_images_for_analyzer.
+        """
+        fig1 = tmp_path / "fig1.png"
+        fig2 = tmp_path / "fig2.png"
+        for f in [fig1, fig2]:
+            f.write_bytes(b"image")
+        
+        state = {
+            "current_stage_id": "stage1",
+            "plan": {
+                "stages": [
+                    {"stage_id": "stage1", "targets": ["Fig1"]},  # Only Fig1 is target
+                ]
+            },
+            "paper_figures": [
+                {"id": "Fig1", "image_path": str(fig1), "description": "Target figure"},
+                {"id": "Fig2", "image_path": str(fig2), "description": "Non-target figure"},
+            ],
+        }
+        content = build_user_content_for_analyzer(state)
+        
+        # Only Fig1 should be listed
+        assert "**Fig1**" in content, "Target figure should be listed"
+        assert "**Fig2**" not in content, "Non-target figure should NOT be listed"
+
+    def test_fallback_in_content_matches_fallback_in_images(self, tmp_path):
+        """
+        Test that build_user_content_for_analyzer uses same fallback logic as get_images_for_analyzer.
+        When no targets match, both should include all paper figures.
+        """
+        fig1 = tmp_path / "fig1.png"
+        fig2 = tmp_path / "fig2.png"
+        for f in [fig1, fig2]:
+            f.write_bytes(b"image")
+        
+        state = {
+            "current_stage_id": "stage1",
+            "plan": {
+                "stages": [
+                    {"stage_id": "stage1", "targets": ["Fig_nonexistent"]},
+                ]
+            },
+            "paper_figures": [
+                {"id": "Fig1", "image_path": str(fig1), "description": "Figure 1"},
+                {"id": "Fig2", "image_path": str(fig2), "description": "Figure 2"},
+            ],
+        }
+        content = build_user_content_for_analyzer(state)
+        
+        # Fallback: ALL figures should be listed
+        assert "**Fig1**" in content, "Fig1 should be listed in fallback"
+        assert "**Fig2**" in content, "Fig2 should be listed in fallback"
+
+    def test_no_attached_images_section_when_no_images(self):
+        """
+        Test that ATTACHED IMAGES section is omitted when there are no images.
+        """
+        state = {
+            "current_stage_id": "stage1",
+            "paper_figures": [],
+            "stage_outputs": {"files": []},
+        }
+        content = build_user_content_for_analyzer(state)
+        
+        # Should NOT have the section when no images
+        assert "## ATTACHED IMAGES" not in content
+
+
+class TestAnalyzerImageConsistency:
+    """
+    Tests ensuring build_user_content_for_analyzer and get_images_for_analyzer 
+    produce consistent results.
+    
+    This is critical: the metadata must match the actual images sent to the LLM.
+    """
+    
+    def test_metadata_matches_images_basic(self, tmp_path):
+        """
+        Test that the number of images listed in metadata matches actual images returned.
+        """
+        fig1 = tmp_path / "fig1.png"
+        fig1.write_bytes(b"image")
+        
+        run_dir = tmp_path / "run"
+        stage_dir = run_dir / "stage1"
+        stage_dir.mkdir(parents=True)
+        sim = stage_dir / "sim.png"
+        sim.write_bytes(b"sim")
+        
+        state = {
+            "current_stage_id": "stage1",
+            "run_output_dir": str(run_dir),
+            "paper_figures": [
+                {"id": "Fig1", "image_path": str(fig1), "description": "Paper figure"},
+            ],
+            "stage_outputs": {
+                "files": ["sim.png"],
+            },
+        }
+        
+        images = get_images_for_analyzer(state)
+        content = build_user_content_for_analyzer(state)
+        
+        # Count "Image N:" patterns in content
+        import re
+        image_refs = re.findall(r"Image \d+:", content)
+        
+        assert len(images) == len(image_refs), (
+            f"Metadata lists {len(image_refs)} images but "
+            f"get_images_for_analyzer returns {len(images)}. "
+            "These must match!"
+        )
+    
+    def test_metadata_matches_images_with_filtering(self, tmp_path):
+        """
+        Test consistency when paper figures are filtered by targets.
+        """
+        fig1 = tmp_path / "fig1.png"
+        fig2 = tmp_path / "fig2.png"
+        for f in [fig1, fig2]:
+            f.write_bytes(b"image")
+        
+        state = {
+            "current_stage_id": "stage1",
+            "plan": {
+                "stages": [
+                    {"stage_id": "stage1", "targets": ["Fig1"]},
+                ]
+            },
+            "paper_figures": [
+                {"id": "Fig1", "image_path": str(fig1), "description": "Target"},
+                {"id": "Fig2", "image_path": str(fig2), "description": "Non-target"},
+            ],
+        }
+        
+        images = get_images_for_analyzer(state)
+        content = build_user_content_for_analyzer(state)
+        
+        # Both should only include Fig1
+        assert len(images) == 1, f"Expected 1 image, got {len(images)}"
+        assert "**Fig1**" in content, "Fig1 should be in content"
+        assert "**Fig2**" not in content, "Fig2 should NOT be in content"
+    
+    def test_metadata_matches_images_with_fallback(self, tmp_path):
+        """
+        Test consistency when fallback logic triggers (no targets match).
+        """
+        fig1 = tmp_path / "fig1.png"
+        fig2 = tmp_path / "fig2.png"
+        for f in [fig1, fig2]:
+            f.write_bytes(b"image")
+        
+        state = {
+            "current_stage_id": "stage1",
+            "plan": {
+                "stages": [
+                    {"stage_id": "stage1", "targets": ["nonexistent"]},
+                ]
+            },
+            "paper_figures": [
+                {"id": "Fig1", "image_path": str(fig1), "description": "Figure 1"},
+                {"id": "Fig2", "image_path": str(fig2), "description": "Figure 2"},
+            ],
+        }
+        
+        images = get_images_for_analyzer(state)
+        content = build_user_content_for_analyzer(state)
+        
+        # Fallback: both should include all figures
+        assert len(images) == 2, f"Expected 2 images (fallback), got {len(images)}"
+        assert "**Fig1**" in content, "Fig1 should be in content (fallback)"
+        assert "**Fig2**" in content, "Fig2 should be in content (fallback)"
+    
+    def test_image_order_in_metadata_matches_image_list(self, tmp_path):
+        """
+        Test that the order of images in metadata matches the order in the image list.
+        Paper figures should be first, then simulation outputs.
+        """
+        fig1 = tmp_path / "fig1.png"
+        fig1.write_bytes(b"paper")
+        
+        run_dir = tmp_path / "run"
+        stage_dir = run_dir / "stage1"
+        stage_dir.mkdir(parents=True)
+        sim = stage_dir / "sim.png"
+        sim.write_bytes(b"sim")
+        
+        state = {
+            "current_stage_id": "stage1",
+            "run_output_dir": str(run_dir),
+            "paper_figures": [
+                {"id": "Fig1", "image_path": str(fig1), "description": "Paper figure"},
+            ],
+            "stage_outputs": {
+                "files": ["sim.png"],
+            },
+        }
+        
+        images = get_images_for_analyzer(state)
+        content = build_user_content_for_analyzer(state)
+        
+        # Verify order: Image 1 is Fig1 (paper), Image 2 is sim.png (simulation)
+        assert "Image 1:" in content and "Fig1" in content
+        assert "Image 2:" in content and "sim.png" in content
+        
+        # Verify actual image order matches
+        assert str(images[0]) == str(fig1), "First image should be paper figure"
+        assert str(images[1]) == str(sim), "Second image should be simulation output"
+
+    def test_multiple_paper_figures_and_simulations_consistency(self, tmp_path):
+        """
+        Test consistency with multiple paper figures and simulation outputs.
+        """
+        # Create paper figures
+        figs = []
+        for i in range(3):
+            f = tmp_path / f"fig{i}.png"
+            f.write_bytes(b"paper")
+            figs.append(f)
+        
+        # Create simulation outputs
+        run_dir = tmp_path / "run"
+        stage_dir = run_dir / "stage1"
+        stage_dir.mkdir(parents=True)
+        sims = []
+        for i in range(2):
+            s = stage_dir / f"sim{i}.png"
+            s.write_bytes(b"sim")
+            sims.append(s)
+        
+        state = {
+            "current_stage_id": "stage1",
+            "run_output_dir": str(run_dir),
+            "paper_figures": [
+                {"id": f"Fig{i}", "image_path": str(figs[i]), "description": f"Figure {i}"}
+                for i in range(3)
+            ],
+            "stage_outputs": {
+                "files": [f"sim{i}.png" for i in range(2)],
+            },
+        }
+        
+        images = get_images_for_analyzer(state)
+        content = build_user_content_for_analyzer(state)
+        
+        # Should have 5 images total
+        assert len(images) == 5
+        
+        # Verify all are listed
+        for i in range(3):
+            assert f"**Fig{i}**" in content, f"Fig{i} missing from content"
+        for i in range(2):
+            assert f"**sim{i}.png**" in content, f"sim{i}.png missing from content"
+
+
+class TestMaxAnalyzerImagesLimit:
+    """Tests for the MAX_ANALYZER_IMAGES limit."""
+    
+    def test_limit_applied_in_user_content(self, tmp_path):
+        """
+        Test that build_user_content_for_analyzer respects MAX_ANALYZER_IMAGES limit.
+        """
+        # Create more images than the limit
+        figures = []
+        for i in range(MAX_ANALYZER_IMAGES + 5):
+            fig = tmp_path / f"fig{i}.png"
+            fig.write_bytes(b"image")
+            figures.append({"id": f"Fig{i}", "image_path": str(fig), "description": f"Figure {i}"})
+        
+        state = {
+            "current_stage_id": "stage1",
+            "paper_figures": figures,
+        }
+        
+        content = build_user_content_for_analyzer(state)
+        
+        # Count "Image N:" patterns
+        import re
+        image_refs = re.findall(r"Image \d+:", content)
+        
+        # Should only list MAX_ANALYZER_IMAGES images
+        assert len(image_refs) == MAX_ANALYZER_IMAGES, (
+            f"Expected {MAX_ANALYZER_IMAGES} image references, got {len(image_refs)}. "
+            f"Limit should be applied."
+        )
+        
+        # Should have note about omitted images
+        assert "omitted" in content.lower(), (
+            "Should have note about omitted images when limit is exceeded"
+        )
+    
+    def test_limit_consistency_between_functions(self, tmp_path):
+        """
+        Test that the limit produces matching results between both functions.
+        """
+        # Create more images than the limit
+        figures = []
+        for i in range(MAX_ANALYZER_IMAGES + 3):
+            fig = tmp_path / f"fig{i}.png"
+            fig.write_bytes(b"image")
+            figures.append({"id": f"Fig{i}", "image_path": str(fig), "description": f"Figure {i}"})
+        
+        state = {
+            "current_stage_id": "stage1",
+            "paper_figures": figures,
+        }
+        
+        images = get_images_for_analyzer(state)
+        content = build_user_content_for_analyzer(state)
+        
+        # The actual LLM call applies [:MAX_ANALYZER_IMAGES] to images
+        limited_images = images[:MAX_ANALYZER_IMAGES]
+        
+        # Count "Image N:" patterns
+        import re
+        image_refs = re.findall(r"Image \d+:", content)
+        
+        assert len(limited_images) == len(image_refs), (
+            f"Limited images ({len(limited_images)}) must match "
+            f"metadata image count ({len(image_refs)})"
+        )
+    
+    def test_limit_preserves_order_paper_before_simulation(self, tmp_path):
+        """
+        Test that when limit is applied, paper figures still come before simulation outputs.
+        """
+        # Create many paper figures
+        paper_figs = []
+        for i in range(6):
+            fig = tmp_path / f"paper{i}.png"
+            fig.write_bytes(b"paper")
+            paper_figs.append({"id": f"Paper{i}", "image_path": str(fig), "description": f"Paper {i}"})
+        
+        # Create many simulation outputs
+        run_dir = tmp_path / "run"
+        stage_dir = run_dir / "stage1"
+        stage_dir.mkdir(parents=True)
+        sim_files = []
+        for i in range(6):
+            sim = stage_dir / f"sim{i}.png"
+            sim.write_bytes(b"sim")
+            sim_files.append(f"sim{i}.png")
+        
+        state = {
+            "current_stage_id": "stage1",
+            "run_output_dir": str(run_dir),
+            "paper_figures": paper_figs,
+            "stage_outputs": {
+                "files": sim_files,
+            },
+        }
+        
+        images = get_images_for_analyzer(state)
+        content = build_user_content_for_analyzer(state)
+        
+        # Total is 12, limit is 10
+        limited_images = images[:MAX_ANALYZER_IMAGES]
+        
+        # Verify paper figures are at the start (first 6 positions)
+        for i in range(6):
+            assert "paper" in str(limited_images[i]).lower(), (
+                f"Position {i} should be paper figure, got {limited_images[i]}"
+            )
+        
+        # Verify simulation outputs fill the rest (positions 6-9)
+        for i in range(6, min(len(limited_images), MAX_ANALYZER_IMAGES)):
+            assert "sim" in str(limited_images[i]).lower(), (
+                f"Position {i} should be simulation output, got {limited_images[i]}"
+            )
+
+    def test_exactly_at_limit(self, tmp_path):
+        """
+        Test behavior when exactly at MAX_ANALYZER_IMAGES (no omission note needed).
+        """
+        figures = []
+        for i in range(MAX_ANALYZER_IMAGES):
+            fig = tmp_path / f"fig{i}.png"
+            fig.write_bytes(b"image")
+            figures.append({"id": f"Fig{i}", "image_path": str(fig), "description": f"Figure {i}"})
+        
+        state = {
+            "current_stage_id": "stage1",
+            "paper_figures": figures,
+        }
+        
+        content = build_user_content_for_analyzer(state)
+        
+        # Should NOT have note about omitted images
+        assert "omitted" not in content.lower(), (
+            "Should NOT have omission note when exactly at limit"
+        )
+        
+        # All images should be listed
+        import re
+        image_refs = re.findall(r"Image \d+:", content)
+        assert len(image_refs) == MAX_ANALYZER_IMAGES
+
+    def test_below_limit(self, tmp_path):
+        """
+        Test behavior when below MAX_ANALYZER_IMAGES.
+        """
+        figures = []
+        for i in range(3):  # Well below limit
+            fig = tmp_path / f"fig{i}.png"
+            fig.write_bytes(b"image")
+            figures.append({"id": f"Fig{i}", "image_path": str(fig), "description": f"Figure {i}"})
+        
+        state = {
+            "current_stage_id": "stage1",
+            "paper_figures": figures,
+        }
+        
+        content = build_user_content_for_analyzer(state)
+        
+        # Should NOT have note about omitted images
+        assert "omitted" not in content.lower()
+        
+        # All images should be listed
+        import re
+        image_refs = re.findall(r"Image \d+:", content)
+        assert len(image_refs) == 3

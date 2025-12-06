@@ -2087,6 +2087,7 @@ class TestPlanStructureEdgeCases:
     def test_plan_reviewer_handles_whitespace_in_stage_id(self, base_state):
         """plan_reviewer should handle stages with whitespace-only IDs as missing."""
         from src.agents.planning import plan_reviewer_node
+        from unittest.mock import patch
 
         base_state["plan"] = {
             "paper_id": "test",
@@ -2102,7 +2103,12 @@ class TestPlanStructureEdgeCases:
             "targets": [{"figure_id": "Fig1"}],
         }
 
-        result = plan_reviewer_node(base_state)
+        mock_response = {"verdict": "approve", "issues": [], "summary": "OK"}
+
+        with patch(
+            "src.agents.planning.call_agent_with_metrics", return_value=mock_response
+        ):
+            result = plan_reviewer_node(base_state)
 
         # The component checks `if not stage_id:` which is falsy for empty strings
         # But "   " is truthy, so this may pass - testing actual behavior

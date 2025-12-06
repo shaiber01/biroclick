@@ -2996,7 +2996,7 @@ class TestExtendedEndToEndFlows:
         Verifies that after STOP, the report generation node is actually called
         and produces workflow_phase='complete'.
         """
-        from unittest.mock import patch, MagicMock
+        from unittest.mock import patch
         from src.agents.planning import plan_reviewer_node
         from src.agents.supervision.supervisor import supervisor_node
         from src.agents.reporting import generate_report_node
@@ -3040,7 +3040,14 @@ class TestExtendedEndToEndFlows:
         
         # Step 4: Actually call generate_report_node and verify it completes correctly
         report_state = merged_state
-        report_result = generate_report_node(report_state)
+        
+        # Mock the LLM call in generate_report_node
+        mock_report_response = {
+            "executive_summary": "Test summary",
+            "conclusions": "Test conclusions",
+        }
+        with patch("src.agents.reporting.call_agent_with_metrics", return_value=mock_report_response):
+            report_result = generate_report_node(report_state)
         
         # generate_report_node sets workflow_phase to 'reporting' (the terminal phase)
         assert report_result.get("workflow_phase") == "reporting", (

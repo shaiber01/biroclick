@@ -34,6 +34,7 @@ from src.llm_client import (
     call_agent_with_metrics,
     build_user_content_for_analyzer,
     get_images_for_analyzer,
+    MAX_ANALYZER_IMAGES,
 )
 
 from .helpers.context import check_context_or_escalate
@@ -566,7 +567,7 @@ def results_analyzer_node(state: ReproState) -> dict:
                 system_prompt=system_prompt,
                 user_content=user_content,
                 state=state,
-                images=images[:10],
+                images=images[:MAX_ANALYZER_IMAGES],
             )
             
             if agent_output:
@@ -592,7 +593,7 @@ def results_analyzer_node(state: ReproState) -> dict:
     matches = totals.get("matches", 0)
     total_targets = totals.get("targets", 0)
     classification_str = overall_classification.value if hasattr(overall_classification, 'value') else str(overall_classification)
-    emoji = "✅" if classification_str in ["good_match", "acceptable"] else "⚠️" if classification_str in ["partial", "pending"] else "❌"
+    emoji = "✅" if classification_str in ["EXCELLENT_MATCH", "ACCEPTABLE_MATCH", "MATCH", "NO_TARGETS"] else "⚠️" if classification_str in ["PARTIAL_MATCH", "PENDING_VALIDATION"] else "❌"
     logger.info(f"{emoji} analyze: stage={current_stage_id}, classification={classification_str}, {matches}/{total_targets} targets matched")
     
     return {

@@ -39,6 +39,7 @@ from src.prompts import build_agent_prompt
 from src.llm_client import (
     call_agent_with_metrics,
     build_user_content_for_planner,
+    get_images_for_planner,
 )
 
 from .helpers.context import check_context_or_escalate, validate_state_or_warn
@@ -180,13 +181,20 @@ def plan_node(state: ReproState) -> dict:
     # Build user content with paper text and figures
     user_content = build_user_content_for_planner(state)
     
-    # Call LLM with structured output
+    # Get paper figure images for multimodal planning
+    # This allows the planner to see figure contents and map IDs correctly
+    images = get_images_for_planner(state)
+    if images:
+        logger.info(f"Passing {len(images)} paper figure images to planner for multimodal analysis")
+    
+    # Call LLM with structured output (multimodal if images available)
     try:
         agent_output = call_agent_with_metrics(
             agent_name="planner",
             system_prompt=system_prompt,
             user_content=user_content,
             state=state,
+            images=images[:20] if images else None,  # Limit to avoid token explosion
         )
     except Exception as e:
         logger.error(f"Planner LLM call failed: {e}")
@@ -276,6 +284,51 @@ def plan_node(state: ReproState) -> dict:
     logger.info(f"📋 planning: {num_stages} stage(s) [{stages_preview}], {num_targets} target(s) [{targets_preview}]{replan_info}")
     
     return result
+
+
+def validate_target_ids_exist(plan: Dict[str, Any], paper_figures: List[Dict[str, Any]]) -> List[str]:
+    """
+    Validate that all target figure IDs in the plan reference actual paper_figures.
+    
+    This catches cases where the planner invented semantic IDs like "Fig_spectrum"
+    instead of using the actual IDs from paper_figures (e.g., "Fig1", "Fig2").
+    
+    Args:
+        plan: The reproduction plan dictionary
+        paper_figures: List of figure dictionaries with 'id' keys
+        
+    Returns:
+        List of issue strings (empty if all targets are valid)
+    """
+    # Build set of valid figure IDs from paper_figures
+    valid_ids = {fig.get("id") for fig in paper_figures if isinstance(fig, dict) and fig.get("id")}
+    
+    if not valid_ids:
+        # No paper figures to validate against
+        return []
+    
+    issues = []
+    
+    # Check stage-level targets
+    for stage in plan.get("stages", []):
+        if not isinstance(stage, dict):
+            continue
+        stage_id = stage.get("stage_id", "unknown")
+        stage_targets = stage.get("targets", [])
+        
+        if not stage_targets:
+            continue
+            
+        for target_ref in stage_targets:
+            if not target_ref:
+                continue
+            if target_ref not in valid_ids:
+                issues.append(
+                    f"Stage '{stage_id}' targets '{target_ref}' which doesn't exist in paper_figures. "
+                    f"Available IDs: {sorted(valid_ids)}"
+                )
+    
+    return issues
 
 
 @with_context_check("plan_review")
@@ -457,6 +510,21 @@ def plan_reviewer_node(state: ReproState) -> dict:
                 blocking_issues.append(
                     f"PLAN_ISSUE: Stage '{stage_id}' depends on itself. "
                     "Stages cannot depend on themselves."
+                )
+    
+    # Validate target IDs reference existing paper_figures
+    # This catches cases where planner invented semantic IDs instead of using actual figure IDs
+    paper_figures = state.get("paper_figures", [])
+    if paper_figures and plan:
+        target_id_issues = validate_target_ids_exist(plan, paper_figures)
+        if target_id_issues:
+            # Limit to first 3 issues to avoid overwhelming feedback
+            for issue in target_id_issues[:3]:
+                blocking_issues.append(f"PLAN_ISSUE: {issue}")
+            if len(target_id_issues) > 3:
+                blocking_issues.append(
+                    f"PLAN_ISSUE: ... and {len(target_id_issues) - 3} more target ID mismatches. "
+                    "Use figure IDs from the AVAILABLE PAPER FIGURES list."
                 )
     
     # Handle blocking issues or call LLM

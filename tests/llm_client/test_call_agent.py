@@ -771,8 +771,9 @@ class TestCallAgentRetryMechanism:
         actual_delays = [call[0][0] for call in mock_sleep.call_args_list]
         assert actual_delays == expected_delays
 
+    @patch("src.llm_client.time.sleep")
     @patch("src.llm_client.get_llm_client")
-    def test_retry_exhausted_raises_runtime_error(self, mock_get_client):
+    def test_retry_exhausted_raises_runtime_error(self, mock_get_client, mock_sleep):
         """Raise RuntimeError when all retries exhausted."""
         mock_llm = MagicMock()
         mock_llm.bind_tools.return_value.invoke.side_effect = ConnectionError("Persistent error")
@@ -835,8 +836,9 @@ class TestCallAgentRetryMechanism:
         # Should only be called once (no retries on ValueError)
         assert call_count[0] == 1
 
+    @patch("src.llm_client.time.sleep")
     @patch("src.llm_client.get_llm_client")
-    def test_retry_various_transient_errors(self, mock_get_client):
+    def test_retry_various_transient_errors(self, mock_get_client, mock_sleep):
         """Retry on various types of transient errors."""
         mock_llm = MagicMock()
         mock_response = MagicMock()

@@ -1599,7 +1599,7 @@ class TestSupervisorReviewerEscalation:
     """
 
     def test_supervisor_handles_reviewer_escalation_provide_guidance(self, base_state):
-        """User provides PROVIDE_GUIDANCE - should set reviewer_feedback and continue."""
+        """User provides PROVIDE_GUIDANCE - should set reviewer_feedback and route to retry."""
         from src.agents.supervision.supervisor import supervisor_node
 
         base_state["ask_user_trigger"] = "reviewer_escalation"
@@ -1611,9 +1611,15 @@ class TestSupervisorReviewerEscalation:
         ]
         base_state["reviewer_escalation_source"] = "code_reviewer"
 
-        result = supervisor_node(base_state)
+        # Mock the LLM call in the trigger handler's SMART PATH
+        # Return retry_code_review to trigger reviewer_feedback setting
+        with patch(
+            "src.agents.supervision.trigger_handlers.call_agent_with_metrics",
+            return_value={"verdict": "retry_code_review", "summary": "User provided guidance."},
+        ):
+            result = supervisor_node(base_state)
 
-        assert result.get("supervisor_verdict") == "ok_continue"
+        assert result.get("supervisor_verdict") == "retry_code_review"
         assert "reviewer_feedback" in result
         assert "User guidance:" in result["reviewer_feedback"]
         assert "Drude model" in result["reviewer_feedback"]
@@ -1628,9 +1634,15 @@ class TestSupervisorReviewerEscalation:
         base_state["user_responses"] = {"Q1": "GUIDANCE: Focus on near-field enhancement"}
         base_state["pending_user_questions"] = ["What aspect should I prioritize?"]
 
-        result = supervisor_node(base_state)
+        # Mock the LLM call in the trigger handler's SMART PATH
+        # Return retry_code_review to trigger reviewer_feedback setting
+        with patch(
+            "src.agents.supervision.trigger_handlers.call_agent_with_metrics",
+            return_value={"verdict": "retry_code_review", "summary": "User provided guidance."},
+        ):
+            result = supervisor_node(base_state)
 
-        assert result.get("supervisor_verdict") == "ok_continue"
+        assert result.get("supervisor_verdict") == "retry_code_review"
         assert "near-field enhancement" in result.get("reviewer_feedback", "")
 
     def test_supervisor_handles_reviewer_escalation_answer_alias(self, base_state):
@@ -1641,9 +1653,15 @@ class TestSupervisorReviewerEscalation:
         base_state["user_responses"] = {"Q1": "ANSWER: The spacing is 20nm period"}
         base_state["pending_user_questions"] = ["What is the array spacing?"]
 
-        result = supervisor_node(base_state)
+        # Mock the LLM call in the trigger handler's SMART PATH
+        # Return retry_code_review to trigger reviewer_feedback setting
+        with patch(
+            "src.agents.supervision.trigger_handlers.call_agent_with_metrics",
+            return_value={"verdict": "retry_code_review", "summary": "User provided answer."},
+        ):
+            result = supervisor_node(base_state)
 
-        assert result.get("supervisor_verdict") == "ok_continue"
+        assert result.get("supervisor_verdict") == "retry_code_review"
         assert "20nm period" in result.get("reviewer_feedback", "")
 
     def test_supervisor_handles_reviewer_escalation_skip(self, base_state):
@@ -1685,10 +1703,16 @@ class TestSupervisorReviewerEscalation:
         base_state["user_responses"] = {"Q1": "I'm not sure what to do, but try the Drude model first"}
         base_state["pending_user_questions"] = ["Question from reviewer"]
 
-        result = supervisor_node(base_state)
+        # Mock the LLM call in the trigger handler's SMART PATH
+        # Return retry_code_review to trigger reviewer_feedback setting
+        with patch(
+            "src.agents.supervision.trigger_handlers.call_agent_with_metrics",
+            return_value={"verdict": "retry_code_review", "summary": "User provided guidance."},
+        ):
+            result = supervisor_node(base_state)
 
         # Free-form responses should now be accepted as guidance
-        assert result.get("supervisor_verdict") == "ok_continue"
+        assert result.get("supervisor_verdict") == "retry_code_review"
         # Verify reviewer feedback contains the user's response
         assert "reviewer_feedback" in result
         assert "try the Drude model first" in result["reviewer_feedback"]
@@ -1701,9 +1725,15 @@ class TestSupervisorReviewerEscalation:
         base_state["user_responses"] = {"Q1": "provide_guidance: use tabulated data"}
         base_state["pending_user_questions"] = ["Question from reviewer"]
 
-        result = supervisor_node(base_state)
+        # Mock the LLM call in the trigger handler's SMART PATH
+        # Return retry_code_review to trigger reviewer_feedback setting
+        with patch(
+            "src.agents.supervision.trigger_handlers.call_agent_with_metrics",
+            return_value={"verdict": "retry_code_review", "summary": "User provided guidance."},
+        ):
+            result = supervisor_node(base_state)
 
-        assert result.get("supervisor_verdict") == "ok_continue"
+        assert result.get("supervisor_verdict") == "retry_code_review"
         assert "tabulated data" in result.get("reviewer_feedback", "")
 
     def test_reviewer_escalation_full_flow_code_reviewer(self, base_state):
@@ -1738,7 +1768,12 @@ class TestSupervisorReviewerEscalation:
         }
         
         # Step 3: Supervisor handles the user response
-        supervisor_result = supervisor_node(base_state)
+        # Mock the LLM call in the trigger handler's SMART PATH
+        with patch(
+            "src.agents.supervision.trigger_handlers.call_agent_with_metrics",
+            return_value={"verdict": "retry_code_review", "summary": "Re-review with guidance."},
+        ):
+            supervisor_result = supervisor_node(base_state)
         
         # Verify supervisor processed guidance correctly
         # Should route back to code_review since escalation came from there
@@ -1802,7 +1837,12 @@ class TestSupervisorReviewerEscalation:
             "user_interactions": [],
         }
 
-        result = supervisor_node(base_state)
+        # Mock the LLM call in the trigger handler's SMART PATH
+        with patch(
+            "src.agents.supervision.trigger_handlers.call_agent_with_metrics",
+            return_value={"verdict": "ok_continue", "summary": "User provided guidance."},
+        ):
+            result = supervisor_node(base_state)
 
         interactions = result.get("progress", {}).get("user_interactions", [])
         assert len(interactions) == 1

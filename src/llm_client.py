@@ -48,6 +48,9 @@ SCHEMAS_DIR = Path(__file__).parent.parent / "schemas"
 MAX_RETRIES = 3
 RETRY_DELAY_SECONDS = 2.0
 
+# Maximum images to send to analyzer LLM (to stay within token limits)
+MAX_ANALYZER_IMAGES = 10
+
 
 # ═══════════════════════════════════════════════════════════════════════
 # Schema Loading
@@ -546,15 +549,16 @@ def build_user_content_for_planner(state: Dict[str, Any]) -> str:
     if paper_text:
         parts.append(f"# PAPER TEXT\n\n{paper_text}")
     
-    # Figure information
+    # Figure information - with explicit ID constraint for multimodal mapping
     figures = state.get("paper_figures", [])
     if figures:
-        fig_desc = "\n".join([
-            f"- {fig.get('id', 'unknown')}: {fig.get('description', 'No description')}"
-            for fig in figures
-            if isinstance(fig, dict)  # Skip non-dict items gracefully
-        ])
-        parts.append(f"# FIGURES\n\n{fig_desc}")
+        parts.append("# AVAILABLE PAPER FIGURES")
+        parts.append("CRITICAL: Use these exact figure IDs in your plan targets. Images are attached in order (first image = first ID listed).\n")
+        for i, fig in enumerate(figures):
+            if isinstance(fig, dict):
+                fig_id = fig.get('id', f'Fig{i+1}')
+                desc = fig.get('description', 'See attached image')
+                parts.append(f"- **{fig_id}**: {desc}")
     
     # Replan feedback if any
     feedback = state.get("planner_feedback", "")
@@ -567,6 +571,33 @@ def build_user_content_for_planner(state: Dict[str, Any]) -> str:
         parts.append("## User-Provided Context\n\n" + "\n".join(user_context))
     
     return "\n\n---\n\n".join(parts)
+
+
+def get_images_for_planner(state: Dict[str, Any]) -> List[Path]:
+    """
+    Get paper figure image paths for the planner agent (multimodal).
+    
+    Returns all paper figure images so the planner can:
+    1. See what each figure contains
+    2. Match system-assigned IDs (Fig1, Fig2) to paper references (Figure 2a, etc.)
+    
+    The images are returned in the same order as paper_figures,
+    so the planner can correlate "first image = Fig1" etc.
+    """
+    images = []
+    image_extensions = [".png", ".jpg", ".jpeg", ".gif", ".webp"]
+    
+    paper_figures = state.get("paper_figures", [])
+    for fig in paper_figures:
+        if not isinstance(fig, dict):
+            continue
+        path = fig.get("image_path")
+        if path:
+            path_obj = Path(path)
+            if path_obj.exists() and path_obj.suffix.lower() in image_extensions:
+                images.append(path_obj)
+    
+    return images
 
 
 def build_user_content_for_designer(state: Dict[str, Any]) -> str:
@@ -699,6 +730,12 @@ def build_user_content_for_code_generator(state: Dict[str, Any]) -> str:
 def build_user_content_for_analyzer(state: Dict[str, Any]) -> str:
     """
     Build user content for the results analyzer agent.
+    
+    Includes explicit image identification so the LLM knows which attached
+    images are paper figures (reference) vs simulation outputs (to evaluate).
+    
+    IMPORTANT: The image listing logic MUST match get_images_for_analyzer()
+    to ensure the metadata matches the actual attached images.
     """
     parts = []
     
@@ -706,20 +743,115 @@ def build_user_content_for_analyzer(state: Dict[str, Any]) -> str:
     stage_id = state.get("current_stage_id") or "unknown"
     parts.append(f"# CURRENT STAGE: {stage_id}")
     
-    # Stage outputs
+    # Stage outputs (JSON metadata)
     outputs = state.get("stage_outputs")
     if outputs is not None:  # Include even if empty dict
         parts.append(f"## Simulation Outputs\n```json\n{json.dumps(outputs, indent=2, default=str)}\n```")
     
-    # Target figures for this stage
+    # Target figures for this stage (same logic as get_images_for_analyzer)
     plan = state.get("plan") or {}
     stages = plan.get("stages", []) if isinstance(plan, dict) else []
     current_stage = next((s for s in stages if s.get("stage_id") == stage_id), None)
     
+    target_ids = []
     if current_stage:
-        targets = current_stage.get("targets", [])
-        if targets:  # Only include if targets list is not empty
-            parts.append(f"## Target Figures: {', '.join(targets)}")
+        target_ids = current_stage.get("targets", [])
+        if target_ids:  # Only include if targets list is not empty
+            parts.append(f"## Target Figures: {', '.join(target_ids)}")
+    
+    # === Image identification section ===
+    # MUST use same logic as get_images_for_analyzer() for consistency
+    paper_figures = state.get("paper_figures") or []
+    image_extensions = [".png", ".jpg", ".jpeg", ".gif", ".webp"]
+    
+    # List paper figure images - SAME LOGIC as get_images_for_analyzer
+    matched_paper_figs = []  # (fig_id, desc) tuples for figures matching targets
+    all_paper_figs = []      # (fig_id, desc) tuples for all valid figures
+    
+    for fig in paper_figures:
+        if not isinstance(fig, dict):
+            continue
+        fig_id = fig.get("id", "")
+        path = fig.get("image_path", "")
+        desc = fig.get('description', 'Paper figure')
+        
+        if path and Path(path).suffix.lower() in image_extensions and Path(path).exists():
+            all_paper_figs.append((fig_id, desc))
+            # Same filtering as get_images_for_analyzer: include if no targets OR fig matches target
+            if not target_ids or fig_id in target_ids:
+                matched_paper_figs.append((fig_id, desc))
+    
+    # Apply same fallback logic as get_images_for_analyzer
+    if target_ids and not matched_paper_figs and all_paper_figs:
+        # Fallback: use all paper figures when no matches found
+        figs_to_list = all_paper_figs
+    else:
+        figs_to_list = matched_paper_figs
+    
+    # Build all image entries to apply the same limit as the LLM call
+    # This ensures metadata matches actual images sent
+    all_image_entries = []  # List of (entry_text, is_paper_fig)
+    
+    # Paper figures first (same order as get_images_for_analyzer)
+    for idx, (fig_id, desc) in enumerate(figs_to_list):
+        all_image_entries.append((f"  - Image {idx + 1}: **{fig_id}** - {desc}", True))
+    
+    # Simulation output images - SAME LOGIC as get_images_for_analyzer
+    stage_outputs_dict = state.get("stage_outputs") or {}
+    output_files = stage_outputs_dict.get("files") if isinstance(stage_outputs_dict, dict) else []
+    if output_files is None:
+        output_files = []
+    
+    # Build stage output directory path (same as get_images_for_analyzer)
+    run_output_dir = state.get("run_output_dir", "")
+    if run_output_dir and stage_id:
+        stage_output_dir = Path(run_output_dir) / stage_id
+    else:
+        paper_id = state.get("paper_id", "unknown")
+        stage_output_dir = Path("outputs") / paper_id / (stage_id or "unknown")
+    
+    image_idx = len(figs_to_list) + 1  # Continue numbering after paper figures
+    
+    for file_path in output_files:
+        # Handle different path formats (same as get_images_for_analyzer)
+        if hasattr(file_path, '__class__') and file_path.__class__.__name__ == 'Path':
+            path = file_path
+        elif isinstance(file_path, str):
+            path = Path(file_path)
+        elif isinstance(file_path, dict):
+            path = Path(file_path.get("path", ""))
+        else:
+            path = Path(str(file_path))
+        
+        # Resolve relative paths (same as get_images_for_analyzer)
+        if not path.is_absolute():
+            path = stage_output_dir / path
+        
+        if path.exists() and path.suffix.lower() in image_extensions:
+            filename = path.name
+            all_image_entries.append((f"  - Image {image_idx}: **{filename}**", False))
+            image_idx += 1
+    
+    # Apply the same limit as the LLM call (images[:MAX_ANALYZER_IMAGES])
+    total_images = len(all_image_entries)
+    limited_entries = all_image_entries[:MAX_ANALYZER_IMAGES]
+    
+    # Split back into paper figures and simulation outputs for display
+    paper_fig_list = [entry for entry, is_paper in limited_entries if is_paper]
+    sim_image_list = [entry for entry, is_paper in limited_entries if not is_paper]
+    
+    if paper_fig_list:
+        parts.append("## ATTACHED IMAGES\n")
+        parts.append("### Paper Figures (reference images for comparison):")
+        parts.append("\n".join(paper_fig_list))
+    
+    if sim_image_list:
+        parts.append("\n### Simulation Outputs (your results to evaluate):")
+        parts.append("\n".join(sim_image_list))
+        parts.append("\nCompare each simulation output image against the corresponding paper figure based on the target.")
+    
+    if total_images > MAX_ANALYZER_IMAGES:
+        parts.append(f"\n**Note**: {total_images - MAX_ANALYZER_IMAGES} additional image(s) omitted due to limit.")
     
     # Revision feedback if any
     feedback = state.get("analysis_feedback") or ""
@@ -756,23 +888,40 @@ def get_images_for_analyzer(state: Dict[str, Any]) -> List[Path]:
     if current_stage:
         target_ids = current_stage.get("targets", [])
     
-    # Paper figures - only include figures that are targets for this stage
+    # Paper figures - include figures that are targets for this stage
+    # With fallback: if no targets match, include ALL paper figures
     paper_figures = state.get("paper_figures") or []
+    matched_paper_figures = []
+    all_paper_figure_paths = []
+    
     if paper_figures:
         for fig in paper_figures:
             if not isinstance(fig, dict):
                 continue
             fig_id = fig.get("id", "")
-            # Only include if this figure is a target for the current stage
-            # (or if no targets are specified, include all - backwards compat)
-            if target_ids and fig_id not in target_ids:
-                continue
             path = fig.get("image_path")
             if path:
                 path_obj = Path(path)
                 if path_obj.exists() and path_obj.suffix.lower() in image_extensions:
-                    images.append(path_obj)
-                    logger.debug(f"Added paper figure for stage {stage_id}: {fig_id} -> {path_obj}")
+                    # Track all valid figure paths
+                    all_paper_figure_paths.append(path_obj)
+                    
+                    # Check if this figure is a target for the current stage
+                    if not target_ids or fig_id in target_ids:
+                        matched_paper_figures.append(path_obj)
+                        logger.debug(f"Added paper figure for stage {stage_id}: {fig_id} -> {path_obj}")
+        
+        # FALLBACK: If we have targets but no paper figures matched,
+        # include ALL paper figures so the analyzer can still do visual comparison
+        # This handles legacy plans with mismatched IDs
+        if target_ids and not matched_paper_figures and all_paper_figure_paths:
+            logger.warning(
+                f"No paper figures matched targets {target_ids} for stage {stage_id}. "
+                f"Including all {len(all_paper_figure_paths)} paper figures as fallback."
+            )
+            images.extend(all_paper_figure_paths)
+        else:
+            images.extend(matched_paper_figures)
     
     # Build stage output directory path
     run_output_dir = state.get("run_output_dir", "")

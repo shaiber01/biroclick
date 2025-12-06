@@ -83,6 +83,39 @@ For each parameter, document:
 - Any discrepancy notes
 
 ═══════════════════════════════════════════════════════════════════════
+A2. FIGURE IDENTIFICATION (MULTIMODAL - CRITICAL)
+═══════════════════════════════════════════════════════════════════════
+
+You are receiving paper figure IMAGES with their system-assigned IDs.
+The images are attached in order: first image = Fig1, second = Fig2, etc.
+
+YOUR TASK: Match each system ID to the paper's figure reference:
+
+1. EXAMINE each attached image
+2. IDENTIFY what it shows (spectrum, field map, schematic, etc.)
+3. MATCH to paper text references ("Figure 1", "Figure 2a", "Fig. 3b")
+4. USE the system ID (Fig1, Fig2) in your plan targets
+
+EXAMPLE MAPPING:
+- Image 1 shows a schematic of nanodisks → Paper says "Figure 1 shows the sample geometry" → Use "Fig1"
+- Image 2 shows transmission spectra → Paper says "Figure 3a shows transmission vs wavelength" → Use "Fig2" (NOT "Fig3a")
+
+RULES:
+- ALWAYS use system IDs (Fig1, Fig2, Fig3) in targets and stages
+- NEVER invent IDs like "Fig3a" or "Fig_spectrum" 
+- Document the paper reference in the target description
+- Your plan will be REJECTED if targets reference non-existent figure IDs
+
+OUTPUT FORMAT for targets:
+```json
+{
+  "figure_id": "Fig3",           // System ID - MUST exist in paper_figures
+  "paper_reference": "Figure 2a", // What paper calls it (for documentation)
+  "description": "Transmission spectra of bare Al nanodisks"
+}
+```
+
+═══════════════════════════════════════════════════════════════════════
 B. FIGURE CLASSIFICATION
 ═══════════════════════════════════════════════════════════════════════
 
