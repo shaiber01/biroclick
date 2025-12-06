@@ -181,7 +181,7 @@ class TestSafetyNet:
         
         result = ask_user_node(state)
         
-        assert result.get("ask_user_trigger") is None
+        # Safety net should set "unknown_escalation" as trigger
         assert result["ask_user_trigger"] == "unknown_escalation"
 
     @patch("src.agents.user_interaction.interrupt")

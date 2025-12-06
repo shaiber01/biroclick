@@ -156,7 +156,6 @@ class TestEdgeCases:
         result = ask_user_node(state)
         
         # Safety net should set "unknown_escalation" as trigger
-        assert result.get("ask_user_trigger") is None
         assert result["ask_user_trigger"] == "unknown_escalation"
         
         # interrupt should be called with regenerated questions containing WORKFLOW RECOVERY
