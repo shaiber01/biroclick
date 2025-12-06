@@ -105,7 +105,7 @@ class TestCodeReviewerNode:
         mock_prompt.return_value = "Prompt"
         mock_llm.return_value = {
             "verdict": "needs_revision",
-            "feedback": "Fix boundary conditions",
+            "summary": "Fix boundary conditions",  # Schema uses "summary" not "feedback"
             "issues": ["Boundary issue"]
         }
         
@@ -157,9 +157,9 @@ class TestCodeReviewerNode:
         
         result = code_reviewer_node(base_state)
         
-        # Should use fallback message
+        # Should use fallback message (from agent_output.get("summary", "Missing verdict in review"))
         assert "reviewer_feedback" in result
-        assert result["reviewer_feedback"] == "Missing verdict or feedback in review"
+        assert result["reviewer_feedback"] == "Missing verdict in review"
         assert result["code_revision_count"] == 1
         assert result["last_code_review_verdict"] == "needs_revision"
 
@@ -168,7 +168,7 @@ class TestCodeReviewerNode:
     def test_reviewer_max_revisions(self, mock_llm, mock_prompt, base_state):
         """Test reviewer hitting max revisions triggers escalation."""
         mock_prompt.return_value = "Prompt"
-        mock_llm.return_value = {"verdict": "needs_revision", "feedback": "Fix it"}
+        mock_llm.return_value = {"verdict": "needs_revision", "summary": "Fix it"}  # Schema uses "summary"
         
         base_state["code_revision_count"] = MAX_CODE_REVISIONS
         
@@ -432,7 +432,7 @@ class TestCodeReviewerNode:
         mock_prompt.return_value = "Prompt"
         mock_llm.return_value = {
             "issues": [],
-            "feedback": "Missing verdict"
+            "summary": "Missing verdict"  # Schema uses "summary" not "feedback"
         }
         
         # Code uses .get("verdict", "needs_revision") so should default to needs_revision
@@ -684,7 +684,7 @@ class TestCodeReviewerNode:
         mock_prompt.return_value = "Prompt"
         mock_llm.return_value = {
             "verdict": "needs_revision",
-            "feedback": "Complex feedback with\nmultiple lines\nand details"
+            "summary": "Complex feedback with\nmultiple lines\nand details"  # Schema uses "summary"
         }
         
         base_state["code_revision_count"] = MAX_CODE_REVISIONS

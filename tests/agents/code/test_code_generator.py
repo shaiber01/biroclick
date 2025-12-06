@@ -479,11 +479,8 @@ class TestCodeGeneratorNode:
                 "valid code" * 10,
                 ["Ez.csv"],
             ),
-            (
-                {"simulation_code": "sim code" * 10},
-                "sim code" * 10,
-                [],
-            ),
+            # Note: Schema uses "code" key, not "simulation_code". 
+            # If "code" key is missing, the entire dict is JSON-dumped as fallback.
             (
                 dict(LONG_FALLBACK_PAYLOAD),
                 LONG_FALLBACK_JSON,
@@ -520,7 +517,6 @@ class TestCodeGeneratorNode:
     @patch("src.agents.code.build_user_content_for_code_generator")
     def test_generator_stub_code_output(self, mock_uc, mock_llm, mock_check, mock_prompt, base_state, stub_code):
         """Test error when LLM returns stub code with various stub markers."""
-        initial_revision_count = base_state.get("code_revision_count", 0)
         mock_check.return_value = None
         mock_prompt.return_value = "System Prompt"
         mock_uc.return_value = "User Content"
@@ -530,8 +526,9 @@ class TestCodeGeneratorNode:
         
         # Strict assertions - verify stub detection
         assert result["workflow_phase"] == "code_generation"
-        expected_count = min(initial_revision_count + 1, base_state["runtime_config"]["max_code_revisions"])
-        assert result["code_revision_count"] == expected_count
+        # Note: code_revision_count is NOT returned when stub is detected -
+        # code_review is the sole owner of that counter to avoid double-counting
+        assert "code_revision_count" not in result
         assert "Generated code is empty or contains stub" in result["reviewer_feedback"]
         # Verify stub code is preserved in result
         assert result["code"] == stub_code
@@ -576,7 +573,7 @@ class TestCodeGeneratorNode:
     @patch("src.agents.code.call_agent_with_metrics")
     @patch("src.agents.code.build_user_content_for_code_generator")
     def test_generator_stub_code_respects_max_revisions(self, mock_uc, mock_llm, mock_check, mock_prompt, base_state):
-        """Test that code revision count respects max limit even when stub code is generated."""
+        """Test that stub code detection returns error feedback without touching revision count."""
         mock_check.return_value = None
         mock_prompt.return_value = "System Prompt"
         mock_uc.return_value = "User Content"
@@ -588,10 +585,10 @@ class TestCodeGeneratorNode:
         
         result = code_generator_node(base_state)
         
-        # Strict assertions - verify max cap is respected
+        # Verify stub detection without code_revision_count modification
+        # (code_review is the sole owner of that counter)
         assert result["workflow_phase"] == "code_generation"
-        assert result["code_revision_count"] == max_revs
-        assert result["code_revision_count"] <= max_revs
+        assert "code_revision_count" not in result
         assert "Generated code is empty or contains stub" in result["reviewer_feedback"]
         assert result["code"] == "# TODO: Implement simulation"
         
@@ -600,7 +597,7 @@ class TestCodeGeneratorNode:
     @patch("src.agents.code.call_agent_with_metrics")
     @patch("src.agents.code.build_user_content_for_code_generator")
     def test_generator_stub_code_respects_custom_max_revisions(self, mock_uc, mock_llm, mock_check, mock_prompt, base_state):
-        """Test that code revision count respects custom runtime_config max_code_revisions."""
+        """Test that stub code detection returns error feedback without touching revision count."""
         mock_check.return_value = None
         mock_prompt.return_value = "System Prompt"
         mock_uc.return_value = "User Content"
@@ -613,9 +610,9 @@ class TestCodeGeneratorNode:
         
         result = code_generator_node(base_state)
         
-        # Should respect runtime_config max, not just default MAX_CODE_REVISIONS
-        assert result["code_revision_count"] == custom_max
-        assert result["code_revision_count"] <= custom_max
+        # Verify stub detection without code_revision_count modification
+        # (code_review is the sole owner of that counter)
+        assert "code_revision_count" not in result
         assert "Generated code is empty or contains stub" in result["reviewer_feedback"]
 
     @patch("src.agents.code.build_agent_prompt")
@@ -731,8 +728,7 @@ class TestCodeGeneratorNode:
     @patch("src.agents.code.call_agent_with_metrics")
     @patch("src.agents.code.check_context_or_escalate")
     def test_generator_short_code_without_stub_markers(self, mock_check, mock_llm, mock_user_content, mock_prompt, base_state, short_code):
-        """Short code lacking stub markers should still trigger revision path."""
-        initial_revision_count = base_state.get("code_revision_count", 0)
+        """Short code lacking stub markers should still trigger error feedback."""
         mock_check.return_value = None
         mock_prompt.return_value = "System Prompt"
         mock_user_content.return_value = "User Content"
@@ -740,10 +736,10 @@ class TestCodeGeneratorNode:
         
         result = code_generator_node(base_state)
         
-        # Strict assertions - verify short code detection
+        # Verify short code detection without code_revision_count modification
+        # (code_review is the sole owner of that counter)
         assert result["workflow_phase"] == "code_generation"
-        expected_count = min(initial_revision_count + 1, base_state["runtime_config"]["max_code_revisions"])
-        assert result["code_revision_count"] == expected_count
+        assert "code_revision_count" not in result
         assert "Generated code is empty or contains stub" in result["reviewer_feedback"]
         # Verify short code is preserved
         assert result["code"] == short_code
@@ -848,7 +844,6 @@ class TestCodeGeneratorNode:
     @patch("src.agents.code.build_user_content_for_code_generator")
     def test_generator_code_extraction_empty_code_string(self, mock_uc, mock_llm, mock_check, mock_prompt, base_state):
         """Test code extraction when LLM returns empty code string."""
-        initial_revision_count = base_state.get("code_revision_count", 0)
         mock_check.return_value = None
         mock_prompt.return_value = "System Prompt"
         mock_uc.return_value = "User Content"
@@ -859,8 +854,8 @@ class TestCodeGeneratorNode:
         # Empty code should trigger stub detection
         assert result["workflow_phase"] == "code_generation"
         assert result["code"] == ""
-        expected_count = min(initial_revision_count + 1, base_state["runtime_config"]["max_code_revisions"])
-        assert result["code_revision_count"] == expected_count
+        # code_revision_count is NOT returned - code_review is the sole owner
+        assert "code_revision_count" not in result
         assert "Generated code is empty or contains stub" in result["reviewer_feedback"]
 
     @patch("src.agents.code.build_agent_prompt")
@@ -869,7 +864,6 @@ class TestCodeGeneratorNode:
     @patch("src.agents.code.build_user_content_for_code_generator")
     def test_generator_code_extraction_whitespace_only_code(self, mock_uc, mock_llm, mock_check, mock_prompt, base_state):
         """Test code extraction when LLM returns whitespace-only code."""
-        initial_revision_count = base_state.get("code_revision_count", 0)
         whitespace_code = "   \n\t  \n   "
         mock_check.return_value = None
         mock_prompt.return_value = "System Prompt"
@@ -881,8 +875,8 @@ class TestCodeGeneratorNode:
         # Whitespace-only code should trigger stub detection (after strip)
         assert result["workflow_phase"] == "code_generation"
         assert result["code"] == whitespace_code
-        expected_count = min(initial_revision_count + 1, base_state["runtime_config"]["max_code_revisions"])
-        assert result["code_revision_count"] == expected_count
+        # code_revision_count is NOT returned - code_review is the sole owner
+        assert "code_revision_count" not in result
         assert "Generated code is empty or contains stub" in result["reviewer_feedback"]
 
     @patch("src.agents.code.build_agent_prompt")
@@ -1000,7 +994,6 @@ class TestCodeGeneratorNode:
     @patch("src.agents.code.build_user_content_for_code_generator")
     def test_generator_stub_detection_case_insensitive(self, mock_uc, mock_llm, mock_check, mock_prompt, base_state):
         """Test that stub detection is case-insensitive."""
-        initial_revision_count = base_state.get("code_revision_count", 0)
         mock_check.return_value = None
         mock_prompt.return_value = "System Prompt"
         mock_uc.return_value = "User Content"
@@ -1021,8 +1014,8 @@ class TestCodeGeneratorNode:
             result = code_generator_node(base_state)
             
             assert result["workflow_phase"] == "code_generation"
-            expected_count = min(initial_revision_count + 1, base_state["runtime_config"]["max_code_revisions"])
-            assert result["code_revision_count"] == expected_count
+            # code_revision_count is NOT returned - code_review is the sole owner
+            assert "code_revision_count" not in result
             assert "Generated code is empty or contains stub" in result["reviewer_feedback"]
             assert result["code"] == stub_code
 

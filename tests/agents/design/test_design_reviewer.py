@@ -155,7 +155,7 @@ class TestDesignReviewerNode:
         initial_count = base_state.get("design_revision_count", 0)
         mock_llm.return_value = {
             "verdict": "needs_revision",
-            "feedback": "Add more details",
+            "summary": "Add more details",  # Schema uses "summary" not "feedback"
             "issues": ["Missing parameters"]
         }
         
@@ -181,7 +181,7 @@ class TestDesignReviewerNode:
         """Test reviewer hitting max revisions."""
         mock_check.return_value = None
         mock_prompt.return_value = "Prompt"
-        mock_llm.return_value = {"verdict": "needs_revision", "feedback": "more"}
+        mock_llm.return_value = {"verdict": "needs_revision", "summary": "more"}  # Schema uses "summary"
         
         max_revisions = base_state.get("runtime_config", {}).get("max_design_revisions", MAX_DESIGN_REVISIONS)
         base_state["design_revision_count"] = max_revisions  # Already at max
@@ -232,7 +232,7 @@ class TestDesignReviewerNode:
         """Test handling when LLM returns JSON without 'verdict' (fail-closed safety)."""
         mock_check.return_value = None
         mock_prompt.return_value = "Prompt"
-        mock_llm.return_value = {"feedback": "Some feedback but no verdict"}
+        mock_llm.return_value = {"summary": "Some feedback but no verdict"}  # Schema uses "summary"
         initial_count = base_state.get("design_revision_count", 0)
         
         result = design_reviewer_node(base_state)
@@ -246,7 +246,7 @@ class TestDesignReviewerNode:
         assert result["design_revision_count"] == initial_count + 1
         # Verify workflow phase is set
         assert result["workflow_phase"] == "design_review"
-        # Verify feedback IS set for needs_revision (uses feedback from LLM response)
+        # Verify feedback IS set for needs_revision (uses summary from LLM response)
         assert result["reviewer_feedback"] == "Some feedback but no verdict"
 
     @patch("src.agents.design.call_agent_with_metrics")

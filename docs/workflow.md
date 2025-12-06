@@ -821,14 +821,12 @@ def material_checkpoint_node(state):
             context={"stage_id": "stage0_material_validation", "agent": "material_checkpoint"}
         )
         
-        # Clear pending questions
+        # Clear pending questions (supervisor clears ask_user_trigger after handling)
         state["pending_user_questions"] = []
-        state["awaiting_user_input"] = False
         
         return {
             "validated_materials": validated,
             "pending_user_questions": [],
-            "awaiting_user_input": False,
             "user_responses": {},  # Clear for next interaction
         }
     
@@ -863,7 +861,6 @@ def material_checkpoint_node(state):
             "planned_materials": updated_materials,
             "backtrack_count": state.get("backtrack_count", 0) + 1,
             "pending_user_questions": [],
-            "awaiting_user_input": False,
             "user_responses": {},
         }
     
@@ -884,13 +881,12 @@ def material_checkpoint_node(state):
             "replan_count": state.get("replan_count", 0) + 1,
             "backtrack_count": state.get("backtrack_count", 0) + 1,
             "pending_user_questions": [],
-            "awaiting_user_input": False,
             "user_responses": {},
         }
     
     else:
-        # User needs more information - keep awaiting input
-        return {"awaiting_user_input": True}
+        # User needs more information - preserve trigger for another ask_user cycle
+        return {"ask_user_trigger": state.get("ask_user_trigger")}
 ```
 
 **Outputs**:
@@ -1036,13 +1032,14 @@ This table summarizes when each agent can propose backtracking and what typicall
 - Backtrack approval needed
 
 **Behavior**:
-1. Set `awaiting_user_input = True`
-2. Populate `pending_user_questions`
-3. Pause graph execution
-4. Wait for `user_responses` to be filled
+1. Node receives `ask_user_trigger` (set by previous node) and `pending_user_questions`
+2. Call `interrupt()` to pause graph execution and display questions to user
+3. Wait for user response via `Command(resume=user_response)`
+4. Store response in `user_responses`
 5. **Log user interaction** to `user_interactions` list
-6. Update `progress["user_interactions"]` for persistence
-7. Resume to appropriate node
+6. Route to `supervisor` which evaluates response and clears `ask_user_trigger`
+
+**Note**: The `ask_user_trigger` field is the **single mechanism** for routing to ask_user. All routers check this field first via the `with_trigger_check` wrapper. See GRAPH.md for details on the routing mechanism.
 
 **User Interaction Logging**:
 ```python
@@ -1442,7 +1439,7 @@ This section documents which nodes mutate which state fields, when state is pers
 | analyze | stage_outputs, paper_figures | analysis_summary, analysis_result_reports, figure_comparisons, discrepancies_log |
 | COMPARISON_CHECK | figure_comparisons, analysis_summary, analysis_result_reports | comparison_verdict, analysis_revision_count |
 | supervisor | progress, validation_hierarchy, user_responses | supervisor_verdict, progress updates, pending_user_questions |
-| ask_user | pending_user_questions | user_responses, awaiting_user_input |
+| ask_user | pending_user_questions, ask_user_trigger | user_responses |
 | generate_report | figure_comparisons, progress | report_conclusions, final_report_path |
 
 ### State Persistence Rules
@@ -1714,9 +1711,9 @@ def design_node(state):
     
     if check["escalate"]:
         # Context overflow - need user guidance
+        # Router will intercept ask_user_trigger and route to ask_user
         return {
             "pending_user_questions": [check["user_question"]],
-            "awaiting_user_input": True,
             "ask_user_trigger": "context_overflow",
             "last_node_before_ask_user": "design",
         }
@@ -1789,25 +1786,25 @@ When `check_context_before_node()` returns `escalate=True`:
 4. Apply selected action and resume
 
 ```python
-# In ask_user node, handle context_overflow trigger
+# In supervisor, handle context_overflow trigger from user response
 if state.get("ask_user_trigger") == "context_overflow":
     user_choice = state["user_responses"].get("context_recovery")
     
     if user_choice == "summarize_feedback":
         # Use LLM to summarize, then retry
         summary = summarize_feedback(state["reviewer_feedback"])
-        return {"reviewer_feedback": summary, "awaiting_user_input": False}
+        return {"reviewer_feedback": summary}  # supervisor clears trigger
     
     elif user_choice == "truncate_paper":
         # Keep only Methods section
         state["paper_text"] = extract_methods_section(state["paper_text"])
-        return {"paper_text": state["paper_text"], "awaiting_user_input": False}
+        return {"paper_text": state["paper_text"]}  # supervisor clears trigger
     
     elif user_choice == "skip_stage":
         # Mark current stage as blocked
         update_progress_stage_status(state, state["current_stage_id"], "blocked",
             summary="Skipped due to context limits")
-        return {"awaiting_user_input": False}
+        return {}  # supervisor clears trigger
 ```
 
 ### Loop Context Estimation
@@ -1964,9 +1961,11 @@ def some_node(state):
     
     if check["escalate"]:
         # Context too large, user intervention needed
+        # Router will intercept ask_user_trigger and route to ask_user
         return {
             "pending_user_questions": [check["user_question"]],
-            "awaiting_user_input": True,
+            "ask_user_trigger": "context_overflow",
+            "last_node_before_ask_user": "design",
         }
     
     if check["state_updates"]:
