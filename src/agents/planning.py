@@ -144,6 +144,15 @@ def plan_node(state: ReproState) -> dict:
     start_time = datetime.now(timezone.utc)
     logger = logging.getLogger(__name__)
     
+    # Early return if trigger already set (preserves existing trigger for router)
+    # This handles the case where adapt_prompts set a trigger via hard edge
+    if state.get("ask_user_trigger"):
+        logger.info(
+            f"plan: Skipping - ask_user_trigger already set "
+            f"(trigger: {state.get('ask_user_trigger')})"
+        )
+        return {}
+    
     # Validate paper text exists and is non-empty
     paper_text = state.get("paper_text", "")
     if not paper_text or len(paper_text.strip()) < 100:
