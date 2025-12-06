@@ -1,31 +1,27 @@
-"""Validation and error handling tests for ask_user_node."""
+"""Validation and error handling tests for ask_user_node.
+
+These tests use the LangGraph interrupt() mocking pattern since the implementation
+uses interrupt() for human-in-the-loop workflows rather than CLI input.
+
+NOTE: ask_user_node has simplified validation - it only checks for empty responses.
+Keyword validation is handled by supervisor's trigger handlers, not here.
+"""
 
 import logging
-import os
-import signal
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from src.agents.user_interaction import ask_user_node
 
-pytestmark = pytest.mark.slow
 
-class TestValidationErrorHandling:
-    """Tests for validation error handling."""
+class TestEmptyResponseHandling:
+    """Tests for empty response handling (the only validation in ask_user_node)."""
 
-    @patch("builtins.input")
-    @patch("src.agents.user_interaction.validate_user_responses")
-    @patch("src.agents.user_interaction.save_checkpoint")
-    @patch.dict("os.environ", {"REPROLAB_NON_INTERACTIVE": "0"})
-    @patch("signal.signal")
-    @patch("signal.alarm")
-    def test_returns_error_on_validation_failure(
-        self, mock_alarm, mock_signal, mock_save, mock_validate, mock_input
-    ):
-        """Should return validation error when response is invalid."""
-        mock_input.side_effect = ["invalid response", ""]
-        mock_validate.return_value = ["Response must contain APPROVE or REJECT"]
+    @patch("src.agents.user_interaction.interrupt")
+    def test_rejects_empty_response(self, mock_interrupt):
+        """Should reject empty response and ask user to retry."""
+        mock_interrupt.return_value = ""
         
         state = {
             "pending_user_questions": ["Material checkpoint: APPROVE or REJECT?"],
@@ -36,355 +32,51 @@ class TestValidationErrorHandling:
         
         # Should return with awaiting_user_input=True and error message
         assert result["awaiting_user_input"] is True
-        assert "validation errors" in result["pending_user_questions"][0].lower()
+        assert "empty" in result["pending_user_questions"][0].lower()
         assert result["ask_user_trigger"] == "material_checkpoint"
-        # Verify validation counter is initialized to 1 (first attempt)
-        assert result["user_validation_attempts_material_checkpoint"] == 1
-        # Verify error message contains the actual validation error
-        assert "Response must contain APPROVE or REJECT" in result["pending_user_questions"][0]
-        # Verify attempt count is shown in error message
-        assert "attempt 1/3" in result["pending_user_questions"][0].lower()
-        # Verify last_node_before_ask_user is preserved if present
-        assert "last_node_before_ask_user" not in result or result.get("last_node_before_ask_user") == state.get("last_node_before_ask_user")
+        # Should NOT have user_responses since response was empty
+        assert "user_responses" not in result
 
-    @patch("builtins.input")
-    @patch("src.agents.user_interaction.validate_user_responses")
-    @patch("src.agents.user_interaction.save_checkpoint")
-    @patch.dict("os.environ", {"REPROLAB_NON_INTERACTIVE": "0"})
-    @patch("signal.signal")
-    @patch("signal.alarm")
-    def test_preserves_all_questions_on_validation_failure(
-        self, mock_alarm, mock_signal, mock_save, mock_validate, mock_input
-    ):
-        """Should preserve ALL questions when validation fails, not just the first one."""
-        # User answers all three, but validation fails
-        mock_input.side_effect = ["Ans1", "", "Ans2", "", "Ans3", ""]
-        mock_validate.return_value = ["Something is wrong"]
+    @patch("src.agents.user_interaction.interrupt")
+    def test_rejects_whitespace_only_response(self, mock_interrupt):
+        """Should reject whitespace-only response."""
+        mock_interrupt.return_value = "   \n\t  "
         
-        questions = ["Q1", "Q2", "Q3"]
         state = {
-            "pending_user_questions": questions,
-            "ask_user_trigger": "multi_test",
+            "pending_user_questions": ["Question?"],
+            "ask_user_trigger": "test",
         }
         
         result = ask_user_node(state)
         
         assert result["awaiting_user_input"] is True
-        # The returned pending questions should include the error message AND re-ask needed questions.
-        # If the implementation replaces the list with a single string (error + Q1), 
-        # then Q2 and Q3 are lost.
-        
-        # We expect the returned list to either be:
-        # 1. [Error + Q1, Q2, Q3]
-        # 2. [Error Message, Q1, Q2, Q3]
-        # 3. Or at least contain the text of all questions if combined.
-        
-        # For now, let's assert that Q2 and Q3 are still present in some form in the pending questions
-        # so the user is prompted for them again.
-        pending_text = " ".join(result["pending_user_questions"])
-        assert "Q2" in pending_text, "Question 2 was lost after validation failure"
-        assert "Q3" in pending_text, "Question 3 was lost after validation failure"
-        # Verify exact structure: first item should have error + Q1, then Q2, then Q3
-        assert len(result["pending_user_questions"]) == 3, "Should have exactly 3 questions (error+Q1, Q2, Q3)"
-        assert "Q1" in result["pending_user_questions"][0], "First question should contain Q1"
-        assert result["pending_user_questions"][1] == "Q2", "Second question should be exactly Q2"
-        assert result["pending_user_questions"][2] == "Q3", "Third question should be exactly Q3"
-        # Verify error message is in first question
-        assert "Something is wrong" in result["pending_user_questions"][0]
+        assert "empty" in result["pending_user_questions"][0].lower()
 
-    @patch("builtins.input")
-    @patch("src.agents.user_interaction.validate_user_responses")
-    @patch("src.agents.user_interaction.save_checkpoint")
-    @patch.dict("os.environ", {"REPROLAB_NON_INTERACTIVE": "0"})
-    @patch("signal.signal")
-    @patch("signal.alarm")
-    def test_increments_validation_attempt_counter(
-        self, mock_alarm, mock_signal, mock_save, mock_validate, mock_input
-    ):
-        """Should increment validation attempt counter on each failure."""
-        mock_input.side_effect = ["invalid", ""]
-        mock_validate.return_value = ["Invalid response"]
+    @patch("src.agents.user_interaction.interrupt")
+    def test_accepts_any_non_empty_response(self, mock_interrupt):
+        """Should accept any non-empty response (validation is done by supervisor)."""
+        mock_interrupt.return_value = "option b - Adjust γX to 1.116×10¹⁴ rad/s"
         
         state = {
-            "pending_user_questions": ["Question?"],
-            "ask_user_trigger": "material_checkpoint",
-            "user_validation_attempts_material_checkpoint": 1,  # Already tried once
+            "pending_user_questions": ["Choose option a, b, or c"],
+            "ask_user_trigger": "reviewer_escalation",
         }
         
         result = ask_user_node(state)
         
-        # Should increment to 2
-        assert result["user_validation_attempts_material_checkpoint"] == 2
-        assert result["awaiting_user_input"] is True
-        # Verify attempt count is shown correctly in error message
-        assert "attempt 2/3" in result["pending_user_questions"][0].lower()
-        # Verify counter is initialized from 0 if not present
-        state_no_counter = {
-            "pending_user_questions": ["Question?"],
-            "ask_user_trigger": "material_checkpoint",
-        }
-        mock_input.side_effect = ["invalid", ""]
-        result2 = ask_user_node(state_no_counter)
-        assert result2["user_validation_attempts_material_checkpoint"] == 1, "Counter should initialize to 1 if missing"
-
-    @patch("builtins.input")
-    @patch("src.agents.user_interaction.validate_user_responses")
-    @patch("src.agents.user_interaction.save_checkpoint")
-    @patch.dict("os.environ", {"REPROLAB_NON_INTERACTIVE": "0"})
-    @patch("signal.signal")
-    @patch("signal.alarm")
-    def test_accepts_after_max_validation_attempts(
-        self, mock_alarm, mock_signal, mock_save, mock_validate, mock_input
-    ):
-        """Should accept response after max validation attempts exceeded."""
-        mock_input.side_effect = ["still invalid", ""]
-        mock_validate.return_value = ["Invalid response"]
-        
-        state = {
-            "pending_user_questions": ["Question?"],
-            "ask_user_trigger": "material_checkpoint",
-            "user_validation_attempts_material_checkpoint": 2,  # Already tried twice (max=3)
-        }
-        
-        with patch("src.agents.user_interaction.logging.getLogger") as mock_get_logger:
-            mock_logger = MagicMock()
-            mock_get_logger.return_value = mock_logger
-            
-            result = ask_user_node(state)
-            
-            # Verify warning logged with correct message
-            mock_logger.warning.assert_called_once()
-            warning_call = mock_logger.warning.call_args[0][0]
-            assert "3 times" in warning_call or "validation failed" in warning_call.lower()
-            assert "material_checkpoint" in warning_call
-        
-        # Should accept despite validation errors
+        # Should accept any non-empty response
         assert result["awaiting_user_input"] is False
         assert "user_responses" in result
-        assert result["user_responses"]["Question?"] == "still invalid", "Response should be stored"
-        assert "supervisor_feedback" in result  # Should note the validation override
-        assert "validation errors" in result["supervisor_feedback"].lower() or "3 attempts" in result["supervisor_feedback"]
-        # Counter should be reset
-        assert result["user_validation_attempts_material_checkpoint"] == 0
-        # Pending questions should be cleared
-        assert result["pending_user_questions"] == []
-        # Workflow phase should be set
-        assert result["workflow_phase"] == "awaiting_user"
-
-    @patch("builtins.input")
-    @patch("src.agents.user_interaction.validate_user_responses")
-    @patch("src.agents.user_interaction.save_checkpoint")
-    @patch.dict("os.environ", {"REPROLAB_NON_INTERACTIVE": "0"})
-    @patch("signal.signal")
-    @patch("signal.alarm")
-    def test_resets_validation_counter_on_valid_response(
-        self, mock_alarm, mock_signal, mock_save, mock_validate, mock_input
-    ):
-        """Should reset validation counter when response is valid."""
-        mock_input.side_effect = ["APPROVE", ""]
-        mock_validate.return_value = []  # No validation errors
-        
-        state = {
-            "pending_user_questions": ["Question?"],
-            "ask_user_trigger": "material_checkpoint",
-            "user_validation_attempts_material_checkpoint": 2,
-        }
-        
-        result = ask_user_node(state)
-        
-        # Counter should be reset to 0
-        assert result["user_validation_attempts_material_checkpoint"] == 0
-        assert result["awaiting_user_input"] is False
-        # Response should be stored
-        assert result["user_responses"]["Question?"] == "APPROVE"
-        # Pending questions should be cleared
-        assert result["pending_user_questions"] == []
-        # Workflow phase should be set
-        assert result["workflow_phase"] == "awaiting_user"
-
-class TestSingleLineResponseFallback:
-    """Tests for single-line response fallback."""
-
-    @patch("builtins.input")
-    @patch("src.agents.user_interaction.validate_user_responses")
-    @patch("src.agents.user_interaction.save_checkpoint")
-    @patch.dict("os.environ", {"REPROLAB_NON_INTERACTIVE": "0"})
-    @patch("signal.signal")
-    @patch("signal.alarm")
-    def test_prompts_for_single_line_on_eof_multiline(
-        self, mock_alarm, mock_signal, mock_save, mock_validate, mock_input
-    ):
-        """Should use single-line input when multiline encounters EOF."""
-        # First input raises EOFError (empty multiline), then single-line response
-        mock_input.side_effect = [EOFError(), "APPROVE"]
-        mock_validate.return_value = []
-        
-        state = {
-            "pending_user_questions": ["Question?"],
-            "ask_user_trigger": "material_checkpoint",
-        }
-        
-        result = ask_user_node(state)
-        
-        assert result["awaiting_user_input"] is False
-        assert result["user_responses"]["Question?"] == "APPROVE"
-        # Verify single-line prompt was called
-        assert mock_input.call_count == 2
-        # Verify second call was for single-line input
-        assert "single line" in mock_input.call_args_list[1][0][0].lower()
-
-class TestExceptionHandling:
-    """Tests for exception handling (KeyboardInterrupt, TimeoutError, EOFError)."""
-
-    @patch("builtins.input")
-    @patch("src.agents.user_interaction.save_checkpoint")
-    @patch.dict("os.environ", {"REPROLAB_NON_INTERACTIVE": "0"})
-    @patch("signal.signal")
-    @patch("signal.alarm")
-    def test_handles_keyboard_interrupt(self, mock_alarm, mock_signal, mock_save, mock_input):
-        """Should save checkpoint on KeyboardInterrupt."""
-        mock_input.side_effect = KeyboardInterrupt()
-        mock_save.return_value = "/path/to/checkpoint"
-        
-        state = {
-            "pending_user_questions": ["Question?"],
-            "ask_user_trigger": "test",
-        }
-        
-        with pytest.raises(SystemExit) as exc_info:
-            ask_user_node(state)
-        
-        assert exc_info.value.code == 0
-        mock_save.assert_called_once()
-        # Verify checkpoint name contains trigger and 'interrupted'
-        args, _ = mock_save.call_args
-        assert "interrupted_test" in args[1]
-
-    @patch("builtins.input")
-    @patch("src.agents.user_interaction.save_checkpoint")
-    @patch.dict("os.environ", {"REPROLAB_NON_INTERACTIVE": "0"})
-    @patch("signal.signal")
-    @patch("signal.alarm")
-    def test_handles_timeout_error(self, mock_alarm, mock_signal, mock_save, mock_input):
-        """Should save checkpoint on TimeoutError."""
-        # Simulate TimeoutError raised during input
-        mock_input.side_effect = TimeoutError()
-        mock_save.return_value = "/path/to/checkpoint"
-        
-        state = {
-            "pending_user_questions": ["Question?"],
-            "ask_user_trigger": "test",
-        }
-        
-        with pytest.raises(SystemExit) as exc_info:
-            ask_user_node(state)
-            
-        assert exc_info.value.code == 0
-        mock_save.assert_called_once()
-        args, _ = mock_save.call_args
-        assert "timeout_test" in args[1]
-
-    @patch("builtins.input")
-    @patch("src.agents.user_interaction.save_checkpoint")
-    @patch.dict("os.environ", {"REPROLAB_NON_INTERACTIVE": "0"})
-    @patch("signal.signal")
-    @patch("signal.alarm")
-    def test_handles_eof_error_at_top_level(self, mock_alarm, mock_signal, mock_save, mock_input):
-        """Should save checkpoint on EOFError when not inside multiline loop."""
-        # This EOFError simulates immediate EOF on input, which might bubble up
-        # However, the code catches EOFError inside the inner loop.
-        # To test the outer EOFError, we need the inner loop to propagate it or the single line input to propagate it.
-        
-        # The code:
-        # try:
-        #   line = input() ... except EOFError: break
-        #
-        # if not response: response = input("Your response (single line): ")
-        
-        # So if the inner loop breaks due to EOF, response is empty.
-        # Then it calls input() again. If THAT raises EOFError, it's caught by the outer try/except.
-        
-        mock_input.side_effect = [EOFError(), EOFError()]
-        mock_save.return_value = "/path/to/checkpoint"
-        
-        state = {
-            "pending_user_questions": ["Question?"],
-            "ask_user_trigger": "test",
-        }
-        
-        with pytest.raises(SystemExit) as exc_info:
-            ask_user_node(state)
-            
-        assert exc_info.value.code == 0
-        mock_save.assert_called_once()
-        args, _ = mock_save.call_args
-        assert "eof_test" in args[1]
-        # Verify state was passed correctly
-        assert args[0] == state
+        assert result["user_responses"]["Choose option a, b, or c"] == "option b - Adjust γX to 1.116×10¹⁴ rad/s"
 
 
-class TestEdgeCases:
-    """Tests for edge cases and boundary conditions."""
+class TestResponseStorage:
+    """Tests for response storage."""
 
-    @patch("builtins.input")
-    @patch("src.agents.user_interaction.validate_user_responses")
-    @patch("src.agents.user_interaction.save_checkpoint")
-    @patch.dict("os.environ", {"REPROLAB_NON_INTERACTIVE": "0"})
-    @patch("signal.signal")
-    @patch("signal.alarm")
-    def test_empty_questions_list(self, mock_alarm, mock_signal, mock_save, mock_validate, mock_input):
-        """Should handle empty questions list gracefully."""
-        state = {
-            "pending_user_questions": [],
-            "ask_user_trigger": "test",
-        }
-        
-        result = ask_user_node(state)
-        
-        assert result["awaiting_user_input"] is False
-        assert result["workflow_phase"] == "awaiting_user"
-        # Should not call input when no questions
-        mock_input.assert_not_called()
-        mock_validate.assert_not_called()
-
-    @patch("builtins.input")
-    @patch("src.agents.user_interaction.validate_user_responses")
-    @patch("src.agents.user_interaction.save_checkpoint")
-    @patch.dict("os.environ", {"REPROLAB_NON_INTERACTIVE": "0"})
-    @patch("signal.signal")
-    @patch("signal.alarm")
-    def test_missing_ask_user_trigger(self, mock_alarm, mock_signal, mock_save, mock_validate, mock_input):
-        """Should handle missing ask_user_trigger with safety net."""
-        mock_input.side_effect = ["APPROVE", ""]
-        mock_validate.return_value = []
-        
-        state = {
-            "pending_user_questions": ["Question?"],
-            # Missing ask_user_trigger - safety net will set "unknown_escalation"
-        }
-        
-        result = ask_user_node(state)
-        
-        # Safety net should set "unknown_escalation" as trigger
-        assert result["awaiting_user_input"] is False
-        assert result["user_validation_attempts_unknown_escalation"] == 0
-        # Verify validate_user_responses was called with "unknown_escalation" trigger
-        mock_validate.assert_called_once()
-        call_args = mock_validate.call_args
-        assert call_args[0][0] == "unknown_escalation"
-
-    @patch("builtins.input")
-    @patch("src.agents.user_interaction.validate_user_responses")
-    @patch("src.agents.user_interaction.save_checkpoint")
-    @patch.dict("os.environ", {"REPROLAB_NON_INTERACTIVE": "0"})
-    @patch("signal.signal")
-    @patch("signal.alarm")
-    def test_empty_response_string(self, mock_alarm, mock_signal, mock_save, mock_validate, mock_input):
-        """Should handle empty response string."""
-        # Empty multiline: first "" gets appended, second "" breaks the loop
-        # Then single-line prompt returns "APPROVE"
-        mock_input.side_effect = ["", "", "APPROVE"]
-        mock_validate.return_value = []
+    @patch("src.agents.user_interaction.interrupt")
+    def test_stores_response_correctly(self, mock_interrupt):
+        """Should store response with question as key."""
+        mock_interrupt.return_value = "User's detailed response"
         
         state = {
             "pending_user_questions": ["Question?"],
@@ -394,156 +86,12 @@ class TestEdgeCases:
         result = ask_user_node(state)
         
         assert result["awaiting_user_input"] is False
-        assert result["user_responses"]["Question?"] == "APPROVE"
-        # Verify single-line prompt was called (3rd call)
-        assert mock_input.call_count == 3
-        # Verify third call was for single-line input
-        assert "single line" in mock_input.call_args_list[2][0][0].lower()
+        assert result["user_responses"]["Question?"] == "User's detailed response"
 
-    @patch("builtins.input")
-    @patch("src.agents.user_interaction.validate_user_responses")
-    @patch("src.agents.user_interaction.save_checkpoint")
-    @patch.dict("os.environ", {"REPROLAB_NON_INTERACTIVE": "0"})
-    @patch("signal.signal")
-    @patch("signal.alarm")
-    def test_whitespace_only_response(self, mock_alarm, mock_signal, mock_save, mock_validate, mock_input):
-        """Should handle whitespace-only response."""
-        # Whitespace line, then empty line to break multiline loop
-        # After strip(), response is empty, so single-line prompt returns "APPROVE"
-        mock_input.side_effect = ["   \t  ", "", "APPROVE"]
-        mock_validate.return_value = []
-        
-        state = {
-            "pending_user_questions": ["Question?"],
-            "ask_user_trigger": "test",
-        }
-        
-        result = ask_user_node(state)
-        
-        # After stripping, response is empty, so should use single-line
-        assert result["awaiting_user_input"] is False
-        assert result["user_responses"]["Question?"] == "APPROVE"
-        # Verify single-line prompt was called
-        assert mock_input.call_count == 3
-
-    @patch("builtins.input")
-    @patch("src.agents.user_interaction.validate_user_responses")
-    @patch("src.agents.user_interaction.save_checkpoint")
-    @patch.dict("os.environ", {"REPROLAB_NON_INTERACTIVE": "0"})
-    @patch("signal.signal")
-    @patch("signal.alarm")
-    def test_multiple_questions_all_responses_stored(self, mock_alarm, mock_signal, mock_save, mock_validate, mock_input):
-        """Should store all responses for multiple questions."""
-        mock_input.side_effect = ["Response1", "", "Response2", "", "Response3", ""]
-        mock_validate.return_value = []
-        
-        questions = ["Q1?", "Q2?", "Q3?"]
-        state = {
-            "pending_user_questions": questions,
-            "ask_user_trigger": "test",
-        }
-        
-        result = ask_user_node(state)
-        
-        assert result["awaiting_user_input"] is False
-        assert len(result["user_responses"]) == 3
-        assert result["user_responses"]["Q1?"] == "Response1"
-        assert result["user_responses"]["Q2?"] == "Response2"
-        assert result["user_responses"]["Q3?"] == "Response3"
-        # Verify validate_user_responses was called with all responses
-        mock_validate.assert_called_once()
-        call_args = mock_validate.call_args
-        assert len(call_args[0][1]) == 3
-        assert call_args[0][1]["Q1?"] == "Response1"
-        assert call_args[0][1]["Q2?"] == "Response2"
-        assert call_args[0][1]["Q3?"] == "Response3"
-
-    @patch("builtins.input")
-    @patch("src.agents.user_interaction.validate_user_responses")
-    @patch("src.agents.user_interaction.save_checkpoint")
-    @patch.dict("os.environ", {"REPROLAB_NON_INTERACTIVE": "0"})
-    @patch("signal.signal")
-    @patch("signal.alarm")
-    def test_multiline_response_preserved(self, mock_alarm, mock_signal, mock_save, mock_validate, mock_input):
-        """Should preserve multiline responses correctly."""
-        multiline_response = "Line 1\nLine 2\nLine 3"
-        mock_input.side_effect = ["Line 1", "Line 2", "Line 3", ""]
-        mock_validate.return_value = []
-        
-        state = {
-            "pending_user_questions": ["Question?"],
-            "ask_user_trigger": "test",
-        }
-        
-        result = ask_user_node(state)
-        
-        assert result["awaiting_user_input"] is False
-        assert result["user_responses"]["Question?"] == multiline_response
-
-    @patch("builtins.input")
-    @patch("src.agents.user_interaction.validate_user_responses")
-    @patch("src.agents.user_interaction.save_checkpoint")
-    @patch.dict("os.environ", {"REPROLAB_NON_INTERACTIVE": "0"})
-    @patch("signal.signal")
-    @patch("signal.alarm")
-    def test_validation_counter_initializes_from_zero(self, mock_alarm, mock_signal, mock_save, mock_validate, mock_input):
-        """Should initialize validation counter to 1 if missing from state."""
-        mock_input.side_effect = ["invalid", ""]
-        mock_validate.return_value = ["Error"]
-        
-        state = {
-            "pending_user_questions": ["Question?"],
-            "ask_user_trigger": "new_trigger",
-            # No validation counter key
-        }
-        
-        result = ask_user_node(state)
-        
-        assert result["user_validation_attempts_new_trigger"] == 1
-        assert "attempt 1/3" in result["pending_user_questions"][0].lower()
-
-    @patch("builtins.input")
-    @patch("src.agents.user_interaction.validate_user_responses")
-    @patch("src.agents.user_interaction.save_checkpoint")
-    @patch.dict("os.environ", {"REPROLAB_NON_INTERACTIVE": "0"})
-    @patch("signal.signal")
-    @patch("signal.alarm")
-    def test_max_validation_attempts_boundary(self, mock_alarm, mock_signal, mock_save, mock_validate, mock_input):
-        """Should accept response exactly at max attempts (3)."""
-        mock_input.side_effect = ["invalid", ""]
-        mock_validate.return_value = ["Error"]
-        
-        state = {
-            "pending_user_questions": ["Question?"],
-            "ask_user_trigger": "test",
-            "user_validation_attempts_test": 2,  # This will become 3, which is max
-        }
-        
-        with patch("src.agents.user_interaction.logging.getLogger") as mock_get_logger:
-            mock_logger = MagicMock()
-            mock_get_logger.return_value = mock_logger
-            
-            result = ask_user_node(state)
-            
-            # Should accept after 3 attempts
-            assert result["awaiting_user_input"] is False
-            assert result["user_validation_attempts_test"] == 0
-            mock_logger.warning.assert_called_once()
-
-
-class TestStatePreservation:
-    """Tests for state preservation and merging."""
-
-    @patch("builtins.input")
-    @patch("src.agents.user_interaction.validate_user_responses")
-    @patch("src.agents.user_interaction.save_checkpoint")
-    @patch.dict("os.environ", {"REPROLAB_NON_INTERACTIVE": "0"})
-    @patch("signal.signal")
-    @patch("signal.alarm")
-    def test_preserves_existing_user_responses(self, mock_alarm, mock_signal, mock_save, mock_validate, mock_input):
-        """Should merge new responses with existing user_responses."""
-        mock_input.side_effect = ["NewResponse", ""]
-        mock_validate.return_value = []
+    @patch("src.agents.user_interaction.interrupt")
+    def test_merges_with_existing_user_responses(self, mock_interrupt):
+        """Should merge new response with existing user_responses."""
+        mock_interrupt.return_value = "NewResponse"
         
         state = {
             "pending_user_questions": ["NewQuestion?"],
@@ -560,119 +108,29 @@ class TestStatePreservation:
         assert result["user_responses"]["OldQuestion?"] == "OldResponse"
         assert result["user_responses"]["NewQuestion?"] == "NewResponse"
 
-    @patch("builtins.input")
-    @patch("src.agents.user_interaction.validate_user_responses")
-    @patch("src.agents.user_interaction.save_checkpoint")
-    @patch.dict("os.environ", {"REPROLAB_NON_INTERACTIVE": "0"})
-    @patch("signal.signal")
-    @patch("signal.alarm")
-    def test_preserves_last_node_before_ask_user(self, mock_alarm, mock_signal, mock_save, mock_validate, mock_input):
-        """Should preserve last_node_before_ask_user on validation failure."""
-        mock_input.side_effect = ["invalid", ""]
-        mock_validate.return_value = ["Error"]
+    @patch("src.agents.user_interaction.interrupt")
+    def test_handles_none_user_responses(self, mock_interrupt):
+        """Should handle None user_responses in state gracefully."""
+        mock_interrupt.return_value = "Response"
         
         state = {
             "pending_user_questions": ["Question?"],
             "ask_user_trigger": "test",
-            "last_node_before_ask_user": "some_node",
+            "user_responses": None,  # Explicitly None
         }
         
         result = ask_user_node(state)
         
-        assert result["last_node_before_ask_user"] == "some_node"
-
-    @patch("builtins.input")
-    @patch("src.agents.user_interaction.validate_user_responses")
-    @patch("src.agents.user_interaction.save_checkpoint")
-    @patch.dict("os.environ", {"REPROLAB_NON_INTERACTIVE": "0"})
-    @patch("signal.signal")
-    @patch("signal.alarm")
-    def test_preserves_paper_id(self, mock_alarm, mock_signal, mock_save, mock_validate, mock_input):
-        """Should preserve paper_id in state (read-only, but verify it's used)."""
-        mock_input.side_effect = ["APPROVE", ""]
-        mock_validate.return_value = []
-        
-        state = {
-            "pending_user_questions": ["Question?"],
-            "ask_user_trigger": "test",
-            "paper_id": "test_paper_123",
-        }
-        
-        # Verify paper_id is used in output (printed, but we can't easily test that)
-        # But we can verify the function completes successfully
-        result = ask_user_node(state)
         assert result["awaiting_user_input"] is False
-
-    @patch("builtins.input")
-    @patch("src.agents.user_interaction.validate_user_responses")
-    @patch("src.agents.user_interaction.save_checkpoint")
-    @patch.dict("os.environ", {"REPROLAB_NON_INTERACTIVE": "0"})
-    @patch("signal.signal")
-    @patch("signal.alarm")
-    def test_does_not_preserve_last_node_on_success(self, mock_alarm, mock_signal, mock_save, mock_validate, mock_input):
-        """Should NOT preserve last_node_before_ask_user on successful validation (cleared after input)."""
-        mock_input.side_effect = ["APPROVE", ""]
-        mock_validate.return_value = []
-        
-        state = {
-            "pending_user_questions": ["Question?"],
-            "ask_user_trigger": "test",
-            "last_node_before_ask_user": "some_node",
-        }
-        
-        result = ask_user_node(state)
-        
-        # last_node_before_ask_user should NOT be in result (cleared after successful input)
-        assert "last_node_before_ask_user" not in result
-        assert result["awaiting_user_input"] is False
+        assert result["user_responses"]["Question?"] == "Response"
 
 
-class TestNonInteractiveMode:
-    """Tests for non-interactive mode."""
+class TestEdgeCases:
+    """Tests for edge cases and boundary conditions."""
 
-    @patch("src.agents.user_interaction.save_checkpoint")
-    @patch.dict("os.environ", {"REPROLAB_NON_INTERACTIVE": "1"})
-    def test_non_interactive_mode_saves_checkpoint(self, mock_save):
-        """Should save checkpoint and exit in non-interactive mode."""
-        mock_save.return_value = "/path/to/checkpoint"
-        
-        state = {
-            "pending_user_questions": ["Question?"],
-            "ask_user_trigger": "test",
-            "paper_id": "test_paper",
-        }
-        
-        with pytest.raises(SystemExit) as exc_info:
-            ask_user_node(state)
-        
-        assert exc_info.value.code == 0
-        mock_save.assert_called_once()
-        args, _ = mock_save.call_args
-        assert args[0] == state
-        assert "awaiting_user_test" in args[1]
-
-    @patch("src.agents.user_interaction.save_checkpoint")
-    @patch.dict("os.environ", {"REPROLAB_NON_INTERACTIVE": "1"})
-    def test_non_interactive_mode_with_multiple_questions(self, mock_save):
-        """Should handle multiple questions in non-interactive mode."""
-        mock_save.return_value = "/path/to/checkpoint"
-        
-        state = {
-            "pending_user_questions": ["Q1?", "Q2?", "Q3?"],
-            "ask_user_trigger": "test",
-            "paper_id": "test_paper",
-        }
-        
-        with pytest.raises(SystemExit) as exc_info:
-            ask_user_node(state)
-        
-        assert exc_info.value.code == 0
-        mock_save.assert_called_once()
-
-    @patch("src.agents.user_interaction.save_checkpoint")
-    @patch.dict("os.environ", {"REPROLAB_NON_INTERACTIVE": "1"})
-    def test_non_interactive_mode_empty_questions(self, mock_save):
-        """Should handle empty questions in non-interactive mode."""
+    @patch("src.agents.user_interaction.interrupt")
+    def test_empty_questions_list(self, mock_interrupt):
+        """Should handle empty questions list gracefully."""
         state = {
             "pending_user_questions": [],
             "ask_user_trigger": "test",
@@ -680,145 +138,342 @@ class TestNonInteractiveMode:
         
         result = ask_user_node(state)
         
-        # Should return normally without saving checkpoint
         assert result["awaiting_user_input"] is False
-        mock_save.assert_not_called()
+        assert result["workflow_phase"] == "awaiting_user"
+        # Should not call interrupt when no questions
+        mock_interrupt.assert_not_called()
+
+    @patch("src.agents.user_interaction.interrupt")
+    def test_missing_ask_user_trigger(self, mock_interrupt):
+        """Should handle missing ask_user_trigger with safety net."""
+        mock_interrupt.return_value = "RETRY"
+        
+        state = {
+            "pending_user_questions": ["Original question without options"],
+            # Missing ask_user_trigger - safety net will set "unknown_escalation"
+        }
+        
+        result = ask_user_node(state)
+        
+        # Safety net should set "unknown_escalation" as trigger
+        assert result["awaiting_user_input"] is False
+        assert result["ask_user_trigger"] == "unknown_escalation"
+        
+        # interrupt should be called with regenerated questions containing WORKFLOW RECOVERY
+        mock_interrupt.assert_called_once()
+        interrupt_payload = mock_interrupt.call_args[0][0]
+        assert interrupt_payload["trigger"] == "unknown_escalation"
+        # Questions should be regenerated with WORKFLOW RECOVERY format
+        regenerated_questions = interrupt_payload["questions"]
+        assert len(regenerated_questions) == 1
+        assert "WORKFLOW RECOVERY" in regenerated_questions[0]
+        # Original context should be preserved
+        assert "Original question without options" in regenerated_questions[0]
+
+    @patch("src.agents.user_interaction.interrupt")
+    def test_missing_trigger_strips_old_options(self, mock_interrupt):
+        """When safety net triggers, old Options: section should be stripped."""
+        mock_interrupt.return_value = "RETRY"
+        
+        state = {
+            "pending_user_questions": ["Question with old options\n\nOptions:\n- PROVIDE_GUIDANCE\n- OLD_OPTION"],
+            # Missing ask_user_trigger
+        }
+        
+        result = ask_user_node(state)
+        
+        mock_interrupt.assert_called_once()
+        interrupt_payload = mock_interrupt.call_args[0][0]
+        regenerated_questions = interrupt_payload["questions"]
+        
+        # Should contain WORKFLOW RECOVERY and new options
+        assert "WORKFLOW RECOVERY" in regenerated_questions[0]
+        # Original question context should be preserved (before Options:)
+        assert "Question with old options" in regenerated_questions[0]
+        # Old options should be stripped and NOT appear
+        assert "OLD_OPTION" not in regenerated_questions[0]
+        assert "PROVIDE_GUIDANCE" not in regenerated_questions[0]
 
 
-class TestSignalHandling:
-    """Tests for signal handling and timeout."""
+class TestStateClearing:
+    """Tests for state clearing on successful response."""
 
-    @patch("builtins.input")
-    @patch("src.agents.user_interaction.save_checkpoint")
-    @patch.dict("os.environ", {"REPROLAB_NON_INTERACTIVE": "0", "REPROLAB_USER_TIMEOUT_SECONDS": "3600"})
-    @patch("signal.signal")
-    @patch("signal.alarm")
-    def test_timeout_environment_variable(self, mock_alarm, mock_signal, mock_save, mock_input):
-        """Should use REPROLAB_USER_TIMEOUT_SECONDS environment variable."""
-        mock_input.side_effect = KeyboardInterrupt()
-        mock_save.return_value = "/path/to/checkpoint"
+    @patch("src.agents.user_interaction.interrupt")
+    def test_clears_pending_questions(self, mock_interrupt):
+        """Should clear pending_user_questions on successful response."""
+        mock_interrupt.return_value = "APPROVE"
+        
+        state = {
+            "pending_user_questions": ["Question?"],
+            "ask_user_trigger": "material_checkpoint",
+        }
+        
+        result = ask_user_node(state)
+        
+        assert result["pending_user_questions"] == []
+        assert result["awaiting_user_input"] is False
+
+    @patch("src.agents.user_interaction.interrupt")
+    def test_clears_original_user_questions(self, mock_interrupt):
+        """Should clear original_user_questions on successful response."""
+        mock_interrupt.return_value = "Response"
+        
+        state = {
+            "pending_user_questions": ["Question?"],
+            "ask_user_trigger": "test",
+            "original_user_questions": ["Original question"],
+        }
+        
+        result = ask_user_node(state)
+        
+        assert result["original_user_questions"] is None
+
+    @patch("src.agents.user_interaction.interrupt")
+    def test_sets_workflow_phase(self, mock_interrupt):
+        """Should set workflow_phase to 'awaiting_user' on success."""
+        mock_interrupt.return_value = "Response"
         
         state = {
             "pending_user_questions": ["Question?"],
             "ask_user_trigger": "test",
         }
         
-        with pytest.raises(SystemExit):
-            ask_user_node(state)
+        result = ask_user_node(state)
         
-        # Verify signal.alarm was called with timeout from env var
-        mock_alarm.assert_called()
-        # Should be called with 3600 seconds
-        assert 3600 in [call[0][0] for call in mock_alarm.call_args_list if call[0]]
+        assert result["workflow_phase"] == "awaiting_user"
 
-    @patch("builtins.input")
-    @patch("src.agents.user_interaction.save_checkpoint")
-    @patch.dict("os.environ", {"REPROLAB_NON_INTERACTIVE": "0"})
-    @patch("signal.signal")
-    @patch("signal.alarm")
-    def test_signal_restored_after_success(self, mock_alarm, mock_signal, mock_save, mock_input):
-        """Should restore signal handler after successful input."""
-        mock_input.side_effect = ["APPROVE", ""]
+
+class TestInterruptPayload:
+    """Tests for interrupt() payload structure."""
+
+    @patch("src.agents.user_interaction.interrupt")
+    def test_interrupt_receives_correct_payload(self, mock_interrupt):
+        """Should call interrupt with correct payload structure."""
+        mock_interrupt.return_value = "APPROVE"
         
-        with patch("src.agents.user_interaction.validate_user_responses") as mock_validate:
-            mock_validate.return_value = []
-            
-            state = {
-                "pending_user_questions": ["Question?"],
-                "ask_user_trigger": "test",
-            }
-            
-            result = ask_user_node(state)
-            
-            assert result["awaiting_user_input"] is False
-            # Verify alarm was cancelled (set to 0)
-            assert any(call[0][0] == 0 for call in mock_alarm.call_args_list)
-            # Verify signal handler was restored
-            assert mock_signal.call_count >= 2  # Set and restore
-
-
-class TestValidationIntegration:
-    """Tests for integration with validation function."""
-
-    @patch("builtins.input")
-    @patch("src.agents.user_interaction.save_checkpoint")
-    @patch.dict("os.environ", {"REPROLAB_NON_INTERACTIVE": "0"})
-    @patch("signal.signal")
-    @patch("signal.alarm")
-    def test_validate_user_responses_called_with_correct_args(self, mock_alarm, mock_signal, mock_save, mock_input):
-        """Should call validate_user_responses with correct arguments."""
-        mock_input.side_effect = ["Response1", "", "Response2", ""]
+        state = {
+            "pending_user_questions": ["Question?"],
+            "ask_user_trigger": "material_checkpoint",
+            "paper_id": "test_paper_123",
+        }
         
-        with patch("src.agents.user_interaction.validate_user_responses") as mock_validate:
-            mock_validate.return_value = []
-            
-            questions = ["Q1?", "Q2?"]
-            state = {
-                "pending_user_questions": questions,
-                "ask_user_trigger": "test_trigger",
-            }
-            
-            result = ask_user_node(state)
-            
-            assert result["awaiting_user_input"] is False
-            # Verify validate_user_responses was called correctly
-            mock_validate.assert_called_once()
-            call_args = mock_validate.call_args[0]
-            assert call_args[0] == "test_trigger"
-            assert isinstance(call_args[1], dict)
-            assert call_args[1]["Q1?"] == "Response1"
-            assert call_args[1]["Q2?"] == "Response2"
-            assert call_args[2] == questions
-
-    @patch("builtins.input")
-    @patch("src.agents.user_interaction.save_checkpoint")
-    @patch.dict("os.environ", {"REPROLAB_NON_INTERACTIVE": "0"})
-    @patch("signal.signal")
-    @patch("signal.alarm")
-    def test_multiple_validation_errors_preserved(self, mock_alarm, mock_signal, mock_save, mock_input):
-        """Should preserve all validation errors in error message."""
-        mock_input.side_effect = ["invalid", ""]
+        ask_user_node(state)
         
-        with patch("src.agents.user_interaction.validate_user_responses") as mock_validate:
-            mock_validate.return_value = [
-                "Error 1: Missing keyword",
-                "Error 2: Invalid format",
-                "Error 3: Wrong trigger",
-            ]
-            
-            state = {
-                "pending_user_questions": ["Question?"],
-                "ask_user_trigger": "test",
-            }
-            
-            result = ask_user_node(state)
-            
-            assert result["awaiting_user_input"] is True
-            error_text = result["pending_user_questions"][0]
-            assert "Error 1: Missing keyword" in error_text
-            assert "Error 2: Invalid format" in error_text
-            assert "Error 3: Wrong trigger" in error_text
-
-    @patch("builtins.input")
-    @patch("src.agents.user_interaction.save_checkpoint")
-    @patch.dict("os.environ", {"REPROLAB_NON_INTERACTIVE": "0"})
-    @patch("signal.signal")
-    @patch("signal.alarm")
-    def test_validation_exception_handling(self, mock_alarm, mock_signal, mock_save, mock_input):
-        """Should handle exceptions from validate_user_responses gracefully."""
-        mock_input.side_effect = ["Response", ""]
+        mock_interrupt.assert_called_once()
+        payload = mock_interrupt.call_args[0][0]
         
-        with patch("src.agents.user_interaction.validate_user_responses") as mock_validate:
-            mock_validate.side_effect = Exception("Validation error")
-            
-            state = {
-                "pending_user_questions": ["Question?"],
-                "ask_user_trigger": "test",
-            }
-            
-            # Should propagate the exception (not catch it)
-            with pytest.raises(Exception) as exc_info:
-                ask_user_node(state)
-            
-            assert "Validation error" in str(exc_info.value)
+        assert payload["trigger"] == "material_checkpoint"
+        assert payload["questions"] == ["Question?"]
+        assert payload["paper_id"] == "test_paper_123"
 
+    @patch("src.agents.user_interaction.interrupt")
+    def test_interrupt_uses_unknown_paper_id_when_missing(self, mock_interrupt):
+        """Should use 'unknown' as paper_id when not provided."""
+        mock_interrupt.return_value = "APPROVE"
+        
+        state = {
+            "pending_user_questions": ["Question?"],
+            "ask_user_trigger": "test",
+            # No paper_id
+        }
+        
+        ask_user_node(state)
+        
+        payload = mock_interrupt.call_args[0][0]
+        assert payload["paper_id"] == "unknown"
+
+
+class TestErrorContextHelpers:
+    """Tests for _infer_error_context and _generate_error_question helper functions."""
+
+    def test_infer_error_context_physics_error(self):
+        """Should return 'physics_error' when physics_verdict is None but execution_verdict exists."""
+        from src.agents.user_interaction import _infer_error_context
+        
+        state = {
+            "physics_verdict": None,
+            "execution_verdict": "pass",  # Execution ran but physics didn't
+        }
+        
+        result = _infer_error_context(state)
+        assert result == "physics_error"
+
+    def test_infer_error_context_execution_error(self):
+        """Should return 'execution_error' when execution_verdict is None."""
+        from src.agents.user_interaction import _infer_error_context
+        
+        state = {
+            "execution_verdict": None,
+        }
+        
+        result = _infer_error_context(state)
+        assert result == "execution_error"
+
+    def test_infer_error_context_comparison_error(self):
+        """Should return 'comparison_error' when comparison_verdict is None."""
+        from src.agents.user_interaction import _infer_error_context
+        
+        state = {
+            "execution_verdict": "pass",
+            "physics_verdict": "pass",
+            "comparison_verdict": None,
+        }
+        
+        result = _infer_error_context(state)
+        assert result == "comparison_error"
+
+    def test_infer_error_context_code_review_error(self):
+        """Should return 'code_review_error' when last_code_review_verdict is None."""
+        from src.agents.user_interaction import _infer_error_context
+        
+        state = {
+            "execution_verdict": "pass",
+            "physics_verdict": "pass",
+            "comparison_verdict": "pass",
+            "last_code_review_verdict": None,
+        }
+        
+        result = _infer_error_context(state)
+        assert result == "code_review_error"
+
+    def test_infer_error_context_design_review_error(self):
+        """Should return 'design_review_error' when last_design_review_verdict is None."""
+        from src.agents.user_interaction import _infer_error_context
+        
+        state = {
+            "execution_verdict": "pass",
+            "physics_verdict": "pass",
+            "comparison_verdict": "pass",
+            "last_code_review_verdict": "approve",
+            "last_design_review_verdict": None,
+        }
+        
+        result = _infer_error_context(state)
+        assert result == "design_review_error"
+
+    def test_infer_error_context_plan_review_error(self):
+        """Should return 'plan_review_error' when last_plan_review_verdict is None."""
+        from src.agents.user_interaction import _infer_error_context
+        
+        state = {
+            "execution_verdict": "pass",
+            "physics_verdict": "pass",
+            "comparison_verdict": "pass",
+            "last_code_review_verdict": "approve",
+            "last_design_review_verdict": "approve",
+            "last_plan_review_verdict": None,
+        }
+        
+        result = _infer_error_context(state)
+        assert result == "plan_review_error"
+
+    def test_infer_error_context_stuck_awaiting_input(self):
+        """Should return 'stuck_awaiting_input' when awaiting_user_input is True."""
+        from src.agents.user_interaction import _infer_error_context
+        
+        state = {
+            "execution_verdict": "pass",
+            "physics_verdict": "pass",
+            "comparison_verdict": "pass",
+            "last_code_review_verdict": "approve",
+            "last_design_review_verdict": "approve",
+            "last_plan_review_verdict": "approve",
+            "awaiting_user_input": True,
+        }
+        
+        result = _infer_error_context(state)
+        assert result == "stuck_awaiting_input"
+
+    def test_infer_error_context_unknown_error(self):
+        """Should return 'unknown_error' when no specific error is detected."""
+        from src.agents.user_interaction import _infer_error_context
+        
+        state = {
+            "execution_verdict": "pass",
+            "physics_verdict": "pass",
+            "comparison_verdict": "pass",
+            "last_code_review_verdict": "approve",
+            "last_design_review_verdict": "approve",
+            "last_plan_review_verdict": "approve",
+            "awaiting_user_input": False,
+        }
+        
+        result = _infer_error_context(state)
+        assert result == "unknown_error"
+
+    def test_infer_error_context_empty_state(self):
+        """Should return 'execution_error' for empty state (execution_verdict is None)."""
+        from src.agents.user_interaction import _infer_error_context
+        
+        state = {}
+        
+        result = _infer_error_context(state)
+        assert result == "execution_error"
+
+    def test_generate_error_question_physics_error(self):
+        """Should generate appropriate message for physics_error."""
+        from src.agents.user_interaction import _generate_error_question
+        
+        state = {"current_stage_id": "stage_1"}
+        
+        result = _generate_error_question("physics_error", state)
+        
+        assert "WORKFLOW RECOVERY" in result
+        assert "Physics validation failed" in result
+        assert "stage_1" in result
+
+    def test_generate_error_question_execution_error(self):
+        """Should generate appropriate message for execution_error."""
+        from src.agents.user_interaction import _generate_error_question
+        
+        state = {"current_stage_id": "stage_2"}
+        
+        result = _generate_error_question("execution_error", state)
+        
+        assert "WORKFLOW RECOVERY" in result
+        assert "Execution validation failed" in result
+        assert "stage_2" in result
+
+    def test_generate_error_question_stuck_awaiting_input(self):
+        """Should generate appropriate message for stuck_awaiting_input."""
+        from src.agents.user_interaction import _generate_error_question
+        
+        state = {}
+        
+        result = _generate_error_question("stuck_awaiting_input", state)
+        
+        assert "WORKFLOW RECOVERY" in result
+        assert "stuck" in result.lower()
+        assert "awaiting_user_input" in result
+
+    def test_generate_error_question_unknown_error(self):
+        """Should generate generic message for unknown_error."""
+        from src.agents.user_interaction import _generate_error_question
+        
+        state = {}
+        
+        result = _generate_error_question("unknown_error", state)
+        
+        assert "WORKFLOW RECOVERY" in result
+        assert "unexpected" in result.lower()
+
+    def test_generate_error_question_unknown_context(self):
+        """Should fall back to unknown_error message for unrecognized context."""
+        from src.agents.user_interaction import _generate_error_question
+        
+        state = {}
+        
+        result = _generate_error_question("some_unrecognized_context", state)
+        
+        assert "WORKFLOW RECOVERY" in result
+        assert "unexpected" in result.lower()
+
+    def test_generate_error_question_uses_default_stage_id(self):
+        """Should use 'unknown' as default stage_id when not in state."""
+        from src.agents.user_interaction import _generate_error_question
+        
+        state = {}  # No current_stage_id
+        
+        result = _generate_error_question("physics_error", state)
+        
+        assert "unknown" in result
