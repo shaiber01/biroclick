@@ -872,6 +872,7 @@ class ReproState(TypedDict, total=False):
     # ─── Agent Feedback ─────────────────────────────────────────────────
     reviewer_feedback: Optional[str]  # Last reviewer feedback for revision
     supervisor_feedback: Optional[str]  # Last supervisor feedback
+    user_context: Optional[List[str]]  # User-provided clarifications and guidance
     planner_feedback: Optional[str]  # Feedback for replanning
     execution_feedback: Optional[str]  # From ExecutionValidatorAgent summary
     physics_feedback: Optional[str]  # From PhysicsSanityAgent summary
@@ -1052,6 +1053,7 @@ def create_initial_state(
         # Agent feedback
         reviewer_feedback=None,
         supervisor_feedback=None,
+        user_context=[],
         planner_feedback=None,
         execution_feedback=None,
         physics_feedback=None,

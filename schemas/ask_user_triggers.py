@@ -81,7 +81,7 @@ ASK_USER_TRIGGERS: Dict[str, Dict[str, Any]] = {
         "expected_response_keys": ["action", "guidance"],
         "valid_verdicts": ["RETRY_WITH_GUIDANCE", "SKIP_STAGE", "STOP"],
         "supervisor_action": {
-            "RETRY_WITH_GUIDANCE": "Reset execution_failure_count=0, add guidance to supervisor_feedback, route to generate_code",
+            "RETRY_WITH_GUIDANCE": "Reset execution_failure_count=0, add guidance to execution_feedback, route to generate_code",
             "SKIP_STAGE": "Mark stage as blocked, route to select_stage",
             "STOP": "Route to generate_report",
         }

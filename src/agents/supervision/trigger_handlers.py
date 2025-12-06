@@ -623,18 +623,20 @@ def handle_clarification(
     Handle clarification trigger response.
     
     Free-form response from user to clarify ambiguity.
-    Adds clarification to assumptions/feedback and continues.
+    Adds clarification to user_context so it reaches relevant agents.
     """
     raw_response = list(user_responses.values())[-1] if user_responses else ""
     
     if raw_response:
-        # Append clarification to assumptions or feedback
-        # Here we append to supervisor_feedback to ensure it reaches the relevant agent
+        # Append clarification to user_context so agents can use it
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+        existing_context = list(state.get("user_context", []) or [])
+        existing_context.append(f"[{timestamp}] {raw_response}")
+        result["user_context"] = existing_context
         result["supervisor_verdict"] = "ok_continue"
-        result["supervisor_feedback"] = f"User clarification provided: {raw_response}"
+        result["supervisor_feedback"] = "User clarification recorded in user_context"
     else:
-        # If user didn't provide anything, ask again? or just continue?
-        # Usually 'ask_user' requires input, so empty might mean "no clarification"
+        # If user didn't provide anything, just continue
         result["supervisor_verdict"] = "ok_continue"
         result["supervisor_feedback"] = "No clarification provided by user."
 

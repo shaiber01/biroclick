@@ -561,6 +561,11 @@ def build_user_content_for_planner(state: Dict[str, Any]) -> str:
     if feedback:
         parts.append(f"# REVISION FEEDBACK\n\n{feedback}")
     
+    # User-provided context/clarifications
+    user_context = state.get("user_context") or []
+    if user_context:
+        parts.append("## User-Provided Context\n\n" + "\n".join(user_context))
+    
     return "\n\n---\n\n".join(parts)
 
 
@@ -609,6 +614,11 @@ def build_user_content_for_designer(state: Dict[str, Any]) -> str:
     if feedback:
         parts.append(f"## REVISION FEEDBACK\n\n{feedback}")
     
+    # User-provided context/clarifications
+    user_context = state.get("user_context") or []
+    if user_context:
+        parts.append("## User-Provided Context\n\n" + "\n".join(user_context))
+    
     return "\n\n".join(parts)
 
 
@@ -653,6 +663,11 @@ def build_user_content_for_code_generator(state: Dict[str, Any]) -> str:
     if feedback_parts:
         parts.append("## REVISION FEEDBACK\n\n" + "\n\n".join(feedback_parts))
     
+    # User-provided context/clarifications
+    user_context = state.get("user_context") or []
+    if user_context:
+        parts.append("## User-Provided Context\n\n" + "\n".join(user_context))
+    
     return "\n\n".join(parts)
 
 
@@ -685,6 +700,11 @@ def build_user_content_for_analyzer(state: Dict[str, Any]) -> str:
     feedback = state.get("analysis_feedback") or ""
     if feedback:
         parts.append(f"## REVISION FEEDBACK\n\n{feedback}")
+    
+    # User-provided context/clarifications
+    user_context = state.get("user_context") or []
+    if user_context:
+        parts.append("## User-Provided Context\n\n" + "\n".join(user_context))
     
     return "\n\n".join(parts)
 
