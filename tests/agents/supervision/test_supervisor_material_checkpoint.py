@@ -131,8 +131,7 @@ class TestMaterialCheckpointTrigger:
         assert "material issue" in result["pending_user_questions"][0].lower()
         # Verify materials not cleared
         assert "pending_validated_materials" not in result or result.get("pending_validated_materials") == [{"material_id": "gold"}]
-        # Verify trigger cleared
-        assert result.get("ask_user_trigger") is None
+        # When verdict is ask_user, trigger is preserved so same handler processes follow-up
 
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_handles_unclear_response(self, mock_context):
@@ -154,8 +153,7 @@ class TestMaterialCheckpointTrigger:
         assert "unclear" in result["pending_user_questions"][0].lower()
         # Response is uppercased, so check for uppercase version
         assert "MAYBE" in result["pending_user_questions"][0]
-        # Verify trigger cleared
-        assert result.get("ask_user_trigger") is None
+        # When verdict is ask_user, trigger is preserved so same handler processes follow-up
 
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_handles_rejection_without_specifics(self, mock_context):
@@ -176,8 +174,7 @@ class TestMaterialCheckpointTrigger:
         assert len(result["pending_user_questions"]) == 1
         assert "didn't specify" in result["pending_user_questions"][0].lower() or \
                "specify" in result["pending_user_questions"][0].lower()
-        # Verify trigger cleared
-        assert result.get("ask_user_trigger") is None
+        # When verdict is ask_user, trigger is preserved so same handler processes follow-up
 
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_handles_missing_pending_materials_on_approve(self, mock_context):
@@ -202,8 +199,7 @@ class TestMaterialCheckpointTrigger:
         # Verify materials remain empty
         assert result.get("validated_materials") == []
         assert result.get("pending_validated_materials") == []
-        # Verify trigger cleared
-        assert result.get("ask_user_trigger") is None
+        # When verdict is ask_user, trigger is preserved so same handler processes follow-up
 
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     @patch("src.agents.supervision.trigger_handlers.update_progress_stage_status")

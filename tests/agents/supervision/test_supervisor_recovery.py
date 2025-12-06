@@ -857,7 +857,7 @@ class TestUserInteractionLogging:
     def test_does_not_log_when_no_trigger(self, mock_context, mock_handle_trigger, mock_call):
         """Should not log interaction when ask_user_trigger is None."""
         mock_context.return_value = None
-        mock_call.return_value = {"verdict": "ok_continue", "reasoning": "test"}
+        mock_call.return_value = {"verdict": "ok_continue", "summary": "test"}
         
         state = {
             "ask_user_trigger": None,
@@ -1281,7 +1281,7 @@ class TestNormalSupervision:
         """Should call LLM for normal supervision."""
         mock_context.return_value = None
         mock_prompt.return_value = "system_prompt"
-        mock_call.return_value = {"verdict": "ok_continue", "reasoning": "All good"}
+        mock_call.return_value = {"verdict": "ok_continue", "summary": "All good"}
         mock_archive.return_value = None
         
         state = {
@@ -1418,10 +1418,15 @@ class TestNormalSupervision:
         """Should handle backtrack_to_stage verdict."""
         mock_context.return_value = None
         mock_prompt.return_value = "prompt"
+        # Use nested backtrack_decision per schema (not flat backtrack_target)
         mock_call.return_value = {
             "verdict": "backtrack_to_stage",
-            "backtrack_target": "stage0",
-            "reasoning": "Need to restart"
+            "backtrack_decision": {
+                "accepted": True,
+                "target_stage_id": "stage0",
+                "stages_to_invalidate": [],
+                "reason": "Need to restart"
+            }
         }
         
         state = {
@@ -1468,7 +1473,7 @@ class TestNormalSupervision:
         mock_call.return_value = {
             "verdict": "all_complete",
             "should_stop": True,
-            "reasoning": "All stages complete"
+            "summary": "All stages complete"
         }
         
         state = {
@@ -1492,7 +1497,7 @@ class TestNormalSupervision:
         mock_prompt.return_value = "prompt"
         mock_call.return_value = {
             "verdict": "replan_needed",
-            "reasoning": "Plan needs adjustment"
+            "summary": "Plan needs adjustment"
         }
         
         state = {
@@ -1515,7 +1520,7 @@ class TestNormalSupervision:
         mock_prompt.return_value = "prompt"
         mock_call.return_value = {
             "verdict": "ask_user",
-            "reasoning": "Need user input"
+            "summary": "Need user input"
         }
         
         state = {
@@ -1537,10 +1542,15 @@ class TestNormalSupervision:
         """Should set complete backtrack_decision structure."""
         mock_context.return_value = None
         mock_prompt.return_value = "prompt"
+        # Use nested backtrack_decision per schema (not flat backtrack_target)
         mock_call.return_value = {
             "verdict": "backtrack_to_stage",
-            "backtrack_target": "stage0",
-            "reasoning": "Need to restart from stage0"
+            "backtrack_decision": {
+                "accepted": True,
+                "target_stage_id": "stage0",
+                "stages_to_invalidate": [],
+                "reason": "Need to restart from stage0"
+            }
         }
         mock_archive.return_value = None
         
@@ -1568,8 +1578,8 @@ class TestNormalSupervision:
         mock_prompt.return_value = "prompt"
         mock_call.return_value = {
             "verdict": "backtrack_to_stage",
-            "reasoning": "Need to restart"
-            # No backtrack_target
+            "summary": "Need to restart"
+            # No backtrack_decision with target_stage_id
         }
         
         state = {
@@ -2068,7 +2078,8 @@ class TestTriggerHandlerIntegration:
         # Verify counter is reset
         assert result["execution_failure_count"] == 0
         assert result["supervisor_verdict"] == "retry_generate_code"  # Retry with guidance
-        assert "mesh" in result.get("supervisor_feedback", "").lower()
+        # User guidance is stored in execution_feedback, not supervisor_feedback
+        assert "mesh" in result.get("execution_feedback", "").lower()
 
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_physics_failure_limit_accept_partial(self, mock_context):

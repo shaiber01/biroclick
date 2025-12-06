@@ -16,9 +16,14 @@ class TestAdaptPromptsNode:
     def test_adapt_prompts_success_with_domain(self, mock_build_prompt, mock_llm):
         """Test successful adaptation with paper_domain update."""
         mock_build_prompt.return_value = "system prompt"
+        # Schema requires domain nested in analysis_summary, not at root level
         mock_llm.return_value = {
             "prompt_modifications": ["a1", "a2"],
-            "paper_domain": "new_domain"
+            "analysis_summary": {
+                "domain": "new_domain",
+                "key_materials": [],
+                "key_phenomena": []
+            }
         }
         
         state = {"paper_text": "some paper text", "paper_domain": "old_domain"}
@@ -347,9 +352,14 @@ class TestAdaptPromptsNode:
     def test_adapt_prompts_state_not_mutated(self, mock_build_prompt, mock_llm):
         """Test that original state is not mutated."""
         mock_build_prompt.return_value = "system prompt"
+        # Schema requires domain nested in analysis_summary, not at root level
         mock_llm.return_value = {
             "prompt_modifications": ["a1"],
-            "paper_domain": "new_domain"
+            "analysis_summary": {
+                "domain": "new_domain",
+                "key_materials": [],
+                "key_phenomena": []
+            }
         }
         
         original_state = {"paper_text": "text", "paper_domain": "old_domain"}
