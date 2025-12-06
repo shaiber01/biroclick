@@ -21,11 +21,11 @@ INVESTIGATE_THRESHOLD = DISCREPANCY_THRESHOLDS["resonance_wavelength"]["investig
 class TestComparisonValidatorEarlyReturns:
     """Test early return conditions."""
 
-    def test_early_return_when_awaiting_user_input(self, base_state):
-        """Should return empty dict when awaiting_user_input is True (no state updates)."""
+    def test_early_return_when_trigger_set(self, base_state):
+        """Should return empty dict when ask_user_trigger is set (no state updates)."""
         from src.agents.analysis import comparison_validator_node
 
-        base_state["awaiting_user_input"] = True
+        base_state["ask_user_trigger"] = "some_trigger"
         base_state["current_stage_id"] = "stage_0"
         base_state["plan"] = {
             "stages": [{"stage_id": "stage_0", "targets": ["material_gold"]}]
@@ -35,10 +35,10 @@ class TestComparisonValidatorEarlyReturns:
 
         result = comparison_validator_node(base_state)
 
-        # Should return empty dict (no state updates) when awaiting user input
+        # Should return empty dict (no state updates) when trigger is set
         assert result == {}
-        # State should remain unchanged (awaiting_user_input still True)
-        assert base_state["awaiting_user_input"] is True
+        # State should remain unchanged (ask_user_trigger still set)
+        assert base_state["ask_user_trigger"] == "some_trigger"
 
     def test_none_stage_id_handled(self, base_state):
         """Should handle None stage_id gracefully."""

@@ -981,7 +981,7 @@ class TestCodeGeneratorValidation:
         assert result.get("ask_user_trigger") is not None or "code" not in result, (
             "Should escalate or fail when current_stage_id is None"
         )
-        if result.get("awaiting_user_input"):
+        if result.get("ask_user_trigger"):
             assert result.get("ask_user_trigger") == "missing_stage_id"
 
     def test_code_generator_with_stub_design(self, base_state, valid_plan):
@@ -1557,20 +1557,20 @@ class TestCodeGeneratorPromptBuilding:
 class TestWithContextCheckDecorator:
     """Verify @with_context_check decorator behavior."""
 
-    def test_code_reviewer_returns_empty_when_awaiting_user_input(self, base_state):
-        """Should return empty dict when awaiting_user_input is True."""
+    def test_code_reviewer_returns_empty_when_trigger_set(self, base_state):
+        """Should return empty dict when ask_user_trigger is set."""
         from src.agents.code import code_reviewer_node
 
         base_state["current_stage_id"] = "stage_0"
         base_state["code"] = "import meep as mp"
-        base_state["awaiting_user_input"] = True  # Already awaiting
+        base_state["ask_user_trigger"] = "some_trigger"  # Trigger set
 
         # Should NOT call LLM, should return empty
         with patch("src.agents.code.call_agent_with_metrics") as mock:
             result = code_reviewer_node(base_state)
 
         assert result == {}, (
-            f"Should return empty dict when awaiting_user_input. Got: {result}"
+            f"Should return empty dict when ask_user_trigger set. Got: {result}"
         )
         mock.assert_not_called()
 

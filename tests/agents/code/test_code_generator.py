@@ -44,7 +44,6 @@ class TestCodeGeneratorNode:
         # Verify no error fields are present
         assert "run_error" not in result
         assert "ask_user_trigger" not in result
-        assert "awaiting_user_input" not in result
         assert "reviewer_feedback" not in result
         # Verify revision count is not incremented on success
         assert "code_revision_count" not in result

@@ -79,7 +79,6 @@ class TestResultsAnalyzerNode:
         # Verify all error handling fields are present and correct
         assert result["workflow_phase"] == "analysis"
         assert result["ask_user_trigger"] == "missing_stage_id"
-        # Note: awaiting_user_input is deprecated, ask_user_trigger is the sole mechanism
         assert "pending_user_questions" in result
         assert isinstance(result["pending_user_questions"], list)
         assert len(result["pending_user_questions"]) > 0

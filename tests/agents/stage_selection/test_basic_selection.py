@@ -36,7 +36,6 @@ class TestSelectStageNode:
         
         # Verify no user interaction triggers
         assert result.get("ask_user_trigger") is None
-        assert result.get("awaiting_user_input") is None
         assert result.get("pending_user_questions") is None
         
         # Verify counters are reset for new stage
@@ -185,7 +184,6 @@ class TestSelectStageNode:
         assert result["current_stage_type"] is None
         assert result["workflow_phase"] == "stage_selection"
         assert result.get("ask_user_trigger") is None
-        assert result.get("awaiting_user_input") is None
 
     def test_returns_escalation_when_no_stages(self):
         """Should return escalation when no stages exist."""

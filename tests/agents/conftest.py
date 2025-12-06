@@ -50,7 +50,7 @@ def minimal_state() -> Dict[str, Any]:
         "comparison_failed": [],
         "completed_stages": [],
         "skipped_stages": [],
-        "awaiting_user_input": False,
+        "ask_user_trigger": None,  # Single mechanism for user interaction routing
         "user_question": None,
         "final_report": None,
         "context_overflow_triggered": False,

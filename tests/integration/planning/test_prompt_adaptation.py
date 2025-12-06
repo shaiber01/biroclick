@@ -531,11 +531,11 @@ class TestAdaptPromptsNode:
                 assert result["workflow_phase"] == "adapting_prompts"
                 assert result["prompt_adaptations"] == []
 
-    def test_adapt_prompts_handles_awaiting_user_input_in_state(self, base_state):
-        """adapt_prompts_node should return empty dict if already awaiting user input."""
+    def test_adapt_prompts_handles_trigger_set_in_state(self, base_state):
+        """adapt_prompts_node should return empty dict if ask_user_trigger is set."""
         from src.agents.planning import adapt_prompts_node
 
-        base_state["awaiting_user_input"] = True
+        base_state["ask_user_trigger"] = "some_trigger"
         
         # Should return early without calling LLM
         with patch(

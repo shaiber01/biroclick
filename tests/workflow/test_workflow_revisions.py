@@ -856,9 +856,9 @@ class TestLLMErrorHandling:
 class TestContextCheckBehavior:
     """Test context check decorator behavior."""
 
-    def test_design_reviewer_returns_empty_when_awaiting_input(self, base_state):
-        """Design reviewer returns empty dict when already awaiting user input."""
-        base_state["awaiting_user_input"] = True
+    def test_design_reviewer_returns_empty_when_trigger_set(self, base_state):
+        """Design reviewer returns empty dict when ask_user_trigger is set."""
+        base_state["ask_user_trigger"] = "some_trigger"
         base_state["current_stage_id"] = "stage_1_extinction"
         base_state["design_description"] = "Test design"
 
@@ -866,9 +866,9 @@ class TestContextCheckBehavior:
 
         assert result == {}
 
-    def test_code_reviewer_returns_empty_when_awaiting_input(self, base_state):
-        """Code reviewer returns empty dict when already awaiting user input."""
-        base_state["awaiting_user_input"] = True
+    def test_code_reviewer_returns_empty_when_trigger_set(self, base_state):
+        """Code reviewer returns empty dict when ask_user_trigger is set."""
+        base_state["ask_user_trigger"] = "some_trigger"
         base_state["current_stage_id"] = "stage_1_extinction"
         base_state["code"] = "# test"
 

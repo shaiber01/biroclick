@@ -1165,9 +1165,9 @@ class TestEdgeCases:
         # Should not crash, should treat as no deps
         assert result.get("current_stage_id") == "stage_0_materials"
 
-    def test_awaiting_user_input_bypasses_nodes(self, base_state):
-        """Test that nodes bypass processing when awaiting_user_input is True."""
-        base_state["awaiting_user_input"] = True
+    def test_trigger_set_bypasses_nodes(self, base_state):
+        """Test that nodes bypass processing when ask_user_trigger is set."""
+        base_state["ask_user_trigger"] = "some_trigger"
         base_state["plan"] = MockResponseFactory.planner_response()
 
         with patch("src.agents.planning.call_agent_with_metrics") as mock_llm:

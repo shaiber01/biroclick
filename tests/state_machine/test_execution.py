@@ -267,9 +267,9 @@ class TestExecutionValidatorNode:
             
             assert result["total_execution_failures"] == 1
 
-    def test_awaiting_user_input_returns_empty(self, execution_state):
-        """Test that awaiting_user_input state returns empty result."""
-        execution_state["awaiting_user_input"] = True
+    def test_returns_empty_when_trigger_set(self, execution_state):
+        """Test that ask_user_trigger being set returns empty result."""
+        execution_state["ask_user_trigger"] = "some_trigger"
         
         result = execution_validator_node(execution_state)
         
@@ -523,9 +523,9 @@ class TestPhysicsSanityNode:
             # Empty dict should not be included (no useful information)
             assert "Design Spec" not in user_content
 
-    def test_awaiting_user_input_returns_empty(self, physics_state):
-        """Test that awaiting_user_input state returns empty result."""
-        physics_state["awaiting_user_input"] = True
+    def test_returns_empty_when_trigger_set(self, physics_state):
+        """Test that ask_user_trigger being set returns empty result."""
+        physics_state["ask_user_trigger"] = "some_trigger"
         
         result = physics_sanity_node(physics_state)
         

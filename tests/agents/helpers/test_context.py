@@ -115,7 +115,7 @@ class TestCheckContextOrEscalate:
         assert len(result["pending_user_questions"]) == 1
         assert result["pending_user_questions"][0] == "Context overflow. Please advise."
         assert "Context overflow" in result["pending_user_questions"][0]
-        # Verify all required keys are present (awaiting_user_input removed)
+        # Verify all required keys are present
         assert set(result.keys()) == {
             "pending_user_questions",
             "ask_user_trigger",
@@ -158,7 +158,7 @@ class TestCheckContextOrEscalate:
         assert "unknown_node" in result["pending_user_questions"][0]
         assert "Context overflow" in result["pending_user_questions"][0]
         assert "How should we proceed?" in result["pending_user_questions"][0]
-        # Verify all required keys are present (awaiting_user_input removed)
+        # Verify all required keys are present
         assert set(result.keys()) == {
             "pending_user_questions",
             "ask_user_trigger",

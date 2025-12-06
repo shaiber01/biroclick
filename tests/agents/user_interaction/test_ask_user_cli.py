@@ -22,7 +22,7 @@ class TestAskUserNode:
     """Tests for ask_user_node function."""
 
     def test_returns_not_awaiting_when_no_questions(self):
-        """Should return awaiting_user_input=False when no questions pending."""
+        """Should clear ask_user state when no questions pending."""
         state = {
             "pending_user_questions": [],
             "ask_user_trigger": "context_overflow",

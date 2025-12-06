@@ -463,15 +463,15 @@ class TestDesignReviewerLLMFailure:
 class TestDesignReviewerContextCheck:
     """Verify design reviewer handles context escalation."""
 
-    def test_design_reviewer_returns_empty_when_awaiting_user_input(self, base_state):
-        """Should return empty dict when already awaiting user input."""
+    def test_design_reviewer_returns_empty_when_trigger_set(self, base_state):
+        """Should return empty dict when ask_user_trigger is already set."""
         from src.agents.design import design_reviewer_node
 
-        base_state["awaiting_user_input"] = True
+        base_state["ask_user_trigger"] = "some_trigger"
         base_state["current_stage_id"] = "stage_0"
         base_state["design_description"] = {"stage_id": "stage_0"}
 
-        # Should NOT call LLM when awaiting input
+        # Should NOT call LLM when trigger is set
         with patch("src.agents.design.call_agent_with_metrics") as mock_call:
             result = design_reviewer_node(base_state)
 

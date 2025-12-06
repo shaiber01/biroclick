@@ -552,7 +552,6 @@ class TestMaterialCheckpointNode:
         required_keys = {
             "workflow_phase",
             "pending_user_questions",
-            "awaiting_user_input",
             "ask_user_trigger",
             "last_node_before_ask_user",
             "pending_validated_materials",

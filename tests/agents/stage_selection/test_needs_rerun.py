@@ -42,7 +42,6 @@ class TestNeedsRerunPriority:
         
         # Verify no user interaction triggers
         assert result.get("ask_user_trigger") is None
-        assert result.get("awaiting_user_input") is None
 
     def test_skips_needs_rerun_with_invalidated_deps(self):
         """Should skip needs_rerun stage if it has invalidated dependencies.

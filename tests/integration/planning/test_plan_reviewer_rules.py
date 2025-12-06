@@ -1606,11 +1606,11 @@ class TestPlannerFeedback:
 class TestContextCheckBehavior:
     """Test with_context_check decorator behavior in plan_reviewer_node."""
 
-    def test_plan_reviewer_returns_empty_when_awaiting_user_input(self, base_state):
-        """plan_reviewer should return empty dict when already awaiting user input."""
+    def test_plan_reviewer_returns_empty_when_trigger_set(self, base_state):
+        """plan_reviewer should return empty dict when ask_user_trigger is already set."""
         from src.agents.planning import plan_reviewer_node
 
-        base_state["awaiting_user_input"] = True
+        base_state["ask_user_trigger"] = "some_trigger"
         base_state["plan"] = {
             "paper_id": "test",
             "title": "Test Plan",
@@ -1620,7 +1620,7 @@ class TestContextCheckBehavior:
         result = plan_reviewer_node(base_state)
 
         # The decorator should return empty dict to avoid modifying state
-        assert result == {}, f"Expected empty dict when awaiting user input, got {result}"
+        assert result == {}, f"Expected empty dict when trigger set, got {result}"
 
 
 class TestComplexScenarios:

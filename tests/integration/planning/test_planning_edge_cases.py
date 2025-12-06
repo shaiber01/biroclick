@@ -24,7 +24,7 @@ class TestPlanningEdgeCases:
             f"Expected ask_user_trigger='missing_paper_text', got {result.get('ask_user_trigger')}"
         )
         assert result.get("ask_user_trigger") is not None, (
-            f"Expected awaiting_user_input=True, got {result.get('awaiting_user_input')}"
+            f"Expected ask_user_trigger to be set, got {result.get('ask_user_trigger')}"
         )
         assert result.get("workflow_phase") == "planning", (
             f"Expected workflow_phase='planning', got {result.get('workflow_phase')}"
@@ -50,7 +50,7 @@ class TestPlanningEdgeCases:
             f"Expected ask_user_trigger='missing_paper_text', got {result.get('ask_user_trigger')}"
         )
         assert result.get("ask_user_trigger") is not None, (
-            f"Expected awaiting_user_input=True, got {result.get('awaiting_user_input')}"
+            f"Expected ask_user_trigger to be set, got {result.get('ask_user_trigger')}"
         )
         assert result.get("workflow_phase") == "planning"
         assert "paper text" in result.get("pending_user_questions", [""])[0].lower(), (
@@ -149,7 +149,7 @@ class TestPlanningEdgeCases:
         """If check_context_or_escalate returns only metrics (no escalation), should continue."""
         from src.agents.planning import plan_node
 
-        metrics_only = {"metrics": {"tokens": 1000}}  # No awaiting_user_input
+        metrics_only = {"metrics": {"tokens": 1000}}  # No ask_user_trigger
 
         with patch(
             "src.agents.planning.check_context_or_escalate", return_value=metrics_only
@@ -208,7 +208,7 @@ class TestPlannerErrorHandling:
             f"Expected ask_user_trigger='llm_error', got {result.get('ask_user_trigger')}"
         )
         assert result.get("ask_user_trigger") is not None, (
-            f"Expected awaiting_user_input=True, got {result.get('awaiting_user_input')}"
+            f"Expected ask_user_trigger to be set, got {result.get('ask_user_trigger')}"
         )
         assert result.get("workflow_phase") == "planning", (
             f"Expected workflow_phase='planning', got {result.get('workflow_phase')}"
@@ -910,9 +910,9 @@ class TestAdaptPromptsEdgeCases:
         ):
             result = adapt_prompts_node(base_state)
 
-        # Decorator should return escalation response directly when awaiting_user_input is True
+        # Decorator should return escalation response directly when ask_user_trigger is set
         assert result == escalation_response, (
             f"Expected escalation response, got {result}. "
-            "The decorator should return escalation directly when awaiting_user_input=True"
+            "The decorator should return escalation directly when ask_user_trigger is set"
         )
 

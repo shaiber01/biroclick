@@ -10,11 +10,11 @@ from tests.integration.helpers.agent_responses import execution_verdict_response
 class TestWithContextCheckDecorator:
     """Test the @with_context_check decorator behavior applied to execution nodes."""
 
-    def test_execution_validator_returns_empty_when_awaiting_user_input(self, base_state):
-        """When awaiting_user_input=True, execution_validator_node should return empty dict immediately."""
+    def test_execution_validator_returns_empty_when_trigger_set(self, base_state):
+        """When ask_user_trigger is set, execution_validator_node should return empty dict immediately."""
         from src.agents.execution import execution_validator_node
 
-        base_state["awaiting_user_input"] = True
+        base_state["ask_user_trigger"] = "some_trigger"  # Trigger set = skip node
         base_state["current_stage_id"] = "stage_0"
         base_state["stage_outputs"] = {"files": ["/tmp/output.csv"]}
 
@@ -24,14 +24,14 @@ class TestWithContextCheckDecorator:
             result = execution_validator_node(base_state)
 
         # Should return empty dict without calling LLM
-        assert result == {}, f"Expected empty dict when awaiting_user_input, got: {result}"
+        assert result == {}, f"Expected empty dict when ask_user_trigger set, got: {result}"
         mock_call.assert_not_called()
 
-    def test_physics_sanity_returns_empty_when_awaiting_user_input(self, base_state):
-        """When awaiting_user_input=True, physics_sanity_node should return empty dict immediately."""
+    def test_physics_sanity_returns_empty_when_trigger_set(self, base_state):
+        """When ask_user_trigger is set, physics_sanity_node should return empty dict immediately."""
         from src.agents.execution import physics_sanity_node
 
-        base_state["awaiting_user_input"] = True
+        base_state["ask_user_trigger"] = "some_trigger"  # Trigger set = skip node
         base_state["current_stage_id"] = "stage_0"
         base_state["stage_outputs"] = {"files": ["/tmp/spectrum.csv"]}
 
@@ -41,15 +41,15 @@ class TestWithContextCheckDecorator:
             result = physics_sanity_node(base_state)
 
         # Should return empty dict without calling LLM
-        assert result == {}, f"Expected empty dict when awaiting_user_input, got: {result}"
+        assert result == {}, f"Expected empty dict when ask_user_trigger set, got: {result}"
         mock_call.assert_not_called()
 
-    def test_execution_validator_processes_normally_when_not_awaiting(self, base_state):
-        """When awaiting_user_input is False/missing, should process normally."""
+    def test_execution_validator_processes_normally_when_no_trigger(self, base_state):
+        """When ask_user_trigger is not set, should process normally."""
         from src.agents.execution import execution_validator_node
 
         mock_response = execution_verdict_response(verdict="pass", summary="OK")
-        base_state["awaiting_user_input"] = False
+        base_state["ask_user_trigger"] = None  # No trigger = process normally
         base_state["current_stage_id"] = "stage_0"
         base_state["stage_outputs"] = {"files": ["/tmp/output.csv"]}
 
@@ -95,7 +95,6 @@ class TestExecutionValidatorBehavior:
         assert "total_execution_failures" not in result
         assert "ask_user_trigger" not in result
         assert "pending_user_questions" not in result
-        assert "awaiting_user_input" not in result
         assert "last_node_before_ask_user" not in result
         
         # Verify LLM was called with correct parameters
@@ -137,7 +136,6 @@ class TestExecutionValidatorBehavior:
         # Warning should NOT trigger user escalation
         assert "ask_user_trigger" not in result
         assert "pending_user_questions" not in result
-        assert "awaiting_user_input" not in result
 
     def test_execution_validator_with_missing_stage_outputs(self, base_state):
         """Test execution validator handles missing stage_outputs gracefully."""
@@ -364,7 +362,7 @@ class TestValidatorVerdicts:
         assert "RETRY_WITH_GUIDANCE" in question
         assert "SKIP_STAGE" in question
         assert "STOP" in question
-        # Should set awaiting_user_input
+        # Should set ask_user_trigger for user interaction routing
         assert result.get("ask_user_trigger") is not None
         # Should set last_node_before_ask_user
         assert result["last_node_before_ask_user"] == "execution_check"
@@ -422,7 +420,6 @@ class TestValidatorVerdicts:
         # Should NOT trigger user ask
         assert "ask_user_trigger" not in result
         assert "pending_user_questions" not in result
-        assert "awaiting_user_input" not in result
         assert "last_node_before_ask_user" not in result
 
 
@@ -465,7 +462,7 @@ class TestPhysicsFailureLimit:
         assert "RETRY" in question or "ACCEPT" in question
         assert "SKIP_STAGE" in question
         assert "STOP" in question
-        # Should set awaiting_user_input
+        # Should set ask_user_trigger for user interaction routing
         assert result.get("ask_user_trigger") is not None
         # Should set last_node_before_ask_user
         assert result["last_node_before_ask_user"] == "physics_check"
@@ -494,7 +491,6 @@ class TestPhysicsFailureLimit:
         # Should NOT trigger user ask
         assert "ask_user_trigger" not in result
         assert "pending_user_questions" not in result
-        assert "awaiting_user_input" not in result
         assert "last_node_before_ask_user" not in result
 
     def test_physics_sanity_fail_with_custom_max_from_runtime_config(self, base_state):

@@ -456,8 +456,8 @@ class TestResultsAnalyzerNode:
             assert "Fig1" in target_figures
             assert "Fig2" in target_figures
 
-    def test_context_escalation_returns_awaiting_user(self, base_state):
-        """Test that context escalation properly returns awaiting_user_input state."""
+    def test_context_escalation_returns_ask_user_trigger(self, base_state):
+        """Test that context escalation properly returns ask_user_trigger."""
         escalation_state = {
             "ask_user_trigger": "context_overflow",
             "ask_user_trigger": "context_overflow",

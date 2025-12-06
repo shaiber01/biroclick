@@ -604,7 +604,7 @@ class TestDeadlockTriggerEdgeCases:
     @patch("src.agents.supervision.supervisor.call_agent_with_metrics")
     def test_handles_context_escalation(self, mock_call, mock_context):
         """Should handle context escalation correctly."""
-        # Context check returns escalation (awaiting_user_input)
+        # Context check returns escalation with ask_user_trigger
         mock_context.return_value = {"ask_user_trigger": "context_overflow"}
         state = {
             "ask_user_trigger": "deadlock_detected",

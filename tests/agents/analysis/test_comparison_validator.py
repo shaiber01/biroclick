@@ -576,7 +576,7 @@ class TestComparisonValidatorNode:
         assert result["comparison_verdict"] == "approve"  # No targets expected
     
     @patch("src.agents.analysis.check_context_or_escalate", return_value=None)
-    def test_handles_awaiting_user_input_true(self, mock_check, base_state):
+    def test_handles_ask_user_trigger_set(self, mock_check, base_state):
         """Should return early when ask_user_trigger is already set."""
         base_state["ask_user_trigger"] = "code_review_limit"
         base_state["figure_comparisons"] = []

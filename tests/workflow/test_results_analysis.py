@@ -841,15 +841,15 @@ class TestComparisonValidatorEdgeCases:
             assert result["comparison_verdict"] == "approve"
             assert "no reproducible targets" in result["comparison_feedback"].lower()
 
-    def test_skips_processing_when_awaiting_user_input(self, validated_analysis_state):
-        """Should skip processing when awaiting_user_input is True."""
-        validated_analysis_state["awaiting_user_input"] = True
+    def test_skips_processing_when_trigger_set(self, validated_analysis_state):
+        """Should skip processing when ask_user_trigger is set."""
+        validated_analysis_state["ask_user_trigger"] = "some_trigger"
         validated_analysis_state["figure_comparisons"] = []
 
         with patch("src.agents.analysis.check_context_or_escalate", return_value=None):
             result = comparison_validator_node(validated_analysis_state)
 
-            # Should return empty dict (no state changes) - this preserves awaiting_user_input=True
+            # Should return empty dict (no state changes) - this preserves ask_user_trigger
             # in the merged state since LangGraph merges the result dict into state
             assert result == {}
             # Verify workflow_phase was NOT set (processing was skipped)

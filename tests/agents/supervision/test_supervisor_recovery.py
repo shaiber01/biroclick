@@ -1699,7 +1699,7 @@ class TestContextCheck:
     @patch("src.agents.supervision.supervisor.call_agent_with_metrics")
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     @patch("src.agents.supervision.supervisor.build_agent_prompt")
-    def test_context_check_returns_awaiting_user_input(self, mock_prompt, mock_context, mock_call):
+    def test_context_check_returns_ask_user_trigger(self, mock_prompt, mock_context, mock_call):
         """Should return early when context check requires user input."""
         mock_context.return_value = {"ask_user_trigger": "context_overflow"}
         

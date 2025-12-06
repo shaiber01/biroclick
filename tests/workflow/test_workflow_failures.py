@@ -308,17 +308,17 @@ class TestExecutionValidatorEdgeCases:
             "Feedback should mention LLM error or auto-approval"
         )
 
-    def test_awaiting_user_input_returns_empty_dict(self, base_state):
-        """Test that node returns empty dict when awaiting_user_input is True.
+    def test_returns_empty_dict_when_trigger_set(self, base_state):
+        """Test that node returns empty dict when ask_user_trigger is set.
         
         This prevents state modification while waiting for user input.
         """
         base_state["current_stage_id"] = "stage_1_extinction"
-        base_state["awaiting_user_input"] = True
+        base_state["ask_user_trigger"] = "some_trigger"
 
         result = execution_validator_node(base_state)
 
-        assert result == {}, "Should return empty dict when awaiting user input"
+        assert result == {}, "Should return empty dict when ask_user_trigger is set"
 
     def test_run_error_included_in_prompt(self, base_state):
         """Test that run_error is injected into the prompt for LLM analysis."""
@@ -578,14 +578,14 @@ class TestPhysicsSanityNode:
             "Feedback should mention LLM error or auto-approval"
         )
 
-    def test_awaiting_user_input_returns_empty_dict(self, base_state):
-        """Test that node returns empty dict when awaiting_user_input is True."""
+    def test_returns_empty_dict_when_trigger_set(self, base_state):
+        """Test that node returns empty dict when ask_user_trigger is set."""
         base_state["current_stage_id"] = "stage_1_extinction"
-        base_state["awaiting_user_input"] = True
+        base_state["ask_user_trigger"] = "some_trigger"
 
         result = physics_sanity_node(base_state)
 
-        assert result == {}, "Should return empty dict when awaiting user input"
+        assert result == {}, "Should return empty dict when ask_user_trigger is set"
 
     def test_empty_design_description_handled(self, base_state):
         """Test handling when design_description is empty dict or None."""

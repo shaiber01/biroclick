@@ -336,7 +336,7 @@ class TestCodeGeneratorNode:
             f"Expected ask_user_trigger='missing_stage_id', got {result.get('ask_user_trigger')}"
         )
         assert result.get("ask_user_trigger") is not None, (
-            "Expected awaiting_user_input=True for missing stage_id"
+            "Expected ask_user_trigger to be set for missing stage_id"
         )
         assert result.get("workflow_phase") == "code_generation", (
             "workflow_phase should be set to 'code_generation'"
@@ -464,7 +464,7 @@ class TestCodeGeneratorNode:
         
         # Should escalate to user
         assert result.get("ask_user_trigger") is not None, (
-            "Expected awaiting_user_input=True on LLM error"
+            "Expected ask_user_trigger to be set on LLM error"
         )
         assert result.get("ask_user_trigger") == "llm_error", (
             f"Expected ask_user_trigger='llm_error', got {result.get('ask_user_trigger')}"
@@ -691,7 +691,7 @@ class TestCodeReviewerNode:
             f"Expected ask_user_trigger='code_review_limit', got {result.get('ask_user_trigger')}"
         )
         assert result.get("ask_user_trigger") is not None, (
-            "Expected awaiting_user_input=True at limit"
+            "Expected ask_user_trigger to be set at limit"
         )
         assert result.get("last_node_before_ask_user") == "code_review", (
             f"Expected last_node_before_ask_user='code_review', "
@@ -739,14 +739,14 @@ class TestCodeReviewerNode:
 class TestContextCheckBehavior:
     """Test context check decorator behavior on code nodes."""
 
-    def test_code_reviewer_returns_empty_when_awaiting_input(self):
-        """When awaiting_user_input=True, code_reviewer should return empty dict."""
+    def test_code_reviewer_returns_empty_when_trigger_set(self):
+        """When ask_user_trigger is set, code_reviewer should return empty dict."""
         state = {
             "paper_id": "test",
             "paper_text": "Test" * 10,
             "current_stage_id": "stage_1",
             "code": "print('test')" * 10,
-            "ask_user_trigger": "context_overflow",  # Already awaiting
+            "ask_user_trigger": "context_overflow",  # Trigger set = skip
             "runtime_config": {},
         }
         
@@ -756,7 +756,7 @@ class TestContextCheckBehavior:
             mock_llm.assert_not_called()
         
         assert result == {}, (
-            f"Expected empty dict when awaiting_user_input=True, got {result}"
+            f"Expected empty dict when ask_user_trigger set, got {result}"
         )
 
     def test_code_generator_returns_escalation_when_context_check_triggers(self):

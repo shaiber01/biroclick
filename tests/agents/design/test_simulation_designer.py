@@ -86,7 +86,7 @@ class TestSimulationDesignerNode:
         base_state["current_stage_id"] = None
         result = simulation_designer_node(base_state)
         
-        # Verify exact error response structure (awaiting_user_input removed)
+        # Verify exact error response structure
         expected_keys = {"workflow_phase", "ask_user_trigger", "pending_user_questions"}
         assert set(result.keys()) == expected_keys, f"Unexpected keys: {set(result.keys()) - expected_keys}"
         
@@ -136,7 +136,7 @@ class TestSimulationDesignerNode:
         
         result = simulation_designer_node(base_state)
         
-        # Verify exact error response structure (awaiting_user_input removed)
+        # Verify exact error response structure
         assert "ask_user_trigger" in result
         assert "pending_user_questions" in result
         assert "workflow_phase" in result

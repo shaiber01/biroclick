@@ -1494,17 +1494,17 @@ class TestSupervisorEdgeCases:
         # Should still process the trigger
         assert result.get("supervisor_verdict") == "ok_continue"
 
-    def test_supervisor_handles_awaiting_user_input_flag(self, base_state):
-        """If awaiting_user_input is set, context check should return early."""
+    def test_supervisor_handles_trigger_with_pending_input(self, base_state):
+        """If ask_user_trigger is set, supervisor should handle the trigger."""
         from src.agents.supervision.supervisor import supervisor_node
 
-        base_state["awaiting_user_input"] = True
         base_state["ask_user_trigger"] = "material_checkpoint"
+        base_state["pending_user_questions"] = ["Test question"]
 
         result = supervisor_node(base_state)
 
-        # Should return empty or minimal result when already awaiting
-        # The actual behavior depends on check_context_or_escalate
+        # Should return a valid result when handling trigger
+        # The actual behavior depends on the trigger handler
         assert isinstance(result, dict)
 
     def test_supervisor_clears_ask_user_trigger_after_handling(self, base_state):

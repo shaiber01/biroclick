@@ -121,7 +121,6 @@ class TestCodeReviewerNode:
         
         # Verify escalation fields are NOT set when under max
         assert "ask_user_trigger" not in result
-        assert "awaiting_user_input" not in result
         
         mock_prompt.assert_called_once_with("code_reviewer", ANY)
         mock_llm.assert_called_once()

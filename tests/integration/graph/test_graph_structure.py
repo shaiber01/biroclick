@@ -3604,7 +3604,7 @@ class TestComplexE2EFlows:
         
         # Verify it sets up for user approval
         assert checkpoint_result.get("ask_user_trigger") is not None, (
-            "material_checkpoint should set awaiting_user_input=True"
+            "material_checkpoint should set ask_user_trigger"
         )
         assert checkpoint_result.get("ask_user_trigger") == "material_checkpoint", (
             f"Should set material_checkpoint trigger, got {checkpoint_result.get('ask_user_trigger')}"

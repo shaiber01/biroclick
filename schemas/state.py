@@ -897,10 +897,6 @@ class ReproState(TypedDict, total=False):
     # Structure matches progress_schema.json#/definitions/user_interaction
     user_interactions: List[Dict[str, Any]]  # Full log of all user decisions/feedback
     
-    # DEPRECATED: awaiting_user_input is no longer used. Kept for checkpoint compatibility.
-    # Use ask_user_trigger instead - it's the single mechanism for routing to ask_user.
-    awaiting_user_input: bool  # DEPRECATED - not used, kept for backward compatibility
-    
     # User interaction routing - SINGLE MECHANISM for routing to ask_user
     # When set, all routers (via with_trigger_check wrapper) will route to ask_user.
     # Nodes with @with_context_check decorator will skip if trigger is set.
@@ -1086,7 +1082,6 @@ def create_initial_state(
         # User interaction
         pending_user_questions=[],
         user_responses={},
-        awaiting_user_input=False,
         user_interactions=[],  # Log of all user decisions/feedback
         ask_user_trigger=None,  # What caused ask_user
         last_node_before_ask_user=None,  # Which node triggered ask_user

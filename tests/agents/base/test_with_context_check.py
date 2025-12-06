@@ -9,6 +9,33 @@ class TestWithContextCheck:
     """Tests for with_context_check decorator."""
 
     @patch("src.agents.base.check_context_or_escalate")
+    def test_skips_when_ask_user_trigger_already_set(self, mock_check):
+        """Should skip and return empty dict when ask_user_trigger is already set in state."""
+        # When trigger is already set, decorator should skip without calling check or function
+        original_state = {
+            "data": "test",
+            "ask_user_trigger": "existing_trigger",  # Already set
+            "pending_user_questions": ["Existing question"],
+        }
+        func_called = []
+        
+        @with_context_check("test_node")
+        def test_node(state):
+            func_called.append(state)
+            return {"result": "success"}
+        
+        result = test_node(original_state)
+        
+        # Should return empty dict (skip)
+        assert result == {}
+        
+        # Function should NOT be called
+        assert len(func_called) == 0
+        
+        # check_context_or_escalate should NOT be called
+        mock_check.assert_not_called()
+
+    @patch("src.agents.base.check_context_or_escalate")
     def test_returns_escalation_when_awaiting_input(self, mock_check):
         """Should return escalation when context check requires user input."""
         escalation = {
@@ -43,11 +70,11 @@ class TestWithContextCheck:
         mock_check.assert_called_once_with(original_state, "test_node")
 
     @patch("src.agents.base.check_context_or_escalate")
-    def test_returns_escalation_when_awaiting_input_false_but_present(self, mock_check):
-        """Should merge state updates when awaiting_user_input is False."""
+    def test_merges_state_updates_when_no_trigger(self, mock_check):
+        """Should merge state updates when escalation has no ask_user_trigger."""
         mock_check.return_value = {
-            "awaiting_user_input": False,
             "metrics": {"tokens": 100},
+            "context_budget": 5000,
         }
         
         original_state = {"original": "data", "preserved": True}
@@ -65,7 +92,7 @@ class TestWithContextCheck:
         assert received_state[0]["original"] == "data"
         assert received_state[0]["preserved"] is True
         assert received_state[0]["metrics"] == {"tokens": 100}
-        assert received_state[0]["awaiting_user_input"] is False
+        assert received_state[0]["context_budget"] == 5000
         
         # Result should come from function, not escalation
         assert result["result"] == "success"
@@ -163,7 +190,7 @@ class TestWithContextCheck:
         
         result = test_node(original_state)
         
-        # Empty dict should not have awaiting_user_input, so function should be called
+        # Empty dict has no ask_user_trigger, so function should be called
         assert len(received_state) == 1
         assert received_state[0] == original_state
         assert result["result"] == "success"
@@ -352,24 +379,24 @@ class TestWithContextCheck:
         assert result["metrics"] == {"tokens": 100, "cost": 0.05}
 
     @patch("src.agents.base.check_context_or_escalate")
-    def test_awaiting_input_with_missing_key(self, mock_check):
-        """Should handle escalation dict without awaiting_user_input key."""
-        # If key is missing, get() returns None, so should merge and call function
+    def test_escalation_without_trigger_merges_and_calls(self, mock_check):
+        """Should merge and call function when escalation has no ask_user_trigger."""
+        # If ask_user_trigger is missing, should merge updates and call function
         mock_check.return_value = {
             "pending_user_questions": ["Question"],
-            # No awaiting_user_input key
+            # No ask_user_trigger key
         }
         
         received_state = []
         
-        @with_context_check("test_missing_key")
+        @with_context_check("test_missing_trigger")
         def test_node(state):
             received_state.append(state.copy())
             return {"result": "success"}
         
         result = test_node({"data": "test"})
         
-        # Should call function since awaiting_user_input is None (missing)
+        # Should call function since ask_user_trigger is not set
         assert len(received_state) == 1
         assert received_state[0]["pending_user_questions"] == ["Question"]
         assert result["result"] == "success"

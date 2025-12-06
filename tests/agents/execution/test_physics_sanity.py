@@ -569,7 +569,7 @@ class TestPhysicsSanityNode:
         mock_check.return_value = escalation_result
         mock_prompt.return_value = "Prompt"
         
-        # When context check returns escalation with awaiting_user_input=True,
+        # When context check returns escalation with ask_user_trigger set,
         # decorator should return immediately without calling the function
         result = physics_sanity_node(base_state)
         

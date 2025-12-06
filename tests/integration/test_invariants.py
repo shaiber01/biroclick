@@ -749,8 +749,8 @@ class TestEdgeCases:
             # Should either escalate or return error state
             assert isinstance(result, dict), \
                 "simulation_designer_node must return dict even with missing fields"
-            # Should either have awaiting_user_input or workflow_phase
-            assert result.get("awaiting_user_input") or result.get("workflow_phase"), \
+            # Should either have ask_user_trigger or workflow_phase
+            assert result.get("ask_user_trigger") or result.get("workflow_phase"), \
                 "simulation_designer_node should escalate or set workflow_phase when fields missing"
         except Exception as e:
             # If it raises, should be a meaningful validation error
@@ -764,7 +764,7 @@ class TestEdgeCases:
             assert isinstance(result, dict), \
                 "code_generator_node must return dict even with missing design"
             # Should escalate or indicate missing design
-            assert result.get("awaiting_user_input") or result.get("workflow_phase"), \
+            assert result.get("ask_user_trigger") or result.get("workflow_phase"), \
                 "code_generator_node should escalate when design missing"
         except Exception as e:
             assert "design" in str(e).lower(), \
@@ -1349,18 +1349,18 @@ class TestComparisonValidatorInvariants:
             assert result["analysis_revision_count"] == 1, \
                 f"Expected analysis_revision_count=1, got {result['analysis_revision_count']}"
 
-    def test_comparison_validator_skips_when_awaiting_user_input(self, base_state, valid_plan):
-        """Test that comparison_validator skips processing when awaiting user input."""
+    def test_comparison_validator_skips_when_trigger_set(self, base_state, valid_plan):
+        """Test that comparison_validator skips processing when ask_user_trigger is set."""
         from src.agents.analysis import comparison_validator_node
 
         base_state["plan"] = valid_plan
         base_state["current_stage_id"] = "stage_0"
-        base_state["awaiting_user_input"] = True  # Already waiting for user
+        base_state["ask_user_trigger"] = "some_trigger"  # Trigger set
 
         result = comparison_validator_node(base_state)
         # Should return empty dict (no processing)
         assert result == {}, \
-            "comparison_validator should return empty dict when awaiting_user_input is True"
+            "comparison_validator should return empty dict when ask_user_trigger is set"
 
 
 class TestSchemaConsistencyInvariants:
@@ -1437,7 +1437,7 @@ class TestStageProgressionInvariants:
         assert isinstance(result, dict), \
             "select_stage_node must return dict even without plan"
         # Should either set current_stage_id to None or escalate
-        assert result.get("current_stage_id") is None or result.get("awaiting_user_input"), \
+        assert result.get("current_stage_id") is None or result.get("ask_user_trigger"), \
             "select_stage_node should not set current_stage_id without plan"
 
     def test_validation_hierarchy_is_computed_not_stored(self, base_state, valid_plan):

@@ -39,7 +39,6 @@ class TestBlockedStageHandling:
         assert result["run_error"] is None
         # Should not trigger user interaction
         assert result.get("ask_user_trigger") is None
-        assert result.get("awaiting_user_input") is None
 
     @patch("src.agents.stage_selection.update_progress_stage_status")
     def test_unblocks_stage_with_partial_completion(self, mock_update):
@@ -426,7 +425,6 @@ class TestBlockedStageHandling:
         # Should select stage0, not detect deadlock
         assert result["current_stage_id"] == "stage0"
         assert result.get("ask_user_trigger") is None
-        assert result.get("awaiting_user_input") is None
 
     def test_handles_empty_dependencies_list(self):
         """Should handle stage with empty dependencies list correctly."""

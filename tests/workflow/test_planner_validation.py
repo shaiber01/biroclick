@@ -673,16 +673,16 @@ class TestPlanReviewerMultipleIssues:
         assert "no targets" in feedback or "target" in feedback
 
 
-class TestPlanReviewerAwaitingUserInput:
-    """Test plan_reviewer_node behavior when awaiting user input."""
+class TestPlanReviewerTriggerSet:
+    """Test plan_reviewer_node behavior when ask_user_trigger is set."""
 
-    def test_skips_when_awaiting_user_input(self, base_state):
-        """Test that plan_reviewer returns empty when awaiting user input."""
-        base_state["awaiting_user_input"] = True
+    def test_skips_when_trigger_set(self, base_state):
+        """Test that plan_reviewer returns empty when ask_user_trigger is set."""
+        base_state["ask_user_trigger"] = "some_trigger"
         plan = MockResponseFactory.planner_response()
         base_state["plan"] = plan
 
         result = plan_reviewer_node(base_state)
 
-        # Should return empty dict when awaiting user input
+        # Should return empty dict when trigger is set
         assert result == {}

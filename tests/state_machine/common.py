@@ -42,7 +42,7 @@ def create_mock_ask_user_node(predefined_response: str = "APPROVE"):
     The mock simulates what happens after a user provides input:
     - Stores the response in user_responses keyed by the first question
     - Clears pending_user_questions
-    - Sets awaiting_user_input to False
+    - Note: ask_user_trigger is cleared by supervisor, not ask_user_node
     
     Args:
         predefined_response: The response to "provide" from the mock user
@@ -67,7 +67,7 @@ def create_mock_ask_user_node(predefined_response: str = "APPROVE"):
             new_responses[questions[0]] = predefined_response
 
         return {
-            "awaiting_user_input": False,
+            # Note: ask_user_trigger is NOT cleared here - supervisor handles that
             "pending_user_questions": [],
             "user_responses": new_responses,
         }

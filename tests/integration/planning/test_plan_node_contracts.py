@@ -230,7 +230,7 @@ class TestOutputStructure:
         ), f"Progress dependencies should round-trip list semantics, got {deps}"
 
         # Ensure no error flags are set
-        assert not result.get("awaiting_user_input")
+        assert not result.get("ask_user_trigger")
 
 
 class TestStateIsolation:
@@ -1718,7 +1718,6 @@ class TestOutputCompleteness:
         # Required keys on error/escalation
         required_keys = [
             "workflow_phase",
-            "awaiting_user_input",
             "ask_user_trigger",
             "pending_user_questions",
         ]
@@ -1922,23 +1921,22 @@ class TestPromptAdaptationIntegration:
 
 
 class TestPlanNodeBehaviorWithAwaitingUserInput:
-    """Verify plan_node behavior when awaiting_user_input is already True.
+    """Verify plan_node behavior when ask_user_trigger is already set.
     
     Note: Unlike nodes with @with_context_check decorator, plan_node handles
     context checking manually and does NOT have an early return for
-    awaiting_user_input=True.
+    ask_user_trigger being set.
     """
 
-    def test_plan_node_processes_even_when_awaiting_user_input(self, base_state):
-        """plan_node processes normally even if awaiting_user_input=True.
+    def test_plan_node_processes_even_when_trigger_set(self, base_state):
+        """plan_node processes normally even if ask_user_trigger is set.
         
         This tests the CURRENT behavior - plan_node does not check for
-        awaiting_user_input at entry. If this is a bug, the test will
+        ask_user_trigger at entry. If this is a bug, the test will
         document the current behavior until it's fixed.
         """
         from src.agents.planning import plan_node
 
-        base_state["awaiting_user_input"] = True
         base_state["ask_user_trigger"] = "some_previous_trigger"
 
         mock_response = {
@@ -1953,10 +1951,10 @@ class TestPlanNodeBehaviorWithAwaitingUserInput:
         ) as mock_llm:
             result = plan_node(base_state)
 
-        # Current behavior: plan_node processes despite awaiting_user_input
+        # Current behavior: plan_node processes despite ask_user_trigger being set
         # This documents the current behavior - if this changes, update the test
         assert mock_llm.called, (
-            "CURRENT BEHAVIOR: plan_node calls LLM even when awaiting_user_input=True"
+            "CURRENT BEHAVIOR: plan_node calls LLM even when ask_user_trigger is set"
         )
         assert "plan" in result, "CURRENT BEHAVIOR: plan_node returns plan"
 

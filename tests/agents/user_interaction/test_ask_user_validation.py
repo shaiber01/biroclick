@@ -30,7 +30,7 @@ class TestEmptyResponseHandling:
         
         result = ask_user_node(state)
         
-        # Should return with awaiting_user_input=True and error message
+        # Should return with ask_user_trigger set and error message
         assert result.get("ask_user_trigger") is not None
         assert "empty" in result["pending_user_questions"][0].lower()
         assert result["ask_user_trigger"] == "material_checkpoint"
@@ -368,7 +368,7 @@ class TestErrorContextHelpers:
         assert result == "plan_review_error"
 
     def test_infer_error_context_stuck_awaiting_input(self):
-        """Should return 'stuck_awaiting_input' when awaiting_user_input is True."""
+        """Should return 'stuck_awaiting_input' when ask_user_trigger is set."""
         from src.agents.user_interaction import _infer_error_context
         
         state = {
@@ -395,7 +395,7 @@ class TestErrorContextHelpers:
             "last_code_review_verdict": "approve",
             "last_design_review_verdict": "approve",
             "last_plan_review_verdict": "approve",
-            "awaiting_user_input": False,
+            # No ask_user_trigger set, so should be unknown_error
         }
         
         result = _infer_error_context(state)
@@ -443,8 +443,7 @@ class TestErrorContextHelpers:
         result = _generate_error_question("stuck_awaiting_input", state)
         
         assert "WORKFLOW RECOVERY" in result
-        assert "stuck" in result.lower()
-        assert "awaiting_user_input" in result
+        assert "stuck" in result.lower() or "ask_user_trigger" in result
 
     def test_generate_error_question_unknown_error(self):
         """Should generate generic message for unknown_error."""

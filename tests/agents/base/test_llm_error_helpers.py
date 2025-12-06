@@ -230,7 +230,6 @@ class TestCreateLlmErrorEscalation:
         assert isinstance(result, dict)
         assert "workflow_phase" in result
         assert "ask_user_trigger" in result
-        # Note: awaiting_user_input is deprecated, ask_user_trigger is the sole mechanism
         assert "pending_user_questions" in result
         
         assert result["workflow_phase"] == "code_generation"
