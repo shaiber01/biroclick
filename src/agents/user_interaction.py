@@ -163,17 +163,42 @@ def ask_user_node(state: ReproState) -> Dict[str, Any]:
     trigger = state.get("ask_user_trigger")
     paper_id = state.get("paper_id", "unknown")
     
-    # Early return if nothing to ask - this is the normal "no questions" case
-    if not questions:
-        return {
-            "workflow_phase": "awaiting_user",
-        }
-    
     # ═══════════════════════════════════════════════════════════════════════
-    # SAFETY NET: Ensure we always have a trigger when we have questions
+    # SAFETY NET #1: Generate recovery questions if routed here without questions
+    # 
+    # This happens when routers return "ask_user" due to errors (e.g., verdict
+    # is None, wrong type, or unrecognized) but cannot set pending_user_questions
+    # because routers can only return route names, not modify state.
+    #
+    # There are NO legitimate cases where ask_user_node receives empty questions:
+    # - If ask_user_trigger is set, the node that set it also sets questions
+    # - If routed via error paths, questions aren't set (this safety net catches it)
+    # - The material_checkpoint "passthrough" actually routes to select_stage, not ask_user
     # ═══════════════════════════════════════════════════════════════════════
     safety_net_triggered = False
-    if not trigger:
+    if not questions:
+        logger.warning(
+            "ask_user_node called with no pending_user_questions - "
+            "this indicates a routing error (e.g., verdict was None). "
+            "Generating recovery questions."
+        )
+        error_context = _infer_error_context(state)
+        contextual_message = _generate_error_question(error_context, state)
+        questions = [
+            f"{contextual_message}\n\n"
+            f"{get_options_prompt('unknown_escalation')}"
+        ]
+        trigger = "unknown_escalation"
+        safety_net_triggered = True
+        logger.info(f"Safety net #1: inferred error context '{error_context}', generated recovery questions")
+    
+    # ═══════════════════════════════════════════════════════════════════════
+    # SAFETY NET #2: Ensure we always have a trigger when we have questions
+    # 
+    # This catches the case where questions ARE present but trigger is missing
+    # (different from safety net #1 which handles missing questions).
+    # ═══════════════════════════════════════════════════════════════════════
+    elif not trigger:
         logger.warning(
             "ask_user_node called with questions but without ask_user_trigger - "
             "this indicates a workflow bug. Setting generic 'unknown_escalation' trigger."
@@ -181,7 +206,7 @@ def ask_user_node(state: ReproState) -> Dict[str, Any]:
         trigger = "unknown_escalation"
         safety_net_triggered = True
         
-        # BUG FIX: When safety net triggers, the existing questions in state may have
+        # When safety net #2 triggers, the existing questions in state may have
         # been generated for a different trigger with different valid options.
         # Use contextual helpers to infer what went wrong and generate appropriate questions.
         error_context = _infer_error_context(state)
@@ -204,7 +229,7 @@ def ask_user_node(state: ReproState) -> Dict[str, Any]:
                 f"{contextual_message}\n\n"
                 f"{get_options_prompt('unknown_escalation')}"
             ]
-        logger.info(f"Safety net: inferred error context '{error_context}', regenerated questions")
+        logger.info(f"Safety net #2: inferred error context '{error_context}', regenerated questions")
     
     # Get original questions (for mapping responses after retry) or use current questions.
     # NOTE: We use `or questions` instead of the default parameter because
@@ -305,11 +330,12 @@ def material_checkpoint_node(state: ReproState) -> dict:
         logger.info(
             f"material_checkpoint: Materials already validated ({len(validated_materials)} items), skipping checkpoint"
         )
-        # Return empty update to pass through to next edge (which goes to ask_user,
-        # but ask_user will see no pending_user_questions and pass through quickly)
+        # Materials already validated - the router (route_after_material_checkpoint)
+        # will see validated_materials is set and route directly to select_stage,
+        # bypassing ask_user entirely. Empty questions here is just defensive.
         return {
             "workflow_phase": "material_checkpoint",
-            "pending_user_questions": [],  # No questions = ask_user passes through
+            "pending_user_questions": [],
         }
     
     # Get material validation results from progress
