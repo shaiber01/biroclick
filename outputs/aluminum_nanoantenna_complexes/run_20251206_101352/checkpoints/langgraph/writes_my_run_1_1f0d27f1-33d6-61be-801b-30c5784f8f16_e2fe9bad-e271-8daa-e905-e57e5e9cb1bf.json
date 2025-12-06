@@ -1,0 +1,43 @@
+{
+  "writes": [
+    {
+      "channel": "workflow_phase",
+      "value_type": "msgpack",
+      "value_data": "qGFuYWx5c2lz"
+    },
+    {
+      "channel": "analysis_summary",
+      "value_type": "msgpack",
+      "value_data": "jKhzdGFnZV9pZLpzdGFnZTBfbWF0ZXJpYWxfdmFsaWRhdGlvbqZ0b3RhbHOFp3RhcmdldHMBp21hdGNoZXMAp3BlbmRpbmcBp21pc3NpbmcAqG1pc21hdGNoAK9tYXRjaGVkX3RhcmdldHOQr3BlbmRpbmdfdGFyZ2V0c5GlRmlnMmGvbWlzc2luZ190YXJnZXRzkLBtaXNtYXRjaF90YXJnZXRzkLRkaXNjcmVwYW5jaWVzX2xvZ2dlZACzdmFsaWRhdGlvbl9jcml0ZXJpYZPZUUFsIGVwc2lsb24gc2hvd3MgZXhwZWN0ZWQgRHJ1ZGUtbGlrZSBiZWhhdmlvciB3aXRoIGludGVyYmFuZCBmZWF0dXJlcyBuZWFyIDEuNSBlVtkzVERCQyBhYnNvcnB0aW9uIHBlYWsgd2l0aGluIMKxNSUgb2YgMi4xIGVWICg1OTAgbm0p2TpUREJDIGxpbmV3aWR0aCBvcmRlciBvZiBtYWduaXR1ZGUgY29uc2lzdGVudCB3aXRoIDAuMDY2IGVWsGZlZWRiYWNrX2FwcGxpZWSRpUZpZzJhsnVucmVzb2x2ZWRfdGFyZ2V0c5GlRmlnMmGlbm90ZXPZc1ZhbGlkYXRvciBmZWVkYmFjazogQ29tcGFyaXNvbnMgcGVuZGluZyBxdWFudGl0YXRpdmUgY2hlY2tzIGZvcjogRmlnMmEgMC8xIHRhcmdldHMgY3VycmVudGx5IGNsYXNzaWZpZWQgYXMgbWF0Y2hlcy64bGxtX3F1YWxpdGF0aXZlX2FuYWx5c2lz2gM1U3RhZ2UgMCBtYXRlcmlhbCB2YWxpZGF0aW9uIGNvbXBsZXRlZCBzdWNjZXNzZnVsbHkgd2l0aCB0aGUgY3JpdGljYWwgVERCQyBKLWFnZ3JlZ2F0ZSBleGNpdG9uIHByb3BlcnRpZXMgbWF0Y2hpbmcgcGFwZXIgcGFyYW1ldGVycyB3aXRoaW4gMSUgKHBlYWsgYXQgMi4xMTkgZVYgdnMgcGFwZXIncyAyLjEgZVYpLiBUaGUgTG9yZW50emlhbiBtb2RlbCBjb3JyZWN0bHkgY2FwdHVyZXMgdGhlIG5hcnJvdyBsaW5ld2lkdGggKH4xNSBtZVYpIGVzc2VudGlhbCBmb3IgYWNoaWV2aW5nIHN0cm9uZyBjb3VwbGluZyByZWdpbWUuIEFsdW1pbnVtIGFuZCBJVE8gdXNlZCBhbmFseXRpY2FsIGFwcHJveGltYXRpb25zIChEcnVkZSBhbmQgY29uc3RhbnQgbiByZXNwZWN0aXZlbHkpIGR1ZSB0byBDU1YgaGVhZGVyIHBhcnNpbmcgaXNzdWVzLCBidXQgYm90aCBzaG93IHBoeXNpY2FsbHkgY29ycmVjdCBiZWhhdmlvcjogQWwgaXMgbWV0YWxsaWMgKM614oKBIDwgMCkgYWNyb3NzIHRoZSB2aXNpYmxlIHJhbmdlIGFuZCBJVE8gaGFzIG4g4omIIDEuOSBhcyBleHBlY3RlZC4gVGhlIEFsIERydWRlIG1vZGVsIG1heSBkaWZmZXIgfjMwJSBmcm9tIFBhbGlrIHRhYnVsYXRlZCB2YWx1ZXMgaW4gbWFnbml0dWRlLCBidXQgdHJlbmRzIGFyZSBjb3JyZWN0LiBUaGVzZSBtYXRlcmlhbCBtb2RlbHMgYXJlIGFkZXF1YXRlIGZvciBwcm9jZWVkaW5nIHRvIGdlb21ldHJ5IHNpbXVsYXRpb25zLCB3aXRoIHRoZSB1bmRlcnN0YW5kaW5nIHRoYXQgYW55IHN5c3RlbWF0aWMgd2F2ZWxlbmd0aCBvZmZzZXRzIHdpbGwgYmUgY29uc2lzdGVudCBhY3Jvc3MgYWxsIHN0YWdlcy4="
+    },
+    {
+      "channel": "analysis_overall_classification",
+      "value_type": "msgpack",
+      "value_data": "sEFDQ0VQVEFCTEVfTUFUQ0g="
+    },
+    {
+      "channel": "analysis_result_reports",
+      "value_type": "msgpack",
+      "value_data": "kYypcmVzdWx0X2lk2SBzdGFnZTBfbWF0ZXJpYWxfdmFsaWRhdGlvbl9GaWcyYa10YXJnZXRfZmlndXJlpUZpZzJhpnN0YXR1c8dAAJO0c3JjLmFnZW50cy5jb25zdGFudHO2QW5hbHlzaXNDbGFzc2lmaWNhdGlvbrJQRU5ESU5HX1ZBTElEQVRJT06wZXhwZWN0ZWRfb3V0cHV0c5HZIHN0YWdlMF9tYXRlcmlhbF92YWxpZGF0aW9uXyoucG5nrm1hdGNoZWRfb3V0cHV02S1zdGFnZTBfbWF0ZXJpYWxfdmFsaWRhdGlvbl9maWcyYV9hbHVtaW51bS5wbme1cHJlY2lzaW9uX3JlcXVpcmVtZW50pGdvb2SzZGlnaXRpemVkX2RhdGFfcGF0aMCzdmFsaWRhdGlvbl9jcml0ZXJpYZC0cXVhbnRpdGF0aXZlX21ldHJpY3OAsWNyaXRlcmlhX2ZhaWx1cmVzkKVub3Rlc7JPdXRwdXQgaWRlbnRpZmllZC6oc3RhZ2VfaWS6c3RhZ2UwX21hdGVyaWFsX3ZhbGlkYXRpb24="
+    },
+    {
+      "channel": "figure_comparisons",
+      "value_type": "msgpack",
+      "value_data": "kYmpZmlndXJlX2lkpUZpZzJhqHN0YWdlX2lkunN0YWdlMF9tYXRlcmlhbF92YWxpZGF0aW9upXRpdGxlpUZpZzJhsHBhcGVyX2ltYWdlX3BhdGjAt3JlcHJvZHVjdGlvbl9pbWFnZV9wYXRo2S1zdGFnZTBfbWF0ZXJpYWxfdmFsaWRhdGlvbl9maWcyYV9hbHVtaW51bS5wbmewY29tcGFyaXNvbl90YWJsZZGEp2ZlYXR1cmWxU2ltdWxhdGlvbiBPdXRwdXSlcGFwZXKlRmlnMmGscmVwcm9kdWN0aW9u2S1zdGFnZTBfbWF0ZXJpYWxfdmFsaWRhdGlvbl9maWcyYV9hbHVtaW51bS5wbmemc3RhdHVzruKaoO+4jyBQZW5kaW5nsHNoYXBlX2NvbXBhcmlzb26QtXJlYXNvbl9mb3JfZGlmZmVyZW5jZaCuY2xhc3NpZmljYXRpb27HQACTtHNyYy5hZ2VudHMuY29uc3RhbnRztkFuYWx5c2lzQ2xhc3NpZmljYXRpb26yUEVORElOR19WQUxJREFUSU9O"
+    },
+    {
+      "channel": "analysis_feedback",
+      "value_type": "msgpack",
+      "value_data": "2TJDb21wYXJpc29ucyBwZW5kaW5nIHF1YW50aXRhdGl2ZSBjaGVja3MgZm9yOiBGaWcyYQ=="
+    },
+    {
+      "channel": "branch:to:comparison_check",
+      "value_type": "null",
+      "value_data": ""
+    }
+  ],
+  "task_id": "e2fe9bad-e271-8daa-e905-e57e5e9cb1bf",
+  "thread_id": "my_run_1",
+  "checkpoint_id": "1f0d27f1-33d6-61be-801b-30c5784f8f16",
+  "saved_at": "2025-12-06T10:40:37.990603"
+}

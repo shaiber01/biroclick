@@ -1,0 +1,38 @@
+{
+  "writes": [
+    {
+      "channel": "__resume__",
+      "value_type": "msgpack",
+      "value_data": "ka9BQ0NFUFRfUEFSVElBTDo="
+    },
+    {
+      "channel": "user_responses",
+      "value_type": "msgpack",
+      "value_data": "gdnYQW5hbHlzaXMgcmV2aXNpb24gbGltaXQgKDIpIHJlYWNoZWQgYnV0IHJlc3VsdHMgZG9uJ3QgbWF0Y2ggcGFwZXIuCgpPcHRpb25zOgotIEFDQ0VQVF9QQVJUSUFMOiBNYXJrIHN0YWdlIGFzIHBhcnRpYWwgc3VjY2VzcyBhbmQgY29udGludWUKLSBQUk9WSURFX0hJTlQ6IFJlc2V0IGNvdW50ZXIgYW5kIHJldHJ5IHdpdGggZ3VpZGFuY2UKLSBTVE9QOiBFbmQgdGhlIHdvcmtmbG93r0FDQ0VQVF9QQVJUSUFMOg=="
+    },
+    {
+      "channel": "pending_user_questions",
+      "value_type": "msgpack",
+      "value_data": "kA=="
+    },
+    {
+      "channel": "awaiting_user_input",
+      "value_type": "msgpack",
+      "value_data": "wg=="
+    },
+    {
+      "channel": "workflow_phase",
+      "value_type": "msgpack",
+      "value_data": "rWF3YWl0aW5nX3VzZXI="
+    },
+    {
+      "channel": "branch:to:supervisor",
+      "value_type": "null",
+      "value_data": ""
+    }
+  ],
+  "task_id": "209781ff-9bcc-8ecb-fd10-3fbcd0386719",
+  "thread_id": "my_run_1",
+  "checkpoint_id": "1f0d27f3-d51c-6346-801d-b3ad5dc7bdea",
+  "saved_at": "2025-12-06T10:40:52.143364"
+}

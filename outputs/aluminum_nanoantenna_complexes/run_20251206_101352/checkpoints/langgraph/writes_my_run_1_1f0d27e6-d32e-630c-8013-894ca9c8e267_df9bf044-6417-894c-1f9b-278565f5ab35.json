@@ -1,0 +1,43 @@
+{
+  "writes": [
+    {
+      "channel": "workflow_phase",
+      "value_type": "msgpack",
+      "value_data": "qGFuYWx5c2lz"
+    },
+    {
+      "channel": "analysis_summary",
+      "value_type": "msgpack",
+      "value_data": "jKhzdGFnZV9pZLpzdGFnZTBfbWF0ZXJpYWxfdmFsaWRhdGlvbqZ0b3RhbHOFp3RhcmdldHMBp21hdGNoZXMAp3BlbmRpbmcBp21pc3NpbmcAqG1pc21hdGNoAK9tYXRjaGVkX3RhcmdldHOQr3BlbmRpbmdfdGFyZ2V0c5GlRmlnMmGvbWlzc2luZ190YXJnZXRzkLBtaXNtYXRjaF90YXJnZXRzkLRkaXNjcmVwYW5jaWVzX2xvZ2dlZACzdmFsaWRhdGlvbl9jcml0ZXJpYZPZUUFsIGVwc2lsb24gc2hvd3MgZXhwZWN0ZWQgRHJ1ZGUtbGlrZSBiZWhhdmlvciB3aXRoIGludGVyYmFuZCBmZWF0dXJlcyBuZWFyIDEuNSBlVtkzVERCQyBhYnNvcnB0aW9uIHBlYWsgd2l0aGluIMKxNSUgb2YgMi4xIGVWICg1OTAgbm0p2TpUREJDIGxpbmV3aWR0aCBvcmRlciBvZiBtYWduaXR1ZGUgY29uc2lzdGVudCB3aXRoIDAuMDY2IGVWsGZlZWRiYWNrX2FwcGxpZWSQsnVucmVzb2x2ZWRfdGFyZ2V0c5GlRmlnMmGlbm90ZXPZYlZhbGlkYXRvciBmZWVkYmFjazogVXNlciBoaW50OiBmaXggQ1NWIHBhcnNpbmcgaXNzdWVzIDAvMSB0YXJnZXRzIGN1cnJlbnRseSBjbGFzc2lmaWVkIGFzIG1hdGNoZXMuuGxsbV9xdWFsaXRhdGl2ZV9hbmFseXNpc9oDe1N0YWdlIDAgbWF0ZXJpYWwgdmFsaWRhdGlvbiBzaG93cyBQQVJUSUFMX01BVENILiBUaGUgVERCQyBKLWFnZ3JlZ2F0ZSBpcyBjb3JyZWN0bHkgbW9kZWxlZCB3aXRoIGEgTG9yZW50emlhbiBvc2NpbGxhdG9yICjOteKInj0yLjU2LCDPieKCgD0zLjIyZTE1IHJhZC9zLCDOsz0yLjQ1ZTEzIHJhZC9zLCBmPTAuNDUpLCB5aWVsZGluZyBhIHJlc29uYW5jZSBhdCAyLjExOSBlViB2cyB0aGUgcGFwZXIncyAyLjEgZVYgKDAuOSUgZXJyb3IgLSBleGNlbGxlbnQpLiBBbHVtaW51bSBzaG93cyBjb3JyZWN0IG1ldGFsbGljIGJlaGF2aW9yICjOteKCgTwwIGFjcm9zcyB2aXNpYmxlIHJhbmdlKSBhbmQgSVRPIGhhcyBhcHByb3ByaWF0ZSByZWZyYWN0aXZlIGluZGV4ICh+MS45KS4gSG93ZXZlciwgQ1NWIHBhcnNpbmcgZXJyb3JzIHByZXZlbnRlZCBsb2FkaW5nIGFjdHVhbCBQYWxpayBBbCBhbmQgS8O2bmlnIElUTyB0YWJ1bGF0ZWQgZGF0YSAtIHRoZSBjb2RlIGZlbGwgYmFjayB0byBEcnVkZSBtb2RlbCBmb3IgQWwgYW5kIGNvbnN0YW50IHZhbHVlcyBmb3IgSVRPLiBUaGUgZXJyb3IgbWVzc2FnZSBpbmRpY2F0ZXMgdGhlIENTViBsb2FkZXIgdHJpZWQgdG8gY29udmVydCB0aGUgaGVhZGVyIHJvdyBzdHJpbmcgJ3dhdmVsZW5ndGhfbm0nIHRvIGEgZmxvYXQuIFRoaXMgbmVlZHMgdG8gYmUgZml4ZWQgKGFkZCBoZWFkZXIgaGFuZGxpbmcpIGFuZCByZS1ydW4gYmVmb3JlIHByb2NlZWRpbmcsIGFzIGFjY3VyYXRlIG1hdGVyaWFsIGRhdGEgaXMgZm91bmRhdGlvbmFsIGZvciBzdWJzZXF1ZW50IHN0cm9uZyBjb3VwbGluZyBzaW11bGF0aW9ucy4gVGhlIHBoeXNpY3MgaXMgcXVhbGl0YXRpdmVseSBjb3JyZWN0IGJ1dCB0aGUgZGF0YSBzb3VyY2VzIGFyZSBpbmNvbXBsZXRlLg=="
+    },
+    {
+      "channel": "analysis_overall_classification",
+      "value_type": "msgpack",
+      "value_data": "rVBBUlRJQUxfTUFUQ0g="
+    },
+    {
+      "channel": "analysis_result_reports",
+      "value_type": "msgpack",
+      "value_data": "kYypcmVzdWx0X2lk2SBzdGFnZTBfbWF0ZXJpYWxfdmFsaWRhdGlvbl9GaWcyYa10YXJnZXRfZmlndXJlpUZpZzJhpnN0YXR1c8dAAJO0c3JjLmFnZW50cy5jb25zdGFudHO2QW5hbHlzaXNDbGFzc2lmaWNhdGlvbrJQRU5ESU5HX1ZBTElEQVRJT06wZXhwZWN0ZWRfb3V0cHV0c5HZIHN0YWdlMF9tYXRlcmlhbF92YWxpZGF0aW9uXyoucG5nrm1hdGNoZWRfb3V0cHV02S1zdGFnZTBfbWF0ZXJpYWxfdmFsaWRhdGlvbl9maWcyYV9hbHVtaW51bS5wbme1cHJlY2lzaW9uX3JlcXVpcmVtZW50pGdvb2SzZGlnaXRpemVkX2RhdGFfcGF0aMCzdmFsaWRhdGlvbl9jcml0ZXJpYZC0cXVhbnRpdGF0aXZlX21ldHJpY3OAsWNyaXRlcmlhX2ZhaWx1cmVzkKVub3Rlc7JPdXRwdXQgaWRlbnRpZmllZC6oc3RhZ2VfaWS6c3RhZ2UwX21hdGVyaWFsX3ZhbGlkYXRpb24="
+    },
+    {
+      "channel": "figure_comparisons",
+      "value_type": "msgpack",
+      "value_data": "kYmpZmlndXJlX2lkpUZpZzJhqHN0YWdlX2lkunN0YWdlMF9tYXRlcmlhbF92YWxpZGF0aW9upXRpdGxlpUZpZzJhsHBhcGVyX2ltYWdlX3BhdGjAt3JlcHJvZHVjdGlvbl9pbWFnZV9wYXRo2S1zdGFnZTBfbWF0ZXJpYWxfdmFsaWRhdGlvbl9maWcyYV9hbHVtaW51bS5wbmewY29tcGFyaXNvbl90YWJsZZGEp2ZlYXR1cmWxU2ltdWxhdGlvbiBPdXRwdXSlcGFwZXKlRmlnMmGscmVwcm9kdWN0aW9u2S1zdGFnZTBfbWF0ZXJpYWxfdmFsaWRhdGlvbl9maWcyYV9hbHVtaW51bS5wbmemc3RhdHVzruKaoO+4jyBQZW5kaW5nsHNoYXBlX2NvbXBhcmlzb26QtXJlYXNvbl9mb3JfZGlmZmVyZW5jZaCuY2xhc3NpZmljYXRpb27HQACTtHNyYy5hZ2VudHMuY29uc3RhbnRztkFuYWx5c2lzQ2xhc3NpZmljYXRpb26yUEVORElOR19WQUxJREFUSU9O"
+    },
+    {
+      "channel": "analysis_feedback",
+      "value_type": "msgpack",
+      "value_data": "2SFVc2VyIGhpbnQ6IGZpeCBDU1YgcGFyc2luZyBpc3N1ZXM="
+    },
+    {
+      "channel": "branch:to:comparison_check",
+      "value_type": "null",
+      "value_data": ""
+    }
+  ],
+  "task_id": "df9bf044-6417-894c-1f9b-278565f5ab35",
+  "thread_id": "my_run_1",
+  "checkpoint_id": "1f0d27e6-d32e-630c-8013-894ca9c8e267",
+  "saved_at": "2025-12-06T10:36:49.374799"
+}

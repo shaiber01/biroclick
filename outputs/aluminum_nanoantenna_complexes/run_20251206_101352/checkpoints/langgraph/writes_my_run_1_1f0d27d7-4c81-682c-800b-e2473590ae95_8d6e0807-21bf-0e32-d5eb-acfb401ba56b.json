@@ -1,0 +1,43 @@
+{
+  "writes": [
+    {
+      "channel": "workflow_phase",
+      "value_type": "msgpack",
+      "value_data": "tGV4ZWN1dGlvbl92YWxpZGF0aW9u"
+    },
+    {
+      "channel": "execution_verdict",
+      "value_type": "msgpack",
+      "value_data": "p3dhcm5pbmc="
+    },
+    {
+      "channel": "execution_feedback",
+      "value_type": "msgpack",
+      "value_data": "2gIcRXhlY3V0aW9uIGNvbXBsZXRlZCBzdWNjZXNzZnVsbHkgd2l0aCBhbGwgNiBleHBlY3RlZCBvdXRwdXQgZmlsZXMgZ2VuZXJhdGVkLiBIb3dldmVyLCBib3RoIEFsdW1pbnVtIChQYWxpaykgYW5kIElUTyAoS8O2bmlnKSBDU1YgZGF0YSBmaWxlcyBmYWlsZWQgdG8gbG9hZCBkdWUgdG8gaGVhZGVyIHBhcnNpbmcgZXJyb3JzLCBjYXVzaW5nIGZhbGxiYWNrIHRvIERydWRlIG1vZGVsIGFuZCBjb25zdGFudCBhcHByb3hpbWF0aW9ucyByZXNwZWN0aXZlbHkuIFREQkMgSi1hZ2dyZWdhdGUgd2FzIGNvbXB1dGVkIGNvcnJlY3RseSB2aWEgTG9yZW50emlhbiBtb2RlbCB3aXRoIDAuOSUgcGVhayBwb3NpdGlvbiBlcnJvci4gVXNlciBzaG91bGQgcmV2aWV3IHRoZSBtYXRlcmlhbCBwcm9wZXJ0eSBwbG90cyB0byBjb25maXJtIHdoZXRoZXIgdGhlIGFwcHJveGltYXRpb25zIGFyZSBhY2NlcHRhYmxlIGZvciBzdWJzZXF1ZW50IHNpbXVsYXRpb24gc3RhZ2VzLCBhcyBtYXRlcmlhbCBlcnJvcnMgcHJvcGFnYXRlIHRvIGFsbCBkb3duc3RyZWFtIHJlc3VsdHMu"
+    },
+    {
+      "channel": "execution_warnings",
+      "value_type": "msgpack",
+      "value_data": "lNlhQWx1bWludW06IFVzaW5nIERydWRlIG1vZGVsIGFwcHJveGltYXRpb24gaW5zdGVhZCBvZiBQYWxpayBleHBlcmltZW50YWwgZGF0YSAoQ1NWIHBhcnNpbmcgZmFpbGVkKdloSVRPOiBVc2luZyBjb25zdGFudCBuPTEuOSBhcHByb3hpbWF0aW9uIGluc3RlYWQgb2YgS8O2bmlnIHdhdmVsZW5ndGgtZGVwZW5kZW50IGRhdGEgKENTViBwYXJzaW5nIGZhaWxlZCnZV0NTViBwYXJzaW5nIGVycm9ycyBzdWdnZXN0IGhlYWRlciByb3cgaGFuZGxpbmcgaXNzdWUgKHNraXByb3dzIHBhcmFtZXRlciBtYXkgYmUgbmVlZGVkKdlqVERCQyBKLWFnZ3JlZ2F0ZSBjb21wdXRlZCBmcm9tIExvcmVudHppYW4gbW9kZWwgLSBwZWFrIGF0IDU4NW5tIHZzIGV4cGVjdGVkIDU5MG5tICgwLjklIGVycm9yLCBhY2NlcHRhYmxlKQ=="
+    },
+    {
+      "channel": "execution_status",
+      "value_type": "msgpack",
+      "value_data": "haljb21wbGV0ZWTDqWV4aXRfY29kZQCvcnVudGltZV9zZWNvbmRzy0ABrhR64UeuqXRpbWVkX291dMKubWVtb3J5X3BlYWtfbWLA"
+    },
+    {
+      "channel": "execution_files_check",
+      "value_type": "msgpack",
+      "value_data": "ha5leHBlY3RlZF9maWxlc5a6c3RhZ2UwX2FsX3Blcm1pdHRpdml0eS5jc3a8c3RhZ2UwX3RkYmNfcGVybWl0dGl2aXR5LmNzdrtzdGFnZTBfaXRvX3Blcm1pdHRpdml0eS5jc3bZLXN0YWdlMF9tYXRlcmlhbF92YWxpZGF0aW9uX2ZpZzJhX2FsdW1pbnVtLnBuZ9kpc3RhZ2UwX21hdGVyaWFsX3ZhbGlkYXRpb25fZmlnMmFfdGRiYy5wbmfZLXN0YWdlMF9tYXRlcmlhbF92YWxpZGF0aW9uX2ZpZzJhX2NvbWJpbmVkLnBuZ6tmb3VuZF9maWxlc5a6c3RhZ2UwX2FsX3Blcm1pdHRpdml0eS5jc3a7c3RhZ2UwX2l0b19wZXJtaXR0aXZpdHkuY3N22S1zdGFnZTBfbWF0ZXJpYWxfdmFsaWRhdGlvbl9maWcyYV9hbHVtaW51bS5wbmfZLXN0YWdlMF9tYXRlcmlhbF92YWxpZGF0aW9uX2ZpZzJhX2NvbWJpbmVkLnBuZ9kpc3RhZ2UwX21hdGVyaWFsX3ZhbGlkYXRpb25fZmlnMmFfdGRiYy5wbme8c3RhZ2UwX3RkYmNfcGVybWl0dGl2aXR5LmNzdq1taXNzaW5nX2ZpbGVzkKthbGxfcHJlc2VudMOvc3BlY19jb21wbGlhbmNlloitYXJ0aWZhY3RfdHlwZbBwZXJtaXR0aXZpdHlfY3N2sWV4cGVjdGVkX2ZpbGVuYW1lunN0YWdlMF9hbF9wZXJtaXR0aXZpdHkuY3N2r2FjdHVhbF9maWxlbmFtZbpzdGFnZTBfYWxfcGVybWl0dGl2aXR5LmNzdqZleGlzdHPDqW5vbl9lbXB0ecOsdmFsaWRfZm9ybWF0w61jb2x1bW5zX21hdGNow6Zpc3N1ZXOR2UhEYXRhIGxvYWRlZCBmcm9tIERydWRlIGFwcHJveGltYXRpb24sIG5vdCBQYWxpayBDU1YgKGZpbGUgcGFyc2luZyBlcnJvcimIrWFydGlmYWN0X3R5cGWwcGVybWl0dGl2aXR5X2NzdrFleHBlY3RlZF9maWxlbmFtZbxzdGFnZTBfdGRiY19wZXJtaXR0aXZpdHkuY3N2r2FjdHVhbF9maWxlbmFtZbxzdGFnZTBfdGRiY19wZXJtaXR0aXZpdHkuY3N2pmV4aXN0c8Opbm9uX2VtcHR5w6x2YWxpZF9mb3JtYXTDrWNvbHVtbnNfbWF0Y2jDpmlzc3Vlc5CIrWFydGlmYWN0X3R5cGWwcGVybWl0dGl2aXR5X2NzdrFleHBlY3RlZF9maWxlbmFtZbtzdGFnZTBfaXRvX3Blcm1pdHRpdml0eS5jc3avYWN0dWFsX2ZpbGVuYW1lu3N0YWdlMF9pdG9fcGVybWl0dGl2aXR5LmNzdqZleGlzdHPDqW5vbl9lbXB0ecOsdmFsaWRfZm9ybWF0w61jb2x1bW5zX21hdGNow6Zpc3N1ZXOR2UVEYXRhIGZyb20gY29uc3RhbnQgYXBwcm94aW1hdGlvbiwgbm90IEvDtm5pZyBDU1YgKGZpbGUgcGFyc2luZyBlcnJvcimHrWFydGlmYWN0X3R5cGWocGxvdF9wbmexZXhwZWN0ZWRfZmlsZW5hbWXZLXN0YWdlMF9tYXRlcmlhbF92YWxpZGF0aW9uX2ZpZzJhX2FsdW1pbnVtLnBuZ69hY3R1YWxfZmlsZW5hbWXZLXN0YWdlMF9tYXRlcmlhbF92YWxpZGF0aW9uX2ZpZzJhX2FsdW1pbnVtLnBuZ6ZleGlzdHPDqW5vbl9lbXB0ecOsdmFsaWRfZm9ybWF0w6Zpc3N1ZXOQh61hcnRpZmFjdF90eXBlqHBsb3RfcG5nsWV4cGVjdGVkX2ZpbGVuYW1l2SlzdGFnZTBfbWF0ZXJpYWxfdmFsaWRhdGlvbl9maWcyYV90ZGJjLnBuZ69hY3R1YWxfZmlsZW5hbWXZKXN0YWdlMF9tYXRlcmlhbF92YWxpZGF0aW9uX2ZpZzJhX3RkYmMucG5npmV4aXN0c8Opbm9uX2VtcHR5w6x2YWxpZF9mb3JtYXTDpmlzc3Vlc5CHrWFydGlmYWN0X3R5cGWocGxvdF9wbmexZXhwZWN0ZWRfZmlsZW5hbWXZLXN0YWdlMF9tYXRlcmlhbF92YWxpZGF0aW9uX2ZpZzJhX2NvbWJpbmVkLnBuZ69hY3R1YWxfZmlsZW5hbWXZLXN0YWdlMF9tYXRlcmlhbF92YWxpZGF0aW9uX2ZpZzJhX2NvbWJpbmVkLnBuZ6ZleGlzdHPDqW5vbl9lbXB0ecOsdmFsaWRfZm9ybWF0w6Zpc3N1ZXOQ"
+    },
+    {
+      "channel": "branch:to:physics_check",
+      "value_type": "null",
+      "value_data": ""
+    }
+  ],
+  "task_id": "8d6e0807-21bf-0e32-d5eb-acfb401ba56b",
+  "thread_id": "my_run_1",
+  "checkpoint_id": "1f0d27d7-4c81-682c-800b-e2473590ae95",
+  "saved_at": "2025-12-06T10:28:26.941078"
+}

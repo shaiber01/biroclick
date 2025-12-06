@@ -1,0 +1,13 @@
+{
+  "writes": [
+    {
+      "channel": "__resume__",
+      "value_type": "msgpack",
+      "value_data": "r0FDQ0VQVF9QQVJUSUFMOg=="
+    }
+  ],
+  "task_id": "00000000-0000-0000-0000-000000000000",
+  "thread_id": "my_run_1",
+  "checkpoint_id": "1f0d27f3-d51c-6346-801d-b3ad5dc7bdea",
+  "saved_at": "2025-12-06T10:40:52.140188"
+}

@@ -1,0 +1,1 @@
+6.01s call     tests/llm_client/test_call_agent.py::TestCallAgentRetryMechanism::test_retry_exhausted_raises_runtime_error

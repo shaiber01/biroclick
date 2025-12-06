@@ -1,0 +1,13 @@
+{
+  "writes": [
+    {
+      "channel": "__interrupt__",
+      "value_type": "msgpack",
+      "value_data": "kcgBbAKTr2xhbmdncmFwaC50eXBlc6lJbnRlcnJ1cHSCpXZhbHVlg6d0cmlnZ2VyrmFuYWx5c2lzX2xpbWl0qXF1ZXN0aW9uc5HZ2EFuYWx5c2lzIHJldmlzaW9uIGxpbWl0ICgyKSByZWFjaGVkIGJ1dCByZXN1bHRzIGRvbid0IG1hdGNoIHBhcGVyLgoKT3B0aW9uczoKLSBBQ0NFUFRfUEFSVElBTDogTWFyayBzdGFnZSBhcyBwYXJ0aWFsIHN1Y2Nlc3MgYW5kIGNvbnRpbnVlCi0gUFJPVklERV9ISU5UOiBSZXNldCBjb3VudGVyIGFuZCByZXRyeSB3aXRoIGd1aWRhbmNlCi0gU1RPUDogRW5kIHRoZSB3b3JrZmxvd6hwYXBlcl9pZL5hbHVtaW51bV9uYW5vYW50ZW5uYV9jb21wbGV4ZXOiaWTZIGZmOWZlNGQ0OTk5NjUzNTI2MTgwZjZjNmEzZWIzNzdh"
+    }
+  ],
+  "task_id": "b3a4e3ab-7ef2-bdc1-aa74-1c347f420e63",
+  "thread_id": "my_run_1",
+  "checkpoint_id": "1f0d2882-57ca-652a-803c-fb14f797b048",
+  "saved_at": "2025-12-06T11:44:23.485203"
+}

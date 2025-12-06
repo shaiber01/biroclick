@@ -1,0 +1,38 @@
+{
+  "writes": [
+    {
+      "channel": "workflow_phase",
+      "value_type": "msgpack",
+      "value_data": "q2NvZGVfcmV2aWV3"
+    },
+    {
+      "channel": "last_code_review_verdict",
+      "value_type": "msgpack",
+      "value_data": "p2FwcHJvdmU="
+    },
+    {
+      "channel": "reviewer_issues",
+      "value_type": "msgpack",
+      "value_data": "kYWoc2V2ZXJpdHmlbWlub3KoY2F0ZWdvcnmsY29kZV9xdWFsaXR5q2Rlc2NyaXB0aW9u2Y9DU1YgaGVhZGVyIGZvcm1hdHRpbmcgdXNlcyBbMTpdIHNsaWNlIHdoaWNoIHJlbW92ZXMgdGhlIGZpcnN0ICcjJyBjaGFyYWN0ZXIsIHJlc3VsdGluZyBpbiBzbGlnaHRseSBtYWxmb3JtZWQgY29tbWVudCBsaW5lcyBpbiB0aGUgb3V0cHV0IGZpbGVzLq1zdWdnZXN0ZWRfZml42ZBFaXRoZXIgcmVtb3ZlIHRoZSBbMTpdIHNsaWNlIGFuZCB1c2UgY29tbWVudHM9JyMgJyBpbiBucC5zYXZldHh0LCBvciByZXN0cnVjdHVyZSB0aGUgaGVhZGVyIHN0cmluZy4gTm90IGJsb2NraW5nIHNpbmNlIGNvbHVtbiBuYW1lcyBhcmUgY29ycmVjdC6tY29kZV9sb2NhdGlvbtk+TGluZXMgMzAwLTMxMCAoYWxfaGVhZGVyLCB0ZGJjX2hlYWRlciwgaXRvX2hlYWRlciBkZWZpbml0aW9ucyk="
+    },
+    {
+      "channel": "code_revision_count",
+      "value_type": "msgpack",
+      "value_data": "AA=="
+    },
+    {
+      "channel": "reviewer_feedback",
+      "value_type": "null",
+      "value_data": ""
+    },
+    {
+      "channel": "branch:to:run_code",
+      "value_type": "null",
+      "value_data": ""
+    }
+  ],
+  "task_id": "fc2aebe8-ed6e-a905-29b1-3ee1e841cd31",
+  "thread_id": "my_run_1",
+  "checkpoint_id": "1f0d27d4-daae-6634-8009-60bf771d63b7",
+  "saved_at": "2025-12-06T10:27:49.844683"
+}

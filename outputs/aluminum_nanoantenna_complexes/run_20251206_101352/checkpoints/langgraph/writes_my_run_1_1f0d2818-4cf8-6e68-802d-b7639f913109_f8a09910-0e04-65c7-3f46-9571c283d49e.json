@@ -1,0 +1,38 @@
+{
+  "writes": [
+    {
+      "channel": "workflow_phase",
+      "value_type": "msgpack",
+      "value_data": "q2NvZGVfcmV2aWV3"
+    },
+    {
+      "channel": "last_code_review_verdict",
+      "value_type": "msgpack",
+      "value_data": "p2FwcHJvdmU="
+    },
+    {
+      "channel": "reviewer_issues",
+      "value_type": "msgpack",
+      "value_data": "k4Woc2V2ZXJpdHmlbWlub3KoY2F0ZWdvcnmmc291cmNlq2Rlc2NyaXB0aW9u2TJTb3VyY2Ugei1wb3NpdGlvbiBkaWZmZXJzIGZyb20gZGVzaWduICgwLjcgdnMgMS4wKa1zdWdnZXN0ZWRfZml42bFObyBmaXggbmVlZGVkIC0gY29kZSdzIGNob2ljZSBvZiB6PTAuNyBpcyBhY3R1YWxseSBiZXR0ZXIgc2luY2UgZGVzaWduJ3Mgej0xLjAgd291bGQgcGxhY2Ugc291cmNlIEFUIHRoZSBQTUwgYm91bmRhcnkgKFBNTCBzdGFydHMgYXQgej0xLjApLiBEb2N1bWVudCB0aGlzIGludGVudGlvbmFsIGRldmlhdGlvbi6tY29kZV9sb2NhdGlvbrFsaW5lOiBzcmNfeiA9IDAuN4Woc2V2ZXJpdHmlbWlub3KoY2F0ZWdvcnmobW9uaXRvcnOrZGVzY3JpcHRpb27ZPlJlZmxlY3Rpb24gbW9uaXRvciB6LXBvc2l0aW9uIGRpZmZlcnMgZnJvbSBkZXNpZ24gKDAuNSB2cyAxLjIprXN1Z2dlc3RlZF9maXjZu05vIGZpeCBuZWVkZWQgLSBjb2RlIENPUlJFQ1RTIGEgZGVzaWduIGVycm9yLiBEZXNpZ24ncyB6PTEuMiBpcyBpbnNpZGUgUE1MIHdoaWNoIHdvdWxkIGdpdmUgd3JvbmcgcmVzdWx0cy4gQ29kZSdzIHo9MC41IGlzIGNvcnJlY3RseSBwb3NpdGlvbmVkIGJldHdlZW4gc291cmNlICgwLjcpIGFuZCBzdHJ1Y3R1cmUgKH4wLjA1KS6tY29kZV9sb2NhdGlvbrJsaW5lOiByZWZsX3ogPSAwLjWFqHNldmVyaXR5pW1pbm9yqGNhdGVnb3J5pmRvbWFpbqtkZXNjcmlwdGlvbtlJU3ltbWV0cnkgcGhhc2VzIGRpZmZlciBmcm9tIGRlc2lnbiAoY29kZTogWD0tMSxZPSsxIHZzIGRlc2lnbjogWD0rMSxZPSsxKa1zdWdnZXN0ZWRfZml42bdObyBmaXggbmVlZGVkIC0gY29kZSBpcyBDT1JSRUNULiBGb3IgRXggcG9sYXJpemF0aW9uOiBFeCBpcyBvZGQgdW5kZXIgeC1yZWZsZWN0aW9uIChuZWVkcyBwaGFzZT0tMSkgYW5kIGV2ZW4gdW5kZXIgeS1yZWZsZWN0aW9uIChuZWVkcyBwaGFzZT0rMSkuIERlc2lnbiBoYWQgaW5jb3JyZWN0IHN5bW1ldHJ5IHBoYXNlcy6tY29kZV9sb2NhdGlvbtlKbGluZXM6IHN5bW1ldHJpZXMgPSBbbXAuTWlycm9yKG1wLlgsIHBoYXNlPS0xKSwgbXAuTWlycm9yKG1wLlksIHBoYXNlPSsxKV0="
+    },
+    {
+      "channel": "code_revision_count",
+      "value_type": "msgpack",
+      "value_data": "AQ=="
+    },
+    {
+      "channel": "reviewer_feedback",
+      "value_type": "null",
+      "value_data": ""
+    },
+    {
+      "channel": "branch:to:run_code",
+      "value_type": "null",
+      "value_data": ""
+    }
+  ],
+  "task_id": "f8a09910-0e04-65c7-3f46-9571c283d49e",
+  "thread_id": "my_run_1",
+  "checkpoint_id": "1f0d2818-4cf8-6e68-802d-b7639f913109",
+  "saved_at": "2025-12-06T10:58:27.342316"
+}

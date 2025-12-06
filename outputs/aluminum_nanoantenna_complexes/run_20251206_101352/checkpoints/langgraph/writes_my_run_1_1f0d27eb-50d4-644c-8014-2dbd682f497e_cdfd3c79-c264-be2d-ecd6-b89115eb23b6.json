@@ -1,0 +1,33 @@
+{
+  "writes": [
+    {
+      "channel": "workflow_phase",
+      "value_type": "msgpack",
+      "value_data": "tWNvbXBhcmlzb25fdmFsaWRhdGlvbg=="
+    },
+    {
+      "channel": "comparison_verdict",
+      "value_type": "msgpack",
+      "value_data": "rm5lZWRzX3JldmlzaW9u"
+    },
+    {
+      "channel": "analysis_revision_count",
+      "value_type": "msgpack",
+      "value_data": "AQ=="
+    },
+    {
+      "channel": "analysis_feedback",
+      "value_type": "msgpack",
+      "value_data": "2TJDb21wYXJpc29ucyBwZW5kaW5nIHF1YW50aXRhdGl2ZSBjaGVja3MgZm9yOiBGaWcyYQ=="
+    },
+    {
+      "channel": "branch:to:analyze",
+      "value_type": "null",
+      "value_data": ""
+    }
+  ],
+  "task_id": "cdfd3c79-c264-be2d-ecd6-b89115eb23b6",
+  "thread_id": "my_run_1",
+  "checkpoint_id": "1f0d27eb-50d4-644c-8014-2dbd682f497e",
+  "saved_at": "2025-12-06T10:36:49.382833"
+}
