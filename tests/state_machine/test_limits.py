@@ -185,7 +185,7 @@ class TestCodeReviewLimit:
             assert limit_state.get("ask_user_trigger") == "code_review_limit", (
                 f"Expected ask_user_trigger='code_review_limit', got '{limit_state.get('ask_user_trigger')}'"
             )
-            assert limit_state.get("awaiting_user_input") is True
+            assert limit_state.get("ask_user_trigger") is not None
             assert limit_state.get("last_node_before_ask_user") == "code_review"
             
             # Verify pending question contains useful info
@@ -344,7 +344,6 @@ class TestCodeReviewLimit:
             )
             
             # ask_user state should be cleared
-            assert post_state.get("awaiting_user_input") is False
             assert post_state.get("ask_user_trigger") is None
             
             # Hint should be in feedback
@@ -420,7 +419,6 @@ class TestCodeReviewLimit:
             
             # Verify proper escalation
             assert limit_state.get("ask_user_trigger") == "code_review_limit"
-            assert limit_state.get("awaiting_user_input") is True
 
 
 # =============================================================================
@@ -483,7 +481,7 @@ class TestDesignReviewLimit:
             assert limit_state.get("ask_user_trigger") == "design_review_limit", (
                 f"Expected ask_user_trigger='design_review_limit', got '{limit_state.get('ask_user_trigger')}'"
             )
-            assert limit_state.get("awaiting_user_input") is True
+            assert limit_state.get("ask_user_trigger") is not None
             assert limit_state.get("last_node_before_ask_user") == "design_review"
 
     def test_design_review_limit_resume_resets_counter(self, initial_state):
@@ -533,7 +531,7 @@ class TestDesignReviewLimit:
             assert post_state.get("design_revision_count") == 0, (
                 f"design_revision_count should be reset to 0, got {post_state.get('design_revision_count')}"
             )
-            assert post_state.get("awaiting_user_input") is False
+            assert post_state.get("ask_user_trigger") is None
 
 
 # =============================================================================
@@ -592,7 +590,7 @@ class TestPlanReviewLimit:
             assert limit_state.get("ask_user_trigger") == "replan_limit", (
                 f"Expected ask_user_trigger='replan_limit', got '{limit_state.get('ask_user_trigger')}'"
             )
-            assert limit_state.get("awaiting_user_input") is True
+            assert limit_state.get("ask_user_trigger") is not None
 
     def test_plan_review_accepts_before_limit_allows_continuation(self, initial_state):
         """
@@ -722,7 +720,7 @@ class TestExecutionFailureLimit:
             assert limit_state.get("ask_user_trigger") == "execution_failure_limit", (
                 f"Expected ask_user_trigger='execution_failure_limit', got '{limit_state.get('ask_user_trigger')}'"
             )
-            assert limit_state.get("awaiting_user_input") is True
+            assert limit_state.get("ask_user_trigger") is not None
 
     def test_execution_failure_below_limit_retries_code_generation(self, initial_state):
         """
@@ -873,7 +871,7 @@ class TestPhysicsFailureLimit:
             assert limit_state.get("ask_user_trigger") == "physics_failure_limit", (
                 f"Expected ask_user_trigger='physics_failure_limit', got '{limit_state.get('ask_user_trigger')}'"
             )
-            assert limit_state.get("awaiting_user_input") is True
+            assert limit_state.get("ask_user_trigger") is not None
 
     def test_physics_design_flaw_routes_to_design(self, initial_state):
         """
@@ -1191,7 +1189,7 @@ class TestLimitEdgeCases:
             # (SKIP skips the stage, doesn't retry)
             # The exact behavior depends on implementation - verify it's handled
             # At minimum, verify we continued past the interrupt
-            assert post_state.get("awaiting_user_input") is False
+            assert post_state.get("ask_user_trigger") is None
 
 
 # =============================================================================

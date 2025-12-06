@@ -840,7 +840,6 @@ class TestAllStagesCompleted:
         assert result.get("current_stage_type") is None
         # Should NOT trigger deadlock or error
         assert result.get("ask_user_trigger") is None
-        assert result.get("awaiting_user_input") is None or result.get("awaiting_user_input") is False
 
     def test_mix_of_completed_success_and_partial(self, base_state):
         """Mix of completed_success and completed_partial should still complete."""

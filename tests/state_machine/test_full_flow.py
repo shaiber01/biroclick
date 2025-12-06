@@ -1110,8 +1110,8 @@ class TestInterruptResumeFlow:
             
             # Verify state after resume
             post_resume_state = graph.get_state(config).values
-            assert post_resume_state.get("awaiting_user_input") is False, \
-                "awaiting_user_input should be False after ask_user completes"
+            assert post_resume_state.get("ask_user_trigger") is None, \
+                "ask_user_trigger should be None after ask_user completes"
 
             print("\n✅ Interrupt resume flow test passed!")
 

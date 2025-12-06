@@ -587,7 +587,6 @@ class TestTimeoutHandling:
         # Should NOT trigger user ask
         assert "ask_user_trigger" not in result
         assert "pending_user_questions" not in result
-        assert "awaiting_user_input" not in result
         # LLM should NOT be called for timeout
         mock_llm.assert_not_called()
 
@@ -826,7 +825,6 @@ class TestPhysicsSanityBehavior:
         # Pass should NOT trigger user ask
         assert "ask_user_trigger" not in result
         assert "pending_user_questions" not in result
-        assert "awaiting_user_input" not in result
         # Should include design spec in user content
         assert "Design Spec" in call_kwargs["user_content"]
         assert "nanorod" in call_kwargs["user_content"]
@@ -960,7 +958,6 @@ class TestPhysicsSanityBehavior:
         # Warning should NOT trigger user ask
         assert "ask_user_trigger" not in result
         assert "pending_user_questions" not in result
-        assert "awaiting_user_input" not in result
         # Warning should NOT include backtrack_suggestion
         assert "backtrack_suggestion" not in result
 

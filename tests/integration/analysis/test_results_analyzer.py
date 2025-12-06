@@ -45,7 +45,6 @@ class TestResultsAnalyzerErrorHandling:
         
         The component MUST:
         - Set ask_user_trigger to exactly "missing_stage_id"
-        - Set awaiting_user_input to exactly True
         - Include an error message mentioning "ERROR"
         - NOT include analysis_summary as a dict (only string if present)
         """
@@ -61,8 +60,6 @@ class TestResultsAnalyzerErrorHandling:
         assert result["workflow_phase"] == "analysis", "workflow_phase must be 'analysis'"
         assert result["ask_user_trigger"] == "missing_stage_id", \
             f"Expected ask_user_trigger='missing_stage_id', got '{result.get('ask_user_trigger')}'"
-        assert result.get("ask_user_trigger") is not None, \
-            "awaiting_user_input must be exactly True, not truthy"
         assert "pending_user_questions" in result
         assert isinstance(result["pending_user_questions"], list)
         assert len(result["pending_user_questions"]) == 1, \

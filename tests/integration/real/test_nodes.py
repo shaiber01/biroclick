@@ -341,8 +341,7 @@ class TestNodeEdgeCases:
         assert "pending_user_questions" in result, "plan_node must set pending_user_questions"
         assert isinstance(result["pending_user_questions"], list), "pending_user_questions must be a list"
         assert len(result["pending_user_questions"]) > 0, "pending_user_questions must not be empty"
-        assert "awaiting_user_input" in result, "plan_node must set awaiting_user_input"
-        assert result.get("ask_user_trigger") is not None, "awaiting_user_input must be True"
+        assert result.get("ask_user_trigger") is not None, "ask_user_trigger must be set"
     
     def test_plan_node_handles_none_paper_text(self, minimal_state, mock_llm_response):
         """plan_node must handle None paper_text."""
@@ -378,8 +377,6 @@ class TestNodeEdgeCases:
         assert result is not None, "simulation_designer_node must return a result even with missing stage_id"
         assert "ask_user_trigger" in result, "simulation_designer_node must set ask_user_trigger when stage_id is missing"
         assert result["ask_user_trigger"] == "missing_stage_id", "ask_user_trigger must be 'missing_stage_id'"
-        assert "awaiting_user_input" in result, "simulation_designer_node must set awaiting_user_input"
-        assert result.get("ask_user_trigger") is not None, "awaiting_user_input must be True"
     
     def test_code_generator_handles_missing_stage_id(self, minimal_state):
         """code_generator_node must handle missing current_stage_id."""
@@ -405,8 +402,6 @@ class TestNodeEdgeCases:
         assert result is not None, "code_generator_node must return a result even with missing stage_id"
         assert "ask_user_trigger" in result, "code_generator_node must set ask_user_trigger when stage_id is missing"
         assert result["ask_user_trigger"] == "missing_stage_id", "ask_user_trigger must be 'missing_stage_id'"
-        assert "awaiting_user_input" in result, "code_generator_node must set awaiting_user_input"
-        assert result.get("ask_user_trigger") is not None, "awaiting_user_input must be True"
     
     def test_code_generator_handles_missing_design_description(self, minimal_state):
         """code_generator_node must handle missing or stub design_description."""

@@ -254,7 +254,7 @@ class TestExecutionValidatorEdgeCases:
             "Should trigger user escalation"
         )
         assert result.get("ask_user_trigger") is not None, (
-            "Should set awaiting_user_input to True"
+            "Should set ask_user_trigger"
         )
         assert result.get("pending_user_questions"), (
             "Should have pending questions for user"

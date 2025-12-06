@@ -479,8 +479,8 @@ class TestResultsAnalyzerValidationCriteria:
 class TestResultsAnalyzerContextEscalation:
     """Test context escalation handling."""
 
-    def test_context_overflow_returns_awaiting_user(self, analysis_ready_state):
-        """Context overflow should return awaiting_user_input state."""
+    def test_context_overflow_returns_ask_user_trigger(self, analysis_ready_state):
+        """Context overflow should return ask_user_trigger state."""
         escalation = {
             "ask_user_trigger": "context_overflow",
             "ask_user_trigger": "context_overflow",

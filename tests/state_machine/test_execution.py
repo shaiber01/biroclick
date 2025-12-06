@@ -413,7 +413,6 @@ class TestPhysicsSanityNode:
             
             # No trigger should be set (still under limit)
             assert result.get("ask_user_trigger") is None
-            assert result.get("awaiting_user_input") is None or result.get("awaiting_user_input") is False
 
     def test_warning_verdict_does_not_increment_counters(self, physics_state):
         """Test that warning verdict does not increment any counters."""

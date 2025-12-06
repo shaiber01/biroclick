@@ -289,7 +289,7 @@ class TestCodeRevisionCycle:
         assert result["last_node_before_ask_user"] == "code_review"
 
     def test_code_revision_with_max_limit_early_return(self, base_state):
-        """When awaiting_user_input is True, node returns empty dict."""
+        """When ask_user_trigger is set, node returns empty dict."""
         plan = MockResponseFactory.planner_response()
         base_state["plan"] = plan
         base_state["progress"] = deepcopy(plan["progress"])
@@ -311,16 +311,15 @@ class TestCodeRevisionCycle:
             result = code_reviewer_node(base_state)
             base_state.update(result)
         assert base_state["code_revision_count"] == 2
-        assert base_state["awaiting_user_input"] is True
         assert base_state["ask_user_trigger"] == "code_review_limit"
 
-        # Third call: should return empty dict because awaiting_user_input is True
+        # Third call: should return empty dict because ask_user_trigger is set
         with patch("src.agents.code.call_agent_with_metrics") as mock_llm:
             mock_llm.return_value = MockResponseFactory.reviewer_needs_revision()
             result = code_reviewer_node(base_state)
         
         # STRICT: Should return empty dict, not increment counter
-        assert result == {}, "Should return empty dict when awaiting_user_input is True"
+        assert result == {}, "Should return empty dict when ask_user_trigger is set"
         assert base_state["code_revision_count"] == 2  # Unchanged
 
     def test_code_revision_counter_at_max_stays_at_max(self, base_state):
@@ -333,7 +332,7 @@ class TestCodeRevisionCycle:
         base_state["design_description"] = "Test design"
         base_state["code_revision_count"] = MAX_CODE_REVISIONS  # Already at max
         base_state["runtime_config"] = {"max_code_revisions": MAX_CODE_REVISIONS}
-        base_state["awaiting_user_input"] = False  # Clear to allow node to run
+        base_state["ask_user_trigger"] = None  # Clear to allow node to run
 
         with patch("src.agents.code.call_agent_with_metrics") as mock_llm:
             mock_llm.return_value = MockResponseFactory.reviewer_needs_revision()

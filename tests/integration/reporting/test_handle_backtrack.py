@@ -297,7 +297,6 @@ class TestHandleBacktrackNode:
         # Verify error response structure
         assert result.get("ask_user_trigger") == "invalid_backtrack_decision", \
             "Must trigger invalid_backtrack_decision"
-        assert result.get("ask_user_trigger") is not None, "Must set awaiting_user_input"
         assert "pending_user_questions" in result, "Must include pending_user_questions"
         assert len(result["pending_user_questions"]) > 0, "Must have at least one question"
         assert result.get("workflow_phase") == "backtracking", "workflow_phase must be 'backtracking'"

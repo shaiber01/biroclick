@@ -482,7 +482,6 @@ class TestPlanningPhase:
         - Plan node detects missing paper_text
         - Sets ask_user_trigger
         - Sets pending_user_questions with error message
-        - Sets awaiting_user_input to True
         """
         # Create state with empty paper_text
         state_with_empty_text = {**initial_state, "paper_text": ""}
@@ -522,8 +521,6 @@ class TestPlanningPhase:
             # Verify error handling
             assert final_state.get("ask_user_trigger") == "missing_paper_text", \
                 "ask_user_trigger should be 'missing_paper_text'"
-            assert final_state.get("awaiting_user_input") is True, \
-                "awaiting_user_input should be True"
             assert len(final_state.get("pending_user_questions", [])) > 0, \
                 "pending_user_questions should contain error message"
             
@@ -1166,7 +1163,6 @@ class TestStageSelection:
         Verifies:
         - When no stages exist, select_stage sets error fields
         - ask_user_trigger is set
-        - awaiting_user_input is True
         """
         # Create state with plan but no stages in progress
         state_with_empty_progress = {
@@ -1191,8 +1187,6 @@ class TestStageSelection:
             "current_stage_id should be None when no stages"
         assert result.get("ask_user_trigger") == "no_stages_available", \
             f"ask_user_trigger should be 'no_stages_available', got {result.get('ask_user_trigger')}"
-        assert result.get("ask_user_trigger") is not None, \
-            "awaiting_user_input should be True"
         assert len(result.get("pending_user_questions", [])) > 0, \
             "Should have pending user questions"
 

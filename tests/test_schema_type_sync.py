@@ -152,7 +152,7 @@ EXPECTED_REPRO_STATE_FIELDS = {
     # Performance Tracking
     "runtime_budget_remaining_seconds", "total_runtime_seconds", "stage_start_time",
     # User Interaction
-    "pending_user_questions", "user_responses", "awaiting_user_input",
+    "pending_user_questions", "user_responses",
     "user_interactions", "ask_user_trigger", "last_node_before_ask_user",
     # Report Generation
     "figure_comparisons", "overall_assessment", "systematic_discrepancies_identified",

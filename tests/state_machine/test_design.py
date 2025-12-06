@@ -95,7 +95,7 @@ class TestSimulationDesignerNode:
         assert result.get("workflow_phase") == "design", "Workflow phase should be 'design'"
         
         # Should NOT trigger user escalation
-        assert not result.get("awaiting_user_input"), "Should not await user input on success"
+        assert not result.get("ask_user_trigger"), "Should not trigger user escalation on success"
 
     def test_missing_stage_id_escalates_to_user(self, base_state):
         """Test: missing current_stage_id escalates to ask_user."""
@@ -224,8 +224,8 @@ class TestDesignReviewerNode:
         assert result.get("workflow_phase") == "design_review"
         # Revision count should NOT increment on approve
         assert result.get("design_revision_count") == 0
-        # Should not await user input
-        assert not result.get("awaiting_user_input")
+        # Should not trigger user escalation
+        assert not result.get("ask_user_trigger")
 
     def test_needs_revision_increments_counter(self, state_with_design):
         """Test: needs_revision verdict increments design_revision_count."""
@@ -323,7 +323,7 @@ class TestDesignReviewerNode:
         
         # Should default to needs_revision for safety
         assert result.get("last_design_review_verdict") == "needs_revision"
-        assert not result.get("awaiting_user_input"), "Should not await user on reviewer LLM error"
+        assert not result.get("ask_user_trigger"), "Should not trigger user escalation on reviewer LLM error"
 
     def test_reviewer_issues_extracted(self, state_with_design):
         """Test: issues from LLM output are stored in reviewer_issues."""
@@ -684,9 +684,9 @@ class TestDesignPhase:
             
             # Check final state - should be waiting for user input
             state = graph.get_state(config).values
-            assert state.get("awaiting_user_input") is True or \
+            assert state.get("ask_user_trigger") is not None or \
                    state.get("design_revision_count") >= MAX_DESIGN_REVISIONS, \
-                "Should be awaiting user input or at revision limit"
+                "Should have ask_user_trigger set or at revision limit"
 
             print("\n✅ Design revision limit test passed!", flush=True)
 
@@ -783,8 +783,8 @@ class TestDesignEdgeCases:
         # Should handle gracefully - empty list
         assert result.get("reviewer_issues") == []
 
-    def test_design_with_awaiting_user_input_already_true(self, state_with_stage):
-        """Test: if already awaiting user input, designer returns empty dict."""
+    def test_design_with_ask_user_trigger_already_set(self, state_with_stage):
+        """Test: if ask_user_trigger is already set, designer returns empty dict."""
         state = {**state_with_stage, "ask_user_trigger": "context_overflow"}
         
         # The with_context_check decorator should return {} early
@@ -866,4 +866,4 @@ class TestDesignEdgeCases:
         
         # Should work correctly with string design_description
         assert result.get("last_design_review_verdict") == "approve"
-        assert not result.get("awaiting_user_input")
+        assert not result.get("ask_user_trigger")
