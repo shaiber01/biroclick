@@ -40,6 +40,10 @@ def with_context_check(node_name: str):
         def wrapper(state: ReproState, *args, **kwargs) -> Dict[str, Any]:
             # Early return if already awaiting user input - don't modify state
             if state.get("awaiting_user_input"):
+                _logger.warning(
+                    f"{node_name}: Skipping because awaiting_user_input=True. "
+                    f"Trigger: {state.get('ask_user_trigger')}"
+                )
                 return {}
             escalation = check_context_or_escalate(state, node_name)
             if escalation is not None:

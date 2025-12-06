@@ -45,6 +45,7 @@ from .helpers.materials import (
     extract_validated_materials,
     format_material_checkpoint_question,
 )
+from .user_options import get_options_prompt
 
 
 def _format_boxed_content(title: str, content: str, prefix: str = "   ") -> str:
@@ -55,6 +56,88 @@ def _format_boxed_content(title: str, content: str, prefix: str = "   ") -> str:
         boxed_lines.append(f"{prefix}│ {line}")
     boxed_lines.append(f"{prefix}└{'─' * (len(title) + 6)}")
     return '\n'.join(boxed_lines)
+
+
+def _infer_error_context(state: "ReproState") -> str:
+    """
+    Infer what went wrong by checking which verdict fields are None/invalid.
+    
+    When ask_user is called without a trigger (safety net), this helps
+    generate a more contextual error message by determining which
+    validation step likely failed.
+    
+    Returns a context string like "physics_error", "execution_error", etc.
+    """
+    # Check verdict fields in order of the pipeline
+    # A None verdict typically means the node was skipped or failed silently
+    if state.get("physics_verdict") is None and state.get("execution_verdict") is not None:
+        return "physics_error"
+    if state.get("execution_verdict") is None:
+        return "execution_error"
+    if state.get("comparison_verdict") is None:
+        return "comparison_error"
+    if state.get("last_code_review_verdict") is None:
+        return "code_review_error"
+    if state.get("last_design_review_verdict") is None:
+        return "design_review_error"
+    if state.get("last_plan_review_verdict") is None:
+        return "plan_review_error"
+    
+    # Check if awaiting_user_input is stuck
+    if state.get("awaiting_user_input"):
+        return "stuck_awaiting_input"
+    
+    return "unknown_error"
+
+
+def _generate_error_question(context: str, state: "ReproState") -> str:
+    """
+    Generate an appropriate error question based on inferred context.
+    
+    Provides a more helpful message to the user than a generic
+    "unexpected error" when we can determine what likely went wrong.
+    """
+    stage_id = state.get("current_stage_id", "unknown")
+    
+    error_messages = {
+        "physics_error": (
+            f"Physics validation failed to run for stage '{stage_id}'.\n\n"
+            "This may indicate the validation node was skipped or encountered an error.\n"
+            "The simulation may have completed but physics checks were not performed."
+        ),
+        "execution_error": (
+            f"Execution validation failed to run for stage '{stage_id}'.\n\n"
+            "The simulation may not have completed properly, or the validation was skipped."
+        ),
+        "comparison_error": (
+            f"Comparison check failed to run for stage '{stage_id}'.\n\n"
+            "Results analysis may not have completed."
+        ),
+        "code_review_error": (
+            f"Code review failed to run for stage '{stage_id}'.\n\n"
+            "The generated code may not have been reviewed."
+        ),
+        "design_review_error": (
+            f"Design review failed to run for stage '{stage_id}'.\n\n"
+            "The simulation design may not have been validated."
+        ),
+        "plan_review_error": (
+            "Plan review failed to run.\n\n"
+            "The reproduction plan may not have been validated."
+        ),
+        "stuck_awaiting_input": (
+            "Workflow appears to be stuck in 'awaiting_user_input' state.\n\n"
+            "This indicates a previous user interaction wasn't properly completed.\n"
+            "The system will attempt to recover."
+        ),
+        "unknown_error": (
+            "An unexpected workflow error occurred.\n\n"
+            "Unable to determine the specific cause from the current state."
+        ),
+    }
+    
+    message = error_messages.get(context, error_messages["unknown_error"])
+    return f"WORKFLOW RECOVERY NEEDED\n\n{message}"
 
 
 def ask_user_node(state: ReproState) -> Dict[str, Any]:
@@ -100,6 +183,31 @@ def ask_user_node(state: ReproState) -> Dict[str, Any]:
         )
         trigger = "unknown_escalation"
         safety_net_triggered = True
+        
+        # BUG FIX: When safety net triggers, the existing questions in state may have
+        # been generated for a different trigger with different valid options.
+        # Use contextual helpers to infer what went wrong and generate appropriate questions.
+        error_context = _infer_error_context(state)
+        contextual_message = _generate_error_question(error_context, state)
+        
+        # Include original context if available (but strip old Options section)
+        original_context = questions[0] if questions else ""
+        if original_context and "Options:" in original_context:
+            original_context = original_context.split("Options:")[0].strip()
+        
+        # Build the final question with contextual error info and correct options
+        if original_context:
+            questions = [
+                f"{contextual_message}\n\n"
+                f"Original context:\n{original_context}\n\n"
+                f"{get_options_prompt('unknown_escalation')}"
+            ]
+        else:
+            questions = [
+                f"{contextual_message}\n\n"
+                f"{get_options_prompt('unknown_escalation')}"
+            ]
+        logger.info(f"Safety net: inferred error context '{error_context}', regenerated questions")
     
     # Get original questions (for mapping responses after retry) or use current questions.
     # NOTE: We use `or questions` instead of the default parameter because
@@ -172,6 +280,10 @@ def ask_user_node(state: ReproState) -> Dict[str, Any]:
         if len(original_questions) > 1:
             reask_questions.extend(original_questions[1:])
         
+        # BUG FIX: Always save user response to state, even when validation fails.
+        # Previously, the response was lost on validation failure, causing supervisor
+        # to process stale responses from earlier interactions. This led to the system
+        # making decisions based on old user input instead of what was just typed.
         return {
             "pending_user_questions": reask_questions,
             "awaiting_user_input": True,
@@ -179,6 +291,7 @@ def ask_user_node(state: ReproState) -> Dict[str, Any]:
             "last_node_before_ask_user": state.get("last_node_before_ask_user"),
             validation_attempt_key: validation_attempts,
             "original_user_questions": original_questions,
+            "user_responses": {**state.get("user_responses", {}), **mapped_responses},
         }
     
     # Validation passed - return success

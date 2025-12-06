@@ -91,6 +91,8 @@ class GraphProgressCallback(BaseCallbackHandler):
                     if interrupts and len(interrupts) > 0:
                         first_interrupt = interrupts[0]
                         if hasattr(first_interrupt, 'value') and isinstance(first_interrupt.value, dict):
+                            logger.info(f"_extract_trigger: interrupt_type={type(first_interrupt).__name__}")
+                            logger.info(f"_extract_trigger: interrupt_value={first_interrupt.value}")
                             return first_interrupt.value.get('trigger', 'unknown')
                 
                 # Direct Interrupt object: has .value attribute directly

@@ -325,7 +325,14 @@ def handle_execution_failure_limit(
     if matched.action == "retry_with_guidance":
         result["execution_failure_count"] = 0
         raw_response = list(user_responses.values())[-1] if user_responses else ""
-        result["supervisor_feedback"] = f"User guidance: {extract_guidance_text(raw_response)}"
+        user_guidance = extract_guidance_text(raw_response)
+        # Combine original execution feedback with user guidance so code generator gets full context
+        original_fb = state.get("execution_feedback", "")
+        if original_fb:
+            result["execution_feedback"] = f"{original_fb}\n\nUSER GUIDANCE: {user_guidance}"
+        else:
+            result["execution_feedback"] = f"USER GUIDANCE: {user_guidance}"
+        result["supervisor_feedback"] = f"User guidance applied to execution_feedback"
         result["supervisor_verdict"] = "retry_generate_code"
     
     elif matched.action == "skip":
@@ -363,13 +370,23 @@ def handle_physics_failure_limit(
     if matched.action == "retry_with_guidance":
         result["physics_failure_count"] = 0
         raw_response = list(user_responses.values())[-1] if user_responses else ""
-        result["supervisor_feedback"] = f"User guidance: {extract_guidance_text(raw_response)}"
+        user_guidance = extract_guidance_text(raw_response)
+        original_fb = state.get("physics_feedback", "")
+        combined_fb = f"{original_fb}\n\nUSER GUIDANCE: {user_guidance}" if original_fb else f"USER GUIDANCE: {user_guidance}"
+        
         # Route based on where the physics failure originated
-        # If from design_review, route back to design; otherwise route to code generation
+        # Write to the feedback field that the destination node actually reads
         last_node = state.get("last_node_before_ask_user", "")
         if last_node == "design_review" or "design" in last_node.lower():
+            # Designer reads reviewer_feedback, not physics_feedback
+            result["reviewer_feedback"] = combined_fb
+            result["physics_feedback"] = None  # Clear stale data
+            result["supervisor_feedback"] = "User guidance applied to reviewer_feedback for designer"
             result["supervisor_verdict"] = "retry_design"
         else:
+            # Code generator reads physics_feedback (labeled as PHYSICS VALIDATION FEEDBACK)
+            result["physics_feedback"] = combined_fb
+            result["supervisor_feedback"] = "User guidance applied to physics_feedback for code generator"
             result["supervisor_verdict"] = "retry_generate_code"
     
     elif matched.action == "accept_partial":

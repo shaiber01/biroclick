@@ -21,32 +21,10 @@ from langgraph.types import Command
 
 # Set up logging before other imports
 from src.logging_utils import setup_console_logging, setup_file_logging
+from src.cli_utils import get_user_input_with_confirmation
 setup_console_logging()
 
 logger = logging.getLogger(__name__)
-
-
-def get_user_input_with_confirmation(prompt: str = "Your response (or 'quit' to exit): ") -> str:
-    """
-    Get user input with echo-back confirmation for longer responses.
-    
-    This helps catch terminal readline buffer corruption that can occur in some
-    IDE terminals when users edit their input with arrow keys or backspace.
-    The terminal may display one thing but Python's input() receives corrupted data.
-    """
-    user_input = input(prompt)
-    
-    # For longer responses (where corruption is more likely), echo back and offer re-entry
-    if len(user_input) > 30 and user_input.lower() != 'quit':
-        print(f"\n📝 Captured ({len(user_input)} chars): {user_input[:100]}{'...' if len(user_input) > 100 else ''}")
-        confirm = input("Press Enter to confirm, or 'r' to re-enter: ").strip().lower()
-        if confirm == 'r':
-            user_input = input("Re-enter your response: ")
-            # Show the re-entered response too for verification
-            if len(user_input) > 30:
-                print(f"📝 Captured: {user_input[:100]}{'...' if len(user_input) > 100 else ''}")
-    
-    return user_input
 
 
 def run_new_paper(args):

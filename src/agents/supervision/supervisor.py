@@ -379,8 +379,14 @@ def supervisor_node(state: ReproState) -> dict:
         # the correct handler instead of falling back to "unknown_escalation".
         if result.get("supervisor_verdict") != "ask_user":
             result["ask_user_trigger"] = None
+            # Clear awaiting_user_input to allow subsequent nodes to run
+            # (nodes with @with_context_check skip when this is True)
+            result["awaiting_user_input"] = False
+            result["pending_user_questions"] = []
         else:
             result["ask_user_trigger"] = ask_user_trigger
+            # Keep awaiting_user_input = True when we need more clarification
+            result["awaiting_user_input"] = True
         
         # After handling a trigger, we skip the LLM call because:
         # 1. handle_trigger() already set the appropriate verdict
