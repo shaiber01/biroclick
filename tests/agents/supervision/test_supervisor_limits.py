@@ -302,7 +302,8 @@ class TestExecutionFailureLimitTrigger:
         assert result["supervisor_verdict"] == "retry_generate_code"  # Retry with guidance
         assert result["ask_user_trigger"] is None  # Should be cleared
         assert "supervisor_feedback" in result
-        assert "User guidance:" in result["supervisor_feedback"]
+        # User guidance is stored in execution_feedback, supervisor_feedback has generic message
+        assert "more memory" in result["execution_feedback"]
         assert result.get("should_stop") is not True  # Should not stop
 
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
@@ -321,7 +322,8 @@ class TestExecutionFailureLimitTrigger:
         assert result["supervisor_verdict"] == "retry_generate_code"  # Retry with guidance
         assert result["ask_user_trigger"] is None  # Should be cleared
         assert "supervisor_feedback" in result
-        assert "User guidance:" in result["supervisor_feedback"]
+        # User guidance is stored in execution_feedback
+        assert "reduce resolution" in result["execution_feedback"]
         assert result.get("should_stop") is not True  # Should not stop
 
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")

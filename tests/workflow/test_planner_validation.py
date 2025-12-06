@@ -612,15 +612,14 @@ class TestPlanReviewerFeedbackExtraction:
     """Test plan_reviewer_node extracts feedback correctly."""
 
     def test_feedback_extracted_from_response(self, base_state):
-        """Test that feedback is extracted from LLM response."""
+        """Test that feedback is extracted from LLM response (via 'summary' key per schema)."""
         plan = MockResponseFactory.planner_response()
         base_state["plan"] = plan
 
         with patch("src.agents.planning.call_agent_with_metrics") as mock_llm:
             mock_llm.return_value = {
                 "verdict": "needs_revision",
-                "feedback": "The plan needs more detail about boundary conditions.",
-                "summary": "Needs work",
+                "summary": "The plan needs more detail about boundary conditions.",  # Schema uses "summary"
             }
             result = plan_reviewer_node(base_state)
 
@@ -628,7 +627,7 @@ class TestPlanReviewerFeedbackExtraction:
         assert "boundary conditions" in result["planner_feedback"]
 
     def test_summary_used_as_fallback_for_feedback(self, base_state):
-        """Test that summary is used if feedback not provided."""
+        """Test that summary is extracted from LLM response."""
         plan = MockResponseFactory.planner_response()
         base_state["plan"] = plan
 

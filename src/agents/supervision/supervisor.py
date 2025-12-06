@@ -10,13 +10,16 @@ supervisor_node:
     READS: current_stage_id, plan, progress, stage_outputs, analysis_reports,
            stage_comparisons, validated_materials, pending_validated_materials,
            ask_user_trigger, user_responses, pending_user_questions,
-           supervisor_call_count, backtrack_count, runtime_config, metrics
+           supervisor_call_count, backtrack_count, runtime_config, metrics,
+           _trigger_persistence_count, _last_seen_trigger, _trigger_first_seen_time
     WRITES: workflow_phase, supervisor_verdict, supervisor_feedback, progress,
             stage_outputs, validated_materials, pending_validated_materials,
             current_stage_id, user_responses, pending_user_questions,
             ask_user_trigger, supervisor_call_count, backtrack_count, 
             backtrack_decision, replan_count, design_feedback,
-            code_feedback, design_revision_count, code_revision_count
+            code_feedback, design_revision_count, code_revision_count,
+            _trigger_persistence_count, _last_seen_trigger, _trigger_first_seen_time,
+            _last_stuck_trigger_recovery
 """
 
 import json
@@ -361,6 +364,107 @@ def supervisor_node(state: ReproState) -> dict:
     
     current_stage_id = state.get("current_stage_id")
     
+    # ═══════════════════════════════════════════════════════════════════════
+    # STUCK TRIGGER DETECTION
+    # Track how many times we've seen the same trigger without resolution.
+    # This catches bugs where triggers aren't being cleared properly.
+    # ═══════════════════════════════════════════════════════════════════════
+    
+    # Configurable thresholds (can be overridden via runtime_config)
+    runtime_config = state.get("runtime_config") or {}
+    WARN_THRESHOLD = runtime_config.get("stuck_trigger_warn_threshold", 3)
+    ERROR_THRESHOLD = runtime_config.get("stuck_trigger_error_threshold", 5)
+    AUTO_CLEAR_THRESHOLD = runtime_config.get("stuck_trigger_auto_clear", 7)
+    
+    # Get current tracking state (handle None values explicitly)
+    last_seen_trigger = state.get("_last_seen_trigger")
+    persistence_count = state.get("_trigger_persistence_count") or 0  # Treat None as 0
+    first_seen_time = state.get("_trigger_first_seen_time")
+    
+    if ask_user_trigger:
+        # Track trigger persistence
+        if ask_user_trigger == last_seen_trigger:
+            # Same trigger as before - increment counter
+            persistence_count += 1
+        else:
+            # New or different trigger - reset counter
+            persistence_count = 1
+            first_seen_time = datetime.now(timezone.utc).isoformat()
+        
+        # Calculate duration string for logging
+        duration_str = ""
+        if first_seen_time:
+            try:
+                first_seen = datetime.fromisoformat(first_seen_time.replace('Z', '+00:00'))
+                duration = datetime.now(timezone.utc) - first_seen
+                duration_str = f" (stuck for {duration.total_seconds():.1f}s)"
+            except (ValueError, TypeError):
+                pass
+        
+        # Log based on threshold
+        if persistence_count >= ERROR_THRESHOLD:
+            logger.error(
+                f"STUCK TRIGGER DETECTED: '{ask_user_trigger}' has persisted for "
+                f"{persistence_count} supervisor cycles{duration_str}. "
+                f"This indicates a bug - the trigger is not being cleared. "
+                f"User responses: {user_responses}"
+            )
+        elif persistence_count >= WARN_THRESHOLD:
+            logger.warning(
+                f"Possible stuck trigger: '{ask_user_trigger}' seen {persistence_count} times{duration_str}. "
+                f"If this continues, auto-recovery may activate at {AUTO_CLEAR_THRESHOLD} cycles."
+            )
+        
+        # Auto-recovery (if enabled and threshold reached)
+        if AUTO_CLEAR_THRESHOLD > 0 and persistence_count >= AUTO_CLEAR_THRESHOLD:
+            logger.error(
+                f"AUTO-RECOVERY ACTIVATED: Force-clearing stuck trigger '{ask_user_trigger}' "
+                f"after {persistence_count} cycles{duration_str}. "
+                f"Workflow will attempt to continue with 'ok_continue' verdict. "
+                f"Please investigate the root cause."
+            )
+            
+            # Save diagnostic information before clearing
+            stuck_trigger_info = {
+                "trigger": ask_user_trigger,
+                "persistence_count": persistence_count,
+                "first_seen_time": first_seen_time,
+                "cleared_at": datetime.now(timezone.utc).isoformat(),
+                "user_responses_at_clear": dict(user_responses) if user_responses else {},
+                "pending_questions_at_clear": list(state.get("pending_user_questions", [])),
+                "current_stage_id": current_stage_id,
+            }
+            
+            # Return early with auto-recovery state
+            return {
+                "workflow_phase": "supervision",
+                "ask_user_trigger": None,
+                "pending_user_questions": [],
+                "user_responses": {},
+                "supervisor_verdict": "ok_continue",
+                "supervisor_feedback": (
+                    f"Auto-recovered from stuck trigger '{ask_user_trigger}'. "
+                    f"Trigger persisted for {persistence_count} cycles. "
+                    f"Continuing workflow - please check logs for root cause."
+                ),
+                # Clear tracking state
+                "_last_seen_trigger": None,
+                "_trigger_persistence_count": 0,
+                "_trigger_first_seen_time": None,
+                # Save diagnostic info
+                "_last_stuck_trigger_recovery": stuck_trigger_info,
+            }
+        
+        # Update tracking in result (will be applied after normal processing)
+        result["_last_seen_trigger"] = ask_user_trigger
+        result["_trigger_persistence_count"] = persistence_count
+        result["_trigger_first_seen_time"] = first_seen_time
+    else:
+        # No trigger - clear tracking state
+        result["_last_seen_trigger"] = None
+        result["_trigger_persistence_count"] = 0
+        result["_trigger_first_seen_time"] = None
+    
     # Post ask_user handling
     if ask_user_trigger:
         # Dispatch to appropriate trigger handler
@@ -383,6 +487,10 @@ def supervisor_node(state: ReproState) -> dict:
             # Clear user_responses to prevent stale responses from affecting
             # future ask_user cycles. Each cycle should start fresh.
             result["user_responses"] = {}
+            # Clear stuck trigger tracking since trigger was successfully handled
+            result["_last_seen_trigger"] = None
+            result["_trigger_persistence_count"] = 0
+            result["_trigger_first_seen_time"] = None
         else:
             result["ask_user_trigger"] = ask_user_trigger
             # Trigger is preserved for next ask_user cycle

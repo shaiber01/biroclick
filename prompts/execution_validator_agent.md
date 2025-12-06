@@ -259,29 +259,25 @@ G. VERDICT GUIDELINES
 ═══════════════════════════════════════════════════════════════════════
 
 PASS (proceed_to_analysis = true):
-- Simulation completed without errors
-- All expected files exist and are valid
-- Data contains no NaN/Inf
-- Runtime was reasonable
-- NO caveats or concerns that require user attention
-
+* Simulation completed without errors
+* All expected files exist and are valid
+* Data contains no NaN/Inf
+* Runtime was reasonable
+* NO caveats or concerns that require user attention
 WARNING (proceed_to_analysis = true, but flag for user attention):
-- Runtime significantly different from estimate
-- Minor data issues (e.g., slightly fewer points)
-- Non-critical files missing (e.g., intermediate outputs)
-- ANY issue that "requires user attention" or "needs clarification"
-- Synthetic/fallback data was used instead of expected data
-- Discrepancies identified that should be noted
-
-IMPORTANT: If you identify issues that "require user attention" or 
-"need clarification before proceeding", use WARNING, not PASS.
-
+* Runtime significantly different from estimate
+* Minor data issues (e.g., slightly fewer points)
+* Non-critical files missing (e.g., intermediate outputs)
+* ANY issue that "requires user attention" or "needs clarification"
+* Discrepancies identified that should be noted
+IMPORTANT: If you identify issues that "require user attention" or "need clarification before proceeding", use WARNING, not PASS.
 FAIL (proceed_to_analysis = false):
-- Simulation crashed
-- Critical output files missing
-- NaN/Inf in output data
-- Data shapes completely wrong
-- Zero-byte files
+* Simulation crashed
+* Critical output files missing
+* NaN/Inf in output data
+* Data shapes completely wrong
+* Zero-byte files
+* No blocking issues, but simple fixes could prevent future complications
 
 ═══════════════════════════════════════════════════════════════════════
 G2. WARNINGS ARRAY USAGE

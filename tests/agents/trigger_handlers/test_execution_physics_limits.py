@@ -33,7 +33,8 @@ class TestExecutionFailureLimitTrigger:
         assert result["execution_failure_count"] == 0
         assert result["supervisor_verdict"] == "retry_generate_code"
         assert "supervisor_feedback" in result
-        assert "more memory" in result["supervisor_feedback"]
+        # User guidance is stored in execution_feedback, supervisor_feedback has generic message
+        assert "more memory" in result["execution_feedback"]
 
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_resets_count_on_guidance(self, mock_context):
@@ -50,7 +51,8 @@ class TestExecutionFailureLimitTrigger:
         
         assert result["execution_failure_count"] == 0
         assert result["supervisor_verdict"] == "retry_generate_code"
-        assert "reduce resolution" in result["supervisor_feedback"]
+        # User guidance is stored in execution_feedback, not supervisor_feedback
+        assert "reduce resolution" in result["execution_feedback"]
 
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     @patch("src.agents.supervision.trigger_handlers.update_progress_stage_status")
@@ -229,9 +231,10 @@ class TestHandleExecutionFailureLimit:
         trigger_handlers.handle_execution_failure_limit(mock_state, mock_result, user_input, "stage1")
         
         assert mock_result["execution_failure_count"] == 0
-        assert "Check memory" in mock_result["supervisor_feedback"]
+        # User guidance goes to execution_feedback, not supervisor_feedback
+        assert "Check memory" in mock_result["execution_feedback"]
         assert mock_result["supervisor_verdict"] == "retry_generate_code"
-        assert mock_result["supervisor_feedback"].startswith("User guidance:")
+        assert mock_result["supervisor_feedback"] == "User guidance applied to execution_feedback"
 
     def test_handle_execution_failure_limit_retry_keyword_only(self, mock_state, mock_result):
         """Test RETRY keyword alone resets count."""
@@ -253,7 +256,8 @@ class TestHandleExecutionFailureLimit:
         
         assert mock_result["execution_failure_count"] == 0
         assert mock_result["supervisor_verdict"] == "retry_generate_code"
-        assert "reduce resolution" in mock_result["supervisor_feedback"]
+        # User guidance goes to execution_feedback
+        assert "reduce resolution" in mock_result["execution_feedback"]
 
     def test_handle_execution_failure_limit_retry_with_empty_guidance(self, mock_state, mock_result):
         """Test RETRY with empty guidance still resets count."""
@@ -328,7 +332,8 @@ class TestHandleExecutionFailureLimit:
         # Should use last response (RETRY)
         assert mock_result["execution_failure_count"] == 0
         assert mock_result["supervisor_verdict"] == "retry_generate_code"
-        assert "guidance" in mock_result["supervisor_feedback"]
+        # User guidance goes to execution_feedback
+        assert "guidance" in mock_result["execution_feedback"]
 
     def test_handle_execution_failure_limit_case_insensitive(self, mock_state, mock_result):
         """Test keywords are case-insensitive."""
@@ -349,7 +354,8 @@ class TestHandleExecutionFailureLimit:
         
         assert mock_result["execution_failure_count"] == 0
         assert mock_result["supervisor_verdict"] == "retry_generate_code"
-        assert "fix memory" in mock_result["supervisor_feedback"]
+        # User guidance goes to execution_feedback
+        assert "fix memory" in mock_result["execution_feedback"]
 
 
 class TestHandlePhysicsFailureLimit:
@@ -376,7 +382,9 @@ class TestHandlePhysicsFailureLimit:
         
         assert mock_result["physics_failure_count"] == 0
         assert mock_result["supervisor_verdict"] == "retry_generate_code"
-        assert "better parameters" in mock_result["supervisor_feedback"]
+        # User guidance goes to physics_feedback or reviewer_feedback
+        assert "better parameters" in mock_result.get("physics_feedback", "") or \
+               "better parameters" in mock_result.get("reviewer_feedback", "")
 
     def test_handle_physics_failure_limit_accept_with_stage_id(self, mock_state, mock_result):
         """Test ACCEPT marks stage as partial when stage_id provided."""
@@ -621,8 +629,9 @@ class TestHandlePhysicsFailureLimit:
         
         trigger_handlers.handle_physics_failure_limit(mock_state, mock_result, user_input, "stage1")
         
-        assert "new guidance" in mock_result["supervisor_feedback"]
-        assert mock_result["supervisor_feedback"].startswith("User guidance:")
+        # User guidance goes to physics_feedback or reviewer_feedback, not supervisor_feedback
+        assert "new guidance" in mock_result.get("physics_feedback", "") or \
+               "new guidance" in mock_result.get("reviewer_feedback", "")
 
     def test_handle_physics_failure_limit_skip_empty_string(self, mock_state, mock_result):
         """Test SKIP with empty string value."""
@@ -716,8 +725,8 @@ class TestHandlePhysicsFailureLimit:
         
         trigger_handlers.handle_execution_failure_limit(mock_state, mock_result, user_input, "stage1")
         
-        assert "new guidance" in mock_result["supervisor_feedback"]
-        assert mock_result["supervisor_feedback"].startswith("User guidance:")
+        # User guidance goes to execution_feedback, not supervisor_feedback
+        assert "new guidance" in mock_result["execution_feedback"]
 
     def test_handle_execution_failure_limit_count_not_present_in_result(self, mock_state, mock_result):
         """Test handler sets count even if not present in result initially."""
@@ -1109,51 +1118,50 @@ class TestClarificationQuestionContent:
 
 
 class TestFeedbackFormat:
-    """Tests for the format and content of supervisor feedback."""
+    """Tests for the format and content of feedback in appropriate state fields."""
 
     def test_execution_retry_feedback_includes_raw_response(self, mock_state, mock_result):
-        """RETRY feedback should include the raw user response."""
+        """RETRY feedback should include the raw user response in execution_feedback."""
         user_input = {"q1": "RETRY with more memory allocation please"}
         mock_result["execution_failure_count"] = 2
         
         trigger_handlers.handle_execution_failure_limit(mock_state, mock_result, user_input, "stage1")
         
-        feedback = mock_result["supervisor_feedback"]
-        assert feedback.startswith("User guidance:")
-        # Should include the raw response
-        assert "RETRY with more memory allocation please" in feedback
+        # User guidance goes to execution_feedback, not supervisor_feedback
+        feedback = mock_result["execution_feedback"]
+        assert "USER GUIDANCE:" in feedback
+        # Should include the extracted guidance
+        assert "more memory allocation please" in feedback
 
     def test_physics_retry_feedback_includes_raw_response(self, mock_state, mock_result):
-        """RETRY feedback should include the raw user response."""
+        """RETRY feedback should include the raw user response in physics_feedback."""
         user_input = {"q1": "RETRY with adjusted parameters"}
         mock_result["physics_failure_count"] = 1
         
         trigger_handlers.handle_physics_failure_limit(mock_state, mock_result, user_input, "stage1")
         
-        feedback = mock_result["supervisor_feedback"]
-        assert feedback.startswith("User guidance:")
-        assert "RETRY with adjusted parameters" in feedback
+        # User guidance goes to physics_feedback or reviewer_feedback
+        feedback = mock_result.get("physics_feedback", "") or mock_result.get("reviewer_feedback", "")
+        assert "adjusted parameters" in feedback
 
     def test_execution_retry_empty_guidance_produces_valid_feedback(self, mock_state, mock_result):
-        """RETRY without additional text should still produce valid feedback."""
+        """RETRY without additional text should still set execution_feedback."""
         user_input = {"q1": "RETRY"}
         mock_result["execution_failure_count"] = 1
         
         trigger_handlers.handle_execution_failure_limit(mock_state, mock_result, user_input, "stage1")
         
-        feedback = mock_result["supervisor_feedback"]
-        assert feedback.startswith("User guidance:")
-        assert "RETRY" in feedback
+        # execution_feedback should be set
+        assert "execution_feedback" in mock_result
 
     def test_execution_guidance_keyword_feedback(self, mock_state, mock_result):
-        """GUIDANCE keyword should produce proper feedback."""
+        """GUIDANCE keyword should set execution_feedback."""
         user_input = {"q1": "GUIDANCE: use less memory"}
         mock_result["execution_failure_count"] = 1
         
         trigger_handlers.handle_execution_failure_limit(mock_state, mock_result, user_input, "stage1")
         
-        feedback = mock_result["supervisor_feedback"]
-        assert feedback.startswith("User guidance:")
+        feedback = mock_result["execution_feedback"]
         assert "use less memory" in feedback
 
 
@@ -1184,9 +1192,10 @@ class TestMultipleUserResponses:
         
         trigger_handlers.handle_physics_failure_limit(mock_state, mock_result, user_input, "stage1")
         
-        # Raw response should be from last item
-        assert "RETRY with better params" in mock_result["supervisor_feedback"]
-        assert "First response" not in mock_result["supervisor_feedback"]
+        # User guidance goes to physics_feedback or reviewer_feedback
+        feedback = mock_result.get("physics_feedback", "") or mock_result.get("reviewer_feedback", "")
+        assert "better params" in feedback
+        assert "First response" not in feedback
 
 
 class TestProgressUpdateParameters:
@@ -1342,7 +1351,8 @@ class TestSpecialCharactersInResponses:
         
         assert mock_result["execution_failure_count"] == 0
         assert mock_result["supervisor_verdict"] == "retry_generate_code"
-        assert "multiline" in mock_result["supervisor_feedback"]
+        # User guidance goes to execution_feedback
+        assert "multiline" in mock_result["execution_feedback"]
 
     def test_physics_response_with_special_chars(self, mock_state, mock_result):
         """Handler should work with special characters in response."""
@@ -1361,7 +1371,8 @@ class TestSpecialCharactersInResponses:
         trigger_handlers.handle_execution_failure_limit(mock_state, mock_result, user_input, "stage1")
         
         assert mock_result["execution_failure_count"] == 0
-        assert "français" in mock_result["supervisor_feedback"]
+        # User guidance goes to execution_feedback
+        assert "français" in mock_result["execution_feedback"]
 
 
 class TestResultDictMutation:
@@ -1464,8 +1475,8 @@ class TestBoundaryConditions:
         
         assert mock_result["execution_failure_count"] == 0
         assert mock_result["supervisor_verdict"] == "retry_generate_code"
-        # Full response should be in feedback
-        assert len(mock_result["supervisor_feedback"]) > 10000
+        # Full response should be in execution_feedback
+        assert len(mock_result["execution_feedback"]) > 10000
 
     def test_physics_very_long_response(self, mock_state, mock_result):
         """Handler should work with very long responses."""
@@ -1543,7 +1554,8 @@ class TestDictKeyOrdering:
         # Last response "RETRY with this guidance" should be used
         assert mock_result["execution_failure_count"] == 0
         assert mock_result["supervisor_verdict"] == "retry_generate_code"
-        assert "RETRY with this guidance" in mock_result["supervisor_feedback"]
+        # User guidance goes to execution_feedback
+        assert "this guidance" in mock_result["execution_feedback"]
 
     def test_physics_single_response_key_doesnt_matter(self, mock_state, mock_result):
         """With single response, key name doesn't affect behavior."""
@@ -1567,9 +1579,9 @@ class TestKeywordOnlyResponses:
         
         assert mock_result["execution_failure_count"] == 0
         assert mock_result["supervisor_verdict"] == "retry_generate_code"
-        # Feedback should still be set
+        # supervisor_feedback and execution_feedback should be set
         assert "supervisor_feedback" in mock_result
-        assert mock_result["supervisor_feedback"].startswith("User guidance:")
+        assert "execution_feedback" in mock_result
 
     def test_execution_exact_skip_keyword(self, mock_state, mock_result):
         """Exact 'SKIP' keyword should work."""

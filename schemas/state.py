@@ -908,6 +908,13 @@ class ReproState(TypedDict, total=False):
     ask_user_trigger: Optional[str]  # e.g., "code_review_limit", "material_checkpoint", "reviewer_escalation"
     last_node_before_ask_user: Optional[str]  # Which node triggered the ask_user
     
+    # Stuck trigger detection (internal tracking, managed by supervisor)
+    # These fields track how long a trigger has persisted to detect infinite loops.
+    _trigger_persistence_count: int  # How many times same trigger seen consecutively
+    _last_seen_trigger: Optional[str]  # Last trigger value for comparison
+    _trigger_first_seen_time: Optional[str]  # ISO timestamp when trigger first appeared
+    _last_stuck_trigger_recovery: Optional[Dict[str, Any]]  # Diagnostic info from last auto-recovery
+    
     # ─── Report Generation ──────────────────────────────────────────────
     # Structures match report_output_schema.json definitions
     figure_comparisons: List[Dict[str, Any]]  # Matches report_output_schema.json#/definitions/figure_comparison
@@ -1083,6 +1090,12 @@ def create_initial_state(
         user_interactions=[],  # Log of all user decisions/feedback
         ask_user_trigger=None,  # What caused ask_user
         last_node_before_ask_user=None,  # Which node triggered ask_user
+        
+        # Stuck trigger detection (internal)
+        _trigger_persistence_count=0,
+        _last_seen_trigger=None,
+        _trigger_first_seen_time=None,
+        _last_stuck_trigger_recovery=None,
         
         # Report generation
         figure_comparisons=[],

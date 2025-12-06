@@ -380,17 +380,16 @@ class TestCodeRevisionCycle:
         base_state["design_description"] = "Test design"
         base_state["runtime_config"] = {"max_code_revisions": 10}
 
-        # Test feedback from 'feedback' field
+        # Test feedback extracted from 'summary' field (schema uses "summary")
         with patch("src.agents.code.call_agent_with_metrics") as mock_llm:
             mock_llm.return_value = {
                 "verdict": "needs_revision",
-                "feedback": "Use vectorized operations",
-                "summary": "Different summary"
+                "summary": "Use vectorized operations"  # Schema uses "summary" not "feedback"
             }
             result = code_reviewer_node(base_state)
         assert result["reviewer_feedback"] == "Use vectorized operations"
 
-        # Test fallback to 'summary' when 'feedback' missing
+        # Test another summary value
         base_state["code_revision_count"] = 0
         with patch("src.agents.code.call_agent_with_metrics") as mock_llm:
             mock_llm.return_value = {
