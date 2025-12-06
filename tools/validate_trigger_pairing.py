@@ -36,6 +36,7 @@ class ViolationType(Enum):
     UNPAIRED_IN_DICT = "unpaired_in_dict"
     UNPAIRED_SUBSCRIPT = "unpaired_subscript"
     SUSPICIOUS_VARIABLE = "suspicious_variable"
+    EMPTY_QUESTIONS = "empty_questions"
 
 
 @dataclass
@@ -63,12 +64,25 @@ class Violation:
 
 
 @dataclass
+class QuestionsAssignment:
+    """Represents a pending_user_questions assignment."""
+    line: int
+    function_name: Optional[str] = None
+    is_empty_list: bool = False  # True if assigned to empty list []
+
+
+@dataclass
 class AnalysisResult:
     """Results from analyzing a single file."""
     filepath: str
     trigger_assignments: List[TriggerAssignment] = field(default_factory=list)
-    questions_lines: Set[int] = field(default_factory=set)
+    questions_assignments: List[QuestionsAssignment] = field(default_factory=list)
     parse_errors: List[str] = field(default_factory=list)
+    
+    @property
+    def questions_lines(self) -> Set[int]:
+        """Backward compatibility: return set of all question lines."""
+        return {q.line for q in self.questions_assignments}
 
 
 @dataclass
@@ -77,8 +91,11 @@ class ValidationResult:
     violations: List[Violation] = field(default_factory=list)
     files_analyzed: int = 0
     trigger_count: int = 0  # Non-clearing trigger assignments
-    questions_count: int = 0  # Questions assignments
+    questions_count: int = 0  # Non-empty questions assignments
     parse_errors: List[str] = field(default_factory=list)
+    # For verbose mode
+    all_trigger_assignments: List[TriggerAssignment] = field(default_factory=list)
+    all_questions_assignments: List[QuestionsAssignment] = field(default_factory=list)
 
 
 # =============================================================================
@@ -127,6 +144,7 @@ class TriggerPairingAnalyzer(ast.NodeVisitor):
         keys: Set[str] = set()
         trigger_value_type: Optional[str] = None
         trigger_value: Optional[str] = None
+        questions_value: Optional[ast.AST] = None
         
         for key, value in zip(node.keys, node.values):
             if isinstance(key, ast.Constant) and isinstance(key.value, str):
@@ -134,8 +152,14 @@ class TriggerPairingAnalyzer(ast.NodeVisitor):
                 
                 if key.value == "ask_user_trigger":
                     trigger_value_type, trigger_value = self._classify_value(value)
+                elif key.value == "pending_user_questions":
+                    questions_value = value
         
         if "ask_user_trigger" in keys:
+            # Check if questions exist AND are non-empty
+            has_questions = "pending_user_questions" in keys
+            is_empty_questions = has_questions and self._is_empty_list(questions_value)
+            
             assignment = TriggerAssignment(
                 filepath=self.filepath,
                 line=node.lineno,
@@ -143,13 +167,18 @@ class TriggerPairingAnalyzer(ast.NodeVisitor):
                 value_type=trigger_value_type or "other",
                 value=trigger_value,
                 in_dict_literal=True,
-                paired_in_dict="pending_user_questions" in keys,
+                paired_in_dict=has_questions and not is_empty_questions,
                 function_name=self.current_function,
             )
             self.result.trigger_assignments.append(assignment)
         
         if "pending_user_questions" in keys:
-            self.result.questions_lines.add(node.lineno)
+            is_empty = self._is_empty_list(questions_value)
+            self.result.questions_assignments.append(QuestionsAssignment(
+                line=node.lineno,
+                function_name=self.current_function,
+                is_empty_list=is_empty,
+            ))
         
         self.generic_visit(node)
     
@@ -179,7 +208,12 @@ class TriggerPairingAnalyzer(ast.NodeVisitor):
                 self.result.trigger_assignments.append(assignment)
             
             elif key_name == "pending_user_questions":
-                self.result.questions_lines.add(node.lineno)
+                is_empty = self._is_empty_list(node.value)
+                self.result.questions_assignments.append(QuestionsAssignment(
+                    line=node.lineno,
+                    function_name=self.current_function,
+                    is_empty_list=is_empty,
+                ))
         
         self.generic_visit(node)
     
@@ -209,6 +243,14 @@ class TriggerPairingAnalyzer(ast.NodeVisitor):
             return ("other", None)
         else:
             return ("other", None)
+    
+    def _is_empty_list(self, node: Optional[ast.AST]) -> bool:
+        """Check if node is an empty list literal []."""
+        if node is None:
+            return False
+        if isinstance(node, ast.List) and len(node.elts) == 0:
+            return True
+        return False
 
 
 # =============================================================================
@@ -252,10 +294,11 @@ def check_pairing_violations(result: AnalysisResult) -> List[Violation]:
     Check for pairing violations in analysis results.
     
     Rules:
-    1. Dict literals: trigger must be paired with questions in same dict
-    2. Subscript assignments: trigger must have questions within ±10 lines
+    1. Dict literals: trigger must be paired with questions in same dict (non-empty)
+    2. Subscript assignments: trigger must have questions within ±10 lines IN SAME FUNCTION
     3. Exception: value=None is clearing, doesn't need questions
     4. Exception: value=variable might be preserving existing trigger
+    5. Empty questions lists are violations
     """
     violations: List[Violation] = []
     
@@ -285,7 +328,7 @@ def check_pairing_violations(result: AnalysisResult) -> List[Violation]:
             ))
             continue
         
-        # Rule 1: Dict literals must be self-contained
+        # Rule 1: Dict literals must be self-contained with non-empty questions
         if assignment.in_dict_literal:
             if not assignment.paired_in_dict:
                 violations.append(Violation(
@@ -294,30 +337,49 @@ def check_pairing_violations(result: AnalysisResult) -> List[Violation]:
                     line=assignment.line,
                     message=(
                         f"ask_user_trigger='{assignment.value}' in dict literal "
-                        f"without pending_user_questions"
+                        f"without pending_user_questions (or questions is empty [])"
                     ),
                     function_name=assignment.function_name,
                     severity="error",
                 ))
             continue
         
-        # Rule 2: Subscript assignments - check proximity
+        # Rule 2: Subscript assignments - check proximity WITHIN SAME FUNCTION
+        # Get questions in the same function (or global scope if function_name is None)
+        same_function_questions = [
+            q for q in result.questions_assignments
+            if q.function_name == assignment.function_name and not q.is_empty_list
+        ]
+        
         nearby_questions = any(
-            abs(q_line - assignment.line) <= 10 
-            for q_line in result.questions_lines
+            abs(q.line - assignment.line) <= 10 
+            for q in same_function_questions
         )
         
         if not nearby_questions:
+            func_context = f" in function '{assignment.function_name}'" if assignment.function_name else ""
             violations.append(Violation(
                 type=ViolationType.UNPAIRED_SUBSCRIPT,
                 filepath=result.filepath,
                 line=assignment.line,
                 message=(
                     f"ask_user_trigger='{assignment.value}' set but no "
-                    f"pending_user_questions found within 10 lines"
+                    f"pending_user_questions found within 10 lines{func_context}"
                 ),
                 function_name=assignment.function_name,
                 severity="error",
+            ))
+    
+    # Rule 5: Check for empty questions lists (warning)
+    for q in result.questions_assignments:
+        if q.is_empty_list:
+            violations.append(Violation(
+                type=ViolationType.EMPTY_QUESTIONS,
+                filepath=result.filepath,
+                line=q.line,
+                message="pending_user_questions is empty [] - users will see no prompt",
+                function_name=q.function_name,
+                severity="warning",
             ))
     
     return violations
@@ -335,12 +397,17 @@ def validate_file(filepath: Path) -> ValidationResult:
     result.files_analyzed = 1
     result.parse_errors.extend(analysis.parse_errors)
     
+    # Store all assignments for verbose mode
+    result.all_trigger_assignments.extend(analysis.trigger_assignments)
+    result.all_questions_assignments.extend(analysis.questions_assignments)
+    
     # Count non-clearing trigger assignments
     for assignment in analysis.trigger_assignments:
         if assignment.value_type != "none":
             result.trigger_count += 1
     
-    result.questions_count = len(analysis.questions_lines)
+    # Count non-empty questions assignments
+    result.questions_count = len([q for q in analysis.questions_assignments if not q.is_empty_list])
     
     violations = check_pairing_violations(analysis)
     result.violations.extend(violations)
@@ -373,12 +440,17 @@ def validate_src_directory(src_dir: Optional[Path] = None) -> ValidationResult:
         result.files_analyzed += 1
         result.parse_errors.extend(analysis.parse_errors)
         
+        # Store all assignments for verbose mode
+        result.all_trigger_assignments.extend(analysis.trigger_assignments)
+        result.all_questions_assignments.extend(analysis.questions_assignments)
+        
         # Count non-clearing trigger assignments
         for assignment in analysis.trigger_assignments:
             if assignment.value_type != "none":
                 result.trigger_count += 1
         
-        result.questions_count += len(analysis.questions_lines)
+        # Count non-empty questions assignments
+        result.questions_count += len([q for q in analysis.questions_assignments if not q.is_empty_list])
         
         violations = check_pairing_violations(analysis)
         result.violations.extend(violations)
@@ -512,8 +584,18 @@ Examples:
                 print(f"  • {err}")
         
         if args.verbose:
-            # Show all assignments (would need to track them in result)
-            print("\n(Verbose mode: showing summary only in this version)")
+            print(f"\n📋 All Trigger Assignments ({len(result.all_trigger_assignments)}):")
+            for t in result.all_trigger_assignments:
+                status = "✓" if t.value_type == "none" or t.paired_in_dict else "?"
+                func = f" [{t.function_name}]" if t.function_name else " [global]"
+                print(f"  {status} {t.filepath}:{t.line}{func} = {t.value_type}:{t.value}")
+            
+            print(f"\n📋 All Questions Assignments ({len(result.all_questions_assignments)}):")
+            for q in result.all_questions_assignments:
+                status = "⚠️" if q.is_empty_list else "✓"
+                func = f" [{q.function_name}]" if q.function_name else " [global]"
+                empty_note = " (EMPTY)" if q.is_empty_list else ""
+                print(f"  {status} Line {q.line}{func}{empty_note}")
         
         if errors:
             print(f"\n❌ ERRORS ({len(errors)}):")

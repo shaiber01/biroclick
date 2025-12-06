@@ -22,6 +22,8 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from tools.validate_trigger_pairing import (
     validate_src_directory,
+    validate_file,
+    analyze_file,
     ViolationType,
     format_violation,
 )
@@ -54,6 +56,9 @@ class TestTriggerQuestionsPairing:
                 msg += f"  • {format_violation(v)}\n"
             msg += "\nFix: Add pending_user_questions alongside ask_user_trigger in the dict."
             pytest.fail(msg)
+        
+        # Verify we actually checked something (not just an empty scan)
+        assert result.files_analyzed > 0, "No files were analyzed"
     
     def test_subscript_assignments_have_nearby_questions(self):
         """
@@ -79,54 +84,79 @@ class TestTriggerQuestionsPairing:
                 msg += f"  • {format_violation(v)}\n"
             msg += "\nFix: Add result[\"pending_user_questions\"] = [...] near the trigger assignment."
             pytest.fail(msg)
+        
+        # Verify we actually checked something
+        assert result.files_analyzed > 0, "No files were analyzed"
     
     def test_trigger_count_sanity_check(self):
         """
-        Sanity check: questions count should be >= trigger count.
+        Strict sanity check for trigger/questions balance.
         
-        Questions can exceed triggers because:
-        - Questions are sometimes set without changing triggers
-        - Dict literals containing both are counted at the same line
+        Expected behavior based on codebase analysis:
+        - trigger_handlers.py has ~25 question-only lines (clarification handlers)
+        - This means questions_count > trigger_count is EXPECTED
+        - But trigger_count > questions_count would indicate BUGS
         
-        But triggers should NOT significantly exceed questions.
+        This test will FAIL if:
+        - Triggers exceed questions (indicates unpaired triggers)
+        - Counts change dramatically (indicates structural changes needing review)
         """
         result = validate_src_directory()
         
-        # Print stats for visibility
+        # Print stats for debugging
         print(f"\n📊 Trigger/Questions balance:")
         print(f"   ask_user_trigger assignments (non-None): {result.trigger_count}")
         print(f"   pending_user_questions assignments: {result.questions_count}")
+        print(f"   Difference (questions - triggers): {result.questions_count - result.trigger_count}")
         
-        # Questions can exceed triggers (OK), but triggers shouldn't exceed questions by much
-        if result.trigger_count > result.questions_count:
-            excess = result.trigger_count - result.questions_count
-            tolerance = 5  # Allow small excess for edge cases
-            assert excess <= tolerance, (
-                f"Trigger count ({result.trigger_count}) exceeds questions count "
-                f"({result.questions_count}) by {excess}. "
-                f"This may indicate unpaired trigger assignments."
-            )
+        # STRICT CHECK 1: Triggers must NEVER exceed questions
+        # If this fails, there are unpaired trigger assignments
+        assert result.trigger_count <= result.questions_count, (
+            f"CRITICAL: Trigger count ({result.trigger_count}) exceeds questions count "
+            f"({result.questions_count}). This indicates unpaired trigger assignments "
+            f"that will cause users to see empty prompts!"
+        )
         
-        # Basic sanity: should have at least some of each
-        assert result.trigger_count > 0, "Expected some trigger assignments"
-        assert result.questions_count > 0, "Expected some questions assignments"
+        # STRICT CHECK 2: Verify counts are in expected ranges
+        # These ranges are based on current codebase analysis (Dec 2024)
+        # If they change significantly, it indicates structural changes needing review
+        MIN_EXPECTED_TRIGGERS = 25  # Currently ~32
+        MAX_EXPECTED_TRIGGERS = 50
+        MIN_EXPECTED_QUESTIONS = 50  # Currently ~59
+        MAX_EXPECTED_QUESTIONS = 80
+        
+        assert result.trigger_count >= MIN_EXPECTED_TRIGGERS, (
+            f"Trigger count ({result.trigger_count}) is below expected minimum ({MIN_EXPECTED_TRIGGERS}). "
+            f"This could indicate the tool is missing assignments or the codebase changed significantly."
+        )
+        assert result.trigger_count <= MAX_EXPECTED_TRIGGERS, (
+            f"Trigger count ({result.trigger_count}) exceeds expected maximum ({MAX_EXPECTED_TRIGGERS}). "
+            f"Review new trigger assignments to ensure they're all properly paired."
+        )
+        assert result.questions_count >= MIN_EXPECTED_QUESTIONS, (
+            f"Questions count ({result.questions_count}) is below expected minimum ({MIN_EXPECTED_QUESTIONS}). "
+            f"This could indicate the tool is missing assignments or the codebase changed significantly."
+        )
+        assert result.questions_count <= MAX_EXPECTED_QUESTIONS, (
+            f"Questions count ({result.questions_count}) exceeds expected maximum ({MAX_EXPECTED_QUESTIONS}). "
+            f"This is likely OK but should be reviewed."
+        )
     
     def test_no_parse_errors(self):
         """Ensure all Python files in src/ can be parsed."""
         result = validate_src_directory()
         
-        if result.parse_errors:
-            msg = "\n\nFailed to parse some files:\n"
-            for err in result.parse_errors:
-                msg += f"  • {err}\n"
-            pytest.fail(msg)
+        assert len(result.parse_errors) == 0, (
+            f"Failed to parse {len(result.parse_errors)} file(s):\n" +
+            "\n".join(f"  • {err}" for err in result.parse_errors)
+        )
     
-    def test_report_suspicious_variables_for_review(self):
+    def test_suspicious_variables_are_known_patterns(self):
         """
-        INFO: Report variable-based trigger assignments for manual review.
+        Variable-based trigger assignments must be known preservation patterns.
         
-        These might be intentional (preserving existing trigger) or bugs.
-        This test prints warnings but doesn't fail.
+        This test FAILS if there are suspicious variables that aren't in the
+        allowed list. Unknown variables could be bugs.
         """
         result = validate_src_directory()
         
@@ -135,42 +165,112 @@ class TestTriggerQuestionsPairing:
             if v.type == ViolationType.SUSPICIOUS_VARIABLE
         ]
         
-        if warnings:
-            print("\n\n📋 Variable-based trigger assignments (for manual review):")
-            for v in warnings:
-                print(f"  • {format_violation(v)}")
-            print("\nThese may be intentional preservation of existing triggers.")
+        # Currently allowed: supervisor.py preserves 'ask_user_trigger' variable
+        # If new suspicious variables appear, they must be reviewed and either:
+        # 1. Added to the PRESERVATION_VARS list in the tool
+        # 2. Fixed in the codebase
+        MAX_ALLOWED_SUSPICIOUS = 0  # We expect all variables to be known patterns
         
-        # Don't fail, just report
+        if len(warnings) > MAX_ALLOWED_SUSPICIOUS:
+            msg = (
+                f"\n\nFound {len(warnings)} suspicious variable-based trigger assignments "
+                f"(max allowed: {MAX_ALLOWED_SUSPICIOUS}):\n\n"
+            )
+            for v in warnings:
+                msg += f"  • {format_violation(v)}\n"
+            msg += (
+                "\nThese could be bugs. Either:\n"
+                "1. Add the variable name to PRESERVATION_VARS in validate_trigger_pairing.py\n"
+                "2. Fix the code to use a string literal with proper pairing"
+            )
+            pytest.fail(msg)
 
 
 class TestTriggerValidationStats:
     """Tests that verify the validation tool is working correctly on real code."""
     
-    def test_finds_trigger_assignments(self):
-        """The codebase should have some trigger assignments (sanity check)."""
-        result = validate_src_directory()
+    def test_finds_expected_trigger_files(self):
+        """
+        Verify the tool finds triggers in the expected files.
         
-        # We know the codebase has triggers, so this should be > 0
-        assert result.trigger_count > 0, (
-            "Expected to find trigger assignments in src/. "
-            "Either the codebase changed dramatically or the tool is broken."
-        )
+        This catches regressions where the tool stops detecting certain patterns.
+        """
+        expected_files_with_triggers = [
+            "src/agents/execution.py",
+            "src/agents/planning.py",
+            "src/agents/code.py",
+            "src/agents/design.py",
+            "src/agents/analysis.py",
+            "src/agents/supervision/supervisor.py",
+            "src/agents/user_interaction.py",
+        ]
+        
+        src_dir = PROJECT_ROOT / "src"
+        found_triggers_in = set()
+        
+        for filepath in src_dir.rglob("*.py"):
+            analysis = analyze_file(filepath)
+            if analysis.trigger_assignments:
+                # Store relative path for comparison
+                rel_path = str(filepath.relative_to(PROJECT_ROOT))
+                found_triggers_in.add(rel_path)
+        
+        for expected in expected_files_with_triggers:
+            assert expected in found_triggers_in, (
+                f"Expected to find triggers in {expected} but didn't. "
+                f"Either the file changed or the tool has a detection bug."
+            )
     
-    def test_finds_questions_assignments(self):
-        """The codebase should have some questions assignments (sanity check)."""
-        result = validate_src_directory()
+    def test_trigger_handlers_has_only_questions(self):
+        """
+        Verify trigger_handlers.py has questions but no triggers.
         
-        assert result.questions_count > 0, (
-            "Expected to find pending_user_questions assignments in src/. "
-            "Either the codebase changed dramatically or the tool is broken."
-        )
+        This is expected behavior: handlers provide clarification questions
+        for existing triggers, they don't set new ones.
+        """
+        handlers_path = PROJECT_ROOT / "src" / "agents" / "supervision" / "trigger_handlers.py"
+        
+        if handlers_path.exists():
+            analysis = analyze_file(handlers_path)
+            
+            # Should have many questions (clarification handlers)
+            assert len(analysis.questions_lines) >= 20, (
+                f"Expected trigger_handlers.py to have many question lines (clarifications), "
+                f"but only found {len(analysis.questions_lines)}. "
+                f"This could indicate the tool isn't detecting questions properly."
+            )
+            
+            # Should have NO trigger assignments
+            non_none_triggers = [a for a in analysis.trigger_assignments if a.value_type != "none"]
+            assert len(non_none_triggers) == 0, (
+                f"trigger_handlers.py should NOT set new triggers (only provide questions), "
+                f"but found {len(non_none_triggers)} trigger assignments. "
+                f"This is a codebase design violation."
+            )
     
-    def test_analyzes_multiple_files(self):
-        """Should analyze multiple files in src/."""
+    def test_analyzes_all_agent_files(self):
+        """
+        Verify all Python files in src/agents/ are analyzed.
+        
+        This catches cases where files are skipped due to encoding or other issues.
+        """
+        src_dir = PROJECT_ROOT / "src"
+        agents_dir = src_dir / "agents"
+        
+        if not agents_dir.exists():
+            pytest.skip("agents directory not found")
+        
+        expected_py_files = list(agents_dir.rglob("*.py"))
+        # Exclude __init__.py and __pycache__
+        expected_py_files = [
+            f for f in expected_py_files 
+            if f.name != "__init__.py" and "__pycache__" not in str(f)
+        ]
+        
         result = validate_src_directory()
         
-        assert result.files_analyzed > 10, (
-            f"Expected to analyze many files, only found {result.files_analyzed}. "
-            "Check that src/ directory exists and contains Python files."
+        # We should analyze at least as many files as there are in agents/
+        assert result.files_analyzed >= len(expected_py_files), (
+            f"Expected to analyze at least {len(expected_py_files)} agent files, "
+            f"but only analyzed {result.files_analyzed} total files."
         )
