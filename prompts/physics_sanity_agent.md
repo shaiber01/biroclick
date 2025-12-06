@@ -162,16 +162,17 @@ PASS (proceed_to_analysis = true):
 - Results look physically reasonable
 
 WARNING (proceed_to_analysis = true, but flag):
-- Conservation laws slightly off (5-10%)
+- Conservation laws slightly off
 - Minor oscillations or artifacts
-- Results look physical but have concerns
+- Results look physical but there are concerns
 
 FAIL (proceed_to_analysis = false, routes to CODE_GENERATE):
-- Conservation laws violated (T+R+A off by >10%)
+- Conservation laws violated (e.g., T+R+A off by >10%)
 - Unphysical values (T>1, R>1, A<0)
 - NaN or Inf in data
 - Results are clearly unphysical
 - Issue is likely a CODE/NUMERICS problem that can be fixed by tweaking code
+- No blocking issues, but simple code fixes could prevent future complications
 
 DESIGN_FLAW (proceed_to_analysis = false, routes to DESIGN):
 - Physics indicates FUNDAMENTAL geometry/design problem
@@ -182,6 +183,7 @@ DESIGN_FLAW (proceed_to_analysis = false, routes to DESIGN):
   - "Boundary conditions incompatible with desired physics"
   - "Structural dimensions violate physical constraints for target response"
 - Tweaking code/numerics CANNOT fix design_flaw issues
+- No blocking issues, but simple design fixes could prevent future complications
 - Design_flaw routes back to SimulationDesignerAgent to redesign structure
 
 CRITICAL DISTINCTION:

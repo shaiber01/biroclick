@@ -981,7 +981,8 @@ class TestClarificationTrigger:
         assert result["ask_user_trigger"] is None
         assert "supervisor_feedback" in result
         assert "User clarification" in result["supervisor_feedback"]
-        assert "550nm" in result["supervisor_feedback"]
+        # The clarification text is stored in user_context, not supervisor_feedback
+        assert "550nm" in result["user_context"][-1]
         assert result.get("should_stop") is not True
 
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
@@ -1003,7 +1004,7 @@ class TestClarificationTrigger:
 
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_preserves_clarification_text(self, mock_context):
-        """Should preserve full clarification text in feedback."""
+        """Should preserve full clarification text in user_context."""
         mock_context.return_value = None
         clarification = "Use FDTD with PML boundaries and mesh size 10nm"
         state = {
@@ -1015,7 +1016,8 @@ class TestClarificationTrigger:
         result = supervisor_node(state)
 
         assert result["supervisor_verdict"] == "ok_continue"
-        assert clarification in result["supervisor_feedback"]
+        # Clarification is stored in user_context, not supervisor_feedback
+        assert clarification in result["user_context"][-1]
 
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_handles_whitespace_only_clarification(self, mock_context):
@@ -1716,7 +1718,8 @@ class TestUserResponseVariations:
         result = supervisor_node(state)
 
         assert result["supervisor_verdict"] == "ok_continue"
-        assert "λ=550nm" in result["supervisor_feedback"]
+        # Clarification is stored in user_context, not supervisor_feedback
+        assert "λ=550nm" in result["user_context"][-1]
 
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
     def test_handles_very_long_response(self, mock_context):

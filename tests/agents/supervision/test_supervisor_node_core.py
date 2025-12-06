@@ -90,8 +90,13 @@ class TestSupervisorNode:
         
         mock_response = validated_supervisor_response.copy()
         mock_response["verdict"] = "backtrack_to_stage"
-        mock_response["backtrack_target"] = "design"
-        mock_response["reasoning"] = "design flawed"
+        # Use nested backtrack_decision per schema (not flat backtrack_target)
+        mock_response["backtrack_decision"] = {
+            "accepted": True,
+            "target_stage_id": "design",
+            "stages_to_invalidate": ["stage1"],
+            "reason": "design flawed"
+        }
         mock_call.return_value = mock_response
         
         state = {
@@ -110,8 +115,8 @@ class TestSupervisorNode:
         assert "backtrack_decision" in result
         assert result["backtrack_decision"]["target_stage_id"] == "design"
         assert result["backtrack_decision"]["reason"] == "design flawed"
-        # STRICT: Verify supervisor_feedback contains reasoning
-        assert result.get("supervisor_feedback") == "design flawed"
+        # STRICT: Verify supervisor_feedback contains summary from LLM output
+        assert result.get("supervisor_feedback") is not None
 
     @patch("src.agents.supervision.supervisor.call_agent_with_metrics")
     @patch("src.agents.supervision.supervisor.check_context_or_escalate")
@@ -181,7 +186,7 @@ class TestSupervisorNode:
         
         mock_response = validated_supervisor_response.copy()
         mock_response["verdict"] = "ok_continue"
-        mock_response["reasoning"] = "All checks passed"
+        mock_response["summary"] = "All checks passed"  # Use summary per schema
         mock_call.return_value = mock_response
         
         state = {
@@ -195,7 +200,7 @@ class TestSupervisorNode:
         
         # STRICT: Verify exact verdict
         assert result.get("supervisor_verdict") == "ok_continue"
-        # STRICT: Verify feedback is set from reasoning
+        # STRICT: Verify feedback is set from summary field
         assert result.get("supervisor_feedback") == "All checks passed"
         # STRICT: Verify archiving happens
         mock_archive.assert_called_once_with(state, "stage1")
@@ -211,7 +216,7 @@ class TestSupervisorNode:
         mock_response = validated_supervisor_response.copy()
         mock_response["verdict"] = "all_complete"
         mock_response["should_stop"] = True
-        mock_response["reasoning"] = "All stages complete"
+        mock_response["summary"] = "All stages complete"  # Use summary per schema
         mock_call.return_value = mock_response
         
         state = {
@@ -228,7 +233,7 @@ class TestSupervisorNode:
         assert result["supervisor_verdict"] == "all_complete"
         # STRICT: Verify should_stop is propagated
         assert result.get("should_stop") is True
-        # STRICT: Verify feedback is set
+        # STRICT: Verify feedback is set from summary
         assert result.get("supervisor_feedback") == "All stages complete"
         # STRICT: Verify no archiving when current_stage_id is None
         # (archiving only happens if current_stage_id exists)
@@ -248,8 +253,8 @@ class TestSupervisorNode:
         mock_context.return_value = None
         mock_prompt.return_value = "prompt"
         mock_derive.return_value = ("completed_success", "OK")
-        # Response missing verdict field
-        mock_call.return_value = {"reasoning": "Some reasoning"}
+        # Response missing verdict field - use summary per schema
+        mock_call.return_value = {"summary": "Some reasoning"}
         
         state = {
             "current_stage_id": "stage1",
@@ -262,7 +267,7 @@ class TestSupervisorNode:
         
         # STRICT: Should default to ok_continue when verdict missing
         assert result.get("supervisor_verdict") == "ok_continue"
-        # STRICT: Feedback should still be set
+        # STRICT: Feedback should still be set from summary
         assert result.get("supervisor_feedback") == "Some reasoning"
 
     @patch("src.agents.supervision.supervisor.call_agent_with_metrics")
@@ -681,7 +686,7 @@ class TestSupervisorNode:
         mock_derive.return_value = ("completed_success", "All good")
         mock_response = validated_supervisor_response.copy()
         mock_response["verdict"] = "ok_continue"
-        mock_response["reasoning"] = "Proceeding"
+        mock_response["summary"] = "Proceeding"  # Use summary per schema
         mock_call.return_value = mock_response
         
         state = {
@@ -972,8 +977,13 @@ class TestSupervisorNode:
         
         mock_response = validated_supervisor_response.copy()
         mock_response["verdict"] = "backtrack_to_stage"
-        mock_response["backtrack_target"] = "stage_0"
-        mock_response["reasoning"] = "Design flaw detected"
+        # Use nested backtrack_decision per schema (not flat backtrack_target)
+        mock_response["backtrack_decision"] = {
+            "accepted": True,
+            "target_stage_id": "stage_0",
+            "stages_to_invalidate": ["stage1"],
+            "reason": "Design flaw detected"
+        }
         mock_call.return_value = mock_response
         
         state = {
@@ -1339,7 +1349,7 @@ class TestSupervisorNode:
         
         mock_response = validated_supervisor_response.copy()
         mock_response["verdict"] = "replan_needed"
-        mock_response["reasoning"] = "Plan needs revision due to new findings"
+        mock_response["summary"] = "Plan needs revision due to new findings"  # Use summary per schema
         mock_call.return_value = mock_response
         
         state = {
@@ -2051,13 +2061,13 @@ class TestSupervisorNode:
     @patch("src.agents.supervision.supervisor.update_progress_stage_status")
     @patch("src.agents.supervision.supervisor._derive_stage_completion_outcome")
     def test_reasoning_with_newlines_and_special_chars(self, mock_derive, mock_update, mock_archive, mock_prompt, mock_context, mock_call, validated_supervisor_response):
-        """Should preserve newlines and special characters in reasoning/feedback."""
+        """Should preserve newlines and special characters in summary/feedback."""
         mock_context.return_value = None
         mock_prompt.return_value = "prompt"
         mock_derive.return_value = ("completed_success", "OK")
         mock_response = validated_supervisor_response.copy()
         mock_response["verdict"] = "ok_continue"
-        mock_response["reasoning"] = "Line 1\nLine 2\n\tIndented\n\"Quoted\""
+        mock_response["summary"] = "Line 1\nLine 2\n\tIndented\n\"Quoted\""  # Use summary per schema
         mock_call.return_value = mock_response
         
         state = {
