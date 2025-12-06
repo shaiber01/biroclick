@@ -14,9 +14,15 @@ code_reviewer_node:
 
 code_generator_node:
     READS: current_stage_id, plan, design_description, paper_text, paper_domain,
-           validated_materials, code_revision_count, code_feedback
+           validated_materials, code_revision_count, code_feedback,
+           code, reviewer_feedback, physics_feedback, execution_feedback
     WRITES: workflow_phase, code, ask_user_trigger, pending_user_questions,
             awaiting_user_input
+    
+    NOTE: When feedback is present (reviewer_feedback, physics_feedback, or 
+    execution_feedback), this indicates a revision loop. In revision mode, 
+    the previous code is included in the prompt so the LLM can make targeted 
+    fixes rather than regenerating from scratch.
 """
 
 import json

@@ -196,18 +196,38 @@ def select_stage_node(state: ReproState) -> dict:
             
             if reset_counters:
                 result_updates.update({
+                    # Counters
                     "design_revision_count": 0,
                     "code_revision_count": 0,
                     "execution_failure_count": 0,
                     "physics_failure_count": 0,
                     "analysis_revision_count": 0,
-                    # Clear all feedback fields to prevent stale feedback leaking between stages
+                    # Feedback fields
                     "reviewer_feedback": None,
                     "physics_feedback": None,
                     "execution_feedback": None,
                     "analysis_feedback": None,
                     "design_feedback": None,
                     "comparison_feedback": None,
+                    # Stage working data
+                    "code": None,
+                    "design_description": None,
+                    "performance_estimate": None,
+                    "analysis_result_reports": [],
+                    # Verdicts
+                    "last_design_review_verdict": None,
+                    "last_code_review_verdict": None,
+                    "execution_verdict": None,
+                    "physics_verdict": None,
+                    "comparison_verdict": None,
+                    "reviewer_issues": [],
+                    "execution_warnings": [],
+                    "physics_warnings": [],
+                    # Structured agent output
+                    "execution_status": None,
+                    "execution_files_check": None,
+                    "physics_conservation_checks": None,
+                    "physics_value_range_checks": None,
                 })
             
             # Log stage selection
@@ -507,18 +527,38 @@ def select_stage_node(state: ReproState) -> dict:
         
         if reset_counters:
             result_updates.update({
+                # Counters
                 "design_revision_count": 0,
                 "code_revision_count": 0,
                 "execution_failure_count": 0,
                 "physics_failure_count": 0,
                 "analysis_revision_count": 0,
-                # Clear all feedback fields to prevent stale feedback leaking between stages
+                # Feedback fields
                 "reviewer_feedback": None,
                 "physics_feedback": None,
                 "execution_feedback": None,
                 "analysis_feedback": None,
                 "design_feedback": None,
                 "comparison_feedback": None,
+                # Stage working data
+                "code": None,
+                "design_description": None,
+                "performance_estimate": None,
+                "analysis_result_reports": [],
+                # Verdicts
+                "last_design_review_verdict": None,
+                "last_code_review_verdict": None,
+                "execution_verdict": None,
+                "physics_verdict": None,
+                "comparison_verdict": None,
+                "reviewer_issues": [],
+                "execution_warnings": [],
+                "physics_warnings": [],
+                # Structured agent output
+                "execution_status": None,
+                "execution_files_check": None,
+                "physics_conservation_checks": None,
+                "physics_value_range_checks": None,
             })
         
         # Log stage selection

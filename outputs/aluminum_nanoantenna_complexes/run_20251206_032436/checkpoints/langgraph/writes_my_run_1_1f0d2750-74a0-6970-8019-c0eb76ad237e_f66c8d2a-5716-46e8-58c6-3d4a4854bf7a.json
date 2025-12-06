@@ -1,0 +1,38 @@
+{
+  "writes": [
+    {
+      "channel": "__resume__",
+      "value_type": "msgpack",
+      "value_data": "kb5SRVRSWV9XSVRIX0dVSURBTkNFOiB0cnkgYWdhaW4="
+    },
+    {
+      "channel": "user_responses",
+      "value_type": "msgpack",
+      "value_data": "gdnWRXhlY3V0aW9uIGZhaWxlZCAyLzIgdGltZXMuIExhc3QgZXJyb3I6IFNpbXVsYXRpb24gZmFpbGVkIHdpdGggZXhpdCBjb2RlIDEuCgpPcHRpb25zOgotIFJFVFJZX1dJVEhfR1VJREFOQ0U6IFJlc2V0IGNvdW50ZXIgYW5kIHJldHJ5IHdpdGggZ3VpZGFuY2UKLSBTS0lQX1NUQUdFOiBTa2lwIHRoaXMgc3RhZ2UgYW5kIGNvbnRpbnVlCi0gU1RPUDogRW5kIHRoZSB3b3JrZmxvd75SRVRSWV9XSVRIX0dVSURBTkNFOiB0cnkgYWdhaW4="
+    },
+    {
+      "channel": "pending_user_questions",
+      "value_type": "msgpack",
+      "value_data": "kA=="
+    },
+    {
+      "channel": "awaiting_user_input",
+      "value_type": "msgpack",
+      "value_data": "wg=="
+    },
+    {
+      "channel": "workflow_phase",
+      "value_type": "msgpack",
+      "value_data": "rWF3YWl0aW5nX3VzZXI="
+    },
+    {
+      "channel": "branch:to:supervisor",
+      "value_type": "null",
+      "value_data": ""
+    }
+  ],
+  "task_id": "f66c8d2a-5716-46e8-58c6-3d4a4854bf7a",
+  "thread_id": "my_run_1",
+  "checkpoint_id": "1f0d2750-74a0-6970-8019-c0eb76ad237e",
+  "saved_at": "2025-12-06T09:30:05.093313"
+}

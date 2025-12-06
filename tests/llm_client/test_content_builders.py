@@ -1054,6 +1054,333 @@ class TestBuildUserContentForCodeGenerator:
         assert materials_json == ["single_material.csv"]
         assert isinstance(materials_json, list)
 
+    # ═══════════════════════════════════════════════════════════════════════
+    # Revision Mode Tests - Previous Code Inclusion
+    # ═══════════════════════════════════════════════════════════════════════
+
+    def test_previous_code_included_when_reviewer_feedback_present(self):
+        """Test that previous code is included when reviewer_feedback exists."""
+        previous_code = """import meep as mp
+sim = mp.Simulation(cell_size=mp.Vector3(1, 1, 1), resolution=10)
+sim.run(until=100)
+"""
+        state = {
+            "current_stage_id": "stage1",
+            "design_description": "Design spec",
+            "code": previous_code,
+            "reviewer_feedback": "Fix the resolution to 20",
+        }
+        content = build_user_content_for_code_generator(state)
+        
+        # Verify PREVIOUS CODE section with exact header
+        assert "## PREVIOUS CODE (apply the feedback below to this code)" in content
+        assert "Do NOT regenerate from scratch. Make targeted fixes based on the feedback." in content
+        
+        # Verify code is in a proper python code block
+        expected_code_block = f"```python\n{previous_code}\n```"
+        assert expected_code_block in content, f"Code block not found. Expected:\n{expected_code_block}"
+        
+        # Verify REVISION FEEDBACK section with exact header
+        assert "## REVISION FEEDBACK (apply these changes to the code above)" in content
+        assert "**Code review:** Fix the resolution to 20" in content
+        
+        # Verify PREVIOUS CODE appears BEFORE REVISION FEEDBACK
+        prev_code_idx = content.index("## PREVIOUS CODE")
+        feedback_idx = content.index("## REVISION FEEDBACK")
+        assert prev_code_idx < feedback_idx, "PREVIOUS CODE must appear before REVISION FEEDBACK"
+        
+        # Verify code appears exactly once
+        assert content.count(previous_code) == 1, "Previous code should appear exactly once"
+
+    def test_previous_code_included_when_physics_feedback_present(self):
+        """Test that previous code is included when physics_feedback exists.
+        
+        This is the path when physics_check fails and routes back to code generation.
+        """
+        previous_code = "# Simulation code with physics issues\nT = 1.5  # Invalid"
+        state = {
+            "current_stage_id": "stage1",
+            "design_description": "Design spec",
+            "code": previous_code,
+            "physics_feedback": "Transmission > 1.0 violates energy conservation",
+        }
+        content = build_user_content_for_code_generator(state)
+        
+        # Verify PREVIOUS CODE section is present with full header and instruction
+        assert "## PREVIOUS CODE (apply the feedback below to this code)" in content
+        assert "Do NOT regenerate from scratch" in content
+        
+        # Verify code is properly wrapped
+        assert f"```python\n{previous_code}\n```" in content
+        
+        # Verify feedback section
+        assert "## REVISION FEEDBACK (apply these changes to the code above)" in content
+        assert "**Physics validation:** Transmission > 1.0 violates energy conservation" in content
+
+    def test_previous_code_included_when_execution_feedback_present(self):
+        """Test that previous code is included when execution_feedback exists.
+        
+        This is the path when execution_check fails and routes back to code generation.
+        """
+        previous_code = "# Code that crashed\nimport meep as mp\nraise RuntimeError('out of memory')"
+        state = {
+            "current_stage_id": "stage1",
+            "design_description": "Design spec",
+            "code": previous_code,
+            "execution_feedback": "Simulation failed with MemoryError",
+        }
+        content = build_user_content_for_code_generator(state)
+        
+        # Verify PREVIOUS CODE section is present with full header and instruction
+        assert "## PREVIOUS CODE (apply the feedback below to this code)" in content
+        assert "Do NOT regenerate from scratch" in content
+        
+        # Verify code is properly wrapped
+        assert f"```python\n{previous_code}\n```" in content
+        
+        # Verify feedback section
+        assert "## REVISION FEEDBACK (apply these changes to the code above)" in content
+        assert "**Execution:** Simulation failed with MemoryError" in content
+
+    def test_previous_code_included_with_all_feedback_types(self):
+        """Test with all three feedback types - verify order is consistent."""
+        previous_code = "# Code with multiple issues"
+        state = {
+            "current_stage_id": "stage1",
+            "design_description": "Design spec",
+            "code": previous_code,
+            "physics_feedback": "Physics issue",
+            "execution_feedback": "Execution issue",
+            "reviewer_feedback": "Review issue",
+        }
+        content = build_user_content_for_code_generator(state)
+        
+        # Verify previous code section
+        assert "## PREVIOUS CODE" in content
+        assert f"```python\n{previous_code}\n```" in content
+        
+        # All feedback should appear
+        assert "**Physics validation:** Physics issue" in content
+        assert "**Execution:** Execution issue" in content
+        assert "**Code review:** Review issue" in content
+        
+        # Verify feedback ORDER is physics → execution → code review
+        physics_idx = content.index("**Physics validation:**")
+        execution_idx = content.index("**Execution:**")
+        review_idx = content.index("**Code review:**")
+        assert physics_idx < execution_idx < review_idx, \
+            "Feedback order must be: physics → execution → code review"
+
+    def test_no_previous_code_when_no_feedback(self):
+        """Test that previous code is NOT included when there's no feedback.
+        
+        This is the initial generation case - code should be generated from scratch.
+        """
+        state = {
+            "current_stage_id": "stage1",
+            "design_description": "Design spec",
+            "code": "# Some existing code",
+        }
+        content = build_user_content_for_code_generator(state)
+        
+        # No feedback means initial generation - no previous code section
+        assert "## PREVIOUS CODE" not in content
+        assert "## REVISION FEEDBACK" not in content
+        assert "Do NOT regenerate from scratch" not in content
+        # The code field should not appear in content
+        assert "# Some existing code" not in content
+
+    def test_no_previous_code_section_when_code_is_empty(self):
+        """Test that PREVIOUS CODE section is not included when code is empty string."""
+        state = {
+            "current_stage_id": "stage1",
+            "design_description": "Design spec",
+            "code": "",
+            "reviewer_feedback": "Some feedback",
+        }
+        content = build_user_content_for_code_generator(state)
+        
+        # Feedback present but code is empty - should not include PREVIOUS CODE
+        assert "## PREVIOUS CODE" not in content
+        assert "Do NOT regenerate from scratch" not in content
+        # But feedback should still be present
+        assert "## REVISION FEEDBACK" in content
+        assert "**Code review:** Some feedback" in content
+
+    def test_no_previous_code_section_when_code_is_none(self):
+        """Test that PREVIOUS CODE section is not included when code is None."""
+        state = {
+            "current_stage_id": "stage1",
+            "design_description": "Design spec",
+            "code": None,
+            "reviewer_feedback": "Some feedback",
+        }
+        content = build_user_content_for_code_generator(state)
+        
+        # Feedback present but code is None - should not include PREVIOUS CODE
+        assert "## PREVIOUS CODE" not in content
+        assert "Do NOT regenerate from scratch" not in content
+        # But feedback should still be present
+        assert "## REVISION FEEDBACK" in content
+
+    def test_no_previous_code_section_when_code_is_whitespace_only(self):
+        """Test that PREVIOUS CODE section handles whitespace-only code.
+        
+        NOTE: Current implementation will show whitespace-only code.
+        This test documents that behavior - if it should be changed, fix the component.
+        """
+        state = {
+            "current_stage_id": "stage1",
+            "design_description": "Design spec",
+            "code": "   \n\t  \n   ",
+            "reviewer_feedback": "Some feedback",
+        }
+        content = build_user_content_for_code_generator(state)
+        
+        # Current behavior: whitespace-only code IS shown (truthy string)
+        # This test verifies the current behavior - if undesirable, fix the component
+        assert "## PREVIOUS CODE" in content
+        assert "## REVISION FEEDBACK" in content
+
+    def test_previous_code_with_triple_backticks_inside(self):
+        """Test code containing triple backticks is still included.
+        
+        NOTE: Code with ``` inside could confuse markdown parsing.
+        This test documents the current behavior.
+        """
+        previous_code = '''# Code that documents itself
+"""
+Example usage:
+```python
+sim.run()
+```
+"""
+print("hello")
+'''
+        state = {
+            "current_stage_id": "stage1",
+            "design_description": "Design spec",
+            "code": previous_code,
+            "reviewer_feedback": "Fix the docstring",
+        }
+        content = build_user_content_for_code_generator(state)
+        
+        # The code should still be present (even though it has nested backticks)
+        assert previous_code in content
+        # Verify the outer code block markers exist
+        assert "```python\n" in content
+        assert "## PREVIOUS CODE" in content
+
+    def test_previous_code_section_order(self):
+        """Test that sections appear in correct order: design, materials, previous_code, feedback."""
+        state = {
+            "current_stage_id": "stage1",
+            "design_description": "Design spec",
+            "validated_materials": ["mat1.csv"],
+            "code": "# Previous code",
+            "reviewer_feedback": "Feedback",
+        }
+        content = build_user_content_for_code_generator(state)
+        
+        stage_idx = content.index("# CURRENT STAGE")
+        design_idx = content.index("## Design Specification")
+        materials_idx = content.index("## Validated Materials")
+        previous_code_idx = content.index("## PREVIOUS CODE")
+        feedback_idx = content.index("## REVISION FEEDBACK")
+        
+        # Order: stage < design < materials < previous_code < feedback
+        assert stage_idx < design_idx < materials_idx < previous_code_idx < feedback_idx, \
+            "Section order must be: CURRENT STAGE → Design → Materials → PREVIOUS CODE → FEEDBACK"
+
+    def test_previous_code_preserves_multiline_formatting(self):
+        """Test that multiline code is preserved correctly in the output."""
+        previous_code = """#!/usr/bin/env python3
+import meep as mp
+import numpy as np
+
+def run_simulation():
+    sim = mp.Simulation(
+        cell_size=mp.Vector3(10, 10, 10),
+        resolution=20,
+    )
+    sim.run(until=200)
+    return sim
+
+if __name__ == "__main__":
+    run_simulation()
+"""
+        state = {
+            "current_stage_id": "stage1",
+            "design_description": "Design",
+            "code": previous_code,
+            "reviewer_feedback": "Add more comments",
+        }
+        content = build_user_content_for_code_generator(state)
+        
+        # Verify the code is embedded in a python code block with exact formatting
+        expected_block = f"```python\n{previous_code}\n```"
+        assert expected_block in content, \
+            f"Multiline code must be preserved exactly. Expected block:\n{expected_block}"
+
+    def test_previous_code_with_special_characters(self):
+        """Test that code with special characters is preserved."""
+        previous_code = "# Code with special chars: © ™ ® € £ ¥ α β γ δ ε\nprint('λ = 500 nm')"
+        state = {
+            "current_stage_id": "stage1",
+            "design_description": "Design",
+            "code": previous_code,
+            "reviewer_feedback": "Fix units",
+        }
+        content = build_user_content_for_code_generator(state)
+        
+        assert previous_code in content
+        # Verify the special characters are not mangled
+        assert "λ = 500 nm" in content
+        assert "© ™ ® € £ ¥ α β γ δ ε" in content
+
+    def test_user_context_appears_after_feedback(self):
+        """Test that user_context appears after revision feedback."""
+        state = {
+            "current_stage_id": "stage1",
+            "design_description": "Design spec",
+            "code": "# Previous code",
+            "reviewer_feedback": "Fix the bug",
+            "user_context": ["User said: Try using a smaller resolution"],
+        }
+        content = build_user_content_for_code_generator(state)
+        
+        # Verify user context is present
+        assert "## User-Provided Context" in content
+        assert "User said: Try using a smaller resolution" in content
+        
+        # Verify order: feedback before user context
+        feedback_idx = content.index("## REVISION FEEDBACK")
+        user_context_idx = content.index("## User-Provided Context")
+        assert feedback_idx < user_context_idx, \
+            "REVISION FEEDBACK must appear before User-Provided Context"
+
+    def test_feedback_with_none_mixed_values(self):
+        """Test with some feedback None and some set - only non-None included."""
+        state = {
+            "current_stage_id": "stage1",
+            "design_description": "Design",
+            "code": "# Code here",
+            "physics_feedback": None,
+            "execution_feedback": "Execution succeeded",
+            "reviewer_feedback": "",
+        }
+        content = build_user_content_for_code_generator(state)
+        
+        # Previous code should be included (execution_feedback is set)
+        assert "## PREVIOUS CODE" in content
+        assert "# Code here" in content
+        
+        # Only execution feedback should appear
+        assert "**Execution:** Execution succeeded" in content
+        # Physics and reviewer should NOT appear (None and empty string)
+        assert "**Physics validation:**" not in content
+        assert "**Code review:**" not in content
+
 
 class TestBuildUserContentForAnalyzer:
     """Tests for build_user_content_for_analyzer."""

@@ -1,0 +1,38 @@
+{
+  "writes": [
+    {
+      "channel": "__resume__",
+      "value_type": "msgpack",
+      "value_data": "kdlZRG91YmxlIM6zWCB0byBtYXRjaCBzdGF0ZWQgMC4wNjYgZVYgbGluZXdpZHRoICjOs19lZmYgPSA1LjDDlzEwwrnCsyByYWQvcykgLSBleGNpdG9uIFF+MzI="
+    },
+    {
+      "channel": "user_responses",
+      "value_type": "msgpack",
+      "value_data": "gdoC3lREQkMgTGluZXdpZHRoIERpc2NyZXBhbmN5IFJlcXVpcmVzIENsYXJpZmljYXRpb246CgpUaGUgcGFwZXIgc3RhdGVzIM6zWCA9IDIuNDXDlzEwwrnCsyByYWQvcyAoPSAwLjAxNjEgZVYpIGJ1dCBhbHNvIGNsYWltcyBsaW5ld2lkdGggfjAuMDY2IGVWLgpVc2luZyBzdGFuZGFyZCBMb3JlbnR6aWFuLCBjb21wdXRlZCBGV0hNID0gMC4wMTYzIGVWIC0gYSBmYWN0b3Igb2YgNMOXIG5hcnJvd2VyIHRoYW4gc3RhdGVkLgoKUGxlYXNlIGFkdmlzZSB3aGljaCBhcHByb2FjaCB0byB1c2UgZm9yIFN0YWdlIDErOgooYSkgVXNlIHBhcGVyJ3MgzrNYIGFzLWlzIChuYXJyb3dlciAwLjAxNiBlViBsaW5ld2lkdGgpIC0gZXhjaXRvbiBRfjEzMAooYikgRG91YmxlIM6zWCB0byBtYXRjaCBzdGF0ZWQgMC4wNjYgZVYgbGluZXdpZHRoICjOs19lZmYgPSA1LjDDlzEwwrnCsyByYWQvcykgLSBleGNpdG9uIFF+MzIKKGMpIFVzZSDOs1ggYXMtaXMgYnV0IG5vdGUgZGlzY3JlcGFuY3kgZm9yIGFuYWx5c2lzIHBoYXNlCgpUaGlzIGFmZmVjdHMgdGhlIHN0cm9uZyBjb3VwbGluZyB0aHJlc2hvbGQgY3JpdGVyaW9uLgoKT3B0aW9uczoKLSBQUk9WSURFX0dVSURBTkNFOiBBbnN3ZXIgdGhlIHJldmlld2VyJ3MgcXVlc3Rpb24gKGluY2x1ZGUgeW91ciByZXNwb25zZSBhZnRlciBrZXl3b3JkKQotIFNLSVBfU1RBR0U6IFNraXAgdGhpcyBzdGFnZSBhbmQgY29udGludWUKLSBTVE9QOiBFbmQgdGhlIHdvcmtmbG932VlEb3VibGUgzrNYIHRvIG1hdGNoIHN0YXRlZCAwLjA2NiBlViBsaW5ld2lkdGggKM6zX2VmZiA9IDUuMMOXMTDCucKzIHJhZC9zKSAtIGV4Y2l0b24gUX4zMg=="
+    },
+    {
+      "channel": "pending_user_questions",
+      "value_type": "msgpack",
+      "value_data": "kA=="
+    },
+    {
+      "channel": "awaiting_user_input",
+      "value_type": "msgpack",
+      "value_data": "wg=="
+    },
+    {
+      "channel": "workflow_phase",
+      "value_type": "msgpack",
+      "value_data": "rWF3YWl0aW5nX3VzZXI="
+    },
+    {
+      "channel": "branch:to:supervisor",
+      "value_type": "null",
+      "value_data": ""
+    }
+  ],
+  "task_id": "233a869f-9f2d-0bd3-503f-d0038fac3b75",
+  "thread_id": "my_run_1",
+  "checkpoint_id": "1f0d276a-8035-6b36-8024-7120e1ac4421",
+  "saved_at": "2025-12-06T09:40:00.112447"
+}

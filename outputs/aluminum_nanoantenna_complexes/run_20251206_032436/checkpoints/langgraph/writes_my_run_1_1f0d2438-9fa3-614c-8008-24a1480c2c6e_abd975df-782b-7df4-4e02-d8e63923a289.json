@@ -1,0 +1,28 @@
+{
+  "writes": [
+    {
+      "channel": "workflow_phase",
+      "value_type": "msgpack",
+      "value_data": "r2NvZGVfZ2VuZXJhdGlvbg=="
+    },
+    {
+      "channel": "code",
+      "value_type": "msgpack",
+      "value_data": "2S57CiAgInN0YWdlX2lkIjogInN0YWdlMF9tYXRlcmlhbF92YWxpZGF0aW9uIgp9"
+    },
+    {
+      "channel": "reviewer_feedback",
+      "value_type": "msgpack",
+      "value_data": "2Z9FUlJPUjogR2VuZXJhdGVkIGNvZGUgaXMgZW1wdHkgb3IgY29udGFpbnMgc3R1YiBtYXJrZXJzLiBDb2RlIGdlbmVyYXRpb24gbXVzdCBwcm9kdWNlIHZhbGlkIE1lZXAgc2ltdWxhdGlvbiBjb2RlLiBQbGVhc2UgcmVnZW5lcmF0ZSB3aXRoIHByb3BlciBpbXBsZW1lbnRhdGlvbi4="
+    },
+    {
+      "channel": "branch:to:code_review",
+      "value_type": "null",
+      "value_data": ""
+    }
+  ],
+  "task_id": "abd975df-782b-7df4-4e02-d8e63923a289",
+  "thread_id": "my_run_1",
+  "checkpoint_id": "1f0d2438-9fa3-614c-8008-24a1480c2c6e",
+  "saved_at": "2025-12-06T03:36:33.859724"
+}

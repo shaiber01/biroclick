@@ -625,6 +625,22 @@ def build_user_content_for_designer(state: Dict[str, Any]) -> str:
 def build_user_content_for_code_generator(state: Dict[str, Any]) -> str:
     """
     Build user content for the code generator agent.
+    
+    REVISION MODE BEHAVIOR:
+    When any feedback is present (physics_feedback, execution_feedback, or 
+    reviewer_feedback), this is a revision loop. In this case:
+    - The previous code from state["code"] is included in the prompt
+    - The LLM is instructed to make targeted fixes rather than regenerate from scratch
+    - All applicable feedback is shown after the previous code
+    
+    INITIAL GENERATION:
+    When no feedback is present, this is initial code generation for the stage.
+    The previous code is NOT included, and the LLM generates fresh code from
+    the design specification.
+    
+    NOTE: Feedback fields are cleared by select_stage_node when moving to a new
+    stage, ensuring fresh generation for each stage while enabling revision
+    within a stage.
     """
     parts = []
     
@@ -660,8 +676,17 @@ def build_user_content_for_code_generator(state: Dict[str, Any]) -> str:
     if reviewer_fb:
         feedback_parts.append(f"**Code review:** {reviewer_fb}")
 
+    # If there's feedback, this is a revision - include previous code so LLM can make targeted fixes
     if feedback_parts:
-        parts.append("## REVISION FEEDBACK\n\n" + "\n\n".join(feedback_parts))
+        previous_code = state.get("code") or ""
+        if previous_code:
+            parts.append(
+                "## PREVIOUS CODE (apply the feedback below to this code)\n\n"
+                "Do NOT regenerate from scratch. Make targeted fixes based on the feedback.\n\n"
+                f"```python\n{previous_code}\n```"
+            )
+        
+        parts.append("## REVISION FEEDBACK (apply these changes to the code above)\n\n" + "\n\n".join(feedback_parts))
     
     # User-provided context/clarifications
     user_context = state.get("user_context") or []

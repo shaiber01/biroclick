@@ -2266,6 +2266,8 @@ Each agent call is an **independent LLM invocation** with its own context window
 - The second call gets **fresh context** with updated state
 - Previous conversation turns are NOT carried over
 - Feedback is passed via state fields (e.g., `reviewer_feedback`, `reviewer_issues`)
+- **Exception**: CodeGeneratorAgent receives the previous code along with feedback 
+  during revision loops, enabling targeted fixes instead of full regeneration
 
 ### What Each Agent Receives
 
@@ -2472,7 +2474,12 @@ Each agent receives **only what it needs** - not full repo access. This section 
 | `paper_id` | `state["paper_id"]` | For output naming |
 | `output_dir` | Computed | Where to save outputs |
 
-**Does NOT receive**: Full paper, plan details, assumptions, figures, previous code.
+**Does NOT receive**: Full paper, plan details, assumptions, figures.
+
+**REVISION MODE**: When feedback is present (from code review, execution check, 
+or physics check), the previous code IS included so the LLM can make targeted 
+fixes. The prompt instructs the LLM to apply changes surgically rather than 
+regenerate from scratch.
 
 **Rationale**: Design spec contains everything needed. Doesn't need paper interpretation.
 

@@ -1,0 +1,38 @@
+{
+  "writes": [
+    {
+      "channel": "workflow_phase",
+      "value_type": "msgpack",
+      "value_data": "q2NvZGVfcmV2aWV3"
+    },
+    {
+      "channel": "last_code_review_verdict",
+      "value_type": "msgpack",
+      "value_data": "p2FwcHJvdmU="
+    },
+    {
+      "channel": "reviewer_issues",
+      "value_type": "msgpack",
+      "value_data": "kA=="
+    },
+    {
+      "channel": "code_revision_count",
+      "value_type": "msgpack",
+      "value_data": "AQ=="
+    },
+    {
+      "channel": "reviewer_feedback",
+      "value_type": "null",
+      "value_data": ""
+    },
+    {
+      "channel": "branch:to:run_code",
+      "value_type": "null",
+      "value_data": ""
+    }
+  ],
+  "task_id": "fa10faba-f147-9dcc-d1ce-3d786a55861e",
+  "thread_id": "my_run_1",
+  "checkpoint_id": "1f0d2765-17b9-604e-8020-c31baecba209",
+  "saved_at": "2025-12-06T09:37:40.270932"
+}
