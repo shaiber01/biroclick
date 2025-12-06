@@ -269,6 +269,98 @@ class TestSelectStageNode:
         assert result["physics_failure_count"] == 0
         assert result["analysis_revision_count"] == 0
 
+    def test_clears_all_stage_data_for_new_stage(self):
+        """Should clear ALL stage-specific data when moving to a new stage.
+        
+        This is critical for the revision mode behavior: when starting a fresh stage,
+        there should be no stale code, design, feedback, or verdicts from the previous
+        stage. The code generator's revision mode depends on feedback being cleared.
+        """
+        state = {
+            "plan": {"stages": []},
+            "progress": {
+                "stages": [
+                    create_stage("stage0", "MATERIAL_VALIDATION", "not_started"),
+                ]
+            },
+            "current_stage_id": "old_stage",  # Different stage = reset
+            # Counters from previous stage
+            "design_revision_count": 10,
+            "code_revision_count": 5,
+            "execution_failure_count": 3,
+            "physics_failure_count": 2,
+            "analysis_revision_count": 1,
+            # Feedback from previous stage
+            "reviewer_feedback": "Old reviewer feedback",
+            "physics_feedback": "Old physics feedback",
+            "execution_feedback": "Old execution feedback",
+            "analysis_feedback": "Old analysis feedback",
+            "design_feedback": "Old design feedback",
+            "comparison_feedback": "Old comparison feedback",
+            # Stage working data from previous stage
+            "code": "# Old code from previous stage\nimport meep as mp",
+            "design_description": {"old": "design from previous stage"},
+            "performance_estimate": {"runtime_minutes": 60},
+            "analysis_result_reports": [{"old": "analysis"}],
+            # Verdicts from previous stage
+            "last_design_review_verdict": "approve",
+            "last_code_review_verdict": "approve",
+            "execution_verdict": "pass",
+            "physics_verdict": "pass",
+            "comparison_verdict": "approve",
+            "reviewer_issues": [{"severity": "major", "description": "old issue"}],
+            "execution_warnings": ["old warning"],
+            "physics_warnings": ["old physics warning"],
+            # Structured agent output from previous stage
+            "execution_status": {"completed": True, "exit_code": 0},
+            "execution_files_check": {"expected_files": ["old.csv"]},
+            "physics_conservation_checks": [{"law": "energy", "status": "pass"}],
+            "physics_value_range_checks": [{"quantity": "T", "status": "pass"}],
+        }
+        
+        result = select_stage_node(state)
+        
+        assert result["current_stage_id"] == "stage0"
+        
+        # ─── Counters should be reset ───────────────────────────────────────
+        assert result["design_revision_count"] == 0
+        assert result["code_revision_count"] == 0
+        assert result["execution_failure_count"] == 0
+        assert result["physics_failure_count"] == 0
+        assert result["analysis_revision_count"] == 0
+        
+        # ─── Feedback fields should be cleared ──────────────────────────────
+        # These are critical for the code generator's revision mode detection
+        assert result["reviewer_feedback"] is None, "reviewer_feedback must be cleared for fresh generation"
+        assert result["physics_feedback"] is None, "physics_feedback must be cleared for fresh generation"
+        assert result["execution_feedback"] is None, "execution_feedback must be cleared for fresh generation"
+        assert result["analysis_feedback"] is None
+        assert result["design_feedback"] is None
+        assert result["comparison_feedback"] is None
+        
+        # ─── Stage working data should be cleared ───────────────────────────
+        # code being None ensures code generator doesn't see stale code
+        assert result["code"] is None, "code must be cleared to prevent stale code leaking to new stage"
+        assert result["design_description"] is None, "design_description must be cleared for new stage"
+        assert result["performance_estimate"] is None
+        assert result["analysis_result_reports"] == []
+        
+        # ─── Verdicts should be cleared ─────────────────────────────────────
+        assert result["last_design_review_verdict"] is None
+        assert result["last_code_review_verdict"] is None
+        assert result["execution_verdict"] is None
+        assert result["physics_verdict"] is None
+        assert result["comparison_verdict"] is None
+        assert result["reviewer_issues"] == []
+        assert result["execution_warnings"] == []
+        assert result["physics_warnings"] == []
+        
+        # ─── Structured agent output should be cleared ──────────────────────
+        assert result["execution_status"] is None
+        assert result["execution_files_check"] is None
+        assert result["physics_conservation_checks"] is None
+        assert result["physics_value_range_checks"] is None
+
     def test_does_not_reset_counters_for_same_stage_continuation(self):
         """Should NOT reset counters if selecting the same stage that is not_started."""
         state = {
@@ -287,6 +379,43 @@ class TestSelectStageNode:
         
         assert result["current_stage_id"] == "stage0"
         # Should NOT reset counters for same stage (unless needs_rerun)
+        assert "design_revision_count" not in result
+        assert "code_revision_count" not in result
+
+    def test_does_not_clear_stage_data_for_same_stage_continuation(self):
+        """Should NOT clear stage data when continuing the same stage.
+        
+        This preserves the code generator's ability to see previous code during
+        revision loops within the same stage.
+        """
+        state = {
+            "plan": {"stages": []},
+            "progress": {
+                "stages": [
+                    create_stage("stage0", "MATERIAL_VALIDATION", "not_started"),
+                ]
+            },
+            "current_stage_id": "stage0",  # Same stage = no reset
+            # These should NOT be cleared
+            "code": "# Existing code\nimport meep as mp",
+            "design_description": {"current": "design"},
+            "reviewer_feedback": "Please fix the bug",
+            "physics_feedback": "T > 1.0 detected",
+            "execution_feedback": None,
+            "last_code_review_verdict": "needs_revision",
+        }
+        
+        result = select_stage_node(state)
+        
+        assert result["current_stage_id"] == "stage0"
+        
+        # These should NOT be in result (not cleared for same stage)
+        assert "code" not in result, "code should not be cleared for same stage continuation"
+        assert "design_description" not in result
+        assert "reviewer_feedback" not in result
+        assert "physics_feedback" not in result
+        assert "execution_feedback" not in result
+        assert "last_code_review_verdict" not in result
         assert "design_revision_count" not in result
         assert "code_revision_count" not in result
 
@@ -332,6 +461,63 @@ class TestSelectStageNode:
         # Should reset even for same stage if needs_rerun
         assert result["design_revision_count"] == 0
         assert result["code_revision_count"] == 0
+
+    def test_priority_1_needs_rerun_clears_all_stage_data(self):
+        """Priority 1: needs_rerun should clear ALL stage data even for same stage.
+        
+        This is critical: when a stage is marked for rerun (e.g., after backtrack),
+        it must start completely fresh with no stale data from the previous attempt.
+        """
+        state = {
+            "plan": {"stages": []},
+            "progress": {
+                "stages": [
+                    create_stage("stage0", "MATERIAL_VALIDATION", "needs_rerun"),
+                ]
+            },
+            "current_stage_id": "stage0",  # Same stage, but needs_rerun = reset
+            # All of this should be cleared
+            "design_revision_count": 10,
+            "code_revision_count": 5,
+            "code": "# Old code that failed\nimport meep",
+            "design_description": {"old": "design that had issues"},
+            "reviewer_feedback": "Old feedback from failed attempt",
+            "physics_feedback": "Physics issues from before",
+            "execution_feedback": "Execution problems",
+            "last_code_review_verdict": "needs_revision",
+            "execution_verdict": "fail",
+            "physics_verdict": "fail",
+            "reviewer_issues": [{"severity": "blocking", "description": "old"}],
+            "execution_warnings": ["old warning"],
+            "physics_warnings": ["old physics warning"],
+        }
+        
+        result = select_stage_node(state)
+        
+        assert result["current_stage_id"] == "stage0"
+        
+        # All counters should be reset
+        assert result["design_revision_count"] == 0
+        assert result["code_revision_count"] == 0
+        assert result["execution_failure_count"] == 0
+        assert result["physics_failure_count"] == 0
+        
+        # All feedback should be cleared
+        assert result["reviewer_feedback"] is None, "needs_rerun must clear reviewer_feedback"
+        assert result["physics_feedback"] is None, "needs_rerun must clear physics_feedback"
+        assert result["execution_feedback"] is None, "needs_rerun must clear execution_feedback"
+        
+        # Stage working data should be cleared
+        assert result["code"] is None, "needs_rerun must clear code"
+        assert result["design_description"] is None, "needs_rerun must clear design_description"
+        
+        # Verdicts should be cleared
+        assert result["last_code_review_verdict"] is None
+        assert result["execution_verdict"] is None
+        assert result["physics_verdict"] is None
+        assert result["reviewer_issues"] == []
+        assert result["execution_warnings"] == []
+        assert result["physics_warnings"] == []
 
     def test_priority_1_skips_needs_rerun_with_blocking_deps(self):
         """Priority 1: Should skip needs_rerun stage if dependencies are blocking."""

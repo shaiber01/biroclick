@@ -41,7 +41,6 @@ from tools.validate_schema_access import (
     get_schema_fields_for_pointer,
     ViolationType,
     ValidationResult,
-    TRACKED_VARIABLES,
     AGENTS_DIR,
     SCHEMAS_DIR,
 )
@@ -358,3 +357,4 @@ class TestIntegration:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
