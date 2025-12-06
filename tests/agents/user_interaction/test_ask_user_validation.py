@@ -129,8 +129,15 @@ class TestEdgeCases:
     """Tests for edge cases and boundary conditions."""
 
     @patch("src.agents.user_interaction.interrupt")
-    def test_empty_questions_list(self, mock_interrupt):
-        """Should handle empty questions list gracefully."""
+    def test_empty_questions_list_triggers_safety_net(self, mock_interrupt):
+        """Safety net #1: Empty questions list should generate recovery questions.
+        
+        Gap #1 fix: When routers return "ask_user" due to errors (verdict is None,
+        wrong type, etc.), they cannot set pending_user_questions. The safety net
+        generates recovery questions so users are always prompted.
+        """
+        mock_interrupt.return_value = "RETRY"
+        
         state = {
             "pending_user_questions": [],
             "ask_user_trigger": "test",
@@ -138,10 +145,15 @@ class TestEdgeCases:
         
         result = ask_user_node(state)
         
-        assert result.get("ask_user_trigger") is None
-        assert result["workflow_phase"] == "awaiting_user"
-        # Should not call interrupt when no questions
-        mock_interrupt.assert_not_called()
+        # Safety net should call interrupt with generated recovery questions
+        mock_interrupt.assert_called_once()
+        payload = mock_interrupt.call_args[0][0]
+        
+        # Should have WORKFLOW RECOVERY in generated questions
+        assert "WORKFLOW RECOVERY" in payload["questions"][0]
+        # Trigger should be overridden to unknown_escalation  
+        assert payload["trigger"] == "unknown_escalation"
+        assert result.get("ask_user_trigger") == "unknown_escalation"
 
     @patch("src.agents.user_interaction.interrupt")
     def test_missing_ask_user_trigger(self, mock_interrupt):
@@ -475,3 +487,170 @@ class TestErrorContextHelpers:
         result = _generate_error_question("physics_error", state)
         
         assert "unknown" in result
+
+
+class TestSafetyNetEmptyQuestions:
+    """Tests for safety net #1: generating recovery questions when questions are empty.
+    
+    Gap #1 fix: When routers return "ask_user" due to errors (verdict is None,
+    wrong type, or unrecognized), they cannot set pending_user_questions because
+    routers can only return route names. The safety net generates recovery questions
+    so users are always prompted.
+    
+    There are NO legitimate cases where ask_user_node should receive empty questions:
+    - If ask_user_trigger is set, the node that set it also sets questions
+    - If routed via error paths, questions aren't set (this safety net catches it)
+    - The material_checkpoint "passthrough" routes to select_stage, not ask_user
+    """
+
+    @patch("src.agents.user_interaction.interrupt")
+    def test_infers_execution_error_for_none_verdict(self, mock_interrupt):
+        """Should infer execution_error when execution_verdict is None."""
+        mock_interrupt.return_value = "RETRY"
+        
+        state = {
+            "pending_user_questions": [],
+            "ask_user_trigger": "some_trigger",
+            "execution_verdict": None,  # This is the error condition
+            "current_stage_id": "stage_1",
+        }
+        
+        ask_user_node(state)
+        
+        mock_interrupt.assert_called_once()
+        payload = mock_interrupt.call_args[0][0]
+        questions = payload["questions"][0]
+        
+        # Should mention execution validation failure
+        assert "WORKFLOW RECOVERY" in questions
+        assert "Execution validation failed" in questions
+        assert "stage_1" in questions
+
+    @patch("src.agents.user_interaction.interrupt")
+    def test_infers_physics_error_when_execution_passed(self, mock_interrupt):
+        """Should infer physics_error when physics_verdict is None but execution passed."""
+        mock_interrupt.return_value = "RETRY"
+        
+        state = {
+            "pending_user_questions": [],
+            "ask_user_trigger": "some_trigger",
+            "execution_verdict": "pass",
+            "physics_verdict": None,  # Execution ran but physics didn't
+            "current_stage_id": "stage_2",
+        }
+        
+        ask_user_node(state)
+        
+        mock_interrupt.assert_called_once()
+        payload = mock_interrupt.call_args[0][0]
+        questions = payload["questions"][0]
+        
+        # Should mention physics validation failure
+        assert "WORKFLOW RECOVERY" in questions
+        assert "Physics validation failed" in questions
+        assert "stage_2" in questions
+
+    @patch("src.agents.user_interaction.interrupt")
+    def test_generated_questions_have_unknown_escalation_options(self, mock_interrupt):
+        """Generated questions should include unknown_escalation options (RETRY, SKIP_STAGE, STOP)."""
+        mock_interrupt.return_value = "RETRY"
+        
+        state = {
+            "pending_user_questions": [],
+            "ask_user_trigger": "test",
+        }
+        
+        ask_user_node(state)
+        
+        payload = mock_interrupt.call_args[0][0]
+        questions = payload["questions"][0]
+        
+        # Should have options from unknown_escalation trigger
+        # These are defined in user_options.py
+        assert "RETRY" in questions or "retry" in questions.lower()
+
+    @patch("src.agents.user_interaction.interrupt")
+    def test_user_can_respond_to_recovery_questions(self, mock_interrupt):
+        """User should be able to respond to recovery questions."""
+        mock_interrupt.return_value = "RETRY"
+        
+        state = {
+            "pending_user_questions": [],
+            "ask_user_trigger": "test",
+        }
+        
+        result = ask_user_node(state)
+        
+        # Should have stored the user's response
+        assert "user_responses" in result
+        # Response should be mapped to the generated question
+        assert len(result["user_responses"]) == 1
+        # The first (only) value should be the user's response
+        assert list(result["user_responses"].values())[0] == "RETRY"
+
+    @patch("src.agents.user_interaction.interrupt")
+    def test_safety_net_sets_trigger_for_supervisor(self, mock_interrupt):
+        """Safety net should set trigger so supervisor knows how to handle the response."""
+        mock_interrupt.return_value = "SKIP_STAGE"
+        
+        state = {
+            "pending_user_questions": [],
+            "ask_user_trigger": "original_trigger",  # Will be overridden
+        }
+        
+        result = ask_user_node(state)
+        
+        # Trigger should be set to unknown_escalation for supervisor
+        assert result.get("ask_user_trigger") == "unknown_escalation"
+
+    @patch("src.agents.user_interaction.interrupt")
+    def test_empty_list_vs_none_both_trigger_safety_net(self, mock_interrupt):
+        """Both empty list [] and None should trigger safety net."""
+        mock_interrupt.return_value = "RETRY"
+        
+        # Test with empty list
+        state1 = {"pending_user_questions": [], "ask_user_trigger": "test"}
+        result1 = ask_user_node(state1)
+        assert result1.get("ask_user_trigger") == "unknown_escalation"
+        
+        mock_interrupt.reset_mock()
+        
+        # Test with None
+        state2 = {"pending_user_questions": None, "ask_user_trigger": "test"}
+        result2 = ask_user_node(state2)
+        assert result2.get("ask_user_trigger") == "unknown_escalation"
+        
+        # Both should have called interrupt
+        assert mock_interrupt.call_count == 1  # Only second call after reset
+
+    @patch("src.agents.user_interaction.interrupt")
+    def test_safety_net_clears_pending_questions_after_response(self, mock_interrupt):
+        """After user responds to recovery questions, pending_user_questions should be cleared."""
+        mock_interrupt.return_value = "RETRY"
+        
+        state = {
+            "pending_user_questions": [],
+            "ask_user_trigger": "test",
+        }
+        
+        result = ask_user_node(state)
+        
+        # Pending questions should be cleared after successful response
+        assert result.get("pending_user_questions") == []
+
+    @patch("src.agents.user_interaction.interrupt")
+    def test_safety_net_logs_warning(self, mock_interrupt, caplog):
+        """Safety net should log a warning when triggered."""
+        import logging
+        mock_interrupt.return_value = "RETRY"
+        
+        state = {
+            "pending_user_questions": [],
+            "ask_user_trigger": "test",
+        }
+        
+        with caplog.at_level(logging.WARNING):
+            ask_user_node(state)
+        
+        # Should have logged a warning about no pending questions
+        assert any("no pending_user_questions" in record.message for record in caplog.records)

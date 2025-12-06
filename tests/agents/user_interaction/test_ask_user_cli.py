@@ -21,42 +21,69 @@ from src.agents.user_interaction import ask_user_node
 class TestAskUserNode:
     """Tests for ask_user_node function."""
 
-    def test_returns_not_awaiting_when_no_questions(self):
-        """Should clear ask_user state when no questions pending."""
+    @patch("src.agents.user_interaction.interrupt")
+    def test_empty_questions_triggers_safety_net(self, mock_interrupt):
+        """Safety net #1: Empty questions should generate recovery questions.
+        
+        When routers return "ask_user" due to errors (e.g., verdict is None),
+        they cannot set pending_user_questions. The safety net generates
+        recovery questions so the user is always prompted.
+        """
+        mock_interrupt.return_value = "RETRY"
+        
         state = {
             "pending_user_questions": [],
+            "ask_user_trigger": "context_overflow",  # Even with trigger, empty questions triggers safety net
+        }
+        
+        result = ask_user_node(state)
+        
+        # Safety net should generate recovery questions and call interrupt
+        mock_interrupt.assert_called_once()
+        payload = mock_interrupt.call_args[0][0]
+        
+        # Should have WORKFLOW RECOVERY in generated questions
+        assert "WORKFLOW RECOVERY" in payload["questions"][0]
+        # Trigger should be overridden to unknown_escalation
+        assert payload["trigger"] == "unknown_escalation"
+        # Result should preserve the safety net trigger
+        assert result.get("ask_user_trigger") == "unknown_escalation"
+
+    @patch("src.agents.user_interaction.interrupt")
+    def test_empty_questions_missing_keys_triggers_safety_net(self, mock_interrupt):
+        """Safety net #1: Should handle missing state keys and generate recovery questions."""
+        mock_interrupt.return_value = "RETRY"
+        
+        state = {
+            "pending_user_questions": [],
+            # No ask_user_trigger - safety net will also set this
+        }
+        
+        result = ask_user_node(state)
+        
+        # Safety net should generate recovery questions
+        mock_interrupt.assert_called_once()
+        payload = mock_interrupt.call_args[0][0]
+        assert "WORKFLOW RECOVERY" in payload["questions"][0]
+        assert result.get("ask_user_trigger") == "unknown_escalation"
+
+    @patch("src.agents.user_interaction.interrupt")
+    def test_none_questions_triggers_safety_net(self, mock_interrupt):
+        """Safety net #1: None pending_user_questions should trigger recovery questions."""
+        mock_interrupt.return_value = "RETRY"
+        
+        state = {
+            "pending_user_questions": None,  # None is falsy, treated as empty
             "ask_user_trigger": "context_overflow",
         }
         
         result = ask_user_node(state)
         
-        assert result.get("ask_user_trigger") is None
-        assert result["workflow_phase"] == "awaiting_user"
-        # Verify no other keys are set
-        assert "user_responses" not in result
-        assert "pending_user_questions" not in result
-
-    def test_returns_not_awaiting_when_no_questions_missing_keys(self):
-        """Should handle missing state keys gracefully."""
-        state = {
-            "pending_user_questions": [],
-        }
-        
-        result = ask_user_node(state)
-        
-        assert result.get("ask_user_trigger") is None
-        assert result["workflow_phase"] == "awaiting_user"
-
-    def test_returns_not_awaiting_when_questions_is_none(self):
-        """Should handle None pending_user_questions."""
-        state = {
-            "pending_user_questions": None,
-            "ask_user_trigger": "context_overflow",
-        }
-        
-        # None should be treated as falsy (no questions), returning early
-        result = ask_user_node(state)
-        assert result.get("ask_user_trigger") is None
+        # None should trigger the safety net (falsy = no questions)
+        mock_interrupt.assert_called_once()
+        payload = mock_interrupt.call_args[0][0]
+        assert "WORKFLOW RECOVERY" in payload["questions"][0]
+        assert result.get("ask_user_trigger") == "unknown_escalation"
 
     @patch("src.agents.user_interaction.interrupt")
     def test_collects_user_response(self, mock_interrupt):
@@ -280,8 +307,15 @@ class TestInterruptIntegration:
         assert payload["paper_id"] == "unknown"
 
     @patch("src.agents.user_interaction.interrupt")
-    def test_interrupt_not_called_when_no_questions(self, mock_interrupt):
-        """Should not call interrupt when there are no questions."""
+    def test_interrupt_called_with_recovery_questions_when_empty(self, mock_interrupt):
+        """Safety net #1: Should call interrupt with recovery questions when questions empty.
+        
+        This tests the Gap #1 fix - when routers return "ask_user" due to errors,
+        they cannot set pending_user_questions. The safety net ensures interrupt
+        IS called with generated recovery questions.
+        """
+        mock_interrupt.return_value = "RETRY"
+        
         state = {
             "pending_user_questions": [],
             "ask_user_trigger": "test",
@@ -289,4 +323,8 @@ class TestInterruptIntegration:
         
         ask_user_node(state)
         
-        mock_interrupt.assert_not_called()
+        # Safety net should call interrupt with generated recovery questions
+        mock_interrupt.assert_called_once()
+        payload = mock_interrupt.call_args[0][0]
+        assert "WORKFLOW RECOVERY" in payload["questions"][0]
+        assert payload["trigger"] == "unknown_escalation"
