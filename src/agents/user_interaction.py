@@ -8,7 +8,7 @@ State Keys
 ask_user_node:
     READS: pending_user_questions, ask_user_trigger, paper_id
     WRITES: workflow_phase, user_responses, pending_user_questions,
-            awaiting_user_input, user_validation_attempts_*
+            awaiting_user_input
 
 material_checkpoint_node:
     READS: current_stage_id, stage_outputs, progress
@@ -40,7 +40,6 @@ from langgraph.types import interrupt
 
 from schemas.state import ReproState, save_checkpoint
 
-from .helpers.context import validate_user_responses
 from .helpers.materials import (
     extract_validated_materials,
     format_material_checkpoint_question,
@@ -243,65 +242,36 @@ def ask_user_node(state: ReproState) -> Dict[str, Any]:
     if original_questions:
         mapped_responses[original_questions[0]] = user_response
     
-    # Validate user response
-    validation_errors = validate_user_responses(trigger, mapped_responses, original_questions)
-    if validation_errors:
-        validation_attempt_key = f"user_validation_attempts_{trigger}"
-        validation_attempts = state.get(validation_attempt_key, 0) + 1
-        max_validation_attempts = 3
-        
-        if validation_attempts >= max_validation_attempts:
-            logger.warning(
-                f"User validation failed {validation_attempts} times for trigger '{trigger}'. "
-                "Accepting response despite validation errors and escalating to supervisor."
-            )
-            result = {
-                "user_responses": {**state.get("user_responses", {}), **mapped_responses},
-                "pending_user_questions": [],
-                "awaiting_user_input": False,
-                "workflow_phase": "awaiting_user",
-                validation_attempt_key: 0,
-                "original_user_questions": None,
-                "supervisor_feedback": (
-                    f"User response had validation errors but was accepted after {validation_attempts} attempts."
-                ),
-            }
-            if safety_net_triggered:
-                result["ask_user_trigger"] = trigger
-            return result
-        
-        error_msg = "\n".join(f"  - {err}" for err in validation_errors)
-        first_question = original_questions[0] if original_questions else 'Please provide a valid response.'
-        reask_questions = [
-            f"Your response had validation errors (attempt {validation_attempts}/{max_validation_attempts}):\n{error_msg}\n\n"
-            f"Please try again:\n{first_question}"
-        ]
-        
-        if len(original_questions) > 1:
-            reask_questions.extend(original_questions[1:])
-        
-        # BUG FIX: Always save user response to state, even when validation fails.
-        # Previously, the response was lost on validation failure, causing supervisor
-        # to process stale responses from earlier interactions. This led to the system
-        # making decisions based on old user input instead of what was just typed.
+    # ═══════════════════════════════════════════════════════════════════════
+    # SIMPLIFIED VALIDATION: Only check for empty responses.
+    # 
+    # Keyword validation is NOT done here because:
+    # 1. Supervisor is the ONLY node that follows ask_user (route_after_ask_user always returns "supervisor")
+    # 2. Every trigger handler in supervisor already has validation logic
+    # 3. Some handlers (like reviewer_escalation) use LLM fallback for free-form responses
+    # 4. Having validation here caused bugs where responses were not properly stored
+    #
+    # The supervisor will validate the response and route back to ask_user if needed.
+    # ═══════════════════════════════════════════════════════════════════════
+    if not str(user_response).strip():
+        logger.warning(f"Empty response received for trigger '{trigger}', asking user to retry")
+        first_question = original_questions[0] if original_questions else 'Please provide a response.'
         return {
-            "pending_user_questions": reask_questions,
+            "pending_user_questions": [
+                f"Your response was empty. Please provide a response:\n\n{first_question}"
+            ],
             "awaiting_user_input": True,
             "ask_user_trigger": trigger,
             "last_node_before_ask_user": state.get("last_node_before_ask_user"),
-            validation_attempt_key: validation_attempts,
             "original_user_questions": original_questions,
-            "user_responses": {**state.get("user_responses", {}), **mapped_responses},
         }
     
-    # Validation passed - return success
-    validation_attempt_key = f"user_validation_attempts_{trigger}"
+    # Store response and pass to supervisor for validation/routing
     result = {
-        "user_responses": {**state.get("user_responses", {}), **mapped_responses},
+        "user_responses": {**(state.get("user_responses") or {}), **mapped_responses},
         "pending_user_questions": [],
         "awaiting_user_input": False,
         "workflow_phase": "awaiting_user",
-        validation_attempt_key: 0,
         "original_user_questions": None,
     }
     if safety_net_triggered:

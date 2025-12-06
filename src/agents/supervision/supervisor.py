@@ -383,6 +383,9 @@ def supervisor_node(state: ReproState) -> dict:
             # (nodes with @with_context_check skip when this is True)
             result["awaiting_user_input"] = False
             result["pending_user_questions"] = []
+            # Clear user_responses to prevent stale responses from affecting
+            # future ask_user cycles. Each cycle should start fresh.
+            result["user_responses"] = {}
         else:
             result["ask_user_trigger"] = ask_user_trigger
             # Keep awaiting_user_input = True when we need more clarification
