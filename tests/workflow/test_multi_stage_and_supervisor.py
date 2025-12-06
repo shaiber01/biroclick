@@ -138,7 +138,7 @@ class TestSelectStageEdgeCases:
         assert result.get("ask_user_trigger") == "no_stages_available", (
             f"Should trigger no_stages_available, got {result.get('ask_user_trigger')}"
         )
-        assert result.get("awaiting_user_input") is True, (
+        assert result.get("ask_user_trigger") is not None, (
             "Should be awaiting user input on error"
         )
         assert result.get("pending_user_questions") is not None, (
@@ -236,7 +236,7 @@ class TestSelectStageEdgeCases:
         assert result.get("ask_user_trigger") is None, (
             "Normal completion should not trigger user interaction"
         )
-        assert result.get("awaiting_user_input") is not True
+        assert result.get("ask_user_trigger") is None
 
     def test_invalidated_stage_skipped(self, base_state):
         """Test that invalidated stages are skipped."""

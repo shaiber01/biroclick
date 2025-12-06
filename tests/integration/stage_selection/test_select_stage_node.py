@@ -126,7 +126,7 @@ class TestStageSelectionEdgeCases:
 
         result = select_stage_node(base_state)
         assert result.get("ask_user_trigger") == "deadlock_detected"
-        assert result.get("awaiting_user_input") is True
+        assert result.get("ask_user_trigger") is not None
         assert result.get("current_stage_id") is None
         assert result.get("current_stage_type") is None
         # Check that pending_user_questions contains useful info
@@ -229,7 +229,7 @@ class TestStageSelectionEdgeCases:
             result = select_stage_node(base_state)
 
         assert result.get("ask_user_trigger") == "progress_init_failed"
-        assert result.get("awaiting_user_input") is True
+        assert result.get("ask_user_trigger") is not None
         assert result.get("current_stage_id") is None
         assert result.get("current_stage_type") is None
         questions = result.get("pending_user_questions", [])
@@ -614,7 +614,7 @@ class TestEmptyPlanAndProgress:
 
         result = select_stage_node(base_state)
         assert result.get("ask_user_trigger") == "no_stages_available"
-        assert result.get("awaiting_user_input") is True
+        assert result.get("ask_user_trigger") is not None
         assert result.get("current_stage_id") is None
         assert result.get("current_stage_type") is None
         questions = result.get("pending_user_questions", [])

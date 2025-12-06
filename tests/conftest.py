@@ -1,12 +1,89 @@
 """Global shared fixtures for all tests."""
 
 import json
+import os
 import pytest
 from pathlib import Path
 from typing import Any, Dict, Optional
 from unittest.mock import MagicMock, patch
 
 from schemas.state import create_initial_state
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Disable LangSmith Tracing - Prevents tracing overhead/costs in tests
+# ═══════════════════════════════════════════════════════════════════════
+
+@pytest.fixture(autouse=True, scope="session")
+def disable_langsmith_tracing():
+    """
+    Disable LangSmith tracing for all tests.
+    
+    This runs once at the start of the test session and prevents:
+    - Tracing overhead slowing down tests
+    - Accidental tracing costs
+    - Network calls to LangSmith servers
+    """
+    # Store original values
+    original_values = {}
+    keys_to_disable = [
+        "LANGCHAIN_TRACING_V2",
+        "LANGCHAIN_TRACING",
+        "LANGSMITH_TRACING",
+    ]
+    
+    for key in keys_to_disable:
+        original_values[key] = os.environ.get(key)
+        os.environ[key] = "false"
+    
+    yield
+    
+    # Restore original values
+    for key in keys_to_disable:
+        if original_values[key] is not None:
+            os.environ[key] = original_values[key]
+        elif key in os.environ:
+            del os.environ[key]
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# LLM Call Protection - Prevents accidental real API calls in tests
+# ═══════════════════════════════════════════════════════════════════════
+
+@pytest.fixture(autouse=True)
+def auto_mock_llm(request, monkeypatch):
+    """
+    Auto-mock LLM client for all non-smoke tests.
+    
+    This provides a safety net - if a test forgets to mock the LLM client,
+    it will fail immediately with a clear error instead of making a real
+    (slow, costly) API call.
+    
+    Tests marked with @pytest.mark.smoke are excluded and CAN make real calls.
+    """
+    # Skip this protection for smoke tests (they intentionally make real calls)
+    if "smoke" in [marker.name for marker in request.node.iter_markers()]:
+        yield
+        return
+    
+    def mock_get_llm_client(*args, **kwargs):
+        raise RuntimeError(
+            "\n\n"
+            "═══════════════════════════════════════════════════════════════════\n"
+            "  REAL LLM CALL ATTEMPTED IN NON-SMOKE TEST!\n"
+            "═══════════════════════════════════════════════════════════════════\n"
+            "\n"
+            "  This test tried to call the real LLM API without proper mocking.\n"
+            "\n"
+            "  To fix, either:\n"
+            "    1. Add @patch('src.llm_client.call_agent_with_metrics') to mock LLM\n"
+            "    2. Mark test with @pytest.mark.smoke if it needs real LLM calls\n"
+            "\n"
+            "═══════════════════════════════════════════════════════════════════\n"
+        )
+    
+    monkeypatch.setattr("src.llm_client.get_llm_client", mock_get_llm_client)
+    yield
 
 
 # ═══════════════════════════════════════════════════════════════════════

@@ -1191,7 +1191,7 @@ class TestStageSelection:
             "current_stage_id should be None when no stages"
         assert result.get("ask_user_trigger") == "no_stages_available", \
             f"ask_user_trigger should be 'no_stages_available', got {result.get('ask_user_trigger')}"
-        assert result.get("awaiting_user_input") is True, \
+        assert result.get("ask_user_trigger") is not None, \
             "awaiting_user_input should be True"
         assert len(result.get("pending_user_questions", [])) > 0, \
             "Should have pending user questions"

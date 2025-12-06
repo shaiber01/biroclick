@@ -25,12 +25,12 @@ class TestAskUserNode:
         """Should return awaiting_user_input=False when no questions pending."""
         state = {
             "pending_user_questions": [],
-            "ask_user_trigger": "test_trigger",
+            "ask_user_trigger": "context_overflow",
         }
         
         result = ask_user_node(state)
         
-        assert result["awaiting_user_input"] is False
+        assert result.get("ask_user_trigger") is None
         assert result["workflow_phase"] == "awaiting_user"
         # Verify no other keys are set
         assert "user_responses" not in result
@@ -44,19 +44,19 @@ class TestAskUserNode:
         
         result = ask_user_node(state)
         
-        assert result["awaiting_user_input"] is False
+        assert result.get("ask_user_trigger") is None
         assert result["workflow_phase"] == "awaiting_user"
 
     def test_returns_not_awaiting_when_questions_is_none(self):
         """Should handle None pending_user_questions."""
         state = {
             "pending_user_questions": None,
-            "ask_user_trigger": "test_trigger",
+            "ask_user_trigger": "context_overflow",
         }
         
         # None should be treated as falsy (no questions), returning early
         result = ask_user_node(state)
-        assert result["awaiting_user_input"] is False
+        assert result.get("ask_user_trigger") is None
 
     @patch("src.agents.user_interaction.interrupt")
     def test_collects_user_response(self, mock_interrupt):
@@ -71,7 +71,7 @@ class TestAskUserNode:
         
         result = ask_user_node(state)
         
-        assert result["awaiting_user_input"] is False
+        assert result.get("ask_user_trigger") is None
         assert "user_responses" in result
         assert result["user_responses"]["Question?"] == "User response"
         assert result["workflow_phase"] == "awaiting_user"
@@ -90,7 +90,7 @@ class TestAskUserNode:
         
         result = ask_user_node(state)
         assert result["pending_user_questions"] == []
-        assert result["awaiting_user_input"] is False
+        assert result.get("ask_user_trigger") is None
         assert result["workflow_phase"] == "awaiting_user"
 
     @patch("src.agents.user_interaction.interrupt")
@@ -107,7 +107,7 @@ class TestAskUserNode:
         result = ask_user_node(state)
         
         assert result["user_responses"]["Question?"] == "Answer"
-        assert result["awaiting_user_input"] is False
+        assert result.get("ask_user_trigger") is None
 
 
 class TestMergeExistingResponses:
@@ -130,7 +130,7 @@ class TestMergeExistingResponses:
         assert result["user_responses"]["Previous question"] == "previous answer"
         assert result["user_responses"]["New question?"] == "new answer"
         assert len(result["user_responses"]) == 2
-        assert result["awaiting_user_input"] is False
+        assert result.get("ask_user_trigger") is None
         assert result["pending_user_questions"] == []
 
     @patch("src.agents.user_interaction.interrupt")
@@ -181,7 +181,7 @@ class TestSafetyNet:
         
         result = ask_user_node(state)
         
-        assert result["awaiting_user_input"] is False
+        assert result.get("ask_user_trigger") is None
         assert result["ask_user_trigger"] == "unknown_escalation"
 
     @patch("src.agents.user_interaction.interrupt")

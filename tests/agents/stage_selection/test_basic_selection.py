@@ -199,7 +199,7 @@ class TestSelectStageNode:
         assert result["current_stage_id"] is None
         assert result["current_stage_type"] is None
         assert result["ask_user_trigger"] == "no_stages_available"
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         assert isinstance(result["pending_user_questions"], list)
         assert len(result["pending_user_questions"]) > 0
         assert "ERROR" in result["pending_user_questions"][0] or "No stages" in result["pending_user_questions"][0]
@@ -216,7 +216,7 @@ class TestSelectStageNode:
         assert result["current_stage_id"] is None
         assert result["current_stage_type"] is None
         assert result["ask_user_trigger"] == "no_stages_available"
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
 
     def test_handles_empty_plan_stages_dict(self):
         """Should handle plan with empty stages dict."""
@@ -1072,7 +1072,7 @@ class TestSelectStageNode:
         
         assert result["current_stage_id"] is None
         assert result["ask_user_trigger"] == "deadlock_detected"
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         assert isinstance(result["pending_user_questions"], list)
         assert len(result["pending_user_questions"]) > 0
         assert "Deadlock" in result["pending_user_questions"][0] or "blocked" in result["pending_user_questions"][0]
@@ -1156,7 +1156,7 @@ class TestSelectStageNode:
         
         assert result["current_stage_id"] is None
         assert result["ask_user_trigger"] == "progress_init_failed"
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         assert isinstance(result["pending_user_questions"], list)
         assert len(result["pending_user_questions"]) > 0
 
@@ -1325,7 +1325,7 @@ class TestSelectStageNode:
             
             assert result["current_stage_id"] is None
             assert result["ask_user_trigger"] == "no_stages_available"
-            assert result["awaiting_user_input"] is True
+            assert result.get("ask_user_trigger") is not None
 
     def test_stage_id_must_be_present(self):
         """Should handle stage without stage_id field."""

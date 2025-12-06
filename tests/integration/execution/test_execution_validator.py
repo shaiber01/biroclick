@@ -365,7 +365,7 @@ class TestValidatorVerdicts:
         assert "SKIP_STAGE" in question
         assert "STOP" in question
         # Should set awaiting_user_input
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         # Should set last_node_before_ask_user
         assert result["last_node_before_ask_user"] == "execution_check"
 
@@ -395,7 +395,7 @@ class TestValidatorVerdicts:
         assert "4/4" in result["pending_user_questions"][0], (
             f"Question should show 4/4 failures, got: {result['pending_user_questions'][0]}"
         )
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         assert result["last_node_before_ask_user"] == "execution_check"
 
     def test_execution_validator_fail_under_max_does_not_trigger_user_ask(self, base_state):
@@ -466,7 +466,7 @@ class TestPhysicsFailureLimit:
         assert "SKIP_STAGE" in question
         assert "STOP" in question
         # Should set awaiting_user_input
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         # Should set last_node_before_ask_user
         assert result["last_node_before_ask_user"] == "physics_check"
 
@@ -522,7 +522,7 @@ class TestPhysicsFailureLimit:
         assert "5/5" in result["pending_user_questions"][0], (
             f"Question should show 5/5 failures, got: {result['pending_user_questions'][0]}"
         )
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         assert result["last_node_before_ask_user"] == "physics_check"
 
 

@@ -69,7 +69,7 @@ class TestCodeGeneratorNode:
         # Strict assertions - verify exact error response structure
         assert result["workflow_phase"] == "code_generation"
         assert result["ask_user_trigger"] == "missing_stage_id"
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         assert isinstance(result["pending_user_questions"], list)
         assert len(result["pending_user_questions"]) == 1
         assert "No stage selected" in result["pending_user_questions"][0] or "ERROR" in result["pending_user_questions"][0]
@@ -560,7 +560,7 @@ class TestCodeGeneratorNode:
         # Strict assertions - verify exact escalation structure
         assert result["workflow_phase"] == "code_generation"
         assert result["ask_user_trigger"] == "llm_error"
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         assert isinstance(result["pending_user_questions"], list)
         assert len(result["pending_user_questions"]) > 0
         # Expect human-readable name "Code Generator"
@@ -628,7 +628,7 @@ class TestCodeGeneratorNode:
             "workflow_phase": "code_generation",
             "ask_user_trigger": "context_overflow",
             "pending_user_questions": ["Context overflow, need guidance"],
-            "awaiting_user_input": True,
+            "ask_user_trigger": "context_overflow",
         }
         mock_check.return_value = escalation
         
@@ -638,7 +638,7 @@ class TestCodeGeneratorNode:
         assert result == escalation
         assert result["workflow_phase"] == "code_generation"
         assert result["ask_user_trigger"] == "context_overflow"
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         # Verify no downstream calls were made
         mock_llm.assert_not_called()
         mock_prompt.assert_not_called()

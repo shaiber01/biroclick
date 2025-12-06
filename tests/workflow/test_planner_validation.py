@@ -31,7 +31,7 @@ class TestPlanNodePaperValidation:
         result = plan_node(base_state)
 
         assert result["ask_user_trigger"] == "missing_paper_text"
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         assert len(result["pending_user_questions"]) > 0
         assert result["workflow_phase"] == "planning"
         # Verify the question mentions the character count
@@ -44,7 +44,7 @@ class TestPlanNodePaperValidation:
         result = plan_node(base_state)
 
         assert result["ask_user_trigger"] == "missing_paper_text"
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         assert len(result["pending_user_questions"]) > 0
 
     def test_missing_paper_text_key_not_present(self, base_state):
@@ -54,7 +54,7 @@ class TestPlanNodePaperValidation:
         result = plan_node(base_state)
 
         assert result["ask_user_trigger"] == "missing_paper_text"
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
 
     def test_short_paper_text(self, base_state):
         """Test planner handles insufficient paper text (<100 chars)."""
@@ -63,7 +63,7 @@ class TestPlanNodePaperValidation:
         result = plan_node(base_state)
 
         assert result["ask_user_trigger"] == "missing_paper_text"
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         # Verify the question mentions the issue
         question = result["pending_user_questions"][0].lower()
         assert "too short" in question or "9 char" in question
@@ -79,7 +79,7 @@ class TestPlanNodePaperValidation:
 
         # Should not trigger missing_paper_text
         assert result.get("ask_user_trigger") != "missing_paper_text"
-        assert result.get("awaiting_user_input") is not True
+        assert result.get("ask_user_trigger") is None
 
     def test_paper_text_99_chars_rejected(self, base_state):
         """Test planner rejects paper text just below threshold."""
@@ -88,7 +88,7 @@ class TestPlanNodePaperValidation:
         result = plan_node(base_state)
 
         assert result["ask_user_trigger"] == "missing_paper_text"
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
 
     def test_paper_text_whitespace_only(self, base_state):
         """Test planner handles whitespace-only paper text."""
@@ -97,7 +97,7 @@ class TestPlanNodePaperValidation:
         result = plan_node(base_state)
 
         assert result["ask_user_trigger"] == "missing_paper_text"
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
 
 
 class TestPlanNodeLLMInteraction:
@@ -110,7 +110,7 @@ class TestPlanNodeLLMInteraction:
             result = plan_node(base_state)
 
         assert result["ask_user_trigger"] == "llm_error"
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         assert "planner failed" in result["pending_user_questions"][0].lower()
         assert "rate limit" in result["pending_user_questions"][0].lower()
 

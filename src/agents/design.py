@@ -9,14 +9,13 @@ simulation_designer_node:
     READS: current_stage_id, plan, paper_text, paper_domain, validated_materials,
            assumptions, design_revision_count, design_feedback
     WRITES: workflow_phase, design_description, design_parameters, design_feedback,
-            ask_user_trigger, pending_user_questions, awaiting_user_input
+            ask_user_trigger, pending_user_questions
 
 design_reviewer_node:
     READS: current_stage_id, design_description, plan, paper_text, paper_domain,
            design_revision_count, design_feedback, runtime_config
     WRITES: workflow_phase, last_design_review_verdict, design_feedback,
-            design_revision_count, ask_user_trigger, pending_user_questions,
-            awaiting_user_input
+            design_revision_count, ask_user_trigger, pending_user_questions
 """
 
 import json
@@ -61,7 +60,7 @@ def simulation_designer_node(state: ReproState) -> dict:
     # Context check
     escalation = check_context_or_escalate(state, "design")
     if escalation is not None:
-        if escalation.get("awaiting_user_input"):
+        if escalation.get("ask_user_trigger"):
             return escalation
         # Just state updates (e.g., metrics) - merge into state and continue
         state = {**state, **escalation}
@@ -80,7 +79,6 @@ def simulation_designer_node(state: ReproState) -> dict:
                 "ERROR: No stage selected for design. This indicates a workflow error. "
                 "Please check stage selection or restart the workflow."
             ],
-            "awaiting_user_input": True,
         }
     
     # Connect prompt adaptation
@@ -211,7 +209,6 @@ def design_reviewer_node(state: ReproState) -> dict:
             "workflow_phase": "design_review",
             "ask_user_trigger": "reviewer_escalation",
             "pending_user_questions": [f"{escalate}\n\n{get_options_prompt('reviewer_escalation')}"],
-            "awaiting_user_input": True,
             "last_node_before_ask_user": "design_review",
             "reviewer_escalation_source": "design_reviewer",
         }
@@ -270,7 +267,6 @@ def design_reviewer_node(state: ReproState) -> dict:
             result.update({
                 "ask_user_trigger": "design_review_limit",
                 "pending_user_questions": [question],
-                "awaiting_user_input": True,
                 "last_node_before_ask_user": "design_review",
             })
     

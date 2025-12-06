@@ -25,9 +25,8 @@ Common State Keys (used by multiple nodes):
     - current_stage_id: ID of stage being processed (most nodes read)
     - plan: Reproduction plan with stages and targets
     - progress: Stage progress tracking dict
-    - ask_user_trigger: Trigger type for user interaction
+    - ask_user_trigger: Trigger type for user interaction (single mechanism for routing to ask_user)
     - pending_user_questions: Questions awaiting user response
-    - awaiting_user_input: Boolean flag for user input state
 """
 
 # Re-export all node functions from submodules

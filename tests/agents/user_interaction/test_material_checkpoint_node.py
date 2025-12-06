@@ -28,7 +28,7 @@ class TestMaterialCheckpointNode:
         result = material_checkpoint_node(state)
         
         # Verify all required return fields are present and correct
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         assert result["ask_user_trigger"] == "material_checkpoint"
         assert result["workflow_phase"] == "material_checkpoint"
         assert result["last_node_before_ask_user"] == "material_checkpoint"
@@ -94,7 +94,7 @@ class TestMaterialCheckpointNode:
         
         result = material_checkpoint_node(state)
         
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         assert result["pending_validated_materials"] == []
         assert isinstance(result["pending_user_questions"], list)
         assert len(result["pending_user_questions"]) == 1
@@ -126,7 +126,7 @@ class TestMaterialCheckpointNode:
         
         result = material_checkpoint_node(state)
         
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         # Format function should be called with plot files
         call_args = mock_format.call_args[0]
         plot_files = call_args[2]  # Third argument is plot_files
@@ -274,7 +274,7 @@ class TestMaterialCheckpointNode:
         
         result = material_checkpoint_node(state)
         
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         # Should pass None as stage0_info
         call_args = mock_format.call_args[0]
         stage_info = call_args[1]
@@ -295,7 +295,7 @@ class TestMaterialCheckpointNode:
         
         result = material_checkpoint_node(state)
         
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         # Should pass None as stage0_info
         call_args = mock_format.call_args[0]
         stage_info = call_args[1]
@@ -316,7 +316,7 @@ class TestMaterialCheckpointNode:
         
         result = material_checkpoint_node(state)
         
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         # Should pass empty list as plot_files
         call_args = mock_format.call_args[0]
         plot_files = call_args[2]
@@ -337,7 +337,7 @@ class TestMaterialCheckpointNode:
         
         result = material_checkpoint_node(state)
         
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         # Should pass empty list as plot_files
         call_args = mock_format.call_args[0]
         plot_files = call_args[2]
@@ -358,7 +358,7 @@ class TestMaterialCheckpointNode:
         
         result = material_checkpoint_node(state)
         
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         # Should pass empty list as plot_files
         call_args = mock_format.call_args[0]
         plot_files = call_args[2]
@@ -401,7 +401,7 @@ class TestMaterialCheckpointNode:
         
         result = material_checkpoint_node(state)
         
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         # Should pass None as stage0_info
         call_args = mock_format.call_args[0]
         stage_info = call_args[1]

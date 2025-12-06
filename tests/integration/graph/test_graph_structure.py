@@ -2832,7 +2832,7 @@ class TestEndToEndUserResponseFlows:
                     plan_result = plan_reviewer_node(plan_state)
         
         # Verify escalation happened
-        assert plan_result.get("awaiting_user_input") is True, "Should be awaiting user input"
+        assert plan_result.get("ask_user_trigger") is not None, "Should be awaiting user input"
         trigger = plan_result.get("ask_user_trigger")
         assert trigger is not None, "Should have set ask_user_trigger"
         
@@ -3603,7 +3603,7 @@ class TestComplexE2EFlows:
         checkpoint_result = material_checkpoint_node(merged_state)
         
         # Verify it sets up for user approval
-        assert checkpoint_result.get("awaiting_user_input") is True, (
+        assert checkpoint_result.get("ask_user_trigger") is not None, (
             "material_checkpoint should set awaiting_user_input=True"
         )
         assert checkpoint_result.get("ask_user_trigger") == "material_checkpoint", (
@@ -4269,7 +4269,7 @@ class TestComplexE2EFlows:
             "ask_user_trigger": "context_overflow",
             "user_responses": {"Q1": "TRUNCATE"},
             "pending_user_questions": ["Context overflow. SUMMARIZE, TRUNCATE, SKIP_STAGE, or STOP?"],
-            "awaiting_user_input": True,
+            "ask_user_trigger": "context_overflow",
             "last_node_before_ask_user": "planning",
             "progress": {"stages": [], "user_interactions": []},
             "paper_id": "test_paper",
@@ -4346,7 +4346,7 @@ class TestComplexE2EFlows:
                         error_result = {
                             "ask_user_trigger": "llm_error",
                             "pending_user_questions": ["LLM API error: rate limit exceeded. RETRY, SKIP, or STOP?"],
-                            "awaiting_user_input": True,
+                            "ask_user_trigger": "context_overflow",
                             "last_node_before_ask_user": "planning",
                         }
         

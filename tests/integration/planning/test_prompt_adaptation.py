@@ -76,7 +76,7 @@ class TestAdaptPromptsNode:
         from src.agents.planning import adapt_prompts_node
 
         escalation_response = {
-            "awaiting_user_input": True,
+            "ask_user_trigger": "context_overflow",
             "reason": "Context too large",
         }
 
@@ -88,7 +88,7 @@ class TestAdaptPromptsNode:
 
         # Verify exact escalation response is returned
         assert result == escalation_response
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         assert result["reason"] == "Context too large"
 
     def test_adapt_prompts_node_updates_state(self, base_state):

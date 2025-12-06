@@ -1357,7 +1357,7 @@ class TestAskUserEscalation:
         assert result.get("ask_user_trigger") == "replan_limit", (
             f"Should trigger ask_user with 'replan_limit', got '{result.get('ask_user_trigger')}'"
         )
-        assert result.get("awaiting_user_input") is True, "Should be awaiting user input"
+        assert result.get("ask_user_trigger") is not None, "Should be awaiting user input"
         assert "pending_user_questions" in result, "Should have pending_user_questions"
         assert len(result["pending_user_questions"]) > 0, "Should have at least one question"
         # Verify question mentions the limit
@@ -1395,7 +1395,7 @@ class TestAskUserEscalation:
 
         assert result.get("replan_count") == custom_max, f"Should be at custom max ({custom_max})"
         assert result.get("ask_user_trigger") == "replan_limit", "Should escalate at custom max"
-        assert result.get("awaiting_user_input") is True, "Should be awaiting user input"
+        assert result.get("ask_user_trigger") is not None, "Should be awaiting user input"
 
     def test_plan_reviewer_does_not_escalate_before_max_replans(self, base_state):
         """plan_reviewer should NOT escalate before max replans is reached."""
@@ -1429,7 +1429,7 @@ class TestAskUserEscalation:
         assert "ask_user_trigger" not in result or result.get("ask_user_trigger") is None, (
             "Should NOT escalate before max replans"
         )
-        assert result.get("awaiting_user_input") is not True, "Should NOT be awaiting user input"
+        assert result.get("ask_user_trigger") is None, "Should NOT be awaiting user input"
 
     def test_plan_reviewer_escalation_includes_last_node_before_ask_user(self, base_state):
         """plan_reviewer escalation should set last_node_before_ask_user."""

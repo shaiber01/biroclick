@@ -256,7 +256,7 @@ class TestDesignReviewerNode:
         """Ensure decorator short-circuits when user input is required."""
         escalation = {
             "workflow_phase": "design_review",
-            "awaiting_user_input": True,
+            "ask_user_trigger": "context_overflow",
             "ask_user_trigger": "context_missing",
         }
         mock_context.return_value = escalation
@@ -797,7 +797,7 @@ class TestDesignReviewerNode:
         
         # Should trigger escalation
         assert result["ask_user_trigger"] == "reviewer_escalation"
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         assert "pending_user_questions" in result
         assert len(result["pending_user_questions"]) == 1
         assert "2D or 3D" in result["pending_user_questions"][0]

@@ -150,7 +150,7 @@ class TestSupervisorNode:
     def test_returns_escalation_on_context_overflow(self, mock_context):
         """Should return escalation when context overflow."""
         context_update = {
-            "awaiting_user_input": True,
+            "ask_user_trigger": "context_overflow",
             "pending_user_questions": ["Context overflow"],
         }
         mock_context.return_value = context_update
@@ -160,7 +160,7 @@ class TestSupervisorNode:
         result = supervisor_node(state)
         
         # STRICT: Verify exact escalation fields
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         assert result["pending_user_questions"] == ["Context overflow"]
         # STRICT: Verify context check was called
         mock_context.assert_called_once_with(state, "supervisor")

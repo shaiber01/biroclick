@@ -562,7 +562,7 @@ class TestPhysicsSanityNode:
     def test_physics_context_escalation(self, mock_llm, mock_check, mock_prompt, base_state):
         """Test that context escalation is handled correctly."""
         escalation_result = {
-            "awaiting_user_input": True,
+            "ask_user_trigger": "context_overflow",
             "ask_user_trigger": "missing_context",
             "pending_user_questions": ["Need more context"]
         }
@@ -575,7 +575,7 @@ class TestPhysicsSanityNode:
         
         # Should return escalation result without calling LLM
         assert result == escalation_result
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         mock_llm.assert_not_called()
         mock_prompt.assert_not_called()
 

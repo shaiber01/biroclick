@@ -136,7 +136,7 @@ class TestDesignRevisionCycle:
         assert result["design_revision_count"] == MAX_DESIGN_REVISIONS
         assert result["ask_user_trigger"] == "design_review_limit", \
             "Must trigger ask_user when design review limit reached"
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         assert len(result["pending_user_questions"]) > 0
         assert "Design review limit reached" in result["pending_user_questions"][0]
         assert result["last_node_before_ask_user"] == "design_review"
@@ -157,7 +157,7 @@ class TestDesignRevisionCycle:
 
         # Counter should stay at max, not exceed it
         assert result["design_revision_count"] == MAX_DESIGN_REVISIONS
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
 
     def test_design_reviewer_custom_max_limit(self, base_state):
         """Design reviewer respects custom max limit from runtime_config."""
@@ -283,7 +283,7 @@ class TestCodeRevisionCycle:
         assert result["code_revision_count"] == MAX_CODE_REVISIONS
         assert result["ask_user_trigger"] == "code_review_limit", \
             "Must trigger ask_user when code review limit reached"
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         assert len(result["pending_user_questions"]) > 0
         assert "Code review limit reached" in result["pending_user_questions"][0]
         assert result["last_node_before_ask_user"] == "code_review"
@@ -342,7 +342,7 @@ class TestCodeRevisionCycle:
         # Counter should stay at max
         assert result["code_revision_count"] == MAX_CODE_REVISIONS
         # Should escalate again
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
 
     def test_code_reviewer_verdict_normalization(self, base_state):
         """Code reviewer normalizes various verdict strings."""
@@ -598,7 +598,7 @@ class TestSimulationDesignerNode:
         result = simulation_designer_node(base_state)
 
         assert result["workflow_phase"] == "design"
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         assert result["ask_user_trigger"] == "missing_stage_id"
         assert len(result["pending_user_questions"]) > 0
         assert "ERROR" in result["pending_user_questions"][0]
@@ -611,7 +611,7 @@ class TestSimulationDesignerNode:
         result = simulation_designer_node(base_state)
 
         # Empty string is falsy, should trigger escalation
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         assert result["ask_user_trigger"] == "missing_stage_id"
 
     def test_design_includes_feedback_in_prompt(self, base_state):
@@ -642,7 +642,7 @@ class TestSimulationDesignerNode:
             mock_llm.side_effect = Exception("API rate limit exceeded")
             result = simulation_designer_node(base_state)
 
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         assert result["ask_user_trigger"] == "llm_error"
         assert "failed" in result["pending_user_questions"][0].lower()
 
@@ -735,7 +735,7 @@ class TestCodeGeneratorMissingStageId:
         result = code_generator_node(base_state)
 
         assert result["workflow_phase"] == "code_generation"
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         assert result["ask_user_trigger"] == "missing_stage_id"
         assert "ERROR" in result["pending_user_questions"][0]
 
@@ -746,7 +746,7 @@ class TestCodeGeneratorMissingStageId:
 
         result = code_generator_node(base_state)
 
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         assert result["ask_user_trigger"] == "missing_stage_id"
 
 
@@ -849,7 +849,7 @@ class TestLLMErrorHandling:
             mock_llm.side_effect = Exception("Service unavailable")
             result = code_generator_node(base_state)
 
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         assert result["ask_user_trigger"] == "llm_error"
         assert "failed" in result["pending_user_questions"][0].lower()
 

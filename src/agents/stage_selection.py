@@ -10,8 +10,7 @@ select_stage_node:
     READS: plan, progress, current_stage_id, validated_materials
     WRITES: workflow_phase, current_stage_id, progress, design_revision_count,
             code_revision_count, execution_failure_count, physics_failure_count,
-            analysis_revision_count, ask_user_trigger, pending_user_questions,
-            awaiting_user_input
+            analysis_revision_count, ask_user_trigger, pending_user_questions
 """
 
 import logging
@@ -50,6 +49,16 @@ def select_stage_node(state: ReproState) -> dict:
     """
     logger = logging.getLogger(__name__)
     
+    # Early return if ask_user_trigger is set - preserve existing trigger
+    # This prevents overwriting a trigger set by handle_backtrack (or other nodes)
+    # The router will redirect to ask_user based on the trigger
+    if state.get("ask_user_trigger"):
+        logger.info(
+            f"select_stage: Skipping - ask_user_trigger already set "
+            f"(trigger: {state.get('ask_user_trigger')})"
+        )
+        return {}
+    
     progress = state.get("progress") or {}  # Handle None gracefully
     stages = progress.get("stages", [])
     plan = state.get("plan") or {}  # Handle None gracefully
@@ -69,7 +78,6 @@ def select_stage_node(state: ReproState) -> dict:
                 "ERROR: No stages available to execute. The plan appears to be empty. "
                 "Please check the plan and replan if necessary."
             ],
-            "awaiting_user_input": True,
         }
     
     # Ensure progress initialized
@@ -95,7 +103,6 @@ def select_stage_node(state: ReproState) -> dict:
                     f"ERROR: Failed to initialize progress stages: {e}. "
                     "Please check plan structure or restart workflow."
                 ],
-                "awaiting_user_input": True,
             }
     
     if not stages or len(stages) == 0:
@@ -108,7 +115,6 @@ def select_stage_node(state: ReproState) -> dict:
             "pending_user_questions": [
                 "ERROR: Stages list is empty. Cannot proceed with reproduction."
             ],
-            "awaiting_user_input": True,
         }
     
     # Get current validation hierarchy
@@ -686,7 +692,6 @@ def select_stage_node(state: ReproState) -> dict:
                     f"Blocked stages: {', '.join(permanently_blocked[:5])}{'...' if len(permanently_blocked) > 5 else ''}. "
                     "Options: 1) Generate report with current results, 2) Replan to fix blocked stages, 3) Stop."
                 ],
-                "awaiting_user_input": True,
             }
     
     # No more stages to run - normal completion

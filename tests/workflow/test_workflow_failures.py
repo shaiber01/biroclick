@@ -253,7 +253,7 @@ class TestExecutionValidatorEdgeCases:
         assert result.get("ask_user_trigger") == "execution_failure_limit", (
             "Should trigger user escalation"
         )
-        assert result.get("awaiting_user_input") is True, (
+        assert result.get("ask_user_trigger") is not None, (
             "Should set awaiting_user_input to True"
         )
         assert result.get("pending_user_questions"), (
@@ -502,7 +502,7 @@ class TestPhysicsSanityNode:
         assert result.get("ask_user_trigger") == "physics_failure_limit", (
             "Should trigger physics_failure_limit escalation"
         )
-        assert result.get("awaiting_user_input") is True
+        assert result.get("ask_user_trigger") is not None
         assert result.get("pending_user_questions"), "Should have pending questions"
         assert result.get("last_node_before_ask_user") == "physics_check"
 

@@ -9,14 +9,13 @@ results_analyzer_node:
     READS: execution_result, current_stage_id, plan, paper_figures, paper_text,
            digitized_data, stage_outputs, analysis_revision_count
     WRITES: workflow_phase, analysis_reports, stage_outputs, analysis_summary,
-            ask_user_trigger, pending_user_questions, awaiting_user_input
+            ask_user_trigger, pending_user_questions
 
 comparison_validator_node:
     READS: current_stage_id, analysis_reports, plan, stage_outputs,
            analysis_revision_count, runtime_config
     WRITES: workflow_phase, comparison_verdict, analysis_revision_count,
-            stage_comparisons, ask_user_trigger, pending_user_questions,
-            awaiting_user_input
+            stage_comparisons, ask_user_trigger, pending_user_questions
 """
 
 import json
@@ -68,7 +67,7 @@ def results_analyzer_node(state: ReproState) -> dict:
     
     context_update = check_context_or_escalate(state, "analyze")
     if context_update:
-        if context_update.get("awaiting_user_input"):
+        if context_update.get("ask_user_trigger"):
             return context_update
         state = {**state, **context_update}
     
@@ -86,7 +85,6 @@ def results_analyzer_node(state: ReproState) -> dict:
                 "ERROR: No stage selected for analysis. This indicates a workflow error. "
                 "Please check stage selection or restart the workflow."
             ],
-            "awaiting_user_input": True,
         }
     
     # Build system prompt for analysis
@@ -620,10 +618,10 @@ def comparison_validator_node(state: ReproState) -> dict:
     Note: Context check is handled by @with_context_check decorator.
     """
 
-    # Defensive check: if state already has awaiting_user_input=True from a previous node,
+    # Defensive check: if ask_user_trigger is already set from a previous node,
     # skip processing and return immediately. The @with_context_check decorator handles
     # escalations from this node, but this guards against pre-existing escalation state.
-    if state.get("awaiting_user_input"):
+    if state.get("ask_user_trigger"):
         return {}
     
     stage_id = state.get("current_stage_id")
@@ -704,7 +702,6 @@ def comparison_validator_node(state: ReproState) -> dict:
                 f"Analysis revision limit ({max_revisions}) reached but results don't match paper.\n\n"
                 f"{get_options_prompt('analysis_limit')}"
             ]
-            result["awaiting_user_input"] = True
             result["last_node_before_ask_user"] = "comparison_check"
     else:
         result["analysis_feedback"] = None

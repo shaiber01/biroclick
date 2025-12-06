@@ -16,7 +16,7 @@ handle_backtrack_node:
             backtrack_stage_id, design_revision_count, code_revision_count,
             execution_failure_count, analysis_revision_count, design_description,
             code, stage_outputs, stage_comparisons, ask_user_trigger,
-            pending_user_questions, awaiting_user_input
+            pending_user_questions
 """
 
 import copy
@@ -240,7 +240,6 @@ def handle_backtrack_node(state: ReproState) -> dict:
             "pending_user_questions": [
                 "ERROR: Backtrack decision is missing or invalid. Cannot proceed with backtracking."
             ],
-            "awaiting_user_input": True,
         }
     
     target_id = decision.get("target_stage_id", "")
@@ -256,7 +255,6 @@ def handle_backtrack_node(state: ReproState) -> dict:
             "pending_user_questions": [
                 "ERROR: Backtrack target stage ID is empty. Cannot proceed with backtracking."
             ],
-            "awaiting_user_input": True,
         }
     
     # Deep copy progress
@@ -275,7 +273,6 @@ def handle_backtrack_node(state: ReproState) -> dict:
             "pending_user_questions": [
                 f"ERROR: Backtrack target stage '{target_id}' not found in progress."
             ],
-            "awaiting_user_input": True,
         }
     
     # Check if backtracking to Stage 0
@@ -338,7 +335,6 @@ def handle_backtrack_node(state: ReproState) -> dict:
             "pending_user_questions": [
                 f"Backtrack limit ({max_backtracks}) exceeded. System is looping. How to proceed?"
             ],
-            "awaiting_user_input": True,
             "last_node_before_ask_user": "handle_backtrack"
         }
     

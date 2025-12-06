@@ -30,7 +30,7 @@ class TestValidationHierarchy:
         # This IS a deadlock - no MATERIAL_VALIDATION stage exists, 
         # so SINGLE_STRUCTURE can never proceed
         assert result.get("ask_user_trigger") == "deadlock_detected"
-        assert result.get("awaiting_user_input") is True
+        assert result.get("ask_user_trigger") is not None
 
     def test_requires_material_validation_for_single_structure_failed(self):
         """SINGLE_STRUCTURE blocks when material_validation is failed."""
@@ -49,7 +49,7 @@ class TestValidationHierarchy:
         assert result["workflow_phase"] == "stage_selection"
         # Should trigger deadlock since material validation failed
         assert result.get("ask_user_trigger") == "deadlock_detected"
-        assert result.get("awaiting_user_input") is True
+        assert result.get("ask_user_trigger") is not None
 
     def test_requires_material_validation_for_single_structure_passed(self):
         """SINGLE_STRUCTURE allows proceeding when material_validation is passed."""
@@ -114,7 +114,7 @@ class TestValidationHierarchy:
         assert result["workflow_phase"] == "stage_selection"
         # Should be a deadlock since SINGLE_STRUCTURE failed
         assert result.get("ask_user_trigger") == "deadlock_detected"
-        assert result.get("awaiting_user_input") is True
+        assert result.get("ask_user_trigger") is not None
 
     def test_requires_single_structure_for_array_system_passed(self):
         """ARRAY_SYSTEM allows proceeding when single_structure is passed."""
@@ -304,7 +304,7 @@ class TestValidationHierarchy:
         assert result["current_stage_id"] is None
         # Should be a deadlock since single structure has a failure
         assert result.get("ask_user_trigger") == "deadlock_detected"
-        assert result.get("awaiting_user_input") is True
+        assert result.get("ask_user_trigger") is not None
 
     def test_multiple_stages_same_type_allows_when_all_passed(self):
         """If multiple stages of same type exist, all must pass for higher types."""
@@ -517,7 +517,7 @@ class TestDeadlockDetection:
         assert result["current_stage_type"] is None
         assert result["workflow_phase"] == "stage_selection"
         assert result["ask_user_trigger"] == "deadlock_detected"
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         assert isinstance(result["pending_user_questions"], list)
         assert len(result["pending_user_questions"]) > 0
         assert "Deadlock detected" in result["pending_user_questions"][0]
@@ -539,7 +539,7 @@ class TestDeadlockDetection:
         assert result["current_stage_id"] == "stage0"
         assert result["current_stage_type"] == "MATERIAL_VALIDATION"
         assert result.get("ask_user_trigger") != "deadlock_detected"
-        assert result.get("awaiting_user_input") is not True
+        assert result.get("ask_user_trigger") is None
 
     def test_no_deadlock_if_invalidated_exists(self):
         """Should not report deadlock if a stage is invalidated (can be rerun)."""
@@ -595,7 +595,7 @@ class TestDeadlockDetection:
         result = select_stage_node(state)
         assert result["current_stage_id"] is None
         assert result["ask_user_trigger"] == "deadlock_detected"
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         assert len(result["pending_user_questions"]) > 0
 
     def test_deadlock_mixed_blocked_and_failed(self):
@@ -614,7 +614,7 @@ class TestDeadlockDetection:
         result = select_stage_node(state)
         assert result["current_stage_id"] is None
         assert result["ask_user_trigger"] == "deadlock_detected"
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
 
     def test_deadlock_message_lists_blocked_stages(self):
         """Deadlock message should include list of blocked stages."""
@@ -706,7 +706,7 @@ class TestProgressInitialization:
         assert result["current_stage_id"] is None
         assert result["workflow_phase"] == "stage_selection"
         assert result["ask_user_trigger"] == "progress_init_failed"
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         assert isinstance(result["pending_user_questions"], list)
         assert len(result["pending_user_questions"]) > 0
         assert "Failed to initialize" in result["pending_user_questions"][0]
@@ -723,7 +723,7 @@ class TestProgressInitialization:
         assert result["current_stage_id"] is None
         assert result["workflow_phase"] == "stage_selection"
         assert result["ask_user_trigger"] == "no_stages_available"
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         assert isinstance(result["pending_user_questions"], list)
         assert len(result["pending_user_questions"]) > 0
         assert "No stages available" in result["pending_user_questions"][0]
@@ -1562,7 +1562,7 @@ class TestStageOutputFields:
         result = select_stage_node(state)
         
         assert result["ask_user_trigger"] == "deadlock_detected"
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         assert "pending_user_questions" in result
         assert isinstance(result["pending_user_questions"], list)
         assert len(result["pending_user_questions"]) > 0
@@ -1577,7 +1577,7 @@ class TestStageOutputFields:
         result = select_stage_node(state)
         
         assert result["ask_user_trigger"] == "no_stages_available"
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         assert "pending_user_questions" in result
         assert isinstance(result["pending_user_questions"], list)
 

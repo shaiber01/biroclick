@@ -14,8 +14,8 @@ supervisor_node:
     WRITES: workflow_phase, supervisor_verdict, supervisor_feedback, progress,
             stage_outputs, validated_materials, pending_validated_materials,
             current_stage_id, user_responses, pending_user_questions,
-            awaiting_user_input, ask_user_trigger, supervisor_call_count,
-            backtrack_count, backtrack_decision, replan_count, design_feedback,
+            ask_user_trigger, supervisor_call_count, backtrack_count, 
+            backtrack_decision, replan_count, design_feedback,
             code_feedback, design_revision_count, code_revision_count
 """
 
@@ -339,7 +339,7 @@ def supervisor_node(state: ReproState) -> dict:
     # Context check
     context_update = check_context_or_escalate(state, "supervisor")
     if context_update:
-        if context_update.get("awaiting_user_input"):
+        if context_update.get("ask_user_trigger"):
             return context_update
         state = {**state, **context_update}
 
@@ -379,17 +379,13 @@ def supervisor_node(state: ReproState) -> dict:
         # the correct handler instead of falling back to "unknown_escalation".
         if result.get("supervisor_verdict") != "ask_user":
             result["ask_user_trigger"] = None
-            # Clear awaiting_user_input to allow subsequent nodes to run
-            # (nodes with @with_context_check skip when this is True)
-            result["awaiting_user_input"] = False
             result["pending_user_questions"] = []
             # Clear user_responses to prevent stale responses from affecting
             # future ask_user cycles. Each cycle should start fresh.
             result["user_responses"] = {}
         else:
             result["ask_user_trigger"] = ask_user_trigger
-            # Keep awaiting_user_input = True when we need more clarification
-            result["awaiting_user_input"] = True
+            # Trigger is preserved for next ask_user cycle
         
         # After handling a trigger, we skip the LLM call because:
         # 1. handle_trigger() already set the appropriate verdict
@@ -424,8 +420,8 @@ def supervisor_node(state: ReproState) -> dict:
                 f"{get_options_prompt('replan_limit')}"
             )
             result["ask_user_trigger"] = "replan_limit"
+            result["supervisor_verdict"] = "ask_user"
             result["pending_user_questions"] = [question]
-            result["awaiting_user_input"] = True
             result["last_node_before_ask_user"] = "supervisor"
     
     # Log user interaction if one just happened

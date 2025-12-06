@@ -1062,7 +1062,6 @@ def _route_with_llm(
                     f"**Completed stages:** {stage_list}\n\n"
                     f"Please respond with the stage ID (e.g., 'stage0', 'stage1') or 'CANCEL' to continue without backtracking."
                 ]
-                result["awaiting_user_input"] = True
         elif verdict == "ask_user":
             # LLM needs clarification - set the question for the user
             user_question = agent_output.get("user_question", "")
@@ -1074,7 +1073,6 @@ def _route_with_llm(
                     f"Your response was unclear. Could you please clarify?\n\n"
                     f"Original response: {guidance_text[:200]}{'...' if len(guidance_text) > 200 else ''}"
                 ]
-            result["awaiting_user_input"] = True
         # For ok_continue, all_complete - no special feedback field needed
         
         logger.info(

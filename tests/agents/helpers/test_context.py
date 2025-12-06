@@ -108,17 +108,16 @@ class TestCheckContextOrEscalate:
         result = check_context_or_escalate(state, "test_node")
         
         assert isinstance(result, dict)
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         assert result["ask_user_trigger"] == "context_overflow"
         assert result["last_node_before_ask_user"] == "test_node"
         assert isinstance(result["pending_user_questions"], list)
         assert len(result["pending_user_questions"]) == 1
         assert result["pending_user_questions"][0] == "Context overflow. Please advise."
         assert "Context overflow" in result["pending_user_questions"][0]
-        # Verify all required keys are present
+        # Verify all required keys are present (awaiting_user_input removed)
         assert set(result.keys()) == {
             "pending_user_questions",
-            "awaiting_user_input",
             "ask_user_trigger",
             "last_node_before_ask_user"
         }
@@ -139,7 +138,7 @@ class TestCheckContextOrEscalate:
             result = check_context_or_escalate(state, node_name)
             
             assert result["last_node_before_ask_user"] == node_name
-            assert result["awaiting_user_input"] is True
+            assert result.get("ask_user_trigger") is not None
             assert result["ask_user_trigger"] == "context_overflow"
 
     @patch("src.agents.helpers.context.check_context_before_node")
@@ -151,7 +150,7 @@ class TestCheckContextOrEscalate:
         result = check_context_or_escalate(state, "unknown_node")
         
         assert isinstance(result, dict)
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         assert result["ask_user_trigger"] == "context_overflow"
         assert result["last_node_before_ask_user"] == "unknown_node"
         assert isinstance(result["pending_user_questions"], list)
@@ -159,10 +158,9 @@ class TestCheckContextOrEscalate:
         assert "unknown_node" in result["pending_user_questions"][0]
         assert "Context overflow" in result["pending_user_questions"][0]
         assert "How should we proceed?" in result["pending_user_questions"][0]
-        # Verify all required keys are present
+        # Verify all required keys are present (awaiting_user_input removed)
         assert set(result.keys()) == {
             "pending_user_questions",
-            "awaiting_user_input",
             "ask_user_trigger",
             "last_node_before_ask_user"
         }
@@ -177,7 +175,7 @@ class TestCheckContextOrEscalate:
         result = check_context_or_escalate(state, "test_node")
         
         assert isinstance(result, dict)
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         assert result["ask_user_trigger"] == "context_overflow"
         assert result["last_node_before_ask_user"] == "test_node"
         assert "test_node" in result["pending_user_questions"][0]

@@ -61,7 +61,7 @@ class TestResultsAnalyzerErrorHandling:
         assert result["workflow_phase"] == "analysis", "workflow_phase must be 'analysis'"
         assert result["ask_user_trigger"] == "missing_stage_id", \
             f"Expected ask_user_trigger='missing_stage_id', got '{result.get('ask_user_trigger')}'"
-        assert result["awaiting_user_input"] is True, \
+        assert result.get("ask_user_trigger") is not None, \
             "awaiting_user_input must be exactly True, not truthy"
         assert "pending_user_questions" in result
         assert isinstance(result["pending_user_questions"], list)
@@ -93,7 +93,7 @@ class TestResultsAnalyzerErrorHandling:
         assert result["workflow_phase"] == "analysis"
         assert result["ask_user_trigger"] == "missing_stage_id", \
             f"Empty string should trigger missing_stage_id, got '{result.get('ask_user_trigger')}'"
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         assert "pending_user_questions" in result
         assert len(result["pending_user_questions"]) == 1
         assert "ERROR" in result["pending_user_questions"][0]

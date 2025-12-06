@@ -237,7 +237,7 @@ class TestResultsAnalyzerNode:
         
         assert result["workflow_phase"] == "analysis"
         assert result["ask_user_trigger"] == "missing_stage_id"
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         assert len(result["pending_user_questions"]) == 1
         assert "ERROR" in result["pending_user_questions"][0]
         assert "stage" in result["pending_user_questions"][0].lower()
@@ -459,7 +459,7 @@ class TestResultsAnalyzerNode:
     def test_context_escalation_returns_awaiting_user(self, base_state):
         """Test that context escalation properly returns awaiting_user_input state."""
         escalation_state = {
-            "awaiting_user_input": True,
+            "ask_user_trigger": "context_overflow",
             "ask_user_trigger": "context_overflow",
             "pending_user_questions": ["Context limit exceeded"]
         }
@@ -467,7 +467,7 @@ class TestResultsAnalyzerNode:
         with patch("src.agents.analysis.check_context_or_escalate", return_value=escalation_state):
             result = results_analyzer_node(base_state)
             
-            assert result["awaiting_user_input"] is True
+            assert result.get("ask_user_trigger") is not None
             assert result["ask_user_trigger"] == "context_overflow"
             assert len(result["pending_user_questions"]) > 0
 

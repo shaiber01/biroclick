@@ -441,9 +441,8 @@ def log_user_interaction(
                 context={"stage_id": state.get("current_stage_id")}
             )
             
-            # Clear pending questions
+            # Clear pending questions (ask_user_trigger is cleared by supervisor)
             state["pending_user_questions"] = []
-            state["awaiting_user_input"] = False
             
             return state
     """
@@ -895,12 +894,18 @@ class ReproState(TypedDict, total=False):
     # ─── User Interaction ───────────────────────────────────────────────
     pending_user_questions: List[str]
     user_responses: Dict[str, str]  # question → response (current session)
-    awaiting_user_input: bool
     # Structure matches progress_schema.json#/definitions/user_interaction
     user_interactions: List[Dict[str, Any]]  # Full log of all user decisions/feedback
     
-    # Resume context - helps agents understand what triggered ask_user
-    ask_user_trigger: Optional[str]  # What caused ask_user (e.g., "code_review_limit", "material_checkpoint")
+    # DEPRECATED: awaiting_user_input is no longer used. Kept for checkpoint compatibility.
+    # Use ask_user_trigger instead - it's the single mechanism for routing to ask_user.
+    awaiting_user_input: bool  # DEPRECATED - not used, kept for backward compatibility
+    
+    # User interaction routing - SINGLE MECHANISM for routing to ask_user
+    # When set, all routers (via with_trigger_check wrapper) will route to ask_user.
+    # Nodes with @with_context_check decorator will skip if trigger is set.
+    # The supervisor clears this after successfully handling the user response.
+    ask_user_trigger: Optional[str]  # e.g., "code_review_limit", "material_checkpoint", "reviewer_escalation"
     last_node_before_ask_user: Optional[str]  # Which node triggered the ask_user
     
     # ─── Report Generation ──────────────────────────────────────────────
@@ -1906,7 +1911,7 @@ def check_context_before_node(
         ...     if check["escalate"]:
         ...         return {
         ...             "pending_user_questions": [check["user_question"]],
-        ...             "awaiting_user_input": True,
+        ...             "ask_user_trigger": "context_overflow",
         ...         }
         ...     if check["state_updates"]:
         ...         state = {**state, **check["state_updates"]}

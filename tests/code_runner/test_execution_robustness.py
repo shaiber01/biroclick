@@ -76,7 +76,7 @@ except Exception as e:
 import time
 import sys
 print("Starting sleep", file=sys.stderr)
-time.sleep(5)
+time.sleep(2)
 print("Finished sleep", file=sys.stderr)
 """
         start = time.time()
@@ -84,7 +84,7 @@ print("Finished sleep", file=sys.stderr)
             code=code,
             stage_id="timeout_test",
             output_dir=tmp_path,
-            config={"timeout_seconds": 1},
+            config={"timeout_seconds": 0.2},
         )
         duration = time.time() - start
 
@@ -96,9 +96,9 @@ print("Finished sleep", file=sys.stderr)
             f"Error message should mention timeout, got: {result['error']}"
 
         # Verify timing: should be close to timeout, not the full sleep duration
-        assert duration < 4.0, f"Execution took too long: {duration}s (expected < 4s)"
-        assert duration >= 0.9, f"Execution too fast: {duration}s (expected >= 0.9s for 1s timeout)"
-        assert result["runtime_seconds"] >= 0.9, \
+        assert duration < 1.5, f"Execution took too long: {duration}s (expected < 1.5s)"
+        assert duration >= 0.15, f"Execution too fast: {duration}s (expected >= 0.15s for 0.2s timeout)"
+        assert result["runtime_seconds"] >= 0.15, \
             f"Runtime seconds too low: {result['runtime_seconds']}s"
 
         # Verify stdout/stderr contain what was printed before timeout
@@ -398,7 +398,7 @@ with open("test_output.txt", "w") as f:
         """Test that runtime_seconds is accurately tracked."""
         code = """
 import time
-time.sleep(0.5)
+time.sleep(0.1)
 print("done")
 """
         start = time.time()
@@ -412,8 +412,8 @@ print("done")
         # Runtime should be positive and reasonable
         assert result["runtime_seconds"] > 0, \
             f"Runtime should be positive, got {result['runtime_seconds']}"
-        assert result["runtime_seconds"] >= 0.4, \
-            f"Runtime should be at least 0.4s, got {result['runtime_seconds']}"
+        assert result["runtime_seconds"] >= 0.08, \
+            f"Runtime should be at least 0.08s, got {result['runtime_seconds']}"
         assert result["runtime_seconds"] <= wall_time + 1.0, \
             f"Runtime {result['runtime_seconds']}s should not exceed wall time {wall_time}s by much"
 
@@ -1043,12 +1043,12 @@ for i in range(5):
 
     def test_timeout_error_structure(self, tmp_path):
         """Test that timeout error results have correct structure."""
-        code = "import time; time.sleep(10)"
+        code = "import time; time.sleep(2)"
         result = run_simulation(
             code=code,
             stage_id="timeout_structure",
             output_dir=tmp_path,
-            config={"timeout_seconds": 1},
+            config={"timeout_seconds": 0.2},
         )
 
         assert result["timeout_exceeded"] is True, "Should mark timeout as exceeded"
@@ -1056,7 +1056,7 @@ for i in range(5):
         assert "timeout" in str(result["error"]).lower(), \
             f"Error should mention timeout, got: {result['error']}"
         assert result["runtime_seconds"] > 0, "Should record runtime"
-        assert result["runtime_seconds"] < 5.0, \
+        assert result["runtime_seconds"] < 1.0, \
             f"Runtime should be close to timeout, got {result['runtime_seconds']}s"
 
     def test_timeout_with_output_capture(self, tmp_path):
@@ -1068,14 +1068,14 @@ print("Output before timeout", file=sys.stdout)
 print("Error before timeout", file=sys.stderr)
 sys.stdout.flush()
 sys.stderr.flush()
-time.sleep(10)
+time.sleep(2)
 print("Output after timeout", file=sys.stdout)
 """
         result = run_simulation(
             code=code,
             stage_id="timeout_output",
             output_dir=tmp_path,
-            config={"timeout_seconds": 1},
+            config={"timeout_seconds": 0.2},
         )
 
         assert result["timeout_exceeded"] is True, "Should mark timeout as exceeded"

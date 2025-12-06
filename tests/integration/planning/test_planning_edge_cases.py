@@ -23,7 +23,7 @@ class TestPlanningEdgeCases:
         assert result.get("ask_user_trigger") == "missing_paper_text", (
             f"Expected ask_user_trigger='missing_paper_text', got {result.get('ask_user_trigger')}"
         )
-        assert result.get("awaiting_user_input") is True, (
+        assert result.get("ask_user_trigger") is not None, (
             f"Expected awaiting_user_input=True, got {result.get('awaiting_user_input')}"
         )
         assert result.get("workflow_phase") == "planning", (
@@ -49,7 +49,7 @@ class TestPlanningEdgeCases:
         assert result.get("ask_user_trigger") == "missing_paper_text", (
             f"Expected ask_user_trigger='missing_paper_text', got {result.get('ask_user_trigger')}"
         )
-        assert result.get("awaiting_user_input") is True, (
+        assert result.get("ask_user_trigger") is not None, (
             f"Expected awaiting_user_input=True, got {result.get('awaiting_user_input')}"
         )
         assert result.get("workflow_phase") == "planning"
@@ -68,7 +68,7 @@ class TestPlanningEdgeCases:
 
         result = plan_node(state)
         assert result.get("ask_user_trigger") == "missing_paper_text"
-        assert result.get("awaiting_user_input") is True
+        assert result.get("ask_user_trigger") is not None
         assert result.get("workflow_phase") == "planning"
 
     def test_plan_node_handles_whitespace_only_paper_text(self):
@@ -82,7 +82,7 @@ class TestPlanningEdgeCases:
 
         result = plan_node(state)
         assert result.get("ask_user_trigger") == "missing_paper_text"
-        assert result.get("awaiting_user_input") is True
+        assert result.get("ask_user_trigger") is not None
 
     def test_plan_node_handles_paper_text_exactly_99_chars(self):
         """Test boundary condition: paper text exactly 99 chars (below threshold)."""
@@ -95,7 +95,7 @@ class TestPlanningEdgeCases:
 
         result = plan_node(state)
         assert result.get("ask_user_trigger") == "missing_paper_text"
-        assert result.get("awaiting_user_input") is True
+        assert result.get("ask_user_trigger") is not None
 
     def test_plan_node_handles_paper_text_exactly_100_chars(self):
         """Test boundary condition: paper text exactly 100 chars (at threshold)."""
@@ -128,7 +128,7 @@ class TestPlanningEdgeCases:
         from src.agents.planning import plan_node
 
         escalation_response = {
-            "awaiting_user_input": True,
+            "ask_user_trigger": "context_overflow",
             "ask_user_trigger": "context_overflow",
             "pending_user_questions": ["Context too large"],
         }
@@ -142,7 +142,7 @@ class TestPlanningEdgeCases:
         assert result == escalation_response, (
             f"Expected escalation response, got {result}"
         )
-        assert result.get("awaiting_user_input") is True
+        assert result.get("ask_user_trigger") is not None
         assert result.get("ask_user_trigger") == "context_overflow"
 
     def test_plan_node_handles_context_check_returns_metrics_only(self, base_state):
@@ -167,7 +167,7 @@ class TestPlanningEdgeCases:
                 result = plan_node(base_state)
 
         # Should proceed with planning, not escalate
-        assert result.get("awaiting_user_input") is not True
+        assert result.get("ask_user_trigger") is None
         assert result.get("workflow_phase") == "planning"
 
     def test_plan_node_handles_context_check_returns_none(self, base_state):
@@ -207,7 +207,7 @@ class TestPlannerErrorHandling:
         assert result.get("ask_user_trigger") == "llm_error", (
             f"Expected ask_user_trigger='llm_error', got {result.get('ask_user_trigger')}"
         )
-        assert result.get("awaiting_user_input") is True, (
+        assert result.get("ask_user_trigger") is not None, (
             f"Expected awaiting_user_input=True, got {result.get('awaiting_user_input')}"
         )
         assert result.get("workflow_phase") == "planning", (
@@ -242,7 +242,7 @@ class TestPlannerErrorHandling:
             ):
                 result = plan_node(base_state)
                 assert result.get("ask_user_trigger") == "llm_error"
-                assert result.get("awaiting_user_input") is True
+                assert result.get("ask_user_trigger") is not None
                 assert result.get("workflow_phase") == "planning"
 
     def test_reviewer_llm_error_defaults_to_needs_revision(self, base_state, valid_plan):
@@ -899,7 +899,7 @@ class TestAdaptPromptsEdgeCases:
         from src.agents.planning import adapt_prompts_node
 
         escalation_response = {
-            "awaiting_user_input": True,
+            "ask_user_trigger": "context_overflow",
             "ask_user_trigger": "context_overflow",
         }
 

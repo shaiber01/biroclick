@@ -181,7 +181,7 @@ class TestCodeReviewerNode:
         
         # Critical: Should trigger user escalation
         assert result["ask_user_trigger"] == "code_review_limit"
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         assert "pending_user_questions" in result
         assert len(result["pending_user_questions"]) == 1
         assert "Code review limit reached" in result["pending_user_questions"][0]
@@ -393,7 +393,7 @@ class TestCodeReviewerNode:
             "workflow_phase": "code_review",
             "ask_user_trigger": "context_overflow",
             "pending_user_questions": ["Context too large"],
-            "awaiting_user_input": True,
+            "ask_user_trigger": "context_overflow",
         }
         mock_check.return_value = escalation
         
@@ -401,7 +401,7 @@ class TestCodeReviewerNode:
         
         # Should return escalation exactly as-is
         assert result == escalation
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         assert result["ask_user_trigger"] == "context_overflow"
         
         # Should NOT call LLM or prompt builder
@@ -718,7 +718,7 @@ class TestCodeReviewerNode:
         
         # Should trigger escalation
         assert result["ask_user_trigger"] == "reviewer_escalation"
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         assert "pending_user_questions" in result
         assert len(result["pending_user_questions"]) == 1
         assert "material model" in result["pending_user_questions"][0]

@@ -64,7 +64,7 @@ class TestPlanNode:
         
         assert result["workflow_phase"] == "planning"
         assert result["ask_user_trigger"] == "missing_paper_text"
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         assert len(result["pending_user_questions"]) == 1
         assert "missing or too short" in result["pending_user_questions"][0]
         assert "0 characters" in result["pending_user_questions"][0]
@@ -76,7 +76,7 @@ class TestPlanNode:
         
         assert result["workflow_phase"] == "planning"
         assert result["ask_user_trigger"] == "missing_paper_text"
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         assert "0 characters" in result["pending_user_questions"][0]
 
     def test_plan_node_short_text(self, mock_state):
@@ -86,7 +86,7 @@ class TestPlanNode:
         
         assert result["workflow_phase"] == "planning"
         assert result["ask_user_trigger"] == "missing_paper_text"
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         assert "too short" in result["pending_user_questions"][0]
 
     def test_plan_node_whitespace_only_text(self, mock_state):
@@ -96,7 +96,7 @@ class TestPlanNode:
         
         assert result["workflow_phase"] == "planning"
         assert result["ask_user_trigger"] == "missing_paper_text"
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
 
     def test_plan_node_exactly_100_chars_boundary(self, mock_state, mock_llm_output):
         """Test boundary condition: exactly 100 characters should pass."""
@@ -117,17 +117,17 @@ class TestPlanNode:
         result = plan_node(mock_state)
         
         assert result["ask_user_trigger"] == "missing_paper_text"
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
 
     @patch("src.agents.planning.check_context_or_escalate")
     def test_plan_node_context_escalation(self, mock_check, mock_state):
         """Test immediate return on context check escalation."""
-        escalation = {"awaiting_user_input": True, "reason": "context"}
+        escalation = {"ask_user_trigger": "context_overflow", "reason": "context"}
         mock_check.return_value = escalation
         
         result = plan_node(mock_state)
         assert result == escalation
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
 
     @patch("src.agents.planning.call_agent_with_metrics")
     @patch("src.agents.planning.check_context_or_escalate")
@@ -156,7 +156,7 @@ class TestPlanNode:
         
         assert result["workflow_phase"] == "planning"
         assert result["ask_user_trigger"] == "llm_error"
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         assert len(result["pending_user_questions"]) == 1
         assert "LLM Error" in result["pending_user_questions"][0]
 
@@ -177,7 +177,7 @@ class TestPlanNode:
             
             assert result["workflow_phase"] == "planning"
             assert result["ask_user_trigger"] == "llm_error"
-            assert result["awaiting_user_input"] is True
+            assert result.get("ask_user_trigger") is not None
             assert exc_msg in result["pending_user_questions"][0]
 
     @patch("src.agents.planning.initialize_progress_from_plan")

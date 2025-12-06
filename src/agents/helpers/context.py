@@ -38,7 +38,6 @@ def check_context_or_escalate(state: ReproState, node_name: str) -> Optional[Dic
         # Must ask user - return state updates to trigger ask_user
         return {
             "pending_user_questions": [check.get("user_question", f"Context overflow in {node_name}. How should we proceed?")],
-            "awaiting_user_input": True,
             "ask_user_trigger": "context_overflow",
             "last_node_before_ask_user": node_name,
         }
@@ -46,7 +45,6 @@ def check_context_or_escalate(state: ReproState, node_name: str) -> Optional[Dic
     # Shouldn't reach here, but fallback to escalation
     return {
         "pending_user_questions": [f"Context overflow in {node_name}. How should we proceed?"],
-        "awaiting_user_input": True,
         "ask_user_trigger": "context_overflow",
         "last_node_before_ask_user": node_name,
     }

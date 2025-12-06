@@ -230,12 +230,11 @@ class TestCreateLlmErrorEscalation:
         assert isinstance(result, dict)
         assert "workflow_phase" in result
         assert "ask_user_trigger" in result
-        assert "awaiting_user_input" in result
+        # Note: awaiting_user_input is deprecated, ask_user_trigger is the sole mechanism
         assert "pending_user_questions" in result
         
         assert result["workflow_phase"] == "code_generation"
         assert result["ask_user_trigger"] == "llm_error"
-        assert result["awaiting_user_input"] is True
         assert isinstance(result["pending_user_questions"], list)
         assert len(result["pending_user_questions"]) == 1
 
@@ -322,9 +321,9 @@ class TestCreateLlmErrorEscalation:
         error = Exception("Error")
         result = create_llm_error_escalation("agent", "phase", error)
         
-        required_keys = {"workflow_phase", "ask_user_trigger", "awaiting_user_input", "pending_user_questions"}
+        required_keys = {"workflow_phase", "ask_user_trigger", "pending_user_questions"}
         assert set(result.keys()) == required_keys
-        assert len(result.keys()) == 4  # No extra keys
+        assert len(result.keys()) == 3  # No extra keys
 
     def test_pending_user_questions_is_list(self):
         """Should have pending_user_questions as a list."""
@@ -335,13 +334,13 @@ class TestCreateLlmErrorEscalation:
         assert len(result["pending_user_questions"]) == 1
         assert isinstance(result["pending_user_questions"][0], str)
 
-    def test_awaiting_user_input_is_boolean(self):
-        """Should have awaiting_user_input as boolean True."""
+    def test_ask_user_trigger_is_string(self):
+        """Should have ask_user_trigger as string 'llm_error'."""
         error = Exception("Error")
         result = create_llm_error_escalation("agent", "phase", error)
         
-        assert isinstance(result["awaiting_user_input"], bool)
-        assert result["awaiting_user_input"] is True
+        assert isinstance(result["ask_user_trigger"], str)
+        assert result["ask_user_trigger"] == "llm_error"
 
     def test_workflow_phase_preserved(self):
         """Should preserve workflow phase exactly."""

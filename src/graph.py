@@ -5,6 +5,19 @@ This module constructs the LangGraph state graph for the ReproLab
 paper reproduction system. It defines the workflow nodes and edges.
 
 ═══════════════════════════════════════════════════════════════════════════════
+ROUTING ARCHITECTURE
+═══════════════════════════════════════════════════════════════════════════════
+
+All routers use a unified mechanism for user interaction routing:
+
+1. The `with_trigger_check` wrapper checks `ask_user_trigger` FIRST
+2. If trigger is set, router returns "ask_user" immediately
+3. This ensures consistent handling across all routing paths
+
+Custom routers in this file are decorated with @with_trigger_check to match
+the behavior of factory-created routers.
+
+═══════════════════════════════════════════════════════════════════════════════
 ROUTING FUNCTIONS
 ═══════════════════════════════════════════════════════════════════════════════
 
@@ -22,6 +35,8 @@ The following routers are defined locally because they have unique logic:
 - route_after_select_stage: Checks current_stage_id, not a verdict
 - route_after_supervisor: Complex multi-verdict with special cases
 - route_after_ask_user: Always routes to supervisor (defined inline)
+
+All local routers are wrapped with @with_trigger_check for consistent behavior.
 """
 
 import os
@@ -63,7 +78,7 @@ from src.agents.user_options import validate_no_collisions
 # This ensures we catch any keyword collisions early
 validate_no_collisions()
 
-# Import factory-generated routing functions
+# Import factory-generated routing functions and the trigger check wrapper
 from src.routing import (
     route_after_plan_review,
     route_after_design_review,
@@ -71,6 +86,7 @@ from src.routing import (
     route_after_execution_check,
     route_after_physics_check,
     route_after_comparison_check,
+    with_trigger_check,
 )
 
 
@@ -100,22 +116,28 @@ def generate_report_node_with_checkpoint(state: ReproState) -> Dict[str, Any]:
 # Simple Routing Functions (not verdict-based)
 # ═══════════════════════════════════════════════════════════════════════
 
-def route_after_plan(state: ReproState) -> Literal["plan_review"]:
+@with_trigger_check
+def route_after_plan(state: ReproState) -> Literal["plan_review", "ask_user"]:
     """Route after planning to dedicated plan review.
     
     The plan goes through PLAN_REVIEW node before proceeding to stage selection.
     This ensures plan quality before execution begins.
+    
+    Note: Wrapped with @with_trigger_check to handle ask_user_trigger.
     """
     # Save checkpoint after planning
     save_checkpoint(state, "after_plan")
     return "plan_review"
 
 
-def route_after_select_stage(state: ReproState) -> Literal["design", "generate_report"]:
+@with_trigger_check
+def route_after_select_stage(state: ReproState) -> Literal["design", "generate_report", "ask_user"]:
     """
     Route based on next stage selection.
     If a stage is selected, go to design.
     If no stage returned (None), generate report.
+    
+    Note: Wrapped with @with_trigger_check to handle ask_user_trigger.
     """
     if state.get("current_stage_id"):
         return "design"
@@ -126,6 +148,7 @@ def route_after_select_stage(state: ReproState) -> Literal["design", "generate_r
 # Complex Routing Function (too many special cases for factory)
 # ═══════════════════════════════════════════════════════════════════════
 
+@with_trigger_check
 def route_after_supervisor(state: ReproState) -> Literal["select_stage", "planning", "ask_user", "handle_backtrack", "generate_report", "material_checkpoint", "analyze", "generate_code", "design", "code_review", "design_review", "plan_review"]:
     """
     Route after supervisor decision.
@@ -137,6 +160,8 @@ def route_after_supervisor(state: ReproState) -> Literal["select_stage", "planni
     - Checkpoint naming using stage context
     
     Includes mandatory material checkpoint after Stage 0 completes.
+    
+    Note: Wrapped with @with_trigger_check to handle ask_user_trigger.
     """
     import logging
     logger = logging.getLogger(__name__)
@@ -274,7 +299,7 @@ def create_repro_graph(checkpoint_dir: Optional[str] = None):
     workflow.add_conditional_edges(
         "planning",
         route_after_plan,
-        {"plan_review": "plan_review"}
+        {"plan_review": "plan_review", "ask_user": "ask_user"}
     )
     
     workflow.add_conditional_edges(
@@ -292,7 +317,8 @@ def create_repro_graph(checkpoint_dir: Optional[str] = None):
         route_after_select_stage,
         {
             "design": "design",
-            "generate_report": "generate_report"
+            "generate_report": "generate_report",
+            "ask_user": "ask_user"
         }
     )
     
@@ -378,17 +404,22 @@ def create_repro_graph(checkpoint_dir: Optional[str] = None):
     workflow.add_edge("handle_backtrack", "select_stage")
     
     # Material checkpoint routes based on whether materials are already validated
-    def route_after_material_checkpoint(state: ReproState) -> str:
+    def _route_after_material_checkpoint(state: ReproState) -> str:
         """
         Route after material checkpoint.
         
         If materials are already validated, skip ask_user and go to select_stage.
         Otherwise, route to ask_user for user confirmation.
+        
+        Note: Wrapped with with_trigger_check to handle ask_user_trigger.
         """
         validated_materials = state.get("validated_materials", [])
         if validated_materials:
             return "select_stage"
         return "ask_user"
+    
+    # Wrap with trigger check for consistent handling
+    route_after_material_checkpoint = with_trigger_check(_route_after_material_checkpoint)
     
     workflow.add_conditional_edges(
         "material_checkpoint",

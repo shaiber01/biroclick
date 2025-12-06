@@ -14,14 +14,14 @@ plan_node:
            runtime_config, prompt_adaptations
     WRITES: workflow_phase, plan, planned_materials, assumptions, paper_domain,
             progress, extracted_parameters, last_plan_review_verdict, planner_feedback,
-            replan_count, ask_user_trigger, pending_user_questions, awaiting_user_input
+            replan_count, ask_user_trigger, pending_user_questions
 
 plan_reviewer_node:
     READS: plan, paper_text, paper_figures, paper_domain, assumptions,
            last_plan_review_verdict, planner_feedback, digitized_data, replan_count,
            runtime_config
     WRITES: workflow_phase, last_plan_review_verdict, planner_feedback, replan_count,
-            ask_user_trigger, pending_user_questions, awaiting_user_input
+            ask_user_trigger, pending_user_questions
 """
 
 import json
@@ -159,13 +159,12 @@ def plan_node(state: ReproState) -> dict:
                 "Planner requires paper text to create reproduction plan. "
                 "Please provide paper text via paper_loader or check paper input."
             ],
-            "awaiting_user_input": True,
         }
     
     # Context check - critical for planner
     escalation = check_context_or_escalate(state, "plan")
     if escalation is not None:
-        if escalation.get("awaiting_user_input"):
+        if escalation.get("ask_user_trigger"):
             return escalation
         # Just state updates (e.g., metrics) - merge into state and continue
         state = {**state, **escalation}
@@ -564,7 +563,6 @@ def plan_reviewer_node(state: ReproState) -> dict:
             "workflow_phase": "plan_review",
             "ask_user_trigger": "reviewer_escalation",
             "pending_user_questions": [f"{escalate}\n\n{get_options_prompt('reviewer_escalation')}"],
-            "awaiting_user_input": True,
             "last_node_before_ask_user": "plan_review",
             "reviewer_escalation_source": "plan_reviewer",
         }
@@ -617,7 +615,6 @@ def plan_reviewer_node(state: ReproState) -> dict:
                     f"- Latest feedback: {summary_text}\n\n"
                     f"{get_options_prompt('replan_limit')}"
                 ]
-                result["awaiting_user_input"] = True
                 result["last_node_before_ask_user"] = "plan_review"
         
         result["planner_feedback"] = agent_output.get("summary", "")

@@ -62,7 +62,6 @@ class TestSimulationDesignerNode:
         
         # Strict assertion: ensure no error flags
         assert "ask_user_trigger" not in result
-        assert "awaiting_user_input" not in result
         assert "pending_user_questions" not in result
 
         # Verify LLM Call Construction - exact calls
@@ -87,12 +86,12 @@ class TestSimulationDesignerNode:
         base_state["current_stage_id"] = None
         result = simulation_designer_node(base_state)
         
-        # Verify exact error response structure
-        expected_keys = {"workflow_phase", "ask_user_trigger", "pending_user_questions", "awaiting_user_input"}
+        # Verify exact error response structure (awaiting_user_input removed)
+        expected_keys = {"workflow_phase", "ask_user_trigger", "pending_user_questions"}
         assert set(result.keys()) == expected_keys, f"Unexpected keys: {set(result.keys()) - expected_keys}"
         
         assert result["ask_user_trigger"] == "missing_stage_id"
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         assert result["workflow_phase"] == "design"  # Should still set phase
         
         # Verify exact error message content
@@ -109,7 +108,7 @@ class TestSimulationDesignerNode:
         
         # Empty string should be treated as missing
         assert result["ask_user_trigger"] == "missing_stage_id"
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         assert result["workflow_phase"] == "design"
     
     def test_designer_missing_stage_id_key(self, base_state):
@@ -119,7 +118,7 @@ class TestSimulationDesignerNode:
         
         # Missing key should be treated as missing
         assert result["ask_user_trigger"] == "missing_stage_id"
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         assert result["workflow_phase"] == "design"
 
     @patch("src.agents.design.build_agent_prompt")
@@ -137,15 +136,14 @@ class TestSimulationDesignerNode:
         
         result = simulation_designer_node(base_state)
         
-        # Verify exact error response structure
+        # Verify exact error response structure (awaiting_user_input removed)
         assert "ask_user_trigger" in result
-        assert "awaiting_user_input" in result
         assert "pending_user_questions" in result
         assert "workflow_phase" in result
         
         # Should escalate to user
         assert result["ask_user_trigger"] == "llm_error"
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         assert result["workflow_phase"] == "design"
         
         # Should contain error info - verify exact content
@@ -421,7 +419,7 @@ class TestSimulationDesignerNode:
         """If context check asks for user input, downstream calls must be skipped."""
         escalation = {
             "workflow_phase": "design",
-            "awaiting_user_input": True,
+            "ask_user_trigger": "context_overflow",
             "ask_user_trigger": "context_invalid",
         }
         mock_check.return_value = escalation

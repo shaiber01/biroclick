@@ -54,7 +54,7 @@ class TestHandleBacktrackNode:
         result = handle_backtrack_node(state)
         
         assert result["workflow_phase"] == "backtracking"
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         assert result["ask_user_trigger"] == "invalid_backtrack_decision"
         assert "pending_user_questions" in result
         assert len(result["pending_user_questions"]) > 0
@@ -73,7 +73,7 @@ class TestHandleBacktrackNode:
         result = handle_backtrack_node(state)
         
         assert result["workflow_phase"] == "backtracking"
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         assert result["ask_user_trigger"] == "invalid_backtrack_decision"
         assert "pending_user_questions" in result
         assert len(result["pending_user_questions"]) > 0
@@ -92,7 +92,7 @@ class TestHandleBacktrackNode:
         result = handle_backtrack_node(state)
         
         assert result["workflow_phase"] == "backtracking"
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         assert result["ask_user_trigger"] == "invalid_backtrack_target"
         assert "pending_user_questions" in result
         assert len(result["pending_user_questions"]) > 0
@@ -218,7 +218,7 @@ class TestHandleBacktrackNode:
         result = handle_backtrack_node(state)
         
         assert result["workflow_phase"] == "backtracking_limit"
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         assert result["ask_user_trigger"] == "backtrack_limit"
         assert "pending_user_questions" in result
         assert len(result["pending_user_questions"]) > 0
@@ -244,7 +244,7 @@ class TestHandleBacktrackNode:
         
         assert result["workflow_phase"] == "backtracking_limit"
         assert result["backtrack_count"] == 2
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
     
     def test_backtrack_limit_defaults_to_two(self):
         """Should use default max_backtracks=2 when runtime_config is missing."""
@@ -392,7 +392,7 @@ class TestHandleBacktrackNode:
         
         assert result["workflow_phase"] == "backtracking"
         assert result["ask_user_trigger"] == "backtrack_target_not_found"
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         assert "pending_user_questions" in result
         assert len(result["pending_user_questions"]) > 0
         assert "stageX" in result["pending_user_questions"][0]
@@ -415,7 +415,7 @@ class TestHandleBacktrackNode:
         
         assert result["workflow_phase"] == "backtracking"
         assert result["ask_user_trigger"] == "backtrack_target_not_found"
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
     
     def test_errors_on_missing_progress(self):
         """Should error when progress is missing."""
@@ -432,7 +432,7 @@ class TestHandleBacktrackNode:
         
         assert result["workflow_phase"] == "backtracking"
         assert result["ask_user_trigger"] == "backtrack_target_not_found"
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
     
     def test_errors_on_missing_progress_stages(self):
         """Should error when progress.stages is missing."""
@@ -449,7 +449,7 @@ class TestHandleBacktrackNode:
         
         assert result["workflow_phase"] == "backtracking"
         assert result["ask_user_trigger"] == "backtrack_target_not_found"
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
 
     def test_deep_copies_progress(self):
         """Should deep copy progress to avoid side effects on input state."""

@@ -12,7 +12,7 @@ class TestWithContextCheck:
     def test_returns_escalation_when_awaiting_input(self, mock_check):
         """Should return escalation when context check requires user input."""
         escalation = {
-            "awaiting_user_input": True,
+            "ask_user_trigger": "context_overflow",
             "pending_user_questions": ["Context overflow"],
             "ask_user_trigger": "context_overflow",
             "last_node_before_ask_user": "test_node",
@@ -31,7 +31,7 @@ class TestWithContextCheck:
         
         # Verify escalation is returned exactly as-is
         assert result == escalation
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         assert result["pending_user_questions"] == ["Context overflow"]
         assert result["ask_user_trigger"] == "context_overflow"
         assert result["last_node_before_ask_user"] == "test_node"

@@ -1757,7 +1757,7 @@ class TestSupervisorReviewerEscalation:
         
         # Verify reviewer sets up escalation correctly
         assert reviewer_result["ask_user_trigger"] == "reviewer_escalation"
-        assert reviewer_result["awaiting_user_input"] is True
+        assert reviewer_result.get("ask_user_trigger") is not None
         assert "Drude model" in reviewer_result["pending_user_questions"][0]
         assert reviewer_result["reviewer_escalation_source"] == "code_reviewer"
         

@@ -519,7 +519,7 @@ class TestPaperTextValidation:
         with patch("src.agents.planning.call_agent_with_metrics", return_value=mock_response):
             result = plan_node(base_state)
 
-        assert result.get("awaiting_user_input") is True, "Should await user input for empty paper_text"
+        assert result.get("ask_user_trigger") is not None, "Should await user input for empty paper_text"
         assert result.get("ask_user_trigger") == "missing_paper_text", (
             f"Expected trigger 'missing_paper_text', got '{result.get('ask_user_trigger')}'"
         )
@@ -545,7 +545,7 @@ class TestPaperTextValidation:
         with patch("src.agents.planning.call_agent_with_metrics", return_value=mock_response):
             result = plan_node(base_state)
 
-        assert result.get("awaiting_user_input") is True
+        assert result.get("ask_user_trigger") is not None
         assert result.get("ask_user_trigger") == "missing_paper_text"
         questions = result.get("pending_user_questions", [])
         assert len(questions) >= 1, "Should have at least one pending question"
@@ -571,7 +571,7 @@ class TestPaperTextValidation:
             result = plan_node(base_state)
 
         # 99 chars is < 100, so should be rejected
-        assert result.get("awaiting_user_input") is True, (
+        assert result.get("ask_user_trigger") is not None, (
             "99 characters should be rejected (< 100 threshold)"
         )
         assert result.get("ask_user_trigger") == "missing_paper_text"
@@ -595,7 +595,7 @@ class TestPaperTextValidation:
             result = plan_node(base_state)
 
         # 100 chars is >= 100, so should be accepted
-        assert result.get("awaiting_user_input") is not True, (
+        assert result.get("ask_user_trigger") is None, (
             "100 characters should be accepted (>= 100 threshold)"
         )
         assert "plan" in result, "Should return plan when paper_text is valid"
@@ -614,7 +614,7 @@ class TestPaperTextValidation:
         with patch("src.agents.planning.call_agent_with_metrics", return_value=mock_response):
             result = plan_node(base_state)
 
-        assert result.get("awaiting_user_input") is True
+        assert result.get("ask_user_trigger") is not None
         assert result.get("ask_user_trigger") == "missing_paper_text"
 
     def test_plan_node_rejects_whitespace_only_paper_text(self, base_state):
@@ -631,7 +631,7 @@ class TestPaperTextValidation:
         with patch("src.agents.planning.call_agent_with_metrics", return_value=mock_response):
             result = plan_node(base_state)
 
-        assert result.get("awaiting_user_input") is True
+        assert result.get("ask_user_trigger") is not None
         assert result.get("ask_user_trigger") == "missing_paper_text"
 
 
@@ -656,7 +656,7 @@ class TestLLMErrorHandling:
         assert result.get("workflow_phase") == "planning", (
             "Should preserve workflow_phase as 'planning'"
         )
-        assert result.get("awaiting_user_input") is True, (
+        assert result.get("ask_user_trigger") is not None, (
             "LLM errors should escalate to user"
         )
         assert result.get("ask_user_trigger") == "llm_error", (
@@ -684,7 +684,7 @@ class TestLLMErrorHandling:
             result = plan_node(base_state)
 
         # Verify escalation structure matches create_llm_error_escalation output
-        assert result.get("awaiting_user_input") is True, "Should await user input"
+        assert result.get("ask_user_trigger") is not None, "Should await user input"
         assert result.get("ask_user_trigger") == "llm_error", (
             "Timeout should also use 'llm_error' trigger"
         )
@@ -706,7 +706,7 @@ class TestLLMErrorHandling:
         ):
             result = plan_node(base_state)
 
-        assert result.get("awaiting_user_input") is True
+        assert result.get("ask_user_trigger") is not None
         assert result.get("ask_user_trigger") == "llm_error"
         assert result.get("workflow_phase") == "planning"
 
@@ -720,7 +720,7 @@ class TestLLMErrorHandling:
         ):
             result = plan_node(base_state)
 
-        assert result.get("awaiting_user_input") is True
+        assert result.get("ask_user_trigger") is not None
         assert result.get("ask_user_trigger") == "llm_error"
         questions = result.get("pending_user_questions", [])
         assert len(questions) >= 1
@@ -1167,7 +1167,7 @@ class TestContextCheckIntegration:
         }
 
         escalation_state = {
-            "awaiting_user_input": True,
+            "ask_user_trigger": "context_overflow",
             "ask_user_trigger": "context_budget_exceeded",
             "pending_user_questions": ["Context budget exceeded - tokens: 50000"],
         }
@@ -1185,7 +1185,7 @@ class TestContextCheckIntegration:
         assert mock_llm.call_count == 0, (
             "LLM should not be called when context check returns escalation"
         )
-        assert result.get("awaiting_user_input") is True
+        assert result.get("ask_user_trigger") is not None
         assert result.get("ask_user_trigger") == "context_budget_exceeded"
         assert result.get("pending_user_questions") == ["Context budget exceeded - tokens: 50000"]
         

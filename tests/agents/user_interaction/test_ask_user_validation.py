@@ -31,7 +31,7 @@ class TestEmptyResponseHandling:
         result = ask_user_node(state)
         
         # Should return with awaiting_user_input=True and error message
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         assert "empty" in result["pending_user_questions"][0].lower()
         assert result["ask_user_trigger"] == "material_checkpoint"
         # Should NOT have user_responses since response was empty
@@ -49,7 +49,7 @@ class TestEmptyResponseHandling:
         
         result = ask_user_node(state)
         
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         assert "empty" in result["pending_user_questions"][0].lower()
 
     @patch("src.agents.user_interaction.interrupt")
@@ -65,7 +65,7 @@ class TestEmptyResponseHandling:
         result = ask_user_node(state)
         
         # Should accept any non-empty response
-        assert result["awaiting_user_input"] is False
+        assert result.get("ask_user_trigger") is None
         assert "user_responses" in result
         assert result["user_responses"]["Choose option a, b, or c"] == "option b - Adjust γX to 1.116×10¹⁴ rad/s"
 
@@ -85,7 +85,7 @@ class TestResponseStorage:
         
         result = ask_user_node(state)
         
-        assert result["awaiting_user_input"] is False
+        assert result.get("ask_user_trigger") is None
         assert result["user_responses"]["Question?"] == "User's detailed response"
 
     @patch("src.agents.user_interaction.interrupt")
@@ -103,7 +103,7 @@ class TestResponseStorage:
         
         result = ask_user_node(state)
         
-        assert result["awaiting_user_input"] is False
+        assert result.get("ask_user_trigger") is None
         assert len(result["user_responses"]) == 2
         assert result["user_responses"]["OldQuestion?"] == "OldResponse"
         assert result["user_responses"]["NewQuestion?"] == "NewResponse"
@@ -121,7 +121,7 @@ class TestResponseStorage:
         
         result = ask_user_node(state)
         
-        assert result["awaiting_user_input"] is False
+        assert result.get("ask_user_trigger") is None
         assert result["user_responses"]["Question?"] == "Response"
 
 
@@ -138,7 +138,7 @@ class TestEdgeCases:
         
         result = ask_user_node(state)
         
-        assert result["awaiting_user_input"] is False
+        assert result.get("ask_user_trigger") is None
         assert result["workflow_phase"] == "awaiting_user"
         # Should not call interrupt when no questions
         mock_interrupt.assert_not_called()
@@ -156,7 +156,7 @@ class TestEdgeCases:
         result = ask_user_node(state)
         
         # Safety net should set "unknown_escalation" as trigger
-        assert result["awaiting_user_input"] is False
+        assert result.get("ask_user_trigger") is None
         assert result["ask_user_trigger"] == "unknown_escalation"
         
         # interrupt should be called with regenerated questions containing WORKFLOW RECOVERY
@@ -211,7 +211,7 @@ class TestStateClearing:
         result = ask_user_node(state)
         
         assert result["pending_user_questions"] == []
-        assert result["awaiting_user_input"] is False
+        assert result.get("ask_user_trigger") is None
 
     @patch("src.agents.user_interaction.interrupt")
     def test_clears_original_user_questions(self, mock_interrupt):
@@ -378,7 +378,7 @@ class TestErrorContextHelpers:
             "last_code_review_verdict": "approve",
             "last_design_review_verdict": "approve",
             "last_plan_review_verdict": "approve",
-            "awaiting_user_input": True,
+            "ask_user_trigger": "context_overflow",
         }
         
         result = _infer_error_context(state)

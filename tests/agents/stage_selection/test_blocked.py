@@ -157,7 +157,7 @@ class TestBlockedStageHandling:
         # With only one stage that has missing dependencies, it's a deadlock
         # The stage can never run because its dependencies don't exist
         assert result.get("ask_user_trigger") == "deadlock_detected"
-        assert result.get("awaiting_user_input") is True
+        assert result.get("ask_user_trigger") is not None
 
     @patch("src.agents.stage_selection.update_progress_stage_status")
     def test_blocks_stage_with_multiple_missing_deps(self, mock_update):
@@ -384,7 +384,7 @@ class TestBlockedStageHandling:
         assert result["current_stage_id"] is None
         assert result["workflow_phase"] == "stage_selection"
         assert result["ask_user_trigger"] == "deadlock_detected"
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         assert len(result["pending_user_questions"]) > 0
         assert "Deadlock detected" in result["pending_user_questions"][0]
         assert "stage1" in result["pending_user_questions"][0] or "stage2" in result["pending_user_questions"][0]
@@ -407,7 +407,7 @@ class TestBlockedStageHandling:
         # Should detect deadlock
         assert result["current_stage_id"] is None
         assert result["ask_user_trigger"] == "deadlock_detected"
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
 
     def test_no_deadlock_when_potentially_runnable_exists(self):
         """Should not detect deadlock when potentially runnable stages exist."""
@@ -526,7 +526,7 @@ class TestBlockedStageHandling:
         assert result["current_stage_id"] is None
         assert result["workflow_phase"] == "stage_selection"
         assert result["ask_user_trigger"] == "deadlock_detected"
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         assert len(result["pending_user_questions"]) > 0
         assert "Deadlock" in result["pending_user_questions"][0]
 
@@ -623,7 +623,7 @@ class TestBlockedStageHandling:
         assert result["current_stage_id"] is None
         assert result["workflow_phase"] == "stage_selection"
         assert result["ask_user_trigger"] == "deadlock_detected"
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         assert "Deadlock" in result["pending_user_questions"][0]
         
         # Verify stage was actually blocked in state

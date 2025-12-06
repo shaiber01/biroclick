@@ -1,4 +1,11 @@
-tests/integration/test_run_folder_structure.py::TestMultipleRuns::test_multiple_runs_create_separate_folders
-tests/code_runner/test_execution_robustness.py::TestExecutionRobustness::test_timeout_with_output_capture
-tests/code_runner/test_execution_robustness.py::TestExecutionRobustness::test_real_timeout_enforcement
-tests/code_runner/test_execution_robustness.py::TestExecutionRobustness::test_timeout_error_structure
+78.30s  tests/integration/planning/test_prompt_adaptation.py::TestAdaptPromptsNode::test_adapt_prompts_handles_context_escalation
+35.04s  tests/integration/planning/test_plan_reviewer_rules.py::TestContextCheckBehavior::test_plan_reviewer_returns_empty_when_awaiting_user_input
+30.50s  tests/state_machine/test_execution.py::TestPhysicsSanityNode::test_awaiting_user_input_returns_empty
+24.85s  tests/agents/supervision/test_supervisor_node_core.py::TestSupervisorNode::test_returns_escalation_on_context_overflow
+24.66s  tests/workflow/test_workflow_revisions.py::TestContextCheckBehavior::test_design_reviewer_returns_empty_when_awaiting_input
+23.43s  tests/workflow/test_workflow_revisions.py::TestContextCheckBehavior::test_code_reviewer_returns_empty_when_awaiting_input
+21.56s  tests/state_machine/test_execution.py::TestExecutionValidatorNode::test_awaiting_user_input_returns_empty
+18.27s  tests/agents/planning/test_plan_node.py::TestPlanNode::test_plan_node_context_escalation
+15.51s  tests/workflow/test_workflow_failures.py::TestExecutionValidatorEdgeCases::test_awaiting_user_input_returns_empty_dict
+14.10s  tests/workflow/test_workflow_failures.py::TestPhysicsSanityNode::test_awaiting_user_input_returns_empty_dict
+1.11s  tests/integration/test_run_folder_structure.py::TestMultipleRuns::test_multiple_runs_create_separate_folders

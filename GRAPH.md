@@ -157,3 +157,41 @@ Nodes marked with 🤖 make LLM (Language Model) calls. Nodes without this indic
 - **Backtracking support**: `handle_backtrack` node marks target stage as `needs_rerun` and dependent stages as `invalidated`
 - **User interaction**: `ask_user` node uses LangGraph interrupts to pause workflow and request user input
 - **Supervisor orchestration**: `supervisor` node makes high-level decisions and routes to appropriate next steps
+
+## Routing Mechanism
+
+### Single Mechanism: `ask_user_trigger`
+
+The workflow uses a single state field `ask_user_trigger` to control routing to user interaction:
+
+1. **Setting the trigger**: When a node needs user input (error limit reached, LLM escalation, etc.), it sets `ask_user_trigger` to a value like `"code_review_limit"` or `"reviewer_escalation"`
+
+2. **Routing check**: All routers are wrapped with `with_trigger_check` which checks this field FIRST before any other routing logic. If set, the router returns `"ask_user"`
+
+3. **Node skipping**: Nodes decorated with `@with_context_check` skip execution if `ask_user_trigger` is set, preserving the trigger for the router to handle
+
+4. **Trigger clearing**: The supervisor clears `ask_user_trigger` after successfully handling the user response
+
+### Why This Design?
+
+This unified approach ensures:
+- **Consistency**: All routing decisions check the same field
+- **No stuck states**: The trigger is always handled by routing to `ask_user`
+- **Predictable flow**: User interaction is always processed through `ask_user → supervisor`
+
+### Trigger Types
+
+| Trigger | Source | Description |
+|---------|--------|-------------|
+| `code_review_limit` | code_reviewer | Code revision limit reached |
+| `design_review_limit` | design_reviewer | Design revision limit reached |
+| `replan_limit` | supervisor/plan_reviewer | Replan limit reached |
+| `reviewer_escalation` | any reviewer | LLM explicitly asks for user help |
+| `context_overflow` | context check | LLM context limit exceeded |
+| `material_checkpoint` | material_checkpoint | Mandatory material validation |
+| `backtrack_limit` | handle_backtrack | Backtrack limit exceeded |
+| `execution_failure_limit` | execution_check | Execution failure limit reached |
+| `physics_failure_limit` | physics_check | Physics check failure limit reached |
+| `analysis_limit` | comparison_check | Analysis revision limit reached |
+| `missing_stage_id` | various | Stage ID missing (workflow error) |
+| `llm_error` | various | LLM API call failed |

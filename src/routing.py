@@ -5,7 +5,18 @@ This module provides a factory function for creating routing functions
 that route based on verdict fields in the ReproState. This eliminates
 the repetitive boilerplate code in graph.py.
 
-Each routing function:
+═══════════════════════════════════════════════════════════════════════════════
+ROUTING ARCHITECTURE
+═══════════════════════════════════════════════════════════════════════════════
+
+All routers use a unified mechanism for user interaction via `ask_user_trigger`:
+
+1. The `with_trigger_check` wrapper is applied to ALL routers (factory and custom)
+2. This wrapper checks `ask_user_trigger` FIRST before any routing logic
+3. If the trigger is set, the router returns "ask_user" immediately
+4. This ensures consistent handling across the entire workflow
+
+Each routing function (after trigger check):
 1. Checks for None verdict (logs error, escalates to ask_user)
 2. Maps verdict values to route names
 3. Checks revision/failure counts against limits
@@ -26,12 +37,46 @@ configuration-based router creation.
 """
 
 import logging
+from functools import wraps
 from typing import Callable, Dict, List, Optional, TypedDict, Any, Literal
 
 from schemas.state import ReproState, save_checkpoint
 
 
 logger = logging.getLogger(__name__)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Universal Router Wrapper
+# ═══════════════════════════════════════════════════════════════════════
+
+def with_trigger_check(router_func: Callable[["ReproState"], str]) -> Callable[["ReproState"], str]:
+    """Universal wrapper that checks ask_user_trigger before any routing logic.
+    
+    This wrapper ensures consistent handling of user interaction triggers across
+    ALL routers (both factory-created and custom). When ask_user_trigger is set,
+    the workflow should route to ask_user regardless of other routing logic.
+    
+    Args:
+        router_func: The routing function to wrap
+        
+    Returns:
+        A wrapped router that checks ask_user_trigger first
+        
+    Example:
+        @with_trigger_check
+        def route_after_plan(state: ReproState) -> str:
+            return "plan_review"
+    """
+    @wraps(router_func)
+    def wrapper(state: "ReproState") -> str:
+        if state.get("ask_user_trigger"):
+            logger.info(
+                f"Routing to ask_user due to trigger: {state.get('ask_user_trigger')}"
+            )
+            return "ask_user"
+        return router_func(state)
+    return wrapper
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -226,18 +271,8 @@ def create_verdict_router(
     pass_through = set(pass_through_verdicts or [])
     
     def router(state: ReproState) -> RouteType:
-        # ═══════════════════════════════════════════════════════════════════════
-        # CHECK FOR PENDING USER INTERACTION
-        # If ask_user_trigger is set, a node has already decided we need user input.
-        # Route to ask_user directly to process any pending/pre-provided response.
-        # This prevents re-evaluation of count limits when resuming from interrupt.
-        # The trigger is cleared by supervisor after processing the response.
-        # ═══════════════════════════════════════════════════════════════════════
-        if state.get("ask_user_trigger"):
-            logger.info(
-                f"{checkpoint_prefix}: ask_user_trigger is set, routing to ask_user"
-            )
-            return "ask_user"
+        # NOTE: ask_user_trigger check is handled by the with_trigger_check wrapper
+        # applied at the end of this factory function.
         
         verdict = state.get(verdict_field)
         
@@ -315,7 +350,8 @@ def create_verdict_router(
         save_checkpoint(state, f"before_ask_user_{checkpoint_prefix}_fallback")
         return "ask_user"
     
-    return router
+    # Wrap with trigger check for consistent handling across all routers
+    return with_trigger_check(router)
 
 
 # ═══════════════════════════════════════════════════════════════════════

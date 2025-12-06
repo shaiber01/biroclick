@@ -79,7 +79,7 @@ class TestResultsAnalyzerNode:
         # Verify all error handling fields are present and correct
         assert result["workflow_phase"] == "analysis"
         assert result["ask_user_trigger"] == "missing_stage_id"
-        assert result["awaiting_user_input"] is True
+        # Note: awaiting_user_input is deprecated, ask_user_trigger is the sole mechanism
         assert "pending_user_questions" in result
         assert isinstance(result["pending_user_questions"], list)
         assert len(result["pending_user_questions"]) > 0
@@ -234,14 +234,14 @@ class TestResultsAnalyzerNode:
     def test_returns_escalation_on_context_overflow(self, mock_context, base_state):
         """Should return escalation when context overflow."""
         mock_context.return_value = {
-            "awaiting_user_input": True,
+            "ask_user_trigger": "context_overflow",
             "pending_user_questions": ["Context overflow"],
         }
         
         result = results_analyzer_node(base_state)
         
         # Verify escalation is properly returned
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") == "context_overflow"
         assert "pending_user_questions" in result
         assert isinstance(result["pending_user_questions"], list)
         assert len(result["pending_user_questions"]) > 0
@@ -348,7 +348,7 @@ class TestResultsAnalyzerNode:
         # Empty string should be treated as missing
         assert result["workflow_phase"] == "analysis"
         assert result["ask_user_trigger"] == "missing_stage_id"
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
 
     def test_analyzer_stage_outputs_files_none(self, base_state):
         """Test error when stage_outputs.files is explicitly None."""
@@ -501,7 +501,7 @@ class TestResultsAnalyzerNode:
         assert result["workflow_phase"] == "analysis"
         assert "analysis_overall_classification" in result
         # Should not be awaiting user input
-        assert result.get("awaiting_user_input") is not True
+        assert result.get("ask_user_trigger") is None
 
     @patch("src.agents.analysis.check_context_or_escalate", return_value=None)
     @patch("src.agents.analysis.build_agent_prompt", return_value="Prompt")

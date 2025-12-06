@@ -605,7 +605,7 @@ class TestDeadlockTriggerEdgeCases:
     def test_handles_context_escalation(self, mock_call, mock_context):
         """Should handle context escalation correctly."""
         # Context check returns escalation (awaiting_user_input)
-        mock_context.return_value = {"awaiting_user_input": True}
+        mock_context.return_value = {"ask_user_trigger": "context_overflow"}
         state = {
             "ask_user_trigger": "deadlock_detected",
             "user_responses": {"Question": "GENERATE_REPORT"},
@@ -616,7 +616,7 @@ class TestDeadlockTriggerEdgeCases:
         result = supervisor_node(state)
         
         # Should return early with context escalation
-        assert result.get("awaiting_user_input") is True
+        assert result.get("ask_user_trigger") is not None
         # Should not process trigger when context escalates
         mock_call.assert_not_called()
 

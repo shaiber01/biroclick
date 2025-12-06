@@ -79,7 +79,7 @@ class TestPlanningPhase:
         
         result = plan_node(base_state)
         
-        assert result.get("awaiting_user_input") is True, (
+        assert result.get("ask_user_trigger") is not None, (
             "Missing paper_text should trigger user escalation"
         )
         assert result.get("ask_user_trigger") == "missing_paper_text"
@@ -92,7 +92,7 @@ class TestPlanningPhase:
         
         result = plan_node(base_state)
         
-        assert result.get("awaiting_user_input") is True
+        assert result.get("ask_user_trigger") is not None
         assert result.get("ask_user_trigger") == "missing_paper_text"
 
     def test_planning_llm_failure_escalates(self, base_state):
@@ -102,7 +102,7 @@ class TestPlanningPhase:
             
             result = plan_node(base_state)
             
-            assert result.get("awaiting_user_input") is True, (
+            assert result.get("ask_user_trigger") is not None, (
                 "LLM failure should trigger user escalation"
             )
             assert result.get("ask_user_trigger") == "llm_error"
@@ -392,7 +392,7 @@ class TestStageSelection:
         result = select_stage_node(base_state)
 
         assert result.get("current_stage_id") is None
-        assert result.get("awaiting_user_input") is True
+        assert result.get("ask_user_trigger") is not None
         assert result.get("ask_user_trigger") == "no_stages_available"
 
     def test_stage_selection_all_completed_returns_none(self, base_state):
@@ -408,7 +408,7 @@ class TestStageSelection:
         result = select_stage_node(base_state)
 
         assert result.get("current_stage_id") is None
-        assert result.get("awaiting_user_input") is not True, (
+        assert result.get("ask_user_trigger") is None, (
             "All stages completed should not escalate"
         )
 
@@ -458,7 +458,7 @@ class TestStageSelection:
 
         # Should detect deadlock
         assert result.get("ask_user_trigger") == "deadlock_detected"
-        assert result.get("awaiting_user_input") is True
+        assert result.get("ask_user_trigger") is not None
 
     def test_stage_selection_blocked_stage_with_missing_stage_type(self, base_state):
         """Test that stage without stage_type gets blocked."""
@@ -474,7 +474,7 @@ class TestStageSelection:
         # Stage 0 should be skipped (missing stage_type)
         # Stage 1 can't run (dependency not satisfied)
         # Should detect deadlock or escalate
-        assert result.get("current_stage_id") is None or result.get("awaiting_user_input") is True
+        assert result.get("current_stage_id") is None or result.get("ask_user_trigger") is not None
 
 
 class TestSimulationDesigner:
@@ -509,7 +509,7 @@ class TestSimulationDesigner:
 
         result = simulation_designer_node(base_state)
 
-        assert result.get("awaiting_user_input") is True
+        assert result.get("ask_user_trigger") is not None
         assert result.get("ask_user_trigger") == "missing_stage_id"
 
     def test_designer_llm_failure_escalates(self, base_state):
@@ -522,7 +522,7 @@ class TestSimulationDesigner:
 
             result = simulation_designer_node(base_state)
 
-            assert result.get("awaiting_user_input") is True
+            assert result.get("ask_user_trigger") is not None
             assert result.get("ask_user_trigger") == "llm_error"
 
     def test_designer_adds_new_assumptions(self, base_state):
@@ -586,7 +586,7 @@ class TestDesignReviewer:
 
             result = design_reviewer_node(base_state)
 
-            assert result.get("awaiting_user_input") is True
+            assert result.get("ask_user_trigger") is not None
             assert result.get("ask_user_trigger") == "design_review_limit"
 
     def test_design_review_verdict_normalization(self, base_state):
@@ -646,7 +646,7 @@ class TestCodeGenerator:
 
         result = code_generator_node(base_state)
 
-        assert result.get("awaiting_user_input") is True
+        assert result.get("ask_user_trigger") is not None
         assert result.get("ask_user_trigger") == "missing_stage_id"
 
     def test_code_generator_stub_design_fails(self, base_state):
@@ -720,7 +720,7 @@ class TestCodeGenerator:
 
             result = code_generator_node(base_state)
 
-            assert result.get("awaiting_user_input") is True
+            assert result.get("ask_user_trigger") is not None
             assert result.get("ask_user_trigger") == "llm_error"
 
     def test_code_generator_stub_code_increments_revision(self, base_state):
@@ -785,7 +785,7 @@ class TestCodeReviewer:
 
             result = code_reviewer_node(base_state)
 
-            assert result.get("awaiting_user_input") is True
+            assert result.get("ask_user_trigger") is not None
             assert result.get("ask_user_trigger") == "code_review_limit"
 
     def test_code_review_llm_failure_defaults_to_needs_revision(self, base_state):
@@ -1137,7 +1137,7 @@ class TestEdgeCases:
         result = select_stage_node(base_state)
         
         # Should not crash, should escalate or return None stage
-        assert result.get("current_stage_id") is None or result.get("awaiting_user_input") is True
+        assert result.get("current_stage_id") is None or result.get("ask_user_trigger") is not None
 
     def test_empty_list_dependencies_handled(self, base_state):
         """Test that empty dependencies list is handled correctly."""
@@ -1189,7 +1189,7 @@ class TestEdgeCases:
             result = code_reviewer_node(base_state)
 
             # When at max, rejection should trigger escalation
-            assert result.get("awaiting_user_input") is True
+            assert result.get("ask_user_trigger") is not None
             assert result.get("ask_user_trigger") == "code_review_limit"
 
     def test_invalid_stage_structure_handled(self, base_state):
@@ -1235,7 +1235,7 @@ class TestCounterBounds:
             # Counter should not exceed max
             assert result["design_revision_count"] <= MAX_DESIGN_REVISIONS
             # Should escalate when at max
-            assert result.get("awaiting_user_input") is True
+            assert result.get("ask_user_trigger") is not None
 
     def test_code_revision_count_respects_max(self, base_state):
         """Test that code_revision_count doesn't exceed MAX_CODE_REVISIONS."""
@@ -1251,7 +1251,7 @@ class TestCounterBounds:
             # Counter should not exceed max
             assert result["code_revision_count"] <= MAX_CODE_REVISIONS
             # Should escalate when at max
-            assert result.get("awaiting_user_input") is True
+            assert result.get("ask_user_trigger") is not None
 
 
 class TestValidationHierarchy:

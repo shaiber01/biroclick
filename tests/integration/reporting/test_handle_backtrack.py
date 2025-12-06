@@ -297,7 +297,7 @@ class TestHandleBacktrackNode:
         # Verify error response structure
         assert result.get("ask_user_trigger") == "invalid_backtrack_decision", \
             "Must trigger invalid_backtrack_decision"
-        assert result.get("awaiting_user_input") is True, "Must set awaiting_user_input"
+        assert result.get("ask_user_trigger") is not None, "Must set awaiting_user_input"
         assert "pending_user_questions" in result, "Must include pending_user_questions"
         assert len(result["pending_user_questions"]) > 0, "Must have at least one question"
         assert result.get("workflow_phase") == "backtracking", "workflow_phase must be 'backtracking'"
@@ -317,7 +317,7 @@ class TestHandleBacktrackNode:
 
         result = handle_backtrack_node(base_state)
         assert result.get("ask_user_trigger") == "invalid_backtrack_decision"
-        assert result.get("awaiting_user_input") is True
+        assert result.get("ask_user_trigger") is not None
 
     def test_backtrack_rejects_empty_decision(self, base_state, valid_plan):
         """Verify error response when backtrack_decision is empty dict."""
@@ -329,7 +329,7 @@ class TestHandleBacktrackNode:
 
         result = handle_backtrack_node(base_state)
         assert result.get("ask_user_trigger") == "invalid_backtrack_decision"
-        assert result.get("awaiting_user_input") is True
+        assert result.get("ask_user_trigger") is not None
 
     def test_backtrack_rejects_empty_target(self, base_state, valid_plan):
         """Verify error response when target_stage_id is empty string."""
@@ -346,7 +346,7 @@ class TestHandleBacktrackNode:
         
         assert result.get("ask_user_trigger") == "invalid_backtrack_target", \
             "Must trigger invalid_backtrack_target for empty target"
-        assert result.get("awaiting_user_input") is True
+        assert result.get("ask_user_trigger") is not None
         assert result.get("workflow_phase") == "backtracking"
         
         # Verify error message
@@ -370,7 +370,7 @@ class TestHandleBacktrackNode:
         
         # Missing key defaults to empty string, which should trigger invalid_backtrack_target
         assert result.get("ask_user_trigger") == "invalid_backtrack_target"
-        assert result.get("awaiting_user_input") is True
+        assert result.get("ask_user_trigger") is not None
 
     def test_backtrack_target_not_found(self, base_state, valid_plan):
         """Verify error when target stage doesn't exist in progress."""
@@ -390,7 +390,7 @@ class TestHandleBacktrackNode:
         
         assert result.get("ask_user_trigger") == "backtrack_target_not_found", \
             "Must trigger backtrack_target_not_found"
-        assert result.get("awaiting_user_input") is True
+        assert result.get("ask_user_trigger") is not None
         assert result.get("workflow_phase") == "backtracking"
         
         # Verify the error message includes the stage ID that wasn't found
@@ -424,7 +424,7 @@ class TestHandleBacktrackNode:
             "Must trigger backtrack_limit"
         assert result.get("workflow_phase") == "backtracking_limit", \
             "Workflow phase must be 'backtracking_limit'"
-        assert result.get("awaiting_user_input") is True
+        assert result.get("ask_user_trigger") is not None
         assert result.get("last_node_before_ask_user") == "handle_backtrack", \
             "Must record last node before ask_user"
         
@@ -665,7 +665,7 @@ class TestHandleBacktrackNode:
         
         # Target stage won't exist in empty progress
         assert result.get("ask_user_trigger") == "backtrack_target_not_found"
-        assert result.get("awaiting_user_input") is True
+        assert result.get("ask_user_trigger") is not None
 
     def test_backtrack_with_missing_progress(self, base_state, valid_plan):
         """Test behavior when progress key is missing from state."""
@@ -903,7 +903,7 @@ class TestHandleBacktrackNode:
         assert result["workflow_phase"] == "backtracking_limit"
         assert result["backtrack_count"] == 6
         assert result["ask_user_trigger"] == "backtrack_limit"
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         assert result["last_node_before_ask_user"] == "handle_backtrack"
         assert "pending_user_questions" in result
         assert len(result["pending_user_questions"]) > 0

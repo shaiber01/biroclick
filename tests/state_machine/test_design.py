@@ -105,7 +105,7 @@ class TestSimulationDesignerNode:
         result = simulation_designer_node(state)
         
         # Must escalate
-        assert result.get("awaiting_user_input") is True, "Must await user input when stage_id missing"
+        assert result.get("ask_user_trigger") is not None, "Must await user input when stage_id missing"
         assert result.get("ask_user_trigger") == "missing_stage_id", "Trigger should be 'missing_stage_id'"
         assert result.get("pending_user_questions"), "Must have questions for user"
         
@@ -120,7 +120,7 @@ class TestSimulationDesignerNode:
             result = simulation_designer_node(state_with_stage)
         
         # Must escalate
-        assert result.get("awaiting_user_input") is True, "Must await user input on LLM error"
+        assert result.get("ask_user_trigger") is not None, "Must await user input on LLM error"
         assert result.get("ask_user_trigger") == "llm_error", "Trigger should be 'llm_error'"
         assert result.get("pending_user_questions"), "Must have questions for user"
 
@@ -173,14 +173,14 @@ class TestSimulationDesignerNode:
         # Mock context check to return escalation
         escalation_response = {
             "pending_user_questions": ["Context overflow in design. How should we proceed?"],
-            "awaiting_user_input": True,
+            "ask_user_trigger": "context_overflow",
             "ask_user_trigger": "context_overflow",
         }
         
         with patch("src.agents.design.check_context_or_escalate", return_value=escalation_response):
             result = simulation_designer_node(state_with_stage)
         
-        assert result.get("awaiting_user_input") is True
+        assert result.get("ask_user_trigger") is not None
         assert result.get("ask_user_trigger") == "context_overflow"
 
     def test_revision_feedback_included_in_prompt(self, state_with_stage):
@@ -247,7 +247,7 @@ class TestDesignReviewerNode:
             result = design_reviewer_node(state_at_revision_limit)
         
         assert result.get("last_design_review_verdict") == "needs_revision"
-        assert result.get("awaiting_user_input") is True, "Must await user input at revision limit"
+        assert result.get("ask_user_trigger") is not None, "Must await user input at revision limit"
         assert result.get("ask_user_trigger") == "design_review_limit"
         assert result.get("pending_user_questions"), "Must have questions for user"
         # Counter should NOT increment past limit
@@ -785,7 +785,7 @@ class TestDesignEdgeCases:
 
     def test_design_with_awaiting_user_input_already_true(self, state_with_stage):
         """Test: if already awaiting user input, designer returns empty dict."""
-        state = {**state_with_stage, "awaiting_user_input": True}
+        state = {**state_with_stage, "ask_user_trigger": "context_overflow"}
         
         # The with_context_check decorator should return {} early
         with patch("src.agents.design.call_agent_with_metrics") as mock:
@@ -847,7 +847,7 @@ class TestDesignEdgeCases:
             result = design_reviewer_node(state)
         
         # Should escalate because we're at the custom limit
-        assert result.get("awaiting_user_input") is True, \
+        assert result.get("ask_user_trigger") is not None, \
             "Should escalate at custom limit"
         assert result.get("ask_user_trigger") == "design_review_limit"
 

@@ -486,7 +486,7 @@ class TestDesignReviewerContextCheck:
         base_state["design_description"] = {"stage_id": "stage_0"}
 
         escalation_result = {
-            "awaiting_user_input": True,
+            "ask_user_trigger": "context_overflow",
             "ask_user_trigger": "context_overflow",
             "pending_user_questions": ["Context overflow. How to proceed?"],
         }
@@ -496,7 +496,7 @@ class TestDesignReviewerContextCheck:
         ):
             result = design_reviewer_node(base_state)
 
-        assert result.get("awaiting_user_input") is True
+        assert result.get("ask_user_trigger") is not None
         assert result.get("ask_user_trigger") == "context_overflow"
 
 
@@ -655,7 +655,7 @@ class TestSimulationDesignerMissingStageId:
             result = simulation_designer_node(base_state)
 
         mock_call.assert_not_called()
-        assert result.get("awaiting_user_input") is True
+        assert result.get("ask_user_trigger") is not None
         assert result.get("ask_user_trigger") == "missing_stage_id"
         assert len(result.get("pending_user_questions", [])) > 0
         # Check the error message is informative
@@ -673,7 +673,7 @@ class TestSimulationDesignerMissingStageId:
             result = simulation_designer_node(base_state)
 
         mock_call.assert_not_called()
-        assert result.get("awaiting_user_input") is True
+        assert result.get("ask_user_trigger") is not None
 
 
 class TestSimulationDesignerNewAssumptions:
@@ -806,7 +806,7 @@ class TestSimulationDesignerLLMFailure:
             result = simulation_designer_node(base_state)
 
         # Designer should escalate to user (can't produce output without LLM)
-        assert result.get("awaiting_user_input") is True
+        assert result.get("ask_user_trigger") is not None
         assert result.get("ask_user_trigger") == "llm_error"
         assert len(result.get("pending_user_questions", [])) > 0
         # Error message should be informative
@@ -839,7 +839,7 @@ class TestSimulationDesignerContextCheck:
         base_state["current_stage_id"] = "stage_0"
 
         escalation = {
-            "awaiting_user_input": True,
+            "ask_user_trigger": "context_overflow",
             "ask_user_trigger": "context_overflow",
             "pending_user_questions": ["Context too large. How to proceed?"],
         }
@@ -850,7 +850,7 @@ class TestSimulationDesignerContextCheck:
         ):
             result = simulation_designer_node(base_state)
 
-        assert result.get("awaiting_user_input") is True
+        assert result.get("ask_user_trigger") is not None
         assert result.get("ask_user_trigger") == "context_overflow"
 
     def test_designer_merges_context_state_updates(self, base_state, valid_plan):

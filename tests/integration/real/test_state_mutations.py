@@ -162,7 +162,7 @@ class TestStateMutations:
         result = plan_node(state)
 
         assert result.get("ask_user_trigger") == "missing_paper_text"
-        assert result.get("awaiting_user_input") is True
+        assert result.get("ask_user_trigger") is not None
         assert "plan" not in result
         assert "pending_user_questions" in result
         assert len(result["pending_user_questions"]) > 0
@@ -176,7 +176,7 @@ class TestStateMutations:
         result = plan_node(state)
 
         assert result.get("ask_user_trigger") == "missing_paper_text"
-        assert result.get("awaiting_user_input") is True
+        assert result.get("ask_user_trigger") is not None
         assert "plan" not in result
         assert "pending_user_questions" in result
         assert any("0 characters" in q or "missing" in q.lower() for q in result["pending_user_questions"])
@@ -189,7 +189,7 @@ class TestStateMutations:
         result = plan_node(state)
 
         assert result.get("ask_user_trigger") == "missing_paper_text"
-        assert result.get("awaiting_user_input") is True
+        assert result.get("ask_user_trigger") is not None
         assert "plan" not in result
 
     def test_plan_node_rejects_boundary_length_paper_text(self):
@@ -202,7 +202,7 @@ class TestStateMutations:
         result = plan_node(state)
 
         assert result.get("ask_user_trigger") == "missing_paper_text"
-        assert result.get("awaiting_user_input") is True
+        assert result.get("ask_user_trigger") is not None
         assert "plan" not in result
 
     def test_plan_node_accepts_boundary_length_paper_text(self):
@@ -280,7 +280,7 @@ class TestStateMutations:
 
         # Should escalate to user on LLM failure
         assert result.get("ask_user_trigger") == "llm_error"
-        assert result.get("awaiting_user_input") is True
+        assert result.get("ask_user_trigger") is not None
         assert "pending_user_questions" in result
         assert len(result["pending_user_questions"]) > 0
         assert any("failed" in q.lower() for q in result["pending_user_questions"])
@@ -295,7 +295,7 @@ class TestStateMutations:
         escalation_result = {
             "ask_user_trigger": "context_issue",
             "pending_user_questions": ["Context check failed"],
-            "awaiting_user_input": True,
+            "ask_user_trigger": "context_overflow",
         }
 
         with patch(
@@ -306,7 +306,7 @@ class TestStateMutations:
 
         # Should return the escalation result
         assert result.get("ask_user_trigger") == "context_issue"
-        assert result.get("awaiting_user_input") is True
+        assert result.get("ask_user_trigger") is not None
 
     def test_plan_node_adds_replan_context_to_prompt(self):
         """plan_node must add replan context when replan_count > 0."""
@@ -534,7 +534,7 @@ class TestStateMutations:
         # After incrementing, we hit the max - should escalate
         assert result["replan_count"] == MAX_REPLANS
         assert result.get("ask_user_trigger") == "replan_limit"
-        assert result.get("awaiting_user_input") is True
+        assert result.get("ask_user_trigger") is not None
         assert "pending_user_questions" in result
         assert len(result["pending_user_questions"]) > 0
         # Should include feedback and options in the question
@@ -1058,7 +1058,7 @@ class TestStateMutations:
         # After incrementing, we hit the max - should escalate
         assert result["design_revision_count"] == MAX_DESIGN_REVISIONS
         assert result.get("ask_user_trigger") == "design_review_limit"
-        assert result.get("awaiting_user_input") is True
+        assert result.get("ask_user_trigger") is not None
         assert "pending_user_questions" in result
         assert len(result["pending_user_questions"]) > 0
         # Should include options in the question
@@ -1319,7 +1319,7 @@ class TestStateMutations:
         result = simulation_designer_node(state)
 
         assert result.get("ask_user_trigger") == "missing_stage_id"
-        assert result.get("awaiting_user_input") is True
+        assert result.get("ask_user_trigger") is not None
         assert "design_description" not in result
         assert result["workflow_phase"] == "design"
         assert "pending_user_questions" in result
@@ -1335,7 +1335,7 @@ class TestStateMutations:
         result = simulation_designer_node(state)
 
         assert result.get("ask_user_trigger") == "missing_stage_id"
-        assert result.get("awaiting_user_input") is True
+        assert result.get("ask_user_trigger") is not None
         assert "design_description" not in result
 
     def test_simulation_designer_handles_new_assumptions(self):
@@ -1466,7 +1466,7 @@ class TestStateMutations:
                 result = simulation_designer_node(state)
 
         assert result.get("ask_user_trigger") == "llm_error"
-        assert result.get("awaiting_user_input") is True
+        assert result.get("ask_user_trigger") is not None
         assert "pending_user_questions" in result
 
     def test_simulation_designer_handles_context_escalation(self):
@@ -1482,7 +1482,7 @@ class TestStateMutations:
         escalation_result = {
             "ask_user_trigger": "context_issue",
             "pending_user_questions": ["Context check failed"],
-            "awaiting_user_input": True,
+            "ask_user_trigger": "context_overflow",
         }
 
         with patch(
@@ -1492,7 +1492,7 @@ class TestStateMutations:
             result = simulation_designer_node(state)
 
         assert result.get("ask_user_trigger") == "context_issue"
-        assert result.get("awaiting_user_input") is True
+        assert result.get("ask_user_trigger") is not None
 
     def test_simulation_designer_handles_non_dict_llm_output(self):
         """simulation_designer_node must handle non-dict LLM output."""
@@ -1613,7 +1613,7 @@ class TestStateMutations:
         result = code_generator_node(state)
 
         assert result.get("ask_user_trigger") == "missing_stage_id"
-        assert result.get("awaiting_user_input") is True
+        assert result.get("ask_user_trigger") is not None
         assert "code" not in result
         assert result["workflow_phase"] == "code_generation"
         assert "pending_user_questions" in result
@@ -1628,7 +1628,7 @@ class TestStateMutations:
         result = code_generator_node(state)
 
         assert result.get("ask_user_trigger") == "missing_stage_id"
-        assert result.get("awaiting_user_input") is True
+        assert result.get("ask_user_trigger") is not None
 
     def test_code_generator_rejects_stub_design(self):
         """code_generator_node must reject stub design descriptions."""
@@ -1881,7 +1881,7 @@ def run_simulation():
                 result = code_generator_node(state)
 
         assert result.get("ask_user_trigger") == "llm_error"
-        assert result.get("awaiting_user_input") is True
+        assert result.get("ask_user_trigger") is not None
         assert "pending_user_questions" in result
 
     def test_code_generator_handles_context_escalation(self):
@@ -1894,7 +1894,7 @@ def run_simulation():
         escalation_result = {
             "ask_user_trigger": "context_issue",
             "pending_user_questions": ["Context check failed"],
-            "awaiting_user_input": True,
+            "ask_user_trigger": "context_overflow",
         }
 
         with patch(
@@ -1904,7 +1904,7 @@ def run_simulation():
             result = code_generator_node(state)
 
         assert result.get("ask_user_trigger") == "context_issue"
-        assert result.get("awaiting_user_input") is True
+        assert result.get("ask_user_trigger") is not None
 
     def test_code_generator_uses_simulation_code_key(self):
         """code_generator_node must handle simulation_code key from LLM."""
@@ -2093,7 +2093,7 @@ def run_simulation():
 
         assert result["code_revision_count"] == MAX_CODE_REVISIONS
         assert result.get("ask_user_trigger") == "code_review_limit"
-        assert result.get("awaiting_user_input") is True
+        assert result.get("ask_user_trigger") is not None
         assert "pending_user_questions" in result
 
     def test_code_reviewer_escalates_at_max_revisions(self):
@@ -2122,7 +2122,7 @@ def run_simulation():
         # After incrementing, we hit the max - should escalate
         assert result["code_revision_count"] == MAX_CODE_REVISIONS
         assert result.get("ask_user_trigger") == "code_review_limit"
-        assert result.get("awaiting_user_input") is True
+        assert result.get("ask_user_trigger") is not None
         assert "pending_user_questions" in result
         # Should include options in the question
         assert any("PROVIDE_HINT" in q for q in result["pending_user_questions"])
@@ -2443,7 +2443,7 @@ def run_simulation():
         # After incrementing, we hit the max - should escalate
         assert result["execution_failure_count"] == MAX_EXECUTION_FAILURES
         assert result.get("ask_user_trigger") == "execution_failure_limit"
-        assert result.get("awaiting_user_input") is True
+        assert result.get("ask_user_trigger") is not None
         assert "pending_user_questions" in result
         # Should include run error in question
         assert any("crashed" in q.lower() for q in result["pending_user_questions"])
@@ -2725,7 +2725,7 @@ def run_simulation():
         # After incrementing, we hit the max - should escalate
         assert result["physics_failure_count"] == MAX_PHYSICS_FAILURES
         assert result.get("ask_user_trigger") == "physics_failure_limit"
-        assert result.get("awaiting_user_input") is True
+        assert result.get("ask_user_trigger") is not None
         assert "pending_user_questions" in result
         # Should include options
         assert any("RETRY" in q for q in result["pending_user_questions"])

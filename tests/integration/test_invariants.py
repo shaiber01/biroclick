@@ -460,7 +460,7 @@ class TestInvariants:
             assert result["design_revision_count"] == 3, \
                 f"design_revision_count should not exceed max (3), got {result['design_revision_count']}"
             # When max is reached, should escalate
-            assert result.get("awaiting_user_input") is True or result.get("ask_user_trigger"), \
+            assert result.get("ask_user_trigger") is not None or result.get("ask_user_trigger"), \
                 "Should escalate to user when max revisions reached"
 
     def test_counter_does_not_increment_on_approve(self, base_state):
@@ -500,7 +500,7 @@ class TestRegressionPrevention:
             result = plan_node(base_state)
             assert isinstance(result, dict), \
                 "plan_node must return dict even on error, got {type(result)}"
-            assert result.get("awaiting_user_input") is True, \
+            assert result.get("ask_user_trigger") is not None, \
                 "plan_node must escalate to user on LLM error"
             assert result.get("workflow_phase") == "planning", \
                 f"Expected workflow_phase 'planning', got '{result.get('workflow_phase')}'"
@@ -1087,7 +1087,7 @@ class TestBacktrackInvariants:
 
         # Test with missing backtrack_decision
         result = handle_backtrack_node(base_state)
-        assert result.get("awaiting_user_input") is True, \
+        assert result.get("ask_user_trigger") is not None, \
             "handle_backtrack_node should escalate when decision is missing"
         assert result.get("ask_user_trigger") == "invalid_backtrack_decision", \
             "Should set ask_user_trigger for invalid decision"
@@ -1095,7 +1095,7 @@ class TestBacktrackInvariants:
         # Test with decision not accepted
         base_state["backtrack_decision"] = {"accepted": False, "target_stage_id": "stage_0"}
         result = handle_backtrack_node(base_state)
-        assert result.get("awaiting_user_input") is True, \
+        assert result.get("ask_user_trigger") is not None, \
             "handle_backtrack_node should escalate when decision is not accepted"
 
     def test_backtrack_node_requires_target_stage_id(self, base_state, valid_plan):
@@ -1110,7 +1110,7 @@ class TestBacktrackInvariants:
         # Test with empty target_stage_id
         base_state["backtrack_decision"] = {"accepted": True, "target_stage_id": ""}
         result = handle_backtrack_node(base_state)
-        assert result.get("awaiting_user_input") is True, \
+        assert result.get("ask_user_trigger") is not None, \
             "handle_backtrack_node should escalate when target_stage_id is empty"
         assert result.get("ask_user_trigger") == "invalid_backtrack_target", \
             "Should set ask_user_trigger for invalid target"
@@ -1131,7 +1131,7 @@ class TestBacktrackInvariants:
             "stages_to_invalidate": []
         }
         result = handle_backtrack_node(base_state)
-        assert result.get("awaiting_user_input") is True, \
+        assert result.get("ask_user_trigger") is not None, \
             "handle_backtrack_node should escalate when target stage doesn't exist"
         assert result.get("ask_user_trigger") == "backtrack_target_not_found", \
             "Should set ask_user_trigger for not found target"
@@ -1153,7 +1153,7 @@ class TestBacktrackInvariants:
         }
 
         result = handle_backtrack_node(base_state)
-        assert result.get("awaiting_user_input") is True, \
+        assert result.get("ask_user_trigger") is not None, \
             "handle_backtrack_node should escalate when max backtracks exceeded"
         assert result.get("ask_user_trigger") == "backtrack_limit", \
             "Should set ask_user_trigger for backtrack limit"
@@ -1911,7 +1911,7 @@ class TestCodeGeneratorInvariants:
         base_state["design_description"] = {"design": "test"}
 
         result = code_generator_node(base_state)
-        assert result.get("awaiting_user_input") is True, \
+        assert result.get("ask_user_trigger") is not None, \
             "code_generator should escalate when current_stage_id is None"
 
     def test_code_generator_requires_design_description(self, base_state, valid_plan):
@@ -1984,7 +1984,7 @@ class TestCodeGeneratorInvariants:
             side_effect=RuntimeError("API Error"),
         ):
             result = code_generator_node(base_state)
-            assert result.get("awaiting_user_input") is True, \
+            assert result.get("ask_user_trigger") is not None, \
                 "code_generator should escalate to user on LLM error"
             assert result.get("ask_user_trigger") == "llm_error", \
                 f"Expected ask_user_trigger 'llm_error', got '{result.get('ask_user_trigger')}'"

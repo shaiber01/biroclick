@@ -323,7 +323,7 @@ class TestComparisonValidatorNode:
         """Should return escalation when context overflow."""
         mock_context.return_value = {
             "workflow_phase": "comparison_validation",  # Added missing phase
-            "awaiting_user_input": True,
+            "ask_user_trigger": "context_overflow",
             "pending_user_questions": ["Context overflow"],
         }
         
@@ -337,16 +337,16 @@ class TestComparisonValidatorNode:
         
         # Let's try patching where it is defined, to cover all usages.
         with patch("src.agents.helpers.context.check_context_before_node") as mock_check_before:
-             mock_check_before.return_value = {
-                 "ok": False,
-                 "escalate": True,
-                 "user_question": "Context overflow",
-                 "state_updates": None
-             }
-             
-             result = comparison_validator_node(base_state)
-             
-             assert result["awaiting_user_input"] is True
+            mock_check_before.return_value = {
+                "ok": False,
+                "escalate": True,
+                "user_question": "Context overflow",
+                "state_updates": None
+            }
+            
+            result = comparison_validator_node(base_state)
+            
+            assert result["ask_user_trigger"] == "context_overflow"
 
     @patch("src.agents.analysis.check_context_or_escalate", return_value=None)
     def test_needs_revision_when_no_comparisons_but_has_targets(self, mock_check, base_state):
@@ -577,13 +577,13 @@ class TestComparisonValidatorNode:
     
     @patch("src.agents.analysis.check_context_or_escalate", return_value=None)
     def test_handles_awaiting_user_input_true(self, mock_check, base_state):
-        """Should return early when awaiting_user_input is already True."""
-        base_state["awaiting_user_input"] = True
+        """Should return early when ask_user_trigger is already set."""
+        base_state["ask_user_trigger"] = "code_review_limit"
         base_state["figure_comparisons"] = []
         
         result = comparison_validator_node(base_state)
         
-        # Should return empty dict (no state changes) - this preserves awaiting_user_input=True
+        # Should return empty dict (no state changes) - this preserves the trigger
         # in the merged state since LangGraph merges the result dict into state
         assert result == {}
         # Verify workflow_phase was NOT set (processing was skipped)

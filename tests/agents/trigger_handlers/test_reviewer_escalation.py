@@ -590,7 +590,7 @@ class TestLLMRoutingIntegration:
         # Should list completed stages
         assert "stage0" in mock_result["pending_user_questions"][0]
         assert "stage1" in mock_result["pending_user_questions"][0]
-        assert mock_result.get("awaiting_user_input") is True
+        assert mock_result.get("ask_user_trigger") is not None
 
     @patch("src.agents.supervision.trigger_handlers.call_agent_with_metrics")
     @patch("src.agents.supervision.trigger_handlers.build_agent_prompt")
@@ -650,7 +650,7 @@ class TestLLMRoutingIntegration:
         assert "pending_user_questions" in mock_result
         assert len(mock_result["pending_user_questions"]) == 1
         assert "gamma parameter" in mock_result["pending_user_questions"][0]
-        assert mock_result.get("awaiting_user_input") is True
+        assert mock_result.get("ask_user_trigger") is not None
 
     @patch("src.agents.supervision.trigger_handlers.call_agent_with_metrics")
     @patch("src.agents.supervision.trigger_handlers.build_agent_prompt")

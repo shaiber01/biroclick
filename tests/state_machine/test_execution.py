@@ -390,7 +390,7 @@ class TestPhysicsSanityNode:
             assert result.get("ask_user_trigger") == "design_flaw_limit", (
                 f"Expected ask_user_trigger='design_flaw_limit', got '{result.get('ask_user_trigger')}'"
             )
-            assert result.get("awaiting_user_input") is True
+            assert result.get("ask_user_trigger") is not None
             assert result.get("last_node_before_ask_user") == "physics_check"
             assert len(result.get("pending_user_questions", [])) > 0
             assert "design flaws" in result["pending_user_questions"][0].lower()

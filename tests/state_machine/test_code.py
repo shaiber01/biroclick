@@ -335,7 +335,7 @@ class TestCodeGeneratorNode:
         assert result.get("ask_user_trigger") == "missing_stage_id", (
             f"Expected ask_user_trigger='missing_stage_id', got {result.get('ask_user_trigger')}"
         )
-        assert result.get("awaiting_user_input") is True, (
+        assert result.get("ask_user_trigger") is not None, (
             "Expected awaiting_user_input=True for missing stage_id"
         )
         assert result.get("workflow_phase") == "code_generation", (
@@ -463,7 +463,7 @@ class TestCodeGeneratorNode:
             result = code_generator_node(state)
         
         # Should escalate to user
-        assert result.get("awaiting_user_input") is True, (
+        assert result.get("ask_user_trigger") is not None, (
             "Expected awaiting_user_input=True on LLM error"
         )
         assert result.get("ask_user_trigger") == "llm_error", (
@@ -690,7 +690,7 @@ class TestCodeReviewerNode:
         assert result.get("ask_user_trigger") == "code_review_limit", (
             f"Expected ask_user_trigger='code_review_limit', got {result.get('ask_user_trigger')}"
         )
-        assert result.get("awaiting_user_input") is True, (
+        assert result.get("ask_user_trigger") is not None, (
             "Expected awaiting_user_input=True at limit"
         )
         assert result.get("last_node_before_ask_user") == "code_review", (
@@ -746,7 +746,7 @@ class TestContextCheckBehavior:
             "paper_text": "Test" * 10,
             "current_stage_id": "stage_1",
             "code": "print('test')" * 10,
-            "awaiting_user_input": True,  # Already awaiting
+            "ask_user_trigger": "context_overflow",  # Already awaiting
             "runtime_config": {},
         }
         
@@ -773,7 +773,7 @@ class TestContextCheckBehavior:
         
         # Mock context check to return escalation
         escalation_result = {
-            "awaiting_user_input": True,
+            "ask_user_trigger": "context_overflow",
             "ask_user_trigger": "context_limit",
             "pending_user_questions": ["Context limit reached"],
         }
@@ -787,7 +787,7 @@ class TestContextCheckBehavior:
             mock_llm.assert_not_called()
         
         # Should return the escalation result
-        assert result.get("awaiting_user_input") is True, (
+        assert result.get("ask_user_trigger") is not None, (
             "Should return escalation when context check triggers"
         )
         assert result.get("ask_user_trigger") == "context_limit", (

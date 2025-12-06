@@ -7,13 +7,12 @@ State Keys
 ----------
 ask_user_node:
     READS: pending_user_questions, ask_user_trigger, paper_id
-    WRITES: workflow_phase, user_responses, pending_user_questions,
-            awaiting_user_input
+    WRITES: workflow_phase, user_responses, pending_user_questions
 
 material_checkpoint_node:
     READS: current_stage_id, stage_outputs, progress
     WRITES: workflow_phase, pending_validated_materials, pending_user_questions,
-            awaiting_user_input, ask_user_trigger, last_node_before_ask_user
+            ask_user_trigger, last_node_before_ask_user
 
 Implementation Notes
 --------------------
@@ -82,8 +81,8 @@ def _infer_error_context(state: "ReproState") -> str:
     if state.get("last_plan_review_verdict") is None:
         return "plan_review_error"
     
-    # Check if awaiting_user_input is stuck
-    if state.get("awaiting_user_input"):
+    # Check if ask_user_trigger is stuck (indicates previous interaction wasn't completed)
+    if state.get("ask_user_trigger"):
         return "stuck_awaiting_input"
     
     return "unknown_error"
@@ -125,7 +124,7 @@ def _generate_error_question(context: str, state: "ReproState") -> str:
             "The reproduction plan may not have been validated."
         ),
         "stuck_awaiting_input": (
-            "Workflow appears to be stuck in 'awaiting_user_input' state.\n\n"
+            "Workflow appears to have an unprocessed ask_user_trigger.\n\n"
             "This indicates a previous user interaction wasn't properly completed.\n"
             "The system will attempt to recover."
         ),
@@ -167,7 +166,6 @@ def ask_user_node(state: ReproState) -> Dict[str, Any]:
     # Early return if nothing to ask - this is the normal "no questions" case
     if not questions:
         return {
-            "awaiting_user_input": False,
             "workflow_phase": "awaiting_user",
         }
     
@@ -260,7 +258,6 @@ def ask_user_node(state: ReproState) -> Dict[str, Any]:
             "pending_user_questions": [
                 f"Your response was empty. Please provide a response:\n\n{first_question}"
             ],
-            "awaiting_user_input": True,
             "ask_user_trigger": trigger,
             "last_node_before_ask_user": state.get("last_node_before_ask_user"),
             "original_user_questions": original_questions,
@@ -270,7 +267,6 @@ def ask_user_node(state: ReproState) -> Dict[str, Any]:
     result = {
         "user_responses": {**(state.get("user_responses") or {}), **mapped_responses},
         "pending_user_questions": [],
-        "awaiting_user_input": False,
         "workflow_phase": "awaiting_user",
         "original_user_questions": None,
     }
@@ -314,7 +310,6 @@ def material_checkpoint_node(state: ReproState) -> dict:
         return {
             "workflow_phase": "material_checkpoint",
             "pending_user_questions": [],  # No questions = ask_user passes through
-            "awaiting_user_input": False,
         }
     
     # Get material validation results from progress
@@ -361,7 +356,6 @@ def material_checkpoint_node(state: ReproState) -> dict:
     return {
         "workflow_phase": "material_checkpoint",
         "pending_user_questions": [question],
-        "awaiting_user_input": True,
         "ask_user_trigger": "material_checkpoint",
         "last_node_before_ask_user": "material_checkpoint",
         "pending_validated_materials": pending_materials,

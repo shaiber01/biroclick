@@ -9,15 +9,14 @@ execution_validator_node:
     READS: execution_result, current_stage_id, code, design_description,
            execution_failure_count, runtime_config
     WRITES: workflow_phase, execution_verdict, execution_feedback,
-            execution_failure_count, ask_user_trigger, pending_user_questions,
-            awaiting_user_input
+            execution_failure_count, ask_user_trigger, pending_user_questions
 
 physics_sanity_node:
     READS: execution_result, current_stage_id, design_description, plan,
            physics_failure_count, runtime_config
     WRITES: workflow_phase, physics_verdict, physics_feedback, physics_failure_count,
             design_revision_count, design_feedback, ask_user_trigger,
-            pending_user_questions, awaiting_user_input
+            pending_user_questions
 """
 
 import json
@@ -169,7 +168,6 @@ def execution_validator_node(state: ReproState) -> dict:
                 f"Execution failed {new_count}/{max_failures} times. Last error: {run_error or 'Unknown'}.\n\n"
                 f"{get_options_prompt('execution_failure_limit')}"
             ]
-            result["awaiting_user_input"] = True
             result["last_node_before_ask_user"] = "execution_check"
     
     # Log execution validation result using structured data
@@ -265,7 +263,6 @@ def physics_sanity_node(state: ReproState) -> dict:
             "workflow_phase": "physics_validation",
             "ask_user_trigger": "reviewer_escalation",
             "pending_user_questions": [f"{escalate}\n\n{get_options_prompt('reviewer_escalation')}"],
-            "awaiting_user_input": True,
             "last_node_before_ask_user": "physics_check",
             "reviewer_escalation_source": "physics_sanity",
         }
@@ -334,7 +331,6 @@ def physics_sanity_node(state: ReproState) -> dict:
                 f"- Latest feedback: {result.get('physics_feedback', 'No feedback available')}\n\n"
                 f"{get_options_prompt('physics_failure_limit')}"
             ]
-            result["awaiting_user_input"] = True
             result["last_node_before_ask_user"] = "physics_check"
     elif agent_output.get("verdict") == "design_flaw":
         new_count, _ = increment_counter_with_max(
@@ -357,7 +353,6 @@ def physics_sanity_node(state: ReproState) -> dict:
                 f"- Latest feedback: {result.get('design_feedback', 'No feedback available')}\n\n"
                 f"{get_options_prompt('design_flaw_limit')}"
             ]
-            result["awaiting_user_input"] = True
             result["last_node_before_ask_user"] = "physics_check"
     
     # If agent suggests backtrack, populate backtrack_suggestion for supervisor

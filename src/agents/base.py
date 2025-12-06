@@ -25,10 +25,14 @@ _logger = logging.getLogger(__name__)
 
 def with_context_check(node_name: str):
     """
-    Decorator that handles context checking boilerplate.
+    Decorator that handles context checking and trigger-based skipping.
     
-    Wraps an agent node function to automatically check context
-    before execution and handle escalation if needed.
+    Wraps an agent node function to:
+    1. Skip execution if ask_user_trigger is already set (preserves existing trigger)
+    2. Check context before execution and handle escalation if needed
+    
+    This ensures nodes don't run when user interaction is pending, and the
+    subsequent router will redirect to ask_user based on the trigger.
     
     Usage:
         @with_context_check("design")
@@ -38,16 +42,17 @@ def with_context_check(node_name: str):
     def decorator(func: Callable[..., Dict[str, Any]]):
         @wraps(func)
         def wrapper(state: ReproState, *args, **kwargs) -> Dict[str, Any]:
-            # Early return if already awaiting user input - don't modify state
-            if state.get("awaiting_user_input"):
-                _logger.warning(
-                    f"{node_name}: Skipping because awaiting_user_input=True. "
-                    f"Trigger: {state.get('ask_user_trigger')}"
+            # Early return if ask_user_trigger is set - don't modify state
+            # This preserves the trigger so the router can redirect to ask_user
+            if state.get("ask_user_trigger"):
+                _logger.info(
+                    f"{node_name}: Skipping - ask_user_trigger is set "
+                    f"(trigger: {state.get('ask_user_trigger')})"
                 )
                 return {}
             escalation = check_context_or_escalate(state, node_name)
             if escalation is not None:
-                if escalation.get("awaiting_user_input"):
+                if escalation.get("ask_user_trigger"):
                     return escalation
                 state = {**state, **escalation}
             return func(state, *args, **kwargs)
@@ -276,8 +281,7 @@ def create_llm_error_escalation(
         error_truncate_len: Max length for error message in question
         
     Returns:
-        Dict with workflow_phase, ask_user_trigger, pending_user_questions,
-        and awaiting_user_input
+        Dict with workflow_phase, ask_user_trigger, pending_user_questions
         
     Example:
         try:
@@ -305,7 +309,6 @@ def create_llm_error_escalation(
         "pending_user_questions": [
             f"{agent_label} failed: {error_msg}. Please check API and try again."
         ],
-        "awaiting_user_input": True,
     }
 
 

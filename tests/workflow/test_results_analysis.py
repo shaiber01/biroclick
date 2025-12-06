@@ -195,7 +195,7 @@ class TestResultsAnalyzerErrorHandling:
 
         # STRICT: Must trigger user escalation, not silent failure
         assert result["workflow_phase"] == "analysis"
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         assert result["ask_user_trigger"] == "missing_stage_id"
         assert len(result["pending_user_questions"]) > 0
         assert "ERROR" in result["pending_user_questions"][0]
@@ -209,7 +209,7 @@ class TestResultsAnalyzerErrorHandling:
 
         # STRICT: Empty string should be treated same as None
         assert result["workflow_phase"] == "analysis"
-        assert result["awaiting_user_input"] is True
+        assert result.get("ask_user_trigger") is not None
         assert result["ask_user_trigger"] == "missing_stage_id"
 
     def test_missing_stage_outputs_returns_fail(self, analysis_ready_state):
@@ -482,7 +482,7 @@ class TestResultsAnalyzerContextEscalation:
     def test_context_overflow_returns_awaiting_user(self, analysis_ready_state):
         """Context overflow should return awaiting_user_input state."""
         escalation = {
-            "awaiting_user_input": True,
+            "ask_user_trigger": "context_overflow",
             "ask_user_trigger": "context_overflow",
             "pending_user_questions": ["Context limit exceeded"]
         }
@@ -490,7 +490,7 @@ class TestResultsAnalyzerContextEscalation:
         with patch("src.agents.analysis.check_context_or_escalate", return_value=escalation):
             result = results_analyzer_node(analysis_ready_state)
 
-            assert result["awaiting_user_input"] is True
+            assert result.get("ask_user_trigger") is not None
             assert result["ask_user_trigger"] == "context_overflow"
             assert len(result["pending_user_questions"]) > 0
 

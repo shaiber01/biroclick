@@ -51,7 +51,7 @@ class TestCodeRevisionCounters:
             f"Got: {result['code_revision_count']}"
         )
         # Should escalate to user when at max and needs_revision
-        assert result.get("awaiting_user_input") is True, (
+        assert result.get("ask_user_trigger") is not None, (
             "Should escalate to user when at max revisions"
         )
         assert result.get("ask_user_trigger") == "code_review_limit"
@@ -78,7 +78,7 @@ class TestCodeRevisionCounters:
             f"Counter should increment from 2 to 3. Got: {result['code_revision_count']}"
         )
         # Should NOT escalate when under max
-        assert result.get("awaiting_user_input") is not True, (
+        assert result.get("ask_user_trigger") is None, (
             "Should not escalate when under max revisions"
         )
 
@@ -124,7 +124,7 @@ class TestCodeRevisionCounters:
             result = code_reviewer_node(base_state)
 
         # Should escalate because at default max
-        assert result.get("awaiting_user_input") is True, (
+        assert result.get("ask_user_trigger") is not None, (
             f"Should escalate at default max ({MAX_CODE_REVISIONS})"
         )
         assert result["code_revision_count"] == MAX_CODE_REVISIONS
@@ -160,7 +160,7 @@ class TestCodeReviewerVerdictHandling:
         )
         assert result["last_code_review_verdict"] == "approve"
         # Should NOT trigger user escalation
-        assert result.get("awaiting_user_input") is not True
+        assert result.get("ask_user_trigger") is None
 
     def test_code_reviewer_approve_sets_correct_verdict(self, base_state):
         """Verdict field should match the LLM response."""
@@ -515,7 +515,7 @@ class TestCodeReviewerEscalation:
             result = code_reviewer_node(base_state)
 
         # Should escalate to user
-        assert result.get("awaiting_user_input") is True, "Should be awaiting user input"
+        assert result.get("ask_user_trigger") is not None, "Should be awaiting user input"
         assert result.get("ask_user_trigger") == "code_review_limit", (
             f"ask_user_trigger should be 'code_review_limit'. Got: {result.get('ask_user_trigger')}"
         )
@@ -978,7 +978,7 @@ class TestCodeGeneratorValidation:
         result = code_generator_node(base_state)
 
         # Should escalate to user or indicate error
-        assert result.get("awaiting_user_input") is True or "code" not in result, (
+        assert result.get("ask_user_trigger") is not None or "code" not in result, (
             "Should escalate or fail when current_stage_id is None"
         )
         if result.get("awaiting_user_input"):
@@ -1318,7 +1318,7 @@ class TestCodeGeneratorLLMErrors:
             result = code_generator_node(base_state)
 
         # Should escalate to user
-        assert result.get("awaiting_user_input") is True, (
+        assert result.get("ask_user_trigger") is not None, (
             "Should escalate to user on LLM error"
         )
         assert result.get("ask_user_trigger") == "llm_error", (
@@ -1584,7 +1584,7 @@ class TestWithContextCheckDecorator:
         # Mock context check to return escalation
         escalation_result = {
             "pending_user_questions": ["Context overflow - how to proceed?"],
-            "awaiting_user_input": True,
+            "ask_user_trigger": "context_overflow",
             "ask_user_trigger": "context_overflow",
         }
 
@@ -1594,7 +1594,7 @@ class TestWithContextCheckDecorator:
         ):
             result = code_reviewer_node(base_state)
 
-        assert result.get("awaiting_user_input") is True
+        assert result.get("ask_user_trigger") is not None
         assert result.get("ask_user_trigger") == "context_overflow"
 
 
@@ -1618,7 +1618,7 @@ class TestCodeGeneratorContextCheck:
         # Mock context check to return escalation
         escalation_result = {
             "pending_user_questions": ["Context overflow in generate_code"],
-            "awaiting_user_input": True,
+            "ask_user_trigger": "context_overflow",
             "ask_user_trigger": "context_overflow",
         }
 
@@ -1628,7 +1628,7 @@ class TestCodeGeneratorContextCheck:
         ):
             result = code_generator_node(base_state)
 
-        assert result.get("awaiting_user_input") is True
+        assert result.get("ask_user_trigger") is not None
         assert result.get("ask_user_trigger") == "context_overflow"
 
 
@@ -1731,7 +1731,7 @@ class TestCodeReviewerBoundaryConditions:
             f"Should increment to max. Expected {max_revs}, got {result['code_revision_count']}"
         )
         # SHOULD escalate - when counter reaches max, revision budget is exhausted
-        assert result.get("awaiting_user_input") is True, (
+        assert result.get("ask_user_trigger") is not None, (
             "Should escalate when counter reaches max (budget exhausted)"
         )
         assert result.get("ask_user_trigger") == "code_review_limit"
@@ -1755,7 +1755,7 @@ class TestCodeReviewerBoundaryConditions:
             result = code_reviewer_node(base_state)
 
         # Should immediately escalate since max is 0
-        assert result.get("awaiting_user_input") is True, (
+        assert result.get("ask_user_trigger") is not None, (
             "Should escalate immediately when max_revisions is 0"
         )
 
@@ -1845,7 +1845,7 @@ print("Done")
 
         assert review_result.get("last_code_review_verdict") == "approve"
         assert review_result.get("workflow_phase") == "code_review"
-        assert review_result.get("awaiting_user_input") is not True
+        assert review_result.get("ask_user_trigger") is None
 
     def test_code_generator_then_reviewer_revision_flow(self, base_state, valid_plan):
         """Test revision flow: generate -> review (reject) -> feedback."""
@@ -1925,12 +1925,12 @@ print("Done")
 
             if expected_count < max_revs:
                 # Should increment counter and continue
-                assert result.get("awaiting_user_input") is not True, (
+                assert result.get("ask_user_trigger") is None, (
                     f"Should not escalate at count {expected_count} (max={max_revs})"
                 )
             else:
                 # Should escalate when reaching max
-                assert result.get("awaiting_user_input") is True, (
+                assert result.get("ask_user_trigger") is not None, (
                     f"Should escalate at count {expected_count} (max={max_revs})"
                 )
                 assert result.get("ask_user_trigger") == "code_review_limit"
